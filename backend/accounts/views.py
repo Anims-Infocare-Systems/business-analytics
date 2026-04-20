@@ -304,21 +304,20 @@ def po_vs_sales(request):
     try:
         cursor = conn.cursor()
 
-        # ── Sales Query ───────────────────────────────────────
-        # Groups by calendar month number; we reorder to FY below.
+        # ── Sales Query ── SUM(txamt), exclude Credit Note ───────
         cursor.execute("""
             SELECT
                 MONTH(invdt)   AS mth,
-                SUM(tamt)      AS total
+                SUM(txamt)     AS total
             FROM Bill_Mas
             WHERE deleted = 0
-              AND btype NOT IN ('Debit Note')
+              AND (btype IS NULL OR btype NOT IN ('Credit Note'))
               AND invdt BETWEEN ? AND ?
             GROUP BY MONTH(invdt)
         """, (start_date, end_date))
         sales_rows = cursor.fetchall()
 
-        # ── PO Query ─────────────────────────────────────────
+        # ── PO Query ── SUM(tamt) from In_PoMas ──────────────
         cursor.execute("""
             SELECT
                 MONTH(podt)    AS mth,

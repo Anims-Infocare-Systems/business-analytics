@@ -594,7 +594,7 @@ function FilterDropdown({ label, icon, options, value, onChange }) {
 }
 
 // ─── Chart Card ───────────────────────────────────────────────
-function ChartCard({ def, onPreview, idx }) {
+function ChartCard({ def, onPreview, idx, dateRange }) {
     const canvasRef  = useRef(null);
     const chartRef   = useRef(null);
     const [fyLabel,  setFyLabel]  = useState("Monthly");
@@ -621,7 +621,17 @@ function ChartCard({ def, onPreview, idx }) {
         setLoading(true);
         setError(null);
 
-        fetch("/api/po-vs-sales/", { credentials: "include" })
+        const ac = new AbortController();
+
+        // Build URL — use selected date range when available, else default FY
+        let url = "/api/po-vs-sales/";
+        if (dateRange?.from && dateRange?.to) {
+            const from = new Date(dateRange.from).toISOString().split("T")[0];
+            const to   = new Date(dateRange.to).toISOString().split("T")[0];
+            url += `?from=${from}&to=${to}`;
+        }
+
+        fetch(url, { credentials: "include", signal: ac.signal })
             .then(res => res.json())
             .then(data => {
                 setLoading(false);
@@ -631,7 +641,7 @@ function ChartCard({ def, onPreview, idx }) {
                     return;
                 }
 
-                // Show FY on the card badge e.g. "FY 2026-27"
+                // Show FY / range label on the card badge
                 if (data.fy) setFyLabel(data.fy);
 
                 if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
@@ -659,15 +669,17 @@ function ChartCard({ def, onPreview, idx }) {
                 });
             })
             .catch(err => {
+                if (err.name === "AbortError") return;
                 setLoading(false);
                 setError("Failed to load chart data. Please try again.");
                 console.error("Fetch error:", err);
             });
 
         return () => {
+            ac.abort();
             if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
         };
-    }, [def]);
+    }, [def, dateRange]);
 
     const handleDownload = () => {
         if (!canvasRef.current) return;
@@ -771,6 +783,8 @@ function PreviewModal({ def, onClose }) {
     }
 
     // ── Build API URL with optional date range ────────────────
+    const ac = new AbortController();
+
     let url = "/api/po-vs-sales/";
     if (modalDateRange.from && modalDateRange.to) {
         const from = new Date(modalDateRange.from).toISOString().split("T")[0];
@@ -779,7 +793,7 @@ function PreviewModal({ def, onClose }) {
     }
 
     // ── Fetch & render ────────────────────────────────────────
-    fetch(url, { credentials: "include" })
+    fetch(url, { credentials: "include", signal: ac.signal })
         .then(res => res.json())
         .then(data => {
             if (data.error) {
@@ -787,7 +801,7 @@ function PreviewModal({ def, onClose }) {
                 return;
             }
 
-            if (chartRef.current) chartRef.current.destroy();
+            if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
 
             chartRef.current = new Chart(canvasRef.current, {
                 type: def.config.type,
@@ -795,13 +809,13 @@ function PreviewModal({ def, onClose }) {
                     labels: data.labels || [],
                     datasets: [
                         {
-                            label: `PO Value (₹L) — ${data.fy || ""}`,      // ✅ FY in legend
+                            label: `PO Value (₹L) — ${data.fy || ""}`,
                             data: data.po || [],
                             backgroundColor: "#3b82f6",
                             borderRadius: 4,
                         },
                         {
-                            label: `Sales Value (₹L) — ${data.fy || ""}`,   // ✅ FY in legend
+                            label: `Sales Value (₹L) — ${data.fy || ""}`,
                             data: data.sales || [],
                             backgroundColor: "#10b981",
                             borderRadius: 4,
@@ -812,7 +826,6 @@ function PreviewModal({ def, onClose }) {
                     ...def.config.options,
                     plugins: {
                         ...def.config.options.plugins,
-                        // ✅ Show company + FY as chart title inside modal
                         title: {
                             display: true,
                             text: `${data.company || ""} · ${data.fy || ""}  (${data.from} → ${data.to})`,
@@ -824,9 +837,10 @@ function PreviewModal({ def, onClose }) {
                 },
             });
         })
-        .catch(err => console.error("Fetch error:", err));
+        .catch(err => { if (err.name !== "AbortError") console.error("Fetch error:", err); });
 
     return () => {
+        ac.abort();
         if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
     };
 }, [def, modalDateRange]);
@@ -1061,7 +1075,13 @@ export default function Charts() {
             {visible.length > 0 ? (
                 <div className="ch-grid">
                     {visible.map((def, idx) => (
-                        <ChartCard key={def.id} def={def} idx={idx} onPreview={setPreview} />
+                        <ChartCard
+                            key={def.id}
+                            def={def}
+                            idx={idx}
+                            onPreview={setPreview}
+                            dateRange={def.id === "sales-1" ? dateRange : undefined}
+                        />
                     ))}
                 </div>
             ) : (
