@@ -20,3 +20,4 @@ class Tenant(models.Model):
 
     def __str__(self):
         return self.company_code
+    #Sabarish 
