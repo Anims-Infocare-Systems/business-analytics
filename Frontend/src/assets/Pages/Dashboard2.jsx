@@ -9,6 +9,8 @@
  *   - Loading shimmer on KPI cards while fetch is in-flight
  *   - Error badge replaces value if fetch fails
  *   - [Apr 2026] Removed Machine OEE section from Overview tab
+ *   - [Apr 2026] Replaced machine-wise Rejection & Rework with:
+ *       Job Order Inspection · Intermediate Inspection · Final Inspection
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -38,13 +40,29 @@ const OEE_CARDS = [
   { id:"PNT-01", type:"Paint Booth",    status:"maintenance", availability:0,  performance:0,  quality:0,  oee:0,  target:80, uptime:"—"     },
 ];
 
-const REJ_REWORK = [
-  { machine:"CNC-01", total:460,  rejected:11, rework:8,  rejPct:2.4,  reworkPct:1.7, target:2.0 },
-  { machine:"CNC-02", total:310,  rejected:19, rework:14, rejPct:6.1,  reworkPct:4.5, target:2.0 },
-  { machine:"INJ-01", total:0,    rejected:0,  rework:0,  rejPct:0,    reworkPct:0,   target:2.0, noData:true },
-  { machine:"ASM-01", total:1140, rejected:14, rework:10, rejPct:1.2,  reworkPct:0.9, target:2.0 },
-  { machine:"WLD-01", total:198,  rejected:22, rework:18, rejPct:11.1, reworkPct:9.1, target:2.0 },
-  { machine:"PNT-01", total:0,    rejected:0,  rework:0,  rejPct:0,    reworkPct:0,   target:2.0, noData:true },
+// ── NEW: Inspection Rejection & Rework data ──────────────────
+const JO_REJ_DATA = [
+  { wo:"WO-2041", part:"Brake Disc",     total:500, rejected:12, rework:8,  rejPct:2.4,  reworkPct:1.6,  target:2.0 },
+  { wo:"WO-2042", part:"Engine Mount",   total:200, rejected:4,  rework:3,  rejPct:2.0,  reworkPct:1.5,  target:2.0 },
+  { wo:"WO-2043", part:"Gear Housing",   total:120, rejected:18, rework:12, rejPct:15.0, reworkPct:10.0, target:2.0 },
+  { wo:"WO-2044", part:"Control Arm",    total:350, rejected:9,  rework:7,  rejPct:2.6,  reworkPct:2.0,  target:2.0 },
+  { wo:"WO-2045", part:"Exhaust Flange", total:800, rejected:6,  rework:5,  rejPct:0.75, reworkPct:0.63, target:2.0 },
+];
+
+const INTER_INSP_DATA = [
+  { stage:"Turning",  part:"Brake Disc",      op:"OP-10", inspected:380, rejected:8,  rework:5,  rejPct:2.1,  reworkPct:1.3  },
+  { stage:"Milling",  part:"Gear Housing",    op:"OP-20", inspected:95,  rejected:14, rework:10, rejPct:14.7, reworkPct:10.5 },
+  { stage:"Drilling", part:"Control Arm",     op:"OP-30", inspected:210, rejected:5,  rework:4,  rejPct:2.4,  reworkPct:1.9  },
+  { stage:"Welding",  part:"Exhaust Flange",  op:"OP-40", inspected:160, rejected:11, rework:9,  rejPct:6.9,  reworkPct:5.6  },
+  { stage:"Assembly", part:"Engine Mount",    op:"OP-50", inspected:180, rejected:3,  rework:2,  rejPct:1.7,  reworkPct:1.1  },
+];
+
+const FINAL_INSP_DATA = [
+  { wo:"WO-2041", part:"Brake Disc",     inspected:470, okQty:455, rejected:10, rework:5,  fpy:96.8, target:98 },
+  { wo:"WO-2042", part:"Engine Mount",   inspected:190, okQty:186, rejected:3,  rework:1,  fpy:97.9, target:98 },
+  { wo:"WO-2043", part:"Gear Housing",   inspected:90,  okQty:72,  rejected:14, rework:4,  fpy:80.0, target:98 },
+  { wo:"WO-2044", part:"Control Arm",    inspected:220, okQty:211, rejected:6,  rework:3,  fpy:95.9, target:98 },
+  { wo:"WO-2045", part:"Exhaust Flange", inspected:145, okQty:143, rejected:1,  rework:1,  fpy:98.6, target:98 },
 ];
 
 const COMPLAINTS = [
@@ -275,7 +293,7 @@ function OeeCard({ m }) {
 }
 
 // ════════════════════════════════════════════
-//  IDLE HOURS SECTION (Machine_IdleEntryMas · Machine_IdleEntryDet · IdleReasons)
+//  IDLE HOURS SECTION
 // ════════════════════════════════════════════
 function IdleHoursSection({ accepted = [], nonAccepted = [], loading = false, error = null }) {
   const accTotal = accepted.reduce((s, r) => s + (Number(r.hours) || 0), 0);
@@ -397,56 +415,331 @@ function IdleHoursSection({ accepted = [], nonAccepted = [], loading = false, er
 }
 
 // ════════════════════════════════════════════
-//  REJECTION & REWORK
+//  JOB ORDER INSPECTION — Rejection & Rework
+//  Source: InJob_Det · ReworkEntry · per Work Order
 // ════════════════════════════════════════════
-function RejReworkSection() {
+function JobOrderInspSection() {
+  const totalRej    = JO_REJ_DATA.reduce((s, r) => s + r.rejected, 0);
+  const totalRwk    = JO_REJ_DATA.reduce((s, r) => s + r.rework, 0);
+  const totalProd   = JO_REJ_DATA.reduce((s, r) => s + r.total, 0);
+  const overallRejPct = totalProd > 0 ? ((totalRej / totalProd) * 100).toFixed(1) : "0";
+
   return (
-    <div className="d2-rej-grid">
-      {REJ_REWORK.map(r => {
-        if (r.noData) {
-          const scfg = STATUS_CFG[OEE_CARDS.find(o => o.id === r.machine)?.status || "maintenance"];
+    <div className="d2-ri-wrapper">
+      {/* Summary strip */}
+      <div className="d2-ri-strip d2-ri-strip--jo">
+        <div className="d2-ri-strip__left">
+          <div className="d2-ri-strip__icon-wrap d2-ri-strip__icon-wrap--jo">📋</div>
+          <div>
+            <div className="d2-ri-strip__title">Job Order Inspection</div>
+            <div className="d2-ri-strip__sub">InJob_Det · ReworkEntry · per Work Order</div>
+          </div>
+        </div>
+        <div className="d2-ri-strip__pills">
+          <div className="d2-ri-pill d2-ri-pill--blue">
+            <span className="d2-ri-pill__val">{totalProd.toLocaleString()}</span>
+            <span className="d2-ri-pill__lbl">Total Produced</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--red">
+            <span className="d2-ri-pill__val">{totalRej}</span>
+            <span className="d2-ri-pill__lbl">Total Rejected</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--amber">
+            <span className="d2-ri-pill__val">{totalRwk}</span>
+            <span className="d2-ri-pill__lbl">Total Rework</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--dark">
+            <span className="d2-ri-pill__val">{overallRejPct}%</span>
+            <span className="d2-ri-pill__lbl">Overall Rej %</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Cards */}
+      <div className="d2-ri-cards">
+        {JO_REJ_DATA.map(r => {
+          const rejOk    = r.rejPct <= r.target;
+          const rejColor = r.rejPct <= r.target ? "#1a56db"
+                         : r.rejPct <= r.target * 2.5 ? "#f59e0b"
+                         : "#ef4444";
+          const rwkColor = r.reworkPct <= 1.5 ? "#0ea5e9"
+                         : r.reworkPct <= 3   ? "#f59e0b"
+                         : "#ef4444";
+          const barW = Math.min((r.rejPct / 20) * 100, 100);
+          const tgtW = Math.min((r.target / 20) * 100, 100);
           return (
-            <div key={r.machine} className="d2-rej-card d2-rej-card--nodata">
-              <div className="d2-rej-id" style={{ color: scfg.color }}>{r.machine}</div>
-              <div className="d2-rej-nodata-msg" style={{ color: scfg.color }}>{scfg.label}</div>
-              <div className="d2-rej-nodata-sub">No production data</div>
+            <div key={r.wo} className="d2-ric d2-ric--jo">
+              <div className="d2-ric__topbar" style={{ background: rejColor }} />
+              <div className="d2-ric__head">
+                <div className="d2-ric__id" style={{ color: rejColor }}>{r.wo}</div>
+                <span className="d2-ric__status-badge" style={{
+                  background: rejOk ? "#dbeafe" : r.rejPct <= r.target * 2.5 ? "#fef3c7" : "#fee2e2",
+                  color: rejColor,
+                }}>
+                  {rejOk ? "✓ WITHIN" : "✗ EXCEEDED"}
+                </span>
+              </div>
+              <div className="d2-ric__part">{r.part}</div>
+              <div className="d2-ric__total">{r.total.toLocaleString()} <span>pcs</span></div>
+
+              <div className="d2-ric__metrics">
+                <div className="d2-ric__metric">
+                  <div className="d2-ric__metric-val" style={{ color: rejColor }}>{r.rejPct}<span>%</span></div>
+                  <div className="d2-ric__metric-lbl">Rejection</div>
+                  <div className="d2-ric__metric-abs">{r.rejected} pcs</div>
+                </div>
+                <div className="d2-ric__vdiv" />
+                <div className="d2-ric__metric">
+                  <div className="d2-ric__metric-val" style={{ color: rwkColor }}>{r.reworkPct}<span>%</span></div>
+                  <div className="d2-ric__metric-lbl">Rework</div>
+                  <div className="d2-ric__metric-abs">{r.rework} pcs</div>
+                </div>
+              </div>
+
+              <div className="d2-ric__bar-section">
+                <div className="d2-ric__bar-label">
+                  <span>vs Target ({r.target}%)</span>
+                  <span style={{ color: rejColor }}>{rejOk ? "✓" : "✗"}</span>
+                </div>
+                <div className="d2-ric__bar-track">
+                  <div className="d2-ric__bar-fill" style={{ width:`${barW}%`, background: rejColor }} />
+                  <div className="d2-ric__tgt-line" style={{ left:`${tgtW}%` }} />
+                </div>
+              </div>
             </div>
           );
-        }
-        const rejOk = r.rejPct <= r.target;
-        const rejColor = r.rejPct <= r.target ? "#10b981" : r.rejPct <= r.target * 2 ? "#f59e0b" : "#ef4444";
-        const rwColor  = r.reworkPct <= 2 ? "#f59e0b" : "#ef4444";
-        return (
-          <div key={r.machine} className="d2-rej-card">
-            <div className="d2-rej-card__topbar" style={{ background: rejColor }} />
-            <div className="d2-rej-id">{r.machine}</div>
-            <div className="d2-rej-total">{r.total.toLocaleString()} <span>pcs</span></div>
-            <div className="d2-rej-metrics">
-              <div className="d2-rej-metric">
-                <div className="d2-rej-metric-val" style={{ color: rejColor }}>{r.rejPct}%</div>
-                <div className="d2-rej-metric-lbl">Rejection</div>
-                <div className="d2-rej-metric-abs">{r.rejected} pcs</div>
-              </div>
-              <div className="d2-rej-divider" />
-              <div className="d2-rej-metric">
-                <div className="d2-rej-metric-val" style={{ color: rwColor }}>{r.reworkPct}%</div>
-                <div className="d2-rej-metric-lbl">Rework</div>
-                <div className="d2-rej-metric-abs">{r.rework} pcs</div>
-              </div>
-            </div>
-            <div className="d2-rej-vs">
-              <div className="d2-rej-vs-label">
-                <span>Rej. vs Target ({r.target}%)</span>
-                <span style={{ color: rejColor }}>{rejOk ? "✓ OK" : "✗ OVER"}</span>
-              </div>
-              <div className="d2-rej-vs-track">
-                <div className="d2-rej-target-line" style={{ left:`${Math.min(r.target / 15 * 100, 100)}%` }} />
-                <div className="d2-rej-vs-fill" style={{ width:`${Math.min(r.rejPct / 15 * 100, 100)}%`, background: rejColor }} />
-              </div>
-            </div>
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════
+//  INTERMEDIATE INSPECTION — Rejection & Rework
+//  Source: InterInspectionEntry · InProcessInspection · per Stage/Operation
+// ════════════════════════════════════════════
+function IntermediateInspSection() {
+  const totalRej     = INTER_INSP_DATA.reduce((s, r) => s + r.rejected, 0);
+  const totalRwk     = INTER_INSP_DATA.reduce((s, r) => s + r.rework, 0);
+  const totalInsp    = INTER_INSP_DATA.reduce((s, r) => s + r.inspected, 0);
+  const overallRejPct = totalInsp > 0 ? ((totalRej / totalInsp) * 100).toFixed(1) : "0";
+
+  const STAGE_COLOR = {
+    Turning:  { c:"#6366f1", bg:"#eef2ff" },
+    Milling:  { c:"#8b5cf6", bg:"#ede9fe" },
+    Drilling: { c:"#a855f7", bg:"#faf5ff" },
+    Welding:  { c:"#d946ef", bg:"#fdf4ff" },
+    Assembly: { c:"#ec4899", bg:"#fdf2f8" },
+  };
+
+  return (
+    <div className="d2-ri-wrapper">
+      {/* Summary strip */}
+      <div className="d2-ri-strip d2-ri-strip--inter">
+        <div className="d2-ri-strip__left">
+          <div className="d2-ri-strip__icon-wrap d2-ri-strip__icon-wrap--inter">⚙️</div>
+          <div>
+            <div className="d2-ri-strip__title">Intermediate Inspection</div>
+            <div className="d2-ri-strip__sub">InterInspectionEntry · InProcessInspection · per Stage / Operation</div>
           </div>
-        );
-      })}
+        </div>
+        <div className="d2-ri-strip__pills">
+          <div className="d2-ri-pill d2-ri-pill--purple">
+            <span className="d2-ri-pill__val">{totalInsp.toLocaleString()}</span>
+            <span className="d2-ri-pill__lbl">Total Inspected</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--red">
+            <span className="d2-ri-pill__val">{totalRej}</span>
+            <span className="d2-ri-pill__lbl">Total Rejected</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--amber">
+            <span className="d2-ri-pill__val">{totalRwk}</span>
+            <span className="d2-ri-pill__lbl">Total Rework</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--dark">
+            <span className="d2-ri-pill__val">{overallRejPct}%</span>
+            <span className="d2-ri-pill__lbl">Overall Rej %</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Cards */}
+      <div className="d2-ri-cards">
+        {INTER_INSP_DATA.map(r => {
+          const rejColor = r.rejPct <= 2   ? "#8b5cf6"
+                         : r.rejPct <= 5   ? "#f59e0b"
+                         : "#ef4444";
+          const rwkColor = r.reworkPct <= 2 ? "#a855f7"
+                         : r.reworkPct <= 4 ? "#f59e0b"
+                         : "#ef4444";
+          const scfg = STAGE_COLOR[r.stage] || { c:"#8b5cf6", bg:"#ede9fe" };
+          const barW = Math.min((r.rejPct / 20) * 100, 100);
+          const rejOk = r.rejPct <= 2;
+          return (
+            <div key={r.op} className="d2-ric d2-ric--inter">
+              <div className="d2-ric__topbar" style={{ background: `linear-gradient(90deg, ${scfg.c}, ${rejColor})` }} />
+              <div className="d2-ric__head">
+                <div className="d2-ric__id" style={{ color: scfg.c }}>{r.stage}</div>
+                <span className="d2-ric__op-badge" style={{ background: scfg.bg, color: scfg.c }}>
+                  {r.op}
+                </span>
+              </div>
+              <div className="d2-ric__part">{r.part}</div>
+              <div className="d2-ric__total">{r.inspected.toLocaleString()} <span>inspected</span></div>
+
+              <div className="d2-ric__metrics">
+                <div className="d2-ric__metric">
+                  <div className="d2-ric__metric-val" style={{ color: rejColor }}>{r.rejPct}<span>%</span></div>
+                  <div className="d2-ric__metric-lbl">Rejection</div>
+                  <div className="d2-ric__metric-abs">{r.rejected} pcs</div>
+                </div>
+                <div className="d2-ric__vdiv" />
+                <div className="d2-ric__metric">
+                  <div className="d2-ric__metric-val" style={{ color: rwkColor }}>{r.reworkPct}<span>%</span></div>
+                  <div className="d2-ric__metric-lbl">Rework</div>
+                  <div className="d2-ric__metric-abs">{r.rework} pcs</div>
+                </div>
+              </div>
+
+              <div className="d2-ric__bar-section">
+                <div className="d2-ric__bar-label">
+                  <span>Rej. severity</span>
+                  <span style={{ color: rejColor }}>{rejOk ? "LOW" : r.rejPct <= 5 ? "MED" : "HIGH"}</span>
+                </div>
+                <div className="d2-ric__bar-track">
+                  <div className="d2-ric__bar-fill" style={{ width:`${barW}%`, background:`linear-gradient(90deg,${scfg.c},${rejColor})` }} />
+                  <div className="d2-ric__tgt-line" style={{ left:"10%" }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════
+//  FINAL INSPECTION — Rejection, Rework & FPY
+//  Source: FinalInspectionEntry · FinalInspRejectionEntryOrg
+// ════════════════════════════════════════════
+function FinalInspRejSection() {
+  const totalInsp  = FINAL_INSP_DATA.reduce((s, r) => s + r.inspected, 0);
+  const totalOk    = FINAL_INSP_DATA.reduce((s, r) => s + r.okQty, 0);
+  const totalRej   = FINAL_INSP_DATA.reduce((s, r) => s + r.rejected, 0);
+  const totalRwk   = FINAL_INSP_DATA.reduce((s, r) => s + r.rework, 0);
+  const overallFPY = totalInsp > 0 ? ((totalOk / totalInsp) * 100).toFixed(1) : "0";
+
+  const circ = 113.1; // 2π × 18
+
+  return (
+    <div className="d2-ri-wrapper">
+      {/* Summary strip */}
+      <div className="d2-ri-strip d2-ri-strip--final">
+        <div className="d2-ri-strip__left">
+          <div className="d2-ri-strip__icon-wrap d2-ri-strip__icon-wrap--final">✅</div>
+          <div>
+            <div className="d2-ri-strip__title">Final Inspection</div>
+            <div className="d2-ri-strip__sub">FinalInspectionEntry · FinalInspRejectionEntryOrg · per Work Order</div>
+          </div>
+        </div>
+        <div className="d2-ri-strip__pills">
+          <div className="d2-ri-pill d2-ri-pill--green">
+            <span className="d2-ri-pill__val">{totalOk.toLocaleString()}</span>
+            <span className="d2-ri-pill__lbl">Total OK Qty</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--red">
+            <span className="d2-ri-pill__val">{totalRej}</span>
+            <span className="d2-ri-pill__lbl">Total Rejected</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--amber">
+            <span className="d2-ri-pill__val">{totalRwk}</span>
+            <span className="d2-ri-pill__lbl">Total Rework</span>
+          </div>
+          <div className="d2-ri-pill d2-ri-pill--teal">
+            <span className="d2-ri-pill__val">{overallFPY}%</span>
+            <span className="d2-ri-pill__lbl">Overall FPY</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Cards */}
+      <div className="d2-ri-cards">
+        {FINAL_INSP_DATA.map(r => {
+          const fpyOk    = r.fpy >= r.target;
+          const fpyColor = r.fpy >= r.target    ? "#10b981"
+                         : r.fpy >= r.target - 3 ? "#f59e0b"
+                         : "#ef4444";
+          const rejColor = r.rejected === 0 ? "#10b981"
+                         : r.rejected <= 5  ? "#f59e0b"
+                         : "#ef4444";
+          const rwkColor = r.rework === 0  ? "#10b981"
+                         : r.rework  <= 3  ? "#f59e0b"
+                         : "#ef4444";
+          const offset = circ - (r.fpy / 100) * circ;
+
+          return (
+            <div key={r.wo} className="d2-ric d2-ric--final">
+              <div className="d2-ric__topbar" style={{ background: fpyColor }} />
+              <div className="d2-ric__head">
+                <div className="d2-ric__id" style={{ color: fpyColor }}>{r.wo}</div>
+                <span className="d2-ric__status-badge" style={{
+                  background: fpyOk ? "#d1fae5" : r.fpy >= r.target - 3 ? "#fef3c7" : "#fee2e2",
+                  color: fpyColor,
+                }}>
+                  {fpyOk ? "✓ FPY OK" : "↓ FPY LOW"}
+                </span>
+              </div>
+              <div className="d2-ric__part">{r.part}</div>
+
+              {/* FPY ring */}
+              <div className="d2-ric__fpy-ring-wrap">
+                <svg viewBox="0 0 44 44" width="72" height="72" style={{ transform:"rotate(-90deg)" }}>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="#e4e9f2" strokeWidth="4" />
+                  <circle cx="22" cy="22" r="18" fill="none"
+                    stroke={fpyColor} strokeWidth="4" strokeLinecap="round"
+                    strokeDasharray={`${circ}`} strokeDashoffset={offset}
+                    style={{ transition:"stroke-dashoffset 1.2s ease" }}
+                  />
+                </svg>
+                <div className="d2-ric__fpy-center">
+                  <span className="d2-ric__fpy-num" style={{ color: fpyColor }}>{r.fpy}</span>
+                  <span className="d2-ric__fpy-pct">%</span>
+                  <span className="d2-ric__fpy-lbl">FPY</span>
+                </div>
+              </div>
+
+              <div className="d2-ric__final-row">
+                <div className="d2-ric__final-stat">
+                  <div style={{ color:"#10b981", fontFamily:"'Outfit',sans-serif", fontSize:17, fontWeight:800 }}>{r.okQty}</div>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:8, color:"#64748b" }}>OK QTY</div>
+                </div>
+                <div className="d2-ric__vdiv" />
+                <div className="d2-ric__final-stat">
+                  <div style={{ color: rejColor, fontFamily:"'Outfit',sans-serif", fontSize:17, fontWeight:800 }}>{r.rejected}</div>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:8, color:"#64748b" }}>REJECTED</div>
+                </div>
+                <div className="d2-ric__vdiv" />
+                <div className="d2-ric__final-stat">
+                  <div style={{ color: rwkColor, fontFamily:"'Outfit',sans-serif", fontSize:17, fontWeight:800 }}>{r.rework}</div>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:8, color:"#64748b" }}>REWORK</div>
+                </div>
+              </div>
+
+              <div className="d2-ric__bar-section">
+                <div className="d2-ric__bar-label">
+                  <span>FPY vs Target ({r.target}%)</span>
+                  <span style={{ color: fpyColor }}>{r.fpy}%</span>
+                </div>
+                <div className="d2-ric__bar-track">
+                  <div className="d2-ric__bar-fill" style={{ width:`${r.fpy}%`, background: fpyColor }} />
+                  <div className="d2-ric__tgt-line" style={{ left:`${r.target}%` }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -768,7 +1061,7 @@ function buildUrl(base, from, to) {
 //  TAB SECTIONS
 // ════════════════════════════════════════════
 
-// ── Overview: Machine OEE section REMOVED ────────────────────
+// ── Overview ─────────────────────────────────
 function OverviewTab({ setupProdChart, setupQualDonut, setupDowntimeChart, setupMatChart, setupOtdChart, setupRejChart, woBadgeCls, stBadgeCls, liveKpis, kpiLoading, kpiError, idleAccepted, idleNonAccepted, idleLoading, idleError }) {
   return (
     <>
@@ -776,8 +1069,14 @@ function OverviewTab({ setupProdChart, setupQualDonut, setupDowntimeChart, setup
       <KpiStrip liveKpis={liveKpis} kpiLoading={kpiLoading} kpiError={kpiError} />
       <SectionLabel>Idle Hours Analysis — Accepted vs Non-Accepted (Machine_IdleEntryMas · Machine_IdleEntryDet · IdleReasons)</SectionLabel>
       <IdleHoursSection accepted={idleAccepted} nonAccepted={idleNonAccepted} loading={idleLoading} error={idleError} />
-      <SectionLabel>Rejection & Rework % — By Machine (InJob_Det.macrej · matrej · ReworkEntry · FinalInspectionEntry)</SectionLabel>
-      <RejReworkSection />
+
+      <SectionLabel>Job Order Inspection — Rejection & Rework (InJob_Det · ReworkEntry · per Work Order)</SectionLabel>
+      <JobOrderInspSection />
+      <SectionLabel>Intermediate Inspection — Rejection & Rework (InterInspectionEntry · InProcessInspection · per Stage)</SectionLabel>
+      <IntermediateInspSection />
+      <SectionLabel>Final Inspection — Rejection, Rework & FPY (FinalInspectionEntry · FinalInspRejectionEntryOrg)</SectionLabel>
+      <FinalInspRejSection />
+
       <SectionLabel>Production Trend · Quality Split · Downtime Analysis</SectionLabel>
       <div className="d2-row3">
         <Card>
@@ -875,8 +1174,14 @@ function ProductionTab({ setupProdChart, setupRejChart, liveKpis, kpiLoading, kp
       </div>
       <SectionLabel>Machine OEE (ProductionEntry.OEENEW + runtimesecs + MacMaster.RatePerHr)</SectionLabel>
       <div className="d2-oee-cards">{OEE_CARDS.map(m => <OeeCard key={m.id} m={m} />)}</div>
-      <SectionLabel>Rejection & Rework — By Machine (InJob_Det · ReworkEntry)</SectionLabel>
-      <RejReworkSection />
+
+      <SectionLabel>Job Order Inspection — Rejection & Rework (InJob_Det · ReworkEntry · per Work Order)</SectionLabel>
+      <JobOrderInspSection />
+      <SectionLabel>Intermediate Inspection — Rejection & Rework (InterInspectionEntry · InProcessInspection · per Stage)</SectionLabel>
+      <IntermediateInspSection />
+      <SectionLabel>Final Inspection — Rejection, Rework & FPY (FinalInspectionEntry · FinalInspRejectionEntryOrg)</SectionLabel>
+      <FinalInspRejSection />
+
       <SectionLabel>6-Month Rejection Trend (InJob_Det.macrej · matrej · ReworkEntry)</SectionLabel>
       <Card>
         <div className="d2-card__hd"><div><div className="d2-card__title">Mac Rejection vs Material Rejection vs Rework</div><div className="d2-card__sub">FROM: InJob_Det GROUP BY month · ReworkEntry</div></div></div>
@@ -903,8 +1208,14 @@ function QualityTab({ setupQualDonut, setupRejChart, liveKpis, kpiLoading, kpiEr
         <Card><div className="d2-card__hd"><div className="d2-card__title">Top Defect Categories</div><button className="d2-card__btn">View NCRs →</button></div><table className="d2-mini-tbl"><thead><tr><th>#</th><th>Defect Type</th><th>Count</th><th>%</th></tr></thead><tbody>{DEFECTS.map((d,i)=>(<tr key={d.name}><td><span className="d2-rank">{i+1}</span></td><td>{d.name}<div className="d2-d-bar" style={{width:`${d.pct}%`,background:d.c}} /></td><td style={{fontFamily:"'JetBrains Mono',monospace",color:d.c,fontWeight:600}}>{d.count}</td><td style={{fontFamily:"'JetBrains Mono',monospace",color:"#64748b"}}>{d.pct}%</td></tr>))}</tbody></table></Card>
         <Card><div className="d2-card__hd"><div><div className="d2-card__title">IQC Rejections</div><div className="d2-card__sub">IQCEntry JOIN GRNMast</div></div></div><table className="d2-mini-tbl"><thead><tr><th>GRN</th><th>Material</th><th>Vendor</th><th>Qty</th><th>Status</th></tr></thead><tbody>{IQC_ROWS.map(r=>(<tr key={r.grn}><td className="d2-mono d2-acc-blue">{r.grn}</td><td>{r.mat}</td><td>{r.vendor}</td><td className={`d2-mono d2-acc-${r.st==="Rejected"?"red":"amber"}`}>{r.qty}</td><td><Badge variant={r.st==="Rejected"?"dn":r.st==="On Hold"?"warn":"neu"}>{r.st}</Badge></td></tr>))}</tbody></table></Card>
       </div>
-      <SectionLabel>Rejection & Rework by Machine (InJob_Det)</SectionLabel>
-      <RejReworkSection />
+
+      <SectionLabel>Job Order Inspection — Rejection & Rework (InJob_Det · ReworkEntry · per Work Order)</SectionLabel>
+      <JobOrderInspSection />
+      <SectionLabel>Intermediate Inspection — Rejection & Rework (InterInspectionEntry · InProcessInspection · per Stage)</SectionLabel>
+      <IntermediateInspSection />
+      <SectionLabel>Final Inspection — Rejection, Rework & FPY (FinalInspectionEntry · FinalInspRejectionEntryOrg)</SectionLabel>
+      <FinalInspRejSection />
+
       <SectionLabel>6-Month Rejection Trend</SectionLabel>
       <Card><div className="d2-card__hd"><div><div className="d2-card__title">Machine Rejection vs Material Rejection vs Rework — Monthly</div><div className="d2-card__sub">FROM: InJob_Det GROUP BY month · ReworkEntry</div></div></div><ChartCanvas setup={setupRejChart} height={200} /></Card>
       <SectionLabel>Customer Complaints (CustomerComplaintMast · NCR · CAPA)</SectionLabel>
