@@ -101,6 +101,14 @@ def find_first_column(cursor, table_name, candidates):
     return None
 
 
+def find_first_table(cursor, candidates):
+    """Return first table name that exists (exact match on TABLE_NAME)."""
+    for t in candidates:
+        if table_exists(cursor, t):
+            return t
+    return None
+
+
 def normalize_accept_flag(value):
     """Map IdleReasons.IsAccept (bit/int/varchar) to True / False / unknown (None)."""
     if value is None:
@@ -747,10 +755,376 @@ def dashboard2_idle_hours(request):
     })
 
 
-    # ─────────────────────────────────────────────────────────────
-#  DASHBOARD 2 — FINAL INSPECTION KPI
-#  Add this view to your existing views.py
-# ─────────────────────────────────────────────────────────────
+@api_view(["GET"])
+def dashboard2_otd(request):
+    """
+    GET /api/dashboard2/otd/
+    Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD (default: month start → today)
+
+    On-time delivery vs In_PoDet_ShdQty.reqdate, using DC date from dc_mas.
+    Deliveries: DcInSubDet UNION ALL DcInSubDetAssmPoDet (sale vs labour split by table),
+    both linked by dcno → dc_mas.
+
+    KPIs:
+      - on_time_delivery_pct: share of delivered qty where DC date <= schedule reqdate
+      - rating_weighted_pct: SUM(qty * CustPoOTDRating.RatingFor) / SUM(qty) using days_late
+        vs CustPoOTDRating bands (days_late = 0 if DC on/before reqdate, else DATEDIFF days)
+      - delayed_lines: count of DC detail rows with DC date > reqdate
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = dashboard2_parse_date_range_default_month(request)
+    company_code = tenant.get("company_code")
+
+    try:
+        cursor = conn.cursor()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    tbl_po_mas = find_first_table(
+        cursor,
+        candidates=["In_PoMas", "in_pomas", "IN_POMAS"],
+    )
+    tbl_shd = find_first_table(
+        cursor,
+        candidates=["In_PoDet_ShdQty", "in_podet_shdqty", "IN_PODET_SHDQTY"],
+    )
+    tbl_dc_mas = find_first_table(
+        cursor,
+        candidates=["dc_mas", "Dc_Mas", "DC_Mas", "DcMas"],
+    )
+    tbl_dc_det = find_first_table(
+        cursor,
+        candidates=["DcInSubDet", "dcinsubdet", "DCINSUBDET"],
+    )
+    tbl_dc_assm = find_first_table(
+        cursor,
+        candidates=["DcInSubDetAssmPoDet", "dcinsubdetassmpodet", "DCINSUBDETASSMPODET"],
+    )
+    tbl_rating = find_first_table(
+        cursor,
+        candidates=["CustPoOTDRating", "custpootdrating", "CUSTPOOTDRATING"],
+    )
+
+    if not all([tbl_po_mas, tbl_shd, tbl_dc_mas, tbl_dc_det, tbl_dc_assm]):
+        cursor.close()
+        conn.close()
+        missing = [
+            n
+            for n, t in [
+                ("In_PoMas", tbl_po_mas),
+                ("In_PoDet_ShdQty", tbl_shd),
+                ("dc_mas", tbl_dc_mas),
+                ("DcInSubDet", tbl_dc_det),
+                ("DcInSubDetAssmPoDet", tbl_dc_assm),
+            ]
+            if not t
+        ]
+        return Response(
+            {"error": f"Missing table(s) for OTD: {', '.join(missing)}"},
+            status=404,
+        )
+
+    po_apono = find_first_column(
+        cursor, tbl_po_mas, ["APono", "apono", "APNO", "PONo", "pono", "PoNo"]
+    )
+    po_deleted = find_first_column(cursor, tbl_po_mas, ["deleted", "Deleted", "is_deleted"])
+    po_company = find_first_column(
+        cursor, tbl_po_mas, ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"]
+    )
+
+    sh_apono = find_first_column(
+        cursor, tbl_shd, ["APono", "apono", "APNO", "PONo", "pono"]
+    )
+    sh_itcode = find_first_column(
+        cursor, tbl_shd, ["itcode", "ItCode", "ITCODE", "PartNo", "partno", "Part_No"]
+    )
+    sh_req = find_first_column(
+        cursor, tbl_shd, ["reqdate", "ReqDate", "REQDATE", "Req_Dt", "req_dt"]
+    )
+    sh_deleted = find_first_column(cursor, tbl_shd, ["deleted", "Deleted", "is_deleted"])
+
+    dcno_m = find_first_column(cursor, tbl_dc_mas, ["dcno", "DcNo", "DCNO", "DC_No"])
+    dc_dt = find_first_column(
+        cursor, tbl_dc_mas, ["dcdate", "DcDate", "DCDT", "DC_DT", "dcdt", "date", "Date"]
+    )
+    dc_m_deleted = find_first_column(cursor, tbl_dc_mas, ["deleted", "Deleted", "is_deleted"])
+    dc_m_company = find_first_column(
+        cursor, tbl_dc_mas, ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"]
+    )
+
+    def dc_cols(tbl):
+        return {
+            "apono": find_first_column(
+                cursor, tbl, ["apono", "APono", "APNO", "PONo", "pono"]
+            ),
+            "partno": find_first_column(
+                cursor, tbl, ["partno", "PartNo", "PARTNO", "itcode", "ItCode"]
+            ),
+            "dcno": find_first_column(cursor, tbl, ["dcno", "DcNo", "DCNO"]),
+            "ok": find_first_column(cursor, tbl, ["okqty", "OkQty", "OKQty"]),
+            "matrej": find_first_column(cursor, tbl, ["matrej", "MatRej", "MATREJ"]),
+            "macrej": find_first_column(cursor, tbl, ["macrej", "MacRej", "MACREJ"]),
+            "uncomp": find_first_column(
+                cursor, tbl, ["uncompqty", "UncompQty", "UNCOMPQTY", "uncomp_qty"]
+            ),
+            "deleted": find_first_column(cursor, tbl, ["deleted", "Deleted", "is_deleted"]),
+        }
+
+    c1 = dc_cols(tbl_dc_det)
+    c2 = dc_cols(tbl_dc_assm)
+
+    required = [
+        (f"{tbl_po_mas}.apono", po_apono),
+        (f"{tbl_shd}.apono", sh_apono),
+        (f"{tbl_shd}.itcode", sh_itcode),
+        (f"{tbl_shd}.reqdate", sh_req),
+        (f"{tbl_dc_mas}.dcno", dcno_m),
+        (f"{tbl_dc_mas}.dcdate", dc_dt),
+        (f"{tbl_dc_det}.apono", c1["apono"]),
+        (f"{tbl_dc_det}.partno", c1["partno"]),
+        (f"{tbl_dc_det}.dcno", c1["dcno"]),
+        (f"{tbl_dc_assm}.apono", c2["apono"]),
+        (f"{tbl_dc_assm}.partno", c2["partno"]),
+        (f"{tbl_dc_assm}.dcno", c2["dcno"]),
+    ]
+    for label, col in required:
+        if not col:
+            cursor.close()
+            conn.close()
+            return Response(
+                {"error": f"OTD: could not resolve column for {label}"},
+                status=422,
+            )
+
+    qty_expr_det = " + ".join(
+        [
+            f"COALESCE(CAST(d.[{c}] AS FLOAT), 0)"
+            for c in [c1["ok"], c1["matrej"], c1["macrej"], c1["uncomp"]]
+            if c
+        ]
+    ) or "0"
+    qty_expr_assm = " + ".join(
+        [
+            f"COALESCE(CAST(a.[{c}] AS FLOAT), 0)"
+            for c in [c2["ok"], c2["matrej"], c2["macrej"], c2["uncomp"]]
+            if c
+        ]
+    ) or "0"
+
+    def filt_po(alias):
+        parts = [f"[{alias}].[{po_deleted}] = 0"] if po_deleted else []
+        if po_company and company_code:
+            parts.append(f"[{alias}].[{po_company}] = ?")
+        return " AND " + " AND ".join(parts) if parts else ""
+
+    def filt_dc_mas(alias):
+        parts = [f"CAST([{alias}].[{dc_dt}] AS DATE) BETWEEN ? AND ?"]
+        if dc_m_deleted:
+            parts.append(f"[{alias}].[{dc_m_deleted}] = 0")
+        if dc_m_company and company_code:
+            parts.append(f"[{alias}].[{dc_m_company}] = ?")
+        return " AND " + " AND ".join(parts)
+
+    sh_where = f"[{sh_deleted}] = 0" if sh_deleted else "1=1"
+    d_del = f"d.[{c1['deleted']}] = 0" if c1["deleted"] else "1=1"
+    a_del = f"a.[{c2['deleted']}] = 0" if c2["deleted"] else "1=1"
+
+    join_po = f"INNER JOIN [{tbl_po_mas}] p ON p.[{po_apono}] = d.[{c1['apono']}]{filt_po('p')}"
+
+    union_sql = f"""
+        SELECT
+            d.[{c1['dcno']}] AS dcno,
+            LTRIM(RTRIM(CAST(d.[{c1['apono']}] AS NVARCHAR(64)))) AS apono,
+            LTRIM(RTRIM(CAST(d.[{c1['partno']}] AS NVARCHAR(128)))) AS partno,
+            CAST(m.[{dc_dt}] AS DATE) AS dc_date,
+            ({qty_expr_det}) AS del_qty
+        FROM [{tbl_dc_det}] d
+        INNER JOIN [{tbl_dc_mas}] m ON m.[{dcno_m}] = d.[{c1['dcno']}]
+        {join_po}
+        WHERE {d_del} AND {filt_dc_mas('m')}
+
+        UNION ALL
+
+        SELECT
+            a.[{c2['dcno']}] AS dcno,
+            LTRIM(RTRIM(CAST(a.[{c2['apono']}] AS NVARCHAR(64)))) AS apono,
+            LTRIM(RTRIM(CAST(a.[{c2['partno']}] AS NVARCHAR(128)))) AS partno,
+            CAST(m2.[{dc_dt}] AS DATE) AS dc_date,
+            ({qty_expr_assm}) AS del_qty
+        FROM [{tbl_dc_assm}] a
+        INNER JOIN [{tbl_dc_mas}] m2 ON m2.[{dcno_m}] = a.[{c2['dcno']}]
+        INNER JOIN [{tbl_po_mas}] p2 ON p2.[{po_apono}] = a.[{c2['apono']}]{filt_po('p2')}
+        WHERE {a_del} AND {filt_dc_mas('m2')}
+    """
+
+    rf = rt = rfor = None
+    if tbl_rating:
+        rf = find_first_column(
+            cursor, tbl_rating, ["RatingFrom", "ratingfrom", "RATINGFROM"]
+        )
+        rt = find_first_column(cursor, tbl_rating, ["RatingTo", "ratingto", "RATINGTO"])
+        rfor = find_first_column(
+            cursor, tbl_rating, ["RatingFor", "ratingfor", "RATINGFOR"]
+        )
+
+    rating_join = ""
+    rating_expr = "CAST(0 AS FLOAT)"
+    if tbl_rating and rf and rt and rfor:
+        rating_join = (
+            f"LEFT JOIN [{tbl_rating}] r ON j.days_late >= r.[{rf}] AND j.days_late <= r.[{rt}]"
+        )
+        rating_expr = f"COALESCE(CAST(r.[{rfor}] AS FLOAT), 0)"
+
+    def append_po_params():
+        pl = []
+        if po_company and company_code:
+            pl.append(company_code)
+        return pl
+
+    def append_dc_params():
+        pl = [start_date, end_date]
+        if dc_m_company and company_code:
+            pl.append(company_code)
+        return pl
+
+    union_params = append_po_params() + append_dc_params() + append_po_params() + append_dc_params()
+
+    main_sql = f"""
+        WITH sch AS (
+            SELECT
+                LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono,
+                LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode,
+                MIN(CAST([{sh_req}] AS DATE)) AS reqdate
+            FROM [{tbl_shd}]
+            WHERE {sh_where}
+            GROUP BY
+                LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))),
+                LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))
+        ),
+        del AS (
+            {union_sql}
+        ),
+        joined AS (
+            SELECT
+                del.dc_date,
+                del.del_qty,
+                sch.reqdate,
+                CASE WHEN del.dc_date <= sch.reqdate THEN 0
+                     ELSE DATEDIFF(DAY, sch.reqdate, del.dc_date)
+                END AS days_late
+            FROM del
+            INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno
+        )
+        SELECT
+            COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty,
+            COALESCE(SUM(j.del_qty), 0) AS total_qty,
+            COALESCE(SUM(CASE WHEN j.dc_date > j.reqdate THEN 1 ELSE 0 END), 0) AS delayed_lines,
+            COALESCE(SUM(CAST(j.del_qty AS FLOAT) * ({rating_expr})), 0) AS rating_num
+        FROM joined j
+        {rating_join}
+    """
+
+    trend_sql = f"""
+        WITH sch AS (
+            SELECT
+                LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono,
+                LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode,
+                MIN(CAST([{sh_req}] AS DATE)) AS reqdate
+            FROM [{tbl_shd}]
+            WHERE {sh_where}
+            GROUP BY
+                LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))),
+                LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))
+        ),
+        del AS (
+            {union_sql}
+        ),
+        joined AS (
+            SELECT
+                del.dc_date,
+                del.del_qty,
+                sch.reqdate
+            FROM del
+            INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno
+        )
+        SELECT
+            YEAR(j.dc_date) AS y,
+            MONTH(j.dc_date) AS m,
+            COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty,
+            COALESCE(SUM(j.del_qty), 0) AS total_qty
+        FROM joined j
+        GROUP BY YEAR(j.dc_date), MONTH(j.dc_date)
+        ORDER BY YEAR(j.dc_date), MONTH(j.dc_date)
+    """
+
+    try:
+        cursor.execute(main_sql, union_params)
+        row = cursor.fetchone()
+        on_time_qty = float(row[0] or 0)
+        total_qty = float(row[1] or 0)
+        delayed_lines = int(row[2] or 0)
+        rating_num = float(row[3] or 0)
+
+        cursor.execute(trend_sql, union_params)
+        trend_rows = cursor.fetchall()
+    except Exception as e:
+        cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    cursor.close()
+    conn.close()
+
+    otd_pct = (
+        round((on_time_qty / total_qty) * 100, 2) if total_qty > 0 else None
+    )
+    rating_weighted_pct = (
+        round((rating_num / total_qty), 2) if total_qty > 0 else None
+    )
+
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    trend = []
+    for tr in trend_rows or []:
+        y, m, otq, tq = int(tr[0]), int(tr[1]), float(tr[2] or 0), float(tr[3] or 0)
+        pct = round((otq / tq) * 100, 2) if tq > 0 else None
+        trend.append({
+            "year": y,
+            "month": m,
+            "label": f"{month_names[m - 1]} {y}",
+            "on_time_delivery_pct": pct,
+            "total_qty": round(tq, 2),
+        })
+
+    schedule_adherence_pct = (
+        rating_weighted_pct if rating_weighted_pct is not None else otd_pct
+    )
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "company_code": tenant.get("company_code", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "kpis": {
+            "on_time_delivery_pct": otd_pct,
+            "rating_weighted_pct": rating_weighted_pct,
+            "schedule_adherence_pct": schedule_adherence_pct,
+            "delayed_lines": delayed_lines,
+            "on_time_qty": round(on_time_qty, 2),
+            "total_del_qty": round(total_qty, 2),
+        },
+        "trend": trend,
+        "sources": [
+            f"{tbl_po_mas} (deleted=0), {tbl_shd} (reqdate), {tbl_dc_mas} (DC date), "
+            f"{tbl_dc_det} + {tbl_dc_assm}",
+            "CustPoOTDRating for weighted score when days late falls in RatingFrom-RatingTo",
+        ],
+    })
+
 
 @api_view(['GET'])
 def dashboard2_final_inspection_kpi(request):
@@ -778,7 +1152,7 @@ def dashboard2_final_inspection_kpi(request):
         "total_rej_qty":      52,
         "total_mat_rej_qty":  14,
         "total_qty":          4284,
-        "first_pass_yield":   98.46,      ← percentage, 2 dp
+        "first_pass_yield":   98.46,
         "inspection_count":   87
     }
     """
