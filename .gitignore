@@ -1,0 +1,17 @@
+# React / Vite
+Frontend/node_modules/
+Frontend/dist/
+
+# Django
+backend/__pycache__/
+backend/*.pyc
+backend/db.sqlite3
+
+# Environment files
+.env
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store

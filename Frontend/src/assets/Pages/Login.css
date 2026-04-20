@@ -1,0 +1,838 @@
+/* ================================================================
+   Login.css  ·  Anims ERP Login Page
+   Full viewport — 100vw × 100vh  ·  Exact Figma values
+   ================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,700;1,800&display=swap');
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+}
+
+button {
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+a {
+    text-decoration: none;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+}
+
+/* ── Tokens ────────────────────────────────────────────────── */
+:root {
+    --c-blue-brand: #2074D4;
+    --c-orange: #FF6A00;
+    --c-blue-mfg: #3985FF;
+    --c-btn: #3978D0;
+    --c-blue-desc: #5E7BA3;
+    --c-heading: #111827;
+    --c-sub: #6B7280;
+    --c-label: #374151;
+    --c-placeholder: #A6A6A6;
+    --c-border: #9397B3;
+    --c-divider: #F3F4F6;
+    --c-link: #9CA3AF;
+    --inp-h: 40.95px;
+    --inp-r: 7.67857px;
+    --inp-bw: 0.96px;
+}
+
+/* ================================================================
+   ROOT  —  fills entire viewport
+   ================================================================ */
+.lp {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    min-height: 600px;
+    background: #ffffff;
+    overflow: hidden;
+    display: flex;
+    font-family: 'Inter', sans-serif;
+}
+
+/* ================================================================
+   ATMOSPHERE BLOBS
+   ================================================================ */
+.lp__blob {
+    position: absolute;
+    width: 46vw;
+    height: 42vh;
+    background: rgba(89, 145, 215, 0.25);
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    /* Soft floating effect */
+    animation: anim-blob-float 15s ease-in-out infinite alternate;
+}
+
+.lp__blob--tr {
+    right: -6vw;
+    top: -22vh;
+    transform: rotate(127deg);
+    animation-delay: 0s;
+}
+
+.lp__blob--bl {
+    left: 22vw;
+    bottom: -14vh;
+    transform: rotate(127deg);
+    animation-delay: -5s;
+}
+
+.lp__blob--tl {
+    left: 10vw;
+    top: -28vh;
+    transform: rotate(63deg);
+    animation-delay: -10s;
+}
+
+/* ================================================================
+   LEFT PANEL — 62% of width, full height, flex column
+   ================================================================ */
+.lp__left {
+    position: relative;
+    z-index: 2;
+    width: 65%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 5% 0 7%;
+    padding-top: 7.5vh;
+    overflow: hidden;
+}
+
+/* ── Brand ──────────────────────────────────────────────────── */
+.lp__brand {
+    position: relative;
+    z-index: 2;
+}
+
+.lp__tagline {
+    position: relative;
+    z-index: 2;
+}
+
+.lp__desc {
+    position: relative;
+    z-index: 2;
+}
+
+.lp__brand-row {
+    display: flex;
+    align-items: baseline;
+    line-height: 1;
+}
+
+.lp__brand-anims,
+.lp__brand-erp {
+    font-family: 'Inter', sans-serif;
+    font-style: italic;
+    font-weight: 800;
+    font-size: clamp(28px, 3.2vw, 50px);
+    color: var(--c-blue-brand);
+    letter-spacing: -1px;
+}
+
+.lp__brand-rule {
+    margin-left: clamp(88px, 9.2vw, 150px);
+    margin-top: 5px;
+    width: clamp(90px, 10vw, 155px);
+    border-top: 2.5px solid var(--c-orange);
+}
+
+.lp__brand-mfg {
+    margin-left: clamp(88px, 9.2vw, 150px);
+    margin-top: 3px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: clamp(16px, 1.8vw, 28px);
+    color: var(--c-blue-mfg);
+}
+
+/* ── Tagline ─────────────────────────────────────────────────── */
+.lp__tagline {
+    margin-top: clamp(16px, 2.8vh, 36px);
+    font-family: 'Inter', sans-serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: clamp(18px, 2vw, 32px);
+    color: var(--c-orange);
+}
+
+/* ================================================================
+   ILLUSTRATION
+   The PNG already contains both the analytics illustration AND the
+   decorative curved divider. We size it so the curve bleeds into
+   the right-panel zone naturally.
+   ================================================================ */
+.lp__illus {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.lp__illus-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: left center;
+    /* makes the black background transparent against the white page */
+    mix-blend-mode: screen;
+}
+
+/* ── Description ─────────────────────────────────────────────── */
+.lp__desc {
+    position: absolute;
+    bottom: clamp(6vh, 15vh, 20vh);
+    left: 7%;
+    max-width: clamp(300px, 35vw, 550px);
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: clamp(12px, 1.1vw, 18px);
+    line-height: 1.6;
+    color: var(--c-blue-desc);
+    z-index: 2;
+}
+
+/* ================================================================
+   RIGHT PANEL — 38% of width, full height
+   ================================================================ */
+.lp__right {
+    position: relative;
+    z-index: 3;
+    width: 38%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 7.5vh 4% 0 4%;
+}
+
+/* ── Logo — fixed top-right corner ─────────────────────────── */
+.lp__logo {
+    position: fixed;
+    top: clamp(20px, 5vh, 60px);
+    right: clamp(20px, 5vw, 80px);
+    width: clamp(60px, 6vw, 90px);
+    height: auto;
+    z-index: 100;
+}
+
+.lp__logo-img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/* ── Card (form wrapper) ─────────────────────────────────────── */
+.lp__card {
+    width: 100%;
+    max-width: 430px;
+    margin-top: auto;
+    margin-bottom: auto;
+    transform: translateY(3vh);
+}
+
+/* ── Heading ─────────────────────────────────────────────────── */
+.lp__card-head {
+    margin-bottom: clamp(14px, 2vh, 22px);
+}
+
+.lp__title {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: clamp(20px, 1.9vw, 28px);
+    line-height: 1.4;
+    color: var(--c-heading);
+    margin-bottom: 4px;
+}
+
+.lp__subtitle {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: clamp(11px, 0.88vw, 14px);
+    line-height: 1.7;
+    color: var(--c-sub);
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+.lp__form {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 1.6vh, 18px);
+}
+
+.lp__field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.lp__label {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 19px;
+    color: var(--c-label);
+}
+
+.lp__wrap {
+    position: relative;
+    width: 100%;
+    height: var(--inp-h);
+}
+
+.lp__ico {
+    position: absolute;
+    left: 11.52px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.lp__inp {
+    width: 100%;
+    height: var(--inp-h);
+    background: #ffffff;
+    border: var(--inp-bw) solid var(--c-border);
+    border-radius: var(--inp-r);
+    padding: 10.558px 12.48px 10.558px 39.35px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 13.44px;
+    color: #374151;
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+}
+
+.lp__inp::placeholder {
+    color: var(--c-placeholder);
+}
+
+.lp__inp:focus {
+    border-color: var(--c-blue-brand);
+    box-shadow: 0 0 0 2.5px rgba(32, 116, 212, .13);
+}
+
+.lp__wrap--bare .lp__inp {
+    padding-left: 12.48px;
+}
+
+.lp__inp--ro {
+    background: #fafafa;
+    color: #374151;          /* ← change from var(--c-placeholder) to this */
+    pointer-events: none;
+}
+
+.lp__inp--ro:focus {
+    border-color: var(--c-border);
+    box-shadow: none;
+}
+
+/* ── Button ──────────────────────────────────────────────────── */
+.lp__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: var(--inp-h);
+    margin-top: 4px;
+    background: var(--c-btn);
+    box-shadow: 0 0.96px 1.92px rgba(0, 0, 0, .05);
+    border-radius: var(--inp-r);
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    color: #fff;
+    transition: background .18s, box-shadow .18s, transform .1s;
+}
+
+.lp__btn:hover {
+    background: #2860b8;
+    box-shadow: 0 4px 18px rgba(39, 102, 209, .3);
+}
+
+.lp__btn:active {
+    transform: scale(0.985);
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.lp__footer {
+    margin-top: clamp(16px, 2.2vh, 26px);
+    padding-top: clamp(14px, 1.8vh, 20px);
+    border-top: 0.96px solid var(--c-divider);
+    width: 100%;
+}
+
+.lp__copy {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 11.52px;
+    color: var(--c-sub);
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.lp__links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.lp__link {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 9.79px;
+    color: var(--c-link);
+    transition: color .15s;
+}
+
+.lp__link:hover {
+    color: var(--c-blue-brand);
+}
+
+.lp__dot {
+    font-size: 9.79px;
+    color: var(--c-link);
+    user-select: none;
+}
+
+
+/* ================================================================
+   RESPONSIVE — TABLET  (max 1024px)
+   ================================================================ */
+@media (max-width: 1024px) {
+
+    .lp__left {
+        width: 55%;
+        padding: 0 3% 0 5%;
+        padding-top: 5vh;
+    }
+
+    .lp__right {
+        width: 45%;
+        padding: 5vh 4% 0 3%;
+    }
+
+    .lp__illus {
+        max-height: 40vh;
+    }
+
+    .lp__logo {
+        top: 24px;
+        right: 20px;
+        width: 60px;
+    }
+
+    .lp__brand-rule,
+    .lp__brand-mfg {
+        margin-left: clamp(70px, 7.5vw, 110px);
+    }
+}
+
+
+/* ================================================================
+   RESPONSIVE — LARGE MOBILE / SMALL TABLET  (max 768px)
+   ================================================================ */
+@media (max-width: 768px) {
+
+    .lp {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+    }
+
+    .lp__blob--tr {
+        right: -20vw;
+        top: -10vh;
+        width: 80vw;
+        height: 30vh;
+    }
+
+    .lp__blob--bl {
+        left: -10vw;
+        bottom: 5vh;
+        width: 70vw;
+        height: 25vh;
+    }
+
+    .lp__blob--tl {
+        display: none;
+    }
+
+    .lp__left {
+        width: 100%;
+        height: auto;
+        padding: 28px 6% 20px;
+        background: linear-gradient(135deg, #dce8fb 0%, #eef4ff 100%);
+        border-bottom: 1px solid rgba(32, 116, 212, 0.12);
+        align-items: center;
+        text-align: center;
+        overflow: hidden;
+    }
+
+    .lp__illus {
+        display: none;
+    }
+
+    .lp__desc {
+        display: none;
+    }
+
+    .lp__brand-row {
+        justify-content: center;
+    }
+
+    .lp__brand-rule {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .lp__brand-mfg {
+        margin-left: auto;
+        text-align: center;
+    }
+
+    .lp__tagline {
+        margin-top: 10px;
+        font-size: clamp(14px, 3.5vw, 20px);
+        text-align: center;
+    }
+
+    .lp__right {
+        width: 100%;
+        height: auto;
+        padding: 28px 6% 40px;
+        align-items: center;
+    }
+
+    .lp__card {
+        max-width: 100%;
+        transform: none;
+        width: 100%;
+    }
+
+    .lp__logo {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        width: 46px;
+    }
+
+    .lp__form {
+        gap: 12px;
+    }
+}
+
+
+/* ================================================================
+   RESPONSIVE — SMALL MOBILE  (max 480px)
+   ================================================================ */
+@media (max-width: 480px) {
+
+    .lp__left {
+        padding: 22px 5% 16px;
+    }
+
+    .lp__brand-anims,
+    .lp__brand-erp {
+        font-size: 26px;
+    }
+
+    .lp__brand-mfg {
+        font-size: 15px;
+    }
+
+    .lp__tagline {
+        font-size: 15px;
+    }
+
+    .lp__right {
+        padding: 22px 5% 36px;
+    }
+
+    .lp__title {
+        font-size: 20px;
+    }
+
+    .lp__subtitle {
+        font-size: 12px;
+    }
+
+    .lp__inp {
+        font-size: 13px;
+        height: 42px;
+    }
+
+    .lp__btn {
+        height: 42px;
+        font-size: 14px;
+    }
+
+    .lp__links {
+        gap: 4px;
+    }
+
+    .lp__copy {
+        font-size: 11px;
+    }
+
+    .lp__logo {
+        width: 38px;
+        top: 12px;
+        right: 12px;
+    }
+}
+
+
+/* ================================================================
+   RESPONSIVE — LANDSCAPE PHONE  (max height 500px + landscape)
+   ================================================================ */
+@media (max-height: 500px) and (orientation: landscape) {
+
+    .lp {
+        flex-direction: row;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    .lp__left {
+        width: 50%;
+        height: 100%;
+        padding: 12px 3% 8px 5%;
+        background: transparent;
+        border-bottom: none;
+        align-items: flex-start;
+        text-align: left;
+        justify-content: center;
+        overflow: visible;
+    }
+
+    .lp__illus {
+        display: none;
+    }
+
+    .lp__desc {
+        display: none;
+    }
+
+    .lp__brand-row {
+        justify-content: flex-start;
+    }
+
+    .lp__brand-rule {
+        margin-left: clamp(70px, 8vw, 120px);
+    }
+
+    .lp__brand-mfg {
+        margin-left: clamp(70px, 8vw, 120px);
+        text-align: left;
+    }
+
+    .lp__tagline {
+        font-size: 14px;
+        margin-top: 8px;
+    }
+
+    .lp__right {
+        width: 50%;
+        height: 100%;
+        padding: 8px 4% 8px 3%;
+    }
+
+    .lp__card {
+        transform: none;
+        margin-top: 0;
+        margin-bottom: 0;
+        max-width: 100%;
+    }
+
+    .lp__card-head {
+        margin-bottom: 8px;
+    }
+
+    .lp__title {
+        font-size: 18px;
+    }
+
+    .lp__subtitle {
+        font-size: 11px;
+    }
+
+    .lp__form {
+        gap: 8px;
+    }
+
+    .lp__footer {
+        margin-top: 8px;
+        padding-top: 8px;
+    }
+
+    .lp__logo {
+        top: 10px;
+        right: 10px;
+        width: 36px;
+    }
+}
+
+
+/* ================================================================
+   RESPONSIVE — EXTRA SMALL MOBILE  (max 360px)
+   ================================================================ */
+@media (max-width: 360px) {
+    .lp__brand-anims,
+    .lp__brand-erp {
+        font-size: 22px;
+    }
+    .lp__brand-mfg {
+        font-size: 13px;
+    }
+    .lp__tagline {
+        font-size: 13px;
+    }
+    .lp__title {
+        font-size: 18px;
+    }
+    .lp__subtitle {
+        font-size: 11px;
+    }
+    .lp__inp {
+        font-size: 12px;
+        height: 38px;
+    }
+    .lp__btn {
+        height: 38px;
+        font-size: 13px;
+    }
+    .lp__logo {
+        width: 32px;
+    }
+}
+
+
+/* ================================================================
+   RESPONSIVE — ULTRA WIDE DETAILED (min-width: 1600px)
+   ================================================================ */
+@media (min-width: 1600px) {
+    .lp__card {
+        max-width: 500px;
+        transform: translateY(2vh);
+    }
+    .lp__title {
+        font-size: 32px;
+    }
+    .lp__subtitle {
+        font-size: 16px;
+    }
+    .lp__inp {
+        height: 48px;
+        font-size: 15px;
+    }
+    .lp__btn {
+        height: 48px;
+        font-size: 16px;
+    }
+    .lp__desc {
+        max-width: 650px;
+        font-size: 20px;
+    }
+    .lp__label {
+        font-size: 16px;
+    }
+}
+.lp__inp--err {
+    border-color: #e05252 !important;
+}
+.lp__inp--err::placeholder {
+    color: #e05252;
+}
+
+/* ================================================================
+   ANIMATIONS & RICH UI UTILITIES
+   ================================================================ */
+
+@keyframes anim-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes anim-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes anim-blob-float {
+    0% { transform: translateY(0px) scale(1) rotate(0deg); }
+    50% { transform: translateY(3vw) scale(1.05) rotate(5deg); }
+    100% { transform: translateY(-2vw) scale(0.95) rotate(-5deg); }
+}
+
+@keyframes anim-float {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-1.5vh); }
+}
+
+.anim-fade-up {
+    opacity: 0;
+    animation: anim-fade-up 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.anim-fade-in {
+    opacity: 0;
+    animation: anim-fade-in 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.float-slow {
+    animation: anim-float 4s ease-in-out infinite alternate;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
