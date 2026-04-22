@@ -74,6 +74,14 @@ def to_lakhs(value):
     return round(float(value or 0) / 100_000, 2)
 
 
+def month_key_from_db(raw):
+    """Normalize MONTH() / date parts from ODBC (may be int or Decimal) for dict lookup."""
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def table_exists(cursor, table_name):
     cursor.execute(
         """
@@ -224,8 +232,8 @@ def login_view(request):
         "company_code": tenant.company_code,
         "company_name": tenant.company_name,
     }
-    request.session.modified = True   # ✅ force Django to persist session
-    request.session.save()     
+    request.session.modified = True
+    request.session.save()
 
     return Response({
         "message":      "Login successful",
@@ -270,11 +278,12 @@ def po_vs_sales(request):
     GET /api/po-vs-sales/
     Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD
 
-    - Default range  : current financial year (Apr 2026 → Mar 2027)
+    - Default range  : current financial year (Apr → Mar)
     - Grouping       : always 12 monthly buckets in FY order (Apr→Mar)
     - Values         : ₹ Lakhs (tamt ÷ 100,000)
-    - Company filter : NOT needed — tenant's own isolated DB is used
-                       (connection comes from session)
+
+    Sales  → Bill_Mas.tamt   WHERE deleted=0 AND btype NOT IN ('Credit Note')
+    PO     → In_PoMas.tamt   WHERE deleted=0
 
     Response shape:
     {
@@ -283,8 +292,8 @@ def po_vs_sales(request):
         "from":     "2026-04-01",
         "to":       "2027-03-31",
         "labels":   ["Apr","May",...,"Mar"],
-        "sales":    [12.50, 18.30, ...],   ← ₹ Lakhs
-        "po":       [10.00, 15.75, ...]    ← ₹ Lakhs
+        "sales":    [12.50, 18.30, ...],   ← ₹ Lakhs  (Bill_Mas.tamt)
+        "po":       [10.00, 15.75, ...]    ← ₹ Lakhs  (In_PoMas.tamt)
     }
     """
     # ── Auth ─────────────────────────────────────────────────
@@ -297,34 +306,36 @@ def po_vs_sales(request):
     start_date, end_date = parse_date_range(request)
 
     # ── Financial year label ──────────────────────────────────
-    # e.g. start=2026-04-01 → "FY 2026-27"
     fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
     fy_label      = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
 
     try:
         cursor = conn.cursor()
 
-        # ── Sales Query ── SUM(txamt), exclude Credit Note ───────
+        # ── Sales query ───────────────────────────────────────
+        # Use tamt (total invoice amount) from Bill_Mas.
+        # Exclude Credit Notes so only actual sales are counted.
+        # invdt is the invoice date — used for date range filtering.
         cursor.execute("""
             SELECT
-                MONTH(invdt)   AS mth,
-                SUM(txamt)     AS total
+                MONTH(invdt)  AS mth,
+                SUM(tamt)     AS total
             FROM Bill_Mas
             WHERE deleted = 0
-              AND (btype IS NULL OR btype NOT IN ('Credit Note'))
-              AND invdt BETWEEN ? AND ?
+              AND ISNULL(btype, '') NOT IN ('Credit Note')
+              AND CAST(invdt AS DATE) BETWEEN ? AND ?
             GROUP BY MONTH(invdt)
         """, (start_date, end_date))
         sales_rows = cursor.fetchall()
 
-        # ── PO Query ── SUM(tamt) from In_PoMas ──────────────
+        # ── PO query ─────────────────────────────────────────
         cursor.execute("""
             SELECT
-                MONTH(podt)    AS mth,
-                SUM(tamt)      AS total
+                MONTH(podt)   AS mth,
+                SUM(tamt)     AS total
             FROM In_PoMas
             WHERE deleted = 0
-              AND podt BETWEEN ? AND ?
+              AND CAST(podt AS DATE) BETWEEN ? AND ?
             GROUP BY MONTH(podt)
         """, (start_date, end_date))
         po_rows = cursor.fetchall()
@@ -336,7 +347,6 @@ def po_vs_sales(request):
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
     # ── Build FY-ordered response (Apr=4 … Mar=3) ─────────────
-    #    12 buckets always present, missing months default to 0.
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     labels      = ["Apr","May","Jun","Jul","Aug","Sep",
                    "Oct","Nov","Dec","Jan","Feb","Mar"]
@@ -345,12 +355,14 @@ def po_vs_sales(request):
     po_map    = {m: 0.0 for m in month_order}
 
     for mth, total in sales_rows:
-        if mth in sales_map:
-            sales_map[mth] = to_lakhs(total)
+        mk = month_key_from_db(mth)
+        if mk in sales_map:
+            sales_map[mk] = to_lakhs(total)
 
     for mth, total in po_rows:
-        if mth in po_map:
-            po_map[mth] = to_lakhs(total)
+        mk = month_key_from_db(mth)
+        if mk in po_map:
+            po_map[mk] = to_lakhs(total)
 
     return Response({
         "company": tenant.get("company_name", ""),
@@ -360,6 +372,113 @@ def po_vs_sales(request):
         "labels":  labels,
         "sales":   [sales_map[m] for m in month_order],
         "po":      [po_map[m]    for m in month_order],
+    })
+
+
+# ─────────────────────────────────────────────────────────────
+#  CUSTOMER COMPLAINT DISTRIBUTION (Month-wise Pie)
+# ─────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+def customer_complaints(request):
+    """
+    GET /api/customer-complaints/
+    Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+    Source: CustCompMas — counts by calendar month of complaint date (CmpDate).
+    Date filter: CAST(CmpDate AS DATE) BETWEEN from AND to.
+    Excludes rows where Deleted is set (treated as non-deleted when ISNULL(Deleted,0)=0).
+
+    Returns month-wise complaint counts for the selected range, buckets in FY order (Apr→Mar).
+    Each month is a slice in the pie chart.
+
+    Response:
+    {
+        "company": "ABC Industries",
+        "fy": "FY 2025-26",
+        "from": "2025-04-01",
+        "to": "2026-03-31",
+        "labels": ["Apr","May",...,"Mar"],
+        "data": [10, 21, 5, ...]  ← complaint counts per month
+    }
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
+    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+
+    try:
+        cursor = conn.cursor()
+
+        tbl = find_first_table(
+            cursor,
+            ["CustCompMas", "custcompmas", "CUSTCOMPMAS"],
+        )
+        if not tbl:
+            cursor.close()
+            conn.close()
+            return Response({"error": "Table CustCompMas not found"}, status=404)
+
+        cmp_date_col = find_first_column(
+            cursor, tbl, ["CmpDate", "cmpdate", "CMPDATE"]
+        )
+        if not cmp_date_col:
+            cursor.close()
+            conn.close()
+            return Response({"error": "Column CmpDate not found on customer complaint table"}, status=404)
+
+        deleted_col = find_first_column(
+            cursor, tbl, ["Deleted", "deleted", "DELETED"]
+        )
+        deleted_sql = (
+            f"AND ISNULL([{deleted_col}], 0) = 0" if deleted_col else ""
+        )
+
+        # Month-wise totals; filter strictly by CmpDate within requested range
+        sql = f"""
+            SELECT
+                MONTH([{cmp_date_col}]) AS month_num,
+                COUNT(*) AS cnt
+            FROM [{tbl}]
+            WHERE [{cmp_date_col}] IS NOT NULL
+              AND CAST([{cmp_date_col}] AS DATE) BETWEEN ? AND ?
+              {deleted_sql}
+            GROUP BY MONTH([{cmp_date_col}])
+            ORDER BY MONTH([{cmp_date_col}])
+        """
+        cursor.execute(sql, (start_date, end_date))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # FY order: Apr(4) → Mar(3)
+    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
+    
+    counts = {m: 0 for m in month_order}
+
+    for month_num, cnt in rows:
+        mk = month_key_from_db(month_num)
+        if mk in counts:
+            try:
+                counts[mk] = int(cnt or 0)
+            except (TypeError, ValueError):
+                counts[mk] = 0
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "fy": fy_label,
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "data": [counts[m] for m in month_order],
     })
 
 
@@ -389,7 +508,6 @@ def dashboard2_kpis(request):
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
-    # Dashboard default requested: current month start -> current date
     from_param = (request.GET.get("from") or "").strip()
     to_param = (request.GET.get("to") or "").strip()
 
@@ -488,7 +606,6 @@ def dashboard2_kpis(request):
             row = cursor.fetchone()
             rejection_qty += float((row[0] if row else 0) or 0)
 
-        # OEE / OA efficiency: average of each table's AVG(OAEFF), deleted = 0
         table_avgs = []
         for table_name in oaeff_tables:
             if not table_exists(cursor, table_name):
@@ -1162,7 +1279,6 @@ def dashboard2_final_inspection_kpi(request):
         return Response({"error": str(e)}, status=401)
 
     # ── Date range ───────────────────────────────────────────
-    # Default: current month start → today
     from_param = (request.GET.get("from") or "").strip()
     to_param   = (request.GET.get("to")   or "").strip()
 
@@ -1187,7 +1303,6 @@ def dashboard2_final_inspection_kpi(request):
     try:
         cursor = conn.cursor()
 
-        # Confirm the table exists before querying
         if not table_exists(cursor, "FinalInspectionEntry"):
             cursor.close()
             conn.close()
@@ -1230,7 +1345,6 @@ def dashboard2_final_inspection_kpi(request):
     total_qty         = float(row[3] or 0)
     inspection_count  = int(row[4]   or 0)
 
-    # First Pass Yield = ok / total × 100
     first_pass_yield = (
         round((total_ok_qty / total_qty) * 100, 2)
         if total_qty > 0
