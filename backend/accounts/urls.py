@@ -8,15 +8,17 @@ from .views import (
     dashboard2_idle_hours, 
     dashboard2_otd,
     customer_complaints,
+    rejection_monthwise, # <--- Added new import
 )
 
 urlpatterns = [
     path('login/', login_view),
     path('company/<str:code>/', get_company),
     
-    # Chart APIs (mounted under `api/` in project urls — no extra `api/` prefix here)
+    # Chart APIs
     path('po-vs-sales/', po_vs_sales),
     path('customer-complaints/', customer_complaints, name='customer_complaints'),
+    path('quality/rejection-monthwise/', rejection_monthwise, name='rejection_monthwise'), # <--- Added new path
     
     # Dashboard 2 APIs
     path('dashboard2/kpis/', dashboard2_kpis),

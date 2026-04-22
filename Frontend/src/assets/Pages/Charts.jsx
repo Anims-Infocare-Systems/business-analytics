@@ -109,6 +109,7 @@ const CHART_DEFS = [
         },
     },
     {
+        // UPDATED: Now points to new API endpoint
         id: "quality-2", title: "Rejection Monthwise",
         badge: "Monthly", category: "quality", type: "line", status: "active",
         tags: ["Quality", "Line Chart"], filename: "rejection-monthwise.png",
@@ -619,13 +620,16 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
 
         if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
 
-        // ── API charts: sales-1 & quality-1 fetch live data ─────────
-        if (def.id === "sales-1" || def.id === "quality-1") {
+        // ── API charts: sales-1, quality-1, quality-2 fetch live data ─────────
+        if (def.id === "sales-1" || def.id === "quality-1" || def.id === "quality-2") {
             setLoading(true);
             setError(null);
 
             const ac = new AbortController();
-            const endpoint = def.id === "sales-1" ? "/api/po-vs-sales/" : "/api/customer-complaints/";
+            let endpoint = "/api/po-vs-sales/";
+            if (def.id === "quality-1") endpoint = "/api/customer-complaints/";
+            if (def.id === "quality-2") endpoint = "/api/quality/rejection-monthwise/"; // <--- New Endpoint
+
             let url = endpoint;
             if (dateRange?.from && dateRange?.to) {
                 const from = formatLocalDate(dateRange.from);
@@ -664,6 +668,24 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
                                     label: "Complaint Count",
                                     data: data.data || [],
                                     backgroundColor: def.config.data.datasets[0].backgroundColor,
+                                }],
+                            },
+                            options: { ...def.config.options },
+                        });
+                    } else if (def.id === "quality-2") {
+                        // Rejection Monthwise – Line chart
+                        chartRef.current = new Chart(canvasRef.current, {
+                            type: "line",
+                            data: {
+                                labels: data.labels || [],
+                                datasets: [{
+                                    label: "Rejection Count",
+                                    data: data.data || [],
+                                    borderColor: "#ec4899", 
+                                    backgroundColor: "rgba(236,72,153,0.1)",
+                                    tension: 0.4, 
+                                    fill: true, 
+                                    pointRadius: 3,
                                 }],
                             },
                             options: { ...def.config.options },
@@ -708,7 +730,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
             <div className="ch-card__tags">
                 {def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}
                 <span className={`ch-tag ch-tag--${def.category}`} style={{ opacity: 0.75, fontStyle: "italic" }}>
-                    {(def.id === "sales-1" || def.id === "quality-1") ? fyLabel : def.badge}
+                    {(def.id === "sales-1" || def.id === "quality-1" || def.id === "quality-2") ? fyLabel : def.badge}
                 </span>
                 {def.status === "archived" && <span className="ch-tag ch-tag--archived">Archived</span>}
             </div>
@@ -767,10 +789,14 @@ function PreviewModal({ def, onClose, initialDateRange }) {
         if (!def || !canvasRef.current) return;
 
         // ── API charts ────────────────────────────────────
-        if (def.id === "sales-1" || def.id === "quality-1") {
+        if (def.id === "sales-1" || def.id === "quality-1" || def.id === "quality-2") {
             if (chartRef.current) chartRef.current.destroy();
             const ac = new AbortController();
-            const endpoint = def.id === "sales-1" ? "/api/po-vs-sales/" : "/api/customer-complaints/";
+            
+            let endpoint = "/api/po-vs-sales/";
+            if (def.id === "quality-1") endpoint = "/api/customer-complaints/";
+            if (def.id === "quality-2") endpoint = "/api/quality/rejection-monthwise/"; // <--- New Endpoint
+
             let url = endpoint;
             if (modalDateRange.from && modalDateRange.to) {
                 const from = formatLocalDate(modalDateRange.from);
@@ -819,6 +845,30 @@ function PreviewModal({ def, onClose, initialDateRange }) {
                                 plugins: {
                                     ...def.config.options.plugins,
                                     title: { display: true, text: `Complaint Distribution ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } },
+                                },
+                            },
+                        });
+                    } else if (def.id === "quality-2") {
+                        // Rejection Monthwise Line Chart
+                        chartRef.current = new Chart(canvasRef.current, {
+                            type: "line",
+                            data: {
+                                labels: data.labels || [],
+                                datasets: [{
+                                    label: `Rejections — ${data.fy || ""}`,
+                                    data: data.data || [],
+                                    borderColor: "#ec4899", 
+                                    backgroundColor: "rgba(236,72,153,0.1)",
+                                    tension: 0.4, 
+                                    fill: true, 
+                                    pointRadius: 3,
+                                }],
+                            },
+                            options: {
+                                ...def.config.options,
+                                plugins: {
+                                    ...def.config.options.plugins,
+                                    title: { display: true, text: `Rejection Trend ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } },
                                 },
                             },
                         });
@@ -993,7 +1043,7 @@ export default function Charts() {
                             def={def}
                             idx={idx}
                             onPreview={handlePreview}
-                            dateRange={(def.id === "sales-1" || def.id === "quality-1") ? dateRange : undefined}
+                            dateRange={(def.id === "sales-1" || def.id === "quality-1" || def.id === "quality-2") ? dateRange : undefined}
                         />
                     ))}
                 </div>
