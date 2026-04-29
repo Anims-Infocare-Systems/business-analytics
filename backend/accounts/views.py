@@ -1105,6 +1105,17 @@ def dashboard2_production_by_shift(request):
 
 @api_view(["GET"])
 def dashboard2_idle_hours(request):
+    """
+    GET /api/dashboard2/idle-hours/
+    Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD (default: month start → today)
+    
+    Dashboard2 - Idle Time Summary Logic:
+    1. Aggregates non-productive hours from 3 areas (Machine, Production, Conveyor)
+    2. Classifies downtime into "Accepted" (IsAccept=1) and "Non-Accepted" (IsAccept=0)
+    3. Matches reasons via: LTRIM(RTRIM(reasons)) = LTRIM(RTRIM(IdleReasons.IdleReasons))
+    4. Calculates duration: DATEDIFF(MINUTE, '1900-01-01', tottime) / 60.0 = hours
+    5. Returns: accepted_hours, non_accepted_hours, total_idle_hours, other_hours
+    """
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
@@ -1112,55 +1123,103 @@ def dashboard2_idle_hours(request):
 
     start_date, end_date = dashboard2_parse_date_range_default_month(request)
     company_code = tenant.get("company_code")
-    d1 = start_date.isoformat()
-    d2 = end_date.isoformat()
+    
+    # Use parameterized queries for date safety
+    date_params = [start_date, end_date]
 
-    final_sql = f"""
-SELECT CAST(ISNULL(SUM(AcceptedMinutes), 0) AS FLOAT) / 60.0 AS accepted_hours,
-       CAST(ISNULL(SUM(NonAcceptedMinutes), 0) AS FLOAT) / 60.0 AS non_accepted_hours,
-       CAST(ISNULL(SUM(TotalMinutes), 0) AS FLOAT) / 60.0 AS total_idle_hours
-FROM (
-    SELECT ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', D.tottime) END), 0) AS AcceptedMinutes,
-           ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', D.tottime) END), 0) AS NonAcceptedMinutes,
-           ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', D.tottime)), 0) AS TotalMinutes
-    FROM Machine_IdleEntryDet D INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-    LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(D.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
-    WHERE M.proddate BETWEEN '{d1}' AND '{d2}' AND M.deleted = 0 AND D.deleted = 0
-    UNION ALL
-    SELECT ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', P.tottime) END), 0),
-           ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', P.tottime) END), 0),
-           ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', P.tottime)), 0)
-    FROM Prod_IdleEntry P INNER JOIN ProductionEntry PE ON P.prodid = PE.prodid
-    LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(P.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
-    WHERE PE.proddate BETWEEN '{d1}' AND '{d2}' AND PE.deleted = 0 AND P.deleted = 0
-    UNION ALL
-    SELECT ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', CI.tottime) END), 0),
-           ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', CI.tottime) END), 0),
-           ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', CI.tottime)), 0)
-    FROM conv_IdleEntry CI INNER JOIN (
-        SELECT entryno FROM ConvProductionEntry WHERE entrydate BETWEEN '{d1}' AND '{d2}' AND deleted = 0
-        UNION SELECT entryno FROM ConvProductionEntryRod WHERE entrydate BETWEEN '{d1}' AND '{d2}' AND deleted = 0
-    ) C ON CI.entryno = C.entryno
-    LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(CI.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
-    WHERE CI.deleted = 0
-) AS X
-"""
-    acc_h = na_h = tot_h = 0.0
+    # ── CORRECTED IDLE HOURS QUERY ───────────────────────────
+    # Properly calculates accepted, non-accepted, total, and other hours
+    # Other hours = idle time where reason doesn't match any IdleReasons entry
+    final_sql = """
+    SELECT 
+        CAST(ISNULL(SUM(AcceptedMinutes), 0) AS FLOAT) / 60.0 AS accepted_hours,
+        CAST(ISNULL(SUM(NonAcceptedMinutes), 0) AS FLOAT) / 60.0 AS non_accepted_hours,
+        CAST(ISNULL(SUM(TotalMinutes), 0) AS FLOAT) / 60.0 AS total_idle_hours,
+        CAST(ISNULL(SUM(OtherMinutes), 0) AS FLOAT) / 60.0 AS other_hours
+    FROM (
+        -- Branch 1: Machine Idle
+        SELECT
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', D.tottime) END), 0) AS AcceptedMinutes,
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', D.tottime) END), 0) AS NonAcceptedMinutes,
+            ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', D.tottime)), 0) AS TotalMinutes,
+            ISNULL(SUM(CASE WHEN IR.IdleReasons IS NULL THEN DATEDIFF(MINUTE, '1900-01-01', D.tottime) END), 0) AS OtherMinutes
+        FROM Machine_IdleEntryDet D
+        INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+        LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(D.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
+        WHERE M.proddate BETWEEN ? AND ?
+          AND M.deleted = 0
+          AND D.deleted = 0
+
+        UNION ALL
+
+        -- Branch 2: Production Idle
+        SELECT
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', P.tottime) END), 0),
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', P.tottime) END), 0),
+            ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', P.tottime)), 0),
+            ISNULL(SUM(CASE WHEN IR.IdleReasons IS NULL THEN DATEDIFF(MINUTE, '1900-01-01', P.tottime) END), 0)
+        FROM Prod_IdleEntry P
+        INNER JOIN ProductionEntry PE ON P.prodid = PE.prodid
+        LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(P.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
+        WHERE PE.proddate BETWEEN ? AND ?
+          AND PE.deleted = 0
+          AND P.deleted = 0
+
+        UNION ALL
+
+        -- Branch 3: Conveyor Idle
+        SELECT
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 1 THEN DATEDIFF(MINUTE, '1900-01-01', CI.tottime) END), 0),
+            ISNULL(SUM(CASE WHEN IR.IsAccept = 0 THEN DATEDIFF(MINUTE, '1900-01-01', CI.tottime) END), 0),
+            ISNULL(SUM(DATEDIFF(MINUTE, '1900-01-01', CI.tottime)), 0),
+            ISNULL(SUM(CASE WHEN IR.IdleReasons IS NULL THEN DATEDIFF(MINUTE, '1900-01-01', CI.tottime) END), 0)
+        FROM conv_IdleEntry CI
+        INNER JOIN (
+            SELECT entryno FROM ConvProductionEntry WHERE entrydate BETWEEN ? AND ? AND deleted = 0
+            UNION
+            SELECT entryno FROM ConvProductionEntryRod WHERE entrydate BETWEEN ? AND ? AND deleted = 0
+        ) C ON CI.entryno = C.entryno
+        LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(CI.reasons)) = LTRIM(RTRIM(IR.IdleReasons)) AND IR.deleted = 0
+        WHERE CI.deleted = 0
+    ) AS X
+    """
+
+    # Build parameters for all 3 branches (each branch needs start_date, end_date)
+    params = [
+        start_date, end_date,  # Branch 1
+        start_date, end_date,  # Branch 2
+        start_date, end_date, start_date, end_date  # Branch 3 (subquery has 2 date ranges)
+    ]
+
+    acc_h = na_h = tot_h = other_h = 0.0
     try:
         cursor = conn.cursor()
-        cursor.execute(final_sql)
+        cursor.execute(final_sql, params)
         row = cursor.fetchone()
         if row:
             acc_h = float(row[0] or 0)
             na_h = float(row[1] or 0)
             tot_h = float(row[2] or 0)
+            other_h = float(row[3] or 0)
         cursor.close()
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    other_mins = max(0.0, (tot_h - acc_h - na_h) * 60.0)
-    return Response({"company": tenant.get("company_name", ""), "company_code": company_code or "", "from": str(start_date), "to": str(end_date), "summary": {"accepted_hours": round(acc_h, 2), "non_accepted_hours": round(na_h, 2), "total_idle_hours": round(tot_h, 2), "other_hours": round(other_mins / 60.0, 2)}})
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "company_code": company_code or "",
+        "from": str(start_date),
+        "to": str(end_date),
+        "summary": {
+            "accepted_hours": round(acc_h, 2),
+            "non_accepted_hours": round(na_h, 2),
+            "total_idle_hours": round(tot_h, 2),
+            "other_hours": round(other_h, 2),
+        },
+        "accepted": [],
+        "non_accepted": [],
+    })
 
 
 @api_view(["GET"])
