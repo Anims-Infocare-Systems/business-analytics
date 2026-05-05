@@ -99,7 +99,7 @@ const HEADING_MAP = {
     "Dispatch / Packing":   "Packing & Dispatch Dashboard",
     "Idle Time Report":     "MIS — Idle Time Report",
     "Efficiency Report":    "MIS — Efficiency Report",
-    "Charts":               "Advanced Analytics Dashboard",
+    "Charts":               "Charts & Visualizations",
     "User Rights":          "Utility — User Rights",
     "Anims Utility":        "Utility — Anims Utility",
 };

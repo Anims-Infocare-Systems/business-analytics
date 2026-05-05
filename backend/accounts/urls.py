@@ -1,45 +1,28 @@
 from django.urls import path
 from .views import (
     # Login & Company
-    login_view,
-    get_company,
-    
+    login_view, get_company,
     # Charts - Sabarish (Monthwise)
-    po_vs_sales,
-    customer_complaints,
-    rejection_monthwise,
-    rework_monthwise,
-    mac_rejection_ppm,
-    otd_report,
-    
-    # Production - Operator Efficiency
-    get_operators,
-    operator_efficiency,
-    overall_operator_efficiency,
-    
+    po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise,
+    mac_rejection_ppm, otd_report,
+    # Operations
+    overall_efficiency_monthwise, production_value_monthwise,
+    # Production - Operator Efficiency & Machine Idle Time
+    get_operators, operator_efficiency, overall_operator_efficiency, machine_wise_idle_time,
     # Dashboard2 - Pranesh (Full Implementation)
-    dashboard2_kpis,
-    dashboard2_production_by_shift,
-    dashboard2_idle_hours,
-    dashboard2_downtime_by_reason,
-    dashboard2_customer_complaints,
-    dashboard2_po_pipeline,
-    dashboard2_inspection_pending_snapshot,
-    dashboard2_grn_pending_pipeline,
-    dashboard2_iqc_rejections,
-    dashboard2_otd,
-    dashboard2_final_inspection_kpi,
-    dashboard2_injob_inspection,
-    dashboard2_inter_inspection,
-    dashboard2_final_inspection_org_rej_rwk,
-    dashboard2_top_defect_categories,
+    dashboard2_kpis, dashboard2_production_by_shift, dashboard2_idle_hours,
+    dashboard2_downtime_by_reason, dashboard2_customer_complaints, dashboard2_po_pipeline,
+    dashboard2_inspection_pending_snapshot, dashboard2_grn_pending_pipeline,
+    dashboard2_iqc_rejections, dashboard2_otd, dashboard2_final_inspection_kpi,
+    dashboard2_injob_inspection, dashboard2_inter_inspection,
+    dashboard2_final_inspection_org_rej_rwk, dashboard2_top_defect_categories,
 )
 
 urlpatterns = [
     # ── Authentication ────────────────────────────────────────
     path('login/', login_view, name='login'),
     path('company/<str:code>/', get_company, name='get_company'),
-    
+
     # ── Charts (Sabarish - Monthwise) ─────────────────────────
     path('po-vs-sales/', po_vs_sales, name='po_vs_sales'),
     path('customer-complaints/', customer_complaints, name='customer_complaints'),
@@ -48,11 +31,16 @@ urlpatterns = [
     path('quality/mac-rejection-ppm/', mac_rejection_ppm, name='mac_rejection_ppm'),
     path('otd-report/', otd_report, name='otd_report'),
     
-    # ── Production - Operator Efficiency ──────────────────────
+    # ── Operations ────────────────────────────────────────────
+    path('operations/overall-efficiency/', overall_efficiency_monthwise, name='overall_efficiency_monthwise'),
+    path('operations/production-value/', production_value_monthwise, name='production_value_monthwise'),
+
+    # ── Production - Operator Efficiency & Machine Idle Time ──
     path('production/operators/', get_operators, name='get_operators'),
     path('production/operator-efficiency/', operator_efficiency, name='operator_efficiency'),
     path('production/overall-operator-efficiency/', overall_operator_efficiency, name='overall_operator_efficiency'),
-    
+    path('production/machine-idle-time/', machine_wise_idle_time, name='machine_wise_idle_time'),
+
     # ── Dashboard2 (Pranesh - Full Implementation) ────────────
     path('dashboard2/kpis/', dashboard2_kpis, name='dashboard2_kpis'),
     path('dashboard2/production-by-shift/', dashboard2_production_by_shift, name='dashboard2_production_by_shift'),
