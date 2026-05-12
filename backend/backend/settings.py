@@ -8,6 +8,7 @@ SECRET_KEY = 'django-insecure-zj%!nwe5_$pw+q0=ngelf(-ce+2t%s55f!iek@#il+)^xddykb
 DEBUG = True
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS += [x.strip() for x in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if x.strip()]
 
 
 # ─── Applications ─────────────────────────────────────────────
@@ -82,13 +83,25 @@ DATABASES = {
 #     CORS_ALLOW_CREDENTIALS = True — browsers reject this combo.
 #     Must use explicit origin list instead.
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",      # ✅ Vite default port — THIS WAS MISSING
-    "http://127.0.0.1:5173",     # ✅ Vite alternate
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
-CORS_ALLOW_CREDENTIALS = True     # ✅ allows session cookie cross-origin
+# DEBUG only: LAN (`vite --host`), non‑default ports; still credential-safe (regex is host:port scoped).
+if DEBUG:
+    _vite_port = r"\d+"
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        rf"^http://localhost:{_vite_port}$",
+        rf"^http://127\.0\.0\.1:{_vite_port}$",
+        rf"^http://192\.168\.\d{{1,3}}\.\d{{1,3}}:{_vite_port}$",
+        rf"^http://10\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}:{_vite_port}$",
+    ]
+else:
+    CORS_ALLOWED_ORIGIN_REGEXES = []
+
+CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
     "content-type",
@@ -109,10 +122,15 @@ SESSION_COOKIE_AGE      = 86400   # ✅ session lives 24 hours (in seconds)
 
 # ─── CSRF ─────────────────────────────────────────────────────
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",      # ✅ add this too
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+]
+CSRF_TRUSTED_ORIGINS += [
+    x.strip()
+    for x in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if x.strip()
 ]
 
 # ─── Password validation ──────────────────────────────────────

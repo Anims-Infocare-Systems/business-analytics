@@ -5,10 +5,15 @@ from .views import (
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise,
     mac_rejection_ppm, otd_report,
+    # Purchase
+    purchase_report_monthwise, supplier_rating_monthwise, # ✅ NEW
+    # Vendor (NEW)
+    vendor_rejection_monthwise,
     # Operations
     overall_efficiency_monthwise, production_value_monthwise,
-    # Production - Operator Efficiency & Machine Idle Time
+    # Production - Operator Efficiency & Machine Idle Time & Machine Efficiency
     get_operators, operator_efficiency, overall_operator_efficiency, machine_wise_idle_time,
+    get_machines, machine_efficiency_monthwise,
     # Dashboard2 - Pranesh (Full Implementation)
     dashboard2_kpis, dashboard2_production_by_shift, dashboard2_idle_hours,
     dashboard2_downtime_by_reason, dashboard2_customer_complaints, dashboard2_po_pipeline,
@@ -17,12 +22,16 @@ from .views import (
     dashboard2_injob_inspection, dashboard2_inter_inspection,
     dashboard2_final_inspection_org_rej_rwk, dashboard2_top_defect_categories,
 )
-
+from .views_dashboard1 import (
+    dashboard1_sales_kpi,
+    dashboard1_purchase_kpi,
+    dashboard1_production_kpi,
+    dashboard1_sales_projections,
+)
 urlpatterns = [
     # ── Authentication ────────────────────────────────────────
     path('login/', login_view, name='login'),
     path('company/<str:code>/', get_company, name='get_company'),
-
     # ── Charts (Sabarish - Monthwise) ─────────────────────────
     path('po-vs-sales/', po_vs_sales, name='po_vs_sales'),
     path('customer-complaints/', customer_complaints, name='customer_complaints'),
@@ -30,17 +39,23 @@ urlpatterns = [
     path('quality/rework-monthwise/', rework_monthwise, name='rework_monthwise'),
     path('quality/mac-rejection-ppm/', mac_rejection_ppm, name='mac_rejection_ppm'),
     path('otd-report/', otd_report, name='otd_report'),
-    
+    # ── Purchase ──────────────────────────────────────────────
+    path('purchase/report-monthwise/', purchase_report_monthwise, name='purchase_report_monthwise'),
+    # ✅ NEW: Supplier Rating Endpoint
+    path('purchase/supplier-rating/', supplier_rating_monthwise, name='supplier_rating_monthwise'),
+    # ── Vendor (NEW) ──────────────────────────────────────────
+    path('vendor/rejection-monthwise/', vendor_rejection_monthwise, name='vendor_rejection_monthwise'),
     # ── Operations ────────────────────────────────────────────
     path('operations/overall-efficiency/', overall_efficiency_monthwise, name='overall_efficiency_monthwise'),
     path('operations/production-value/', production_value_monthwise, name='production_value_monthwise'),
-
     # ── Production - Operator Efficiency & Machine Idle Time ──
     path('production/operators/', get_operators, name='get_operators'),
     path('production/operator-efficiency/', operator_efficiency, name='operator_efficiency'),
     path('production/overall-operator-efficiency/', overall_operator_efficiency, name='overall_operator_efficiency'),
     path('production/machine-idle-time/', machine_wise_idle_time, name='machine_wise_idle_time'),
-
+    # ── ✅ NEW: Machine Efficiency Endpoints ─────────────────
+    path('production/machines/', get_machines, name='get_machines'),
+    path('production/machine-efficiency-monthwise/', machine_efficiency_monthwise, name='machine_efficiency_monthwise'),
     # ── Dashboard2 (Pranesh - Full Implementation) ────────────
     path('dashboard2/kpis/', dashboard2_kpis, name='dashboard2_kpis'),
     path('dashboard2/production-by-shift/', dashboard2_production_by_shift, name='dashboard2_production_by_shift'),
@@ -57,4 +72,8 @@ urlpatterns = [
     path('dashboard2/inter-inspection/', dashboard2_inter_inspection, name='dashboard2_inter_inspection'),
     path('dashboard2/final-inspection-org-rej-rwk/', dashboard2_final_inspection_org_rej_rwk, name='dashboard2_final_inspection_org_rej_rwk'),
     path('dashboard2/top-defect-categories/', dashboard2_top_defect_categories, name='dashboard2_top_defect_categories'),
+    path('dashboard1/sales-kpi/', dashboard1_sales_kpi, name='dashboard1_sales_kpi'),
+    path('dashboard1/purchase-kpi/', dashboard1_purchase_kpi, name='dashboard1_purchase_kpi'),
+    path('dashboard1/production-kpi/', dashboard1_production_kpi, name='dashboard1_production_kpi'),
+    path('dashboard1/sales-projections/', dashboard1_sales_projections, name='dashboard1_sales_projections'),
 ]

@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { resolveApiBase } from "../../apiBase";
 import "./Login.css";
+
+const API = resolveApiBase();
 
 const IconOrg = () => (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -40,11 +43,6 @@ const IconArrow = () => (
             strokeLinecap="round" strokeLinejoin="round" />
     </svg>
 );
-
-// ── Base URL — single place to change ─────────────────────────
-// In dev, Vite proxies `/api` to Django (see `vite.config.js`).
-// In prod, set `VITE_API_BASE_URL` if backend is hosted elsewhere.
-const API = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 export default function LoginPage() {
     const navigate = useNavigate();

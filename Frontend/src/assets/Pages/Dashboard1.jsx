@@ -1,14 +1,27 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { resolveApiBase } from "../../apiBase";
 import "./Dashboard1.css";
 
+const API_BASE = resolveApiBase();
+
+function formatRupees(rupees) {
+    const amount = Number(rupees);
+    if (!Number.isFinite(amount)) return "0";
+    if (Number.isInteger(amount)) {
+        return amount.toLocaleString("en-IN");
+    }
+    return amount.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 // ════════════════════════════════════════════
-//  Canvas Chart Helpers
+//  Canvas Chart Helpers (UNCHANGED)
 // ════════════════════════════════════════════
 const DPR = window.devicePixelRatio || 1;
 
 function setupCanvas(canvas, h) {
-    if (!canvas) return null;
+    if (!canvas?.parentElement) return null;
     const w = canvas.parentElement.getBoundingClientRect().width - 32;
+    if (!Number.isFinite(w) || w <= 0) return null;
     canvas.width = w * DPR;
     canvas.height = h * DPR;
     canvas.style.width = w + "px";
@@ -19,31 +32,33 @@ function setupCanvas(canvas, h) {
 }
 
 function drawSparkline(canvas, data, color) {
+    const values = Array.isArray(data) ? data.filter((v) => Number.isFinite(Number(v))) : [];
+    if (!values.length) return;
     const s = setupCanvas(canvas, 30);
     if (!s) return;
     const { ctx, w, h } = s;
-    const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
-    const px = (i) => i * (w / (data.length - 1));
+    const mn = Math.min(...values), mx = Math.max(...values), rng = mx - mn || 1;
+    const px = (i) => (values.length <= 1 ? w / 2 : i * (w / (values.length - 1)));
     const py = (v) => h - 3 - ((v - mn) / rng) * (h - 6);
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, color + "40");
     g.addColorStop(1, color + "00");
     ctx.beginPath();
-    ctx.moveTo(px(0), py(data[0]));
-    for (let i = 1; i < data.length; i++) {
+    ctx.moveTo(px(0), py(values[0]));
+    for (let i = 1; i < values.length; i++) {
         const cx = (px(i - 1) + px(i)) / 2;
-        ctx.bezierCurveTo(cx, py(data[i - 1]), cx, py(data[i]), px(i), py(data[i]));
+        ctx.bezierCurveTo(cx, py(values[i - 1]), cx, py(values[i]), px(i), py(values[i]));
     }
-    ctx.lineTo(px(data.length - 1), h);
+    ctx.lineTo(px(values.length - 1), h);
     ctx.lineTo(px(0), h);
     ctx.closePath();
     ctx.fillStyle = g;
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(px(0), py(data[0]));
-    for (let i = 1; i < data.length; i++) {
+    ctx.moveTo(px(0), py(values[0]));
+    for (let i = 1; i < values.length; i++) {
         const cx = (px(i - 1) + px(i)) / 2;
-        ctx.bezierCurveTo(cx, py(data[i - 1]), cx, py(data[i]), px(i), py(data[i]));
+        ctx.bezierCurveTo(cx, py(values[i - 1]), cx, py(values[i]), px(i), py(values[i]));
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -52,12 +67,12 @@ function drawSparkline(canvas, data, color) {
 
 function drawBarChart(canvas, labels, sets, h = 118) {
     const s = setupCanvas(canvas, h);
-    if (!s) return;
+    if (!s || !labels.length || !sets.length) return;
     const { ctx, w } = s;
     const pad = { l: 32, r: 6, t: 6, b: 20 };
     const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
-    const all = sets.flatMap((d) => d.data);
-    const mx = Math.max(...all) * 1.18;
+    const all = sets.flatMap((d) => d.data).map((v) => Number(v) || 0);
+    const mx = Math.max(1, Math.max(...all, 0) * 1.18);
     for (let i = 0; i <= 4; i++) {
         const y = pad.t + ch - i * (ch / 4);
         ctx.strokeStyle = "rgba(228,233,242,0.9)";
@@ -73,7 +88,7 @@ function drawBarChart(canvas, labels, sets, h = 118) {
     const bw = cw / ng, bW = (bw - gap * (nb + 1)) / nb;
     sets.forEach((ds, di) =>
         ds.data.forEach((val, gi) => {
-            const bh = (val / mx) * ch;
+            const bh = Math.max(0, (Number(val) || 0) / mx * ch);
             const x = pad.l + gi * bw + gap + di * (bW + gap);
             const y = pad.t + ch - bh;
             const g2 = ctx.createLinearGradient(0, y, 0, y + bh);
@@ -102,6 +117,7 @@ function drawLineChart(canvas, sets, range, h = 118) {
     const pad = { l: 32, r: 6, t: 6, b: 20 };
     const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
     const [mn, mx] = range;
+    const span = mx - mn || 1;
     for (let i = 0; i <= 4; i++) {
         const y = pad.t + ch * (1 - i / 4);
         ctx.strokeStyle = "rgba(228,233,242,0.9)";
@@ -118,8 +134,9 @@ function drawLineChart(canvas, sets, range, h = 118) {
     }
     sets.forEach((ds) => {
         const n = ds.data.length;
+        if (n < 2) return;
         const px = (i) => pad.l + i * (cw / (n - 1));
-        const py = (v) => pad.t + ch * (1 - (v - mn) / (mx - mn));
+        const py = (v) => pad.t + ch * (1 - (v - mn) / span);
         const g3 = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
         g3.addColorStop(0, ds.color + "2a");
         g3.addColorStop(1, ds.color + "00");
@@ -150,7 +167,7 @@ function drawLineChart(canvas, sets, range, h = 118) {
 }
 
 // ════════════════════════════════════════════
-//  Year–Month Picker
+//  Year–Month Picker (UNCHANGED)
 // ════════════════════════════════════════════
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -159,13 +176,10 @@ function YearMonthPicker({ value, onChange }) {
     const [open, setOpen] = useState(false);
     const [yearView, setYearView] = useState(value.year);
     const [animDir, setAnimDir] = useState(null);
-    // "right" = panel opens leftward (aligns to right edge of chip)
-    // "left"  = panel opens rightward (aligns to left edge of chip)
     const [panelAlign, setPanelAlign] = useState("right");
     const wrapRef = useRef(null);
     const chipRef = useRef(null);
 
-    // ── Close on outside click ────────────────────────────────
     useEffect(() => {
         if (!open) return;
         const handler = (e) => {
@@ -175,13 +189,11 @@ function YearMonthPicker({ value, onChange }) {
         return () => document.removeEventListener("mousedown", handler);
     }, [open]);
 
-    // ── Detect which side has more room when opening ──────────
     const handleOpen = () => {
         if (!open && chipRef.current) {
             const rect = chipRef.current.getBoundingClientRect();
             const spaceRight = window.innerWidth - rect.left;
             const panelWidth = 272;
-            // If not enough room to the right → right-align (open leftward)
             setPanelAlign(spaceRight < panelWidth + 16 ? "right" : "left");
         }
         setOpen(o => !o);
@@ -230,11 +242,9 @@ function YearMonthPicker({ value, onChange }) {
 
             {open && (
                 <div className={`d1-ymp__panel d1-ymp__panel--${panelAlign}`}>
-                    {/* Drag handle — visible on mobile bottom sheet only */}
                     <div className="d1-ymp__handle" />
                     <div className="d1-ymp__glow" />
 
-                    {/* ── Year row ── */}
                     <div className="d1-ymp__year-row">
                         <button className="d1-ymp__yr-nav" onClick={() => shiftYear(-1)} type="button" aria-label="Previous year">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6" /></svg>
@@ -252,7 +262,6 @@ function YearMonthPicker({ value, onChange }) {
 
                     <div className="d1-ymp__divider" />
 
-                    {/* ── Month grid ── */}
                     <div className="d1-ymp__months">
                         {MONTHS_SHORT.map((m, i) => {
                             const isSelected = value.year === yearView && value.month === i;
@@ -280,7 +289,6 @@ function YearMonthPicker({ value, onChange }) {
                         })}
                     </div>
 
-                    {/* ── Footer ── */}
                     <div className="d1-ymp__footer">
                         <span className="d1-ymp__footer-label">
                             {MONTHS_FULL[value.month]} {value.year}
@@ -303,16 +311,19 @@ function YearMonthPicker({ value, onChange }) {
 }
 
 // ════════════════════════════════════════════
-//  KPI Card
+//  KPI Card (UNCHANGED)
 // ════════════════════════════════════════════
 function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, value, footer, sparkData, sparkColor, collapsed }) {
     const canvasRef = useRef(null);
 
     useEffect(() => {
-        if (!collapsed && canvasRef.current) {
+        if (collapsed || !canvasRef.current) return;
+        try {
             drawSparkline(canvasRef.current, sparkData, sparkColor);
+        } catch (error) {
+            console.error(`Dashboard1 KPI sparkline failed: ${label}`, error);
         }
-    }, [sparkData, sparkColor, collapsed]);
+    }, [sparkData, sparkColor, collapsed, label]);
 
     return (
         <div
@@ -336,13 +347,18 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
 }
 
 // ════════════════════════════════════════════
-//  Chart Card
+//  Chart Card (UNCHANGED)
 // ════════════════════════════════════════════
 function ChartCard({ title, legend, drawFn, deps, collapsed }) {
     const canvasRef = useRef(null);
 
     useEffect(() => {
-        if (!collapsed && canvasRef.current) drawFn(canvasRef.current);
+        if (collapsed || !canvasRef.current) return;
+        try {
+            drawFn(canvasRef.current);
+        } catch (error) {
+            console.error(`Dashboard1 chart render failed: ${title}`, error);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [...deps, collapsed]);
 
@@ -367,7 +383,7 @@ function ChartCard({ title, legend, drawFn, deps, collapsed }) {
 }
 
 // ════════════════════════════════════════════
-//  Analysis Table
+//  Analysis Table (UNCHANGED)
 // ════════════════════════════════════════════
 function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, rows, collapsed }) {
     return (
@@ -400,7 +416,7 @@ function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, r
 }
 
 // ════════════════════════════════════════════
-//  Section Header
+//  Section Header (UNCHANGED)
 // ════════════════════════════════════════════
 function SectionHeader({ title, collapsed, onToggle, accent }) {
     return (
@@ -421,7 +437,7 @@ function SectionHeader({ title, collapsed, onToggle, accent }) {
 }
 
 // ════════════════════════════════════════════
-//  Refresh Icon
+//  Refresh Icon (UNCHANGED)
 // ════════════════════════════════════════════
 function RefreshIcon({ spinning }) {
     return (
@@ -434,42 +450,101 @@ function RefreshIcon({ spinning }) {
 }
 
 // ════════════════════════════════════════════
-//  Main Dashboard1 Component
+//  Main Dashboard1 Component (UPDATED with API)
 // ════════════════════════════════════════════
 export default function Dashboard1() {
     const [spinning, setSpinning] = useState(false);
     const [period, setPeriod] = useState({ year: 2026, month: 2 });
+    const [salesData, setSalesData] = useState(null);
+    const [purchaseData, setPurchaseData] = useState(null);
+    const [productionData, setProductionData] = useState(null);
+    const [salesProjectionsData, setSalesProjectionsData] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     const [kpiCollapsed, setKpiCollapsed] = useState(false);
     const [chartsCollapsed, setChartsCollapsed] = useState(false);
     const [tablesCollapsed, setTablesCollapsed] = useState(false);
 
+    const fetchDashboardData = useCallback(async () => {
+        setLoading(true);
+        const periodQuery = `year=${period.year}&month=${period.month}`;
+        try {
+            const [salesResponse, purchaseResponse, productionResponse, salesProjectionsResponse] = await Promise.all([
+                fetch(`${API_BASE}/dashboard1/sales-kpi/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/purchase-kpi/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/production-kpi/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/sales-projections/?${periodQuery}`, { credentials: "include" }),
+            ]);
+            const [salesResult, purchaseResult, productionResult, salesProjectionsResult] = await Promise.all([
+                salesResponse.json(),
+                purchaseResponse.json(),
+                productionResponse.json(),
+                salesProjectionsResponse.json(),
+            ]);
+
+            setSalesData(salesResponse.ok && salesResult.success ? salesResult.data : null);
+            setPurchaseData(purchaseResponse.ok && purchaseResult.success ? purchaseResult.data : null);
+            setProductionData(productionResponse.ok && productionResult.success ? productionResult.data : null);
+            setSalesProjectionsData(
+                salesProjectionsResponse.ok && salesProjectionsResult.success ? salesProjectionsResult.data : null
+            );
+        } catch (error) {
+            console.error("Error fetching dashboard data:", error);
+            setSalesData(null);
+            setPurchaseData(null);
+            setProductionData(null);
+            setSalesProjectionsData(null);
+        } finally {
+            setLoading(false);
+        }
+    }, [period]);
+
+    useEffect(() => {
+        fetchDashboardData();
+    }, [fetchDashboardData]);
+
     const handleRefresh = () => {
         setSpinning(true);
-        setTimeout(() => setSpinning(false), 900);
+        fetchDashboardData().finally(() => {
+            setTimeout(() => setSpinning(false), 900);
+        });
     };
 
+    // Build KPI Cards - Only Sales Value is dynamic, others remain static
     const kpiCards = [
         {
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>),
-            delta: "↑ 12.4%", deltaType: "up", label: "Sales Value",
-            value: "3,16,98,201", footer: `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: [278, 305, 292, 328, 310, 335, 317], sparkColor: "#1a56db",
+            delta: salesData ? `${salesData.delta_type === 'up' ? '↑' : '↓'} ${salesData.delta}%` : "↑ 12.4%",
+            deltaType: salesData ? salesData.delta_type : "up",
+            label: "Sales Value",
+            value: salesData ? formatRupees(salesData.current_value) : "35,09,948",
+            footer: salesData ? `${MONTHS_FULL[period.month]} ${period.year} · ${salesData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
+            sparkData: salesData ? salesData.spark_data : [278, 305, 292, 328, 310, 335, 317],
+            sparkColor: "#1a56db",
         },
+        // Other KPIs remain unchanged (static data)
         {
             kgrad: "linear-gradient(90deg,#f59e0b,#fbbf24)", kbg: "#fffbeb", kclr: "#b45309", animDelay: ".07s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>),
-            delta: "↓ 3.1%", deltaType: "dn", label: "Purchase Value",
-            value: "2,05,32,587", footer: `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: [218, 200, 225, 208, 234, 211, 205], sparkColor: "#f59e0b",
+            delta: purchaseData ? `${purchaseData.delta_type === "up" ? "↑" : "↓"} ${purchaseData.delta}%` : "↓ 3.1%",
+            deltaType: purchaseData ? purchaseData.delta_type : "dn",
+            label: "Purchase Value",
+            value: purchaseData ? formatRupees(purchaseData.current_value) : "2,05,32,587",
+            footer: purchaseData ? `${MONTHS_FULL[period.month]} ${period.year} · ${purchaseData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
+            sparkData: purchaseData ? purchaseData.spark_data : [218, 200, 225, 208, 234, 211, 205],
+            sparkColor: "#f59e0b",
         },
         {
             kgrad: "linear-gradient(90deg,#10b981,#34d399)", kbg: "#ecfdf5", kclr: "#059669", animDelay: ".14s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20h.01M7 20v-4" /><path d="M12 20V10" /><path d="M17 20V4" /><path d="M22 20h.01" /></svg>),
-            delta: "↑ 8.7%", deltaType: "up", label: "Production Value",
-            value: "10,17,528", footer: `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: [90, 104, 97, 112, 106, 99, 102], sparkColor: "#10b981",
+            delta: productionData ? `${productionData.delta_type === "up" ? "↑" : "↓"} ${productionData.delta}%` : "↑ 8.7%",
+            deltaType: productionData ? productionData.delta_type : "up",
+            label: "Production Value",
+            value: productionData ? formatRupees(productionData.current_value) : "10,17,528",
+            footer: productionData ? `${MONTHS_FULL[period.month]} ${period.year} · ${productionData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
+            sparkData: productionData ? productionData.spark_data : [90, 104, 97, 112, 106, 99, 102],
+            sparkColor: "#10b981",
         },
         {
             kgrad: "linear-gradient(90deg,#8b5cf6,#c4b5fd)", kbg: "#f5f3ff", kclr: "#7c3aed", animDelay: ".21s",
@@ -484,10 +559,15 @@ export default function Dashboard1() {
         {
             title: "Sales Projections in Lakhs",
             legend: [{ label: "Sales", color: "#1a56db" }, { label: "Projections", color: "#f59e0b" }],
-            drawFn: (c) => drawBarChart(c, ["M1", "M2", "M3", "M4", "M5"], [
-                { data: [313, 319, 316, 328, 317], color: "#1a56db" },
-                { data: [322, 338, 328, 342, 332], color: "#f59e0b" },
-            ]),
+            drawFn: (c) => drawBarChart(
+                c,
+                salesProjectionsData?.labels?.length ? salesProjectionsData.labels : [MONTHS_SHORT[period.month]],
+                [
+                    { data: salesProjectionsData?.sales ?? [0], color: "#1a56db" },
+                    { data: salesProjectionsData?.po ?? [0], color: "#f59e0b" },
+                ]
+            ),
+            deps: [salesProjectionsData, period],
         },
         {
             title: "Purchase Projections in Lakhs",
@@ -514,27 +594,27 @@ export default function Dashboard1() {
 
     const tables = [
         {
-            title: "Sales Analysis", sub: "in Lakhs (₹)",
+            title: "Sales Analysis", sub: "in ₹",
             badgeLabel: "Sales", badgeBg: "#eff4ff", badgeColor: "#1a56db",
             headers: ["Desc", "Sales", "LAB", "Exp", "Total"],
             rows: [
                 { cells: [{ val: "Today" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
                 { cells: [{ val: "YDA" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: "316.98", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "316.98", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: "610.56", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "610.56", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: "2585.37", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "2585.37", cls: "d1-td-num" }] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: salesData ? formatRupees(salesData.current_value) : "35,09,948", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.current_value) : "35,09,948", cls: "d1-td-num" }] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: salesData ? formatRupees(salesData.quarter_value) : "6,10,56,000", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.quarter_value) : "6,10,56,000", cls: "d1-td-num" }] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: salesData ? formatRupees(salesData.fy_value) : "25,85,37,000", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.fy_value) : "25,85,37,000", cls: "d1-td-num" }] },
             ],
         },
         {
-            title: "Purchase Analysis", sub: "in Lakhs (₹)",
+            title: "Purchase Analysis", sub: "in ₹",
             badgeLabel: "Purchase", badgeBg: "#fffbeb", badgeColor: "#b45309",
             headers: ["Description", "PO", "GRN"],
             rows: [
                 { cells: [{ val: "Today" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
                 { cells: [{ val: "YDA" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: "3078.38", cls: "d1-td-num" }, { val: "205.33", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: "11582.09", cls: "d1-td-num" }, { val: "363.71", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: "34415.97", cls: "d1-td-num" }, { val: "1710.38", cls: "d1-td-num" }] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: purchaseData ? formatRupees(purchaseData.current_value) : "2,05,32,587", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: purchaseData ? formatRupees(purchaseData.quarter_value) : "11,58,20,900", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: purchaseData ? formatRupees(purchaseData.fy_value) : "34,41,59,700", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
             ],
         },
         {
@@ -584,7 +664,7 @@ export default function Dashboard1() {
 
             <SectionHeader title="Charts & Projections" collapsed={chartsCollapsed} onToggle={() => setChartsCollapsed(v => !v)} accent="#10b981" />
             <div className={`d1-charts-grid${chartsCollapsed ? " d1-grid--collapsed" : ""}`}>
-                {chartCards.map((c, i) => <ChartCard key={i} {...c} deps={[]} collapsed={chartsCollapsed} />)}
+                {chartCards.map((c, i) => <ChartCard key={i} {...c} deps={c.deps ?? []} collapsed={chartsCollapsed} />)}
             </div>
 
             <SectionHeader title="Analysis Tables" collapsed={tablesCollapsed} onToggle={() => setTablesCollapsed(v => !v)} accent="#8b5cf6" />

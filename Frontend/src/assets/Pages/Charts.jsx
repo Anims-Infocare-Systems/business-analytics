@@ -8,8 +8,15 @@ import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import jsPDF from "jspdf";
 import ChartDatePicker from "./ChartDatePicker";
+import { resolveApiBase } from "../../apiBase";
 import "./Charts.css";
 Chart.register(...registerables);
+
+const API_BASE = resolveApiBase();
+function api(path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE}${p}`;
+}
 
 /** Machine Wise Idle Time — all bars in card width; hover tooltip shows mac + hours. */
 function machineIdleBarChartOptions() {
@@ -128,7 +135,7 @@ const CHART_DEFS = [
   {
     id: "production-4", title: "Machine Efficiency Monthwise", badge: "Monthly", category: "production", type: "line", status: "active",
     tags: ["Production", "Line Chart"], filename: "machine-efficiency-monthwise.png",
-    config: { type: "line", data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: "MC Group A", data: [75,82,70,88,79,85,81,87,83,89,86,91], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.08)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "MC Group B", data: [68,74,65,78,72,80,75,82,77,84,80,87], borderColor: "#06b6d4", backgroundColor: "rgba(6,182,212,0.08)", tension: 0.4, fill: true, pointRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } } } },
+    config: { type: "line", data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } },
   },
   // ══ OPERATIONS (2 charts) ══════════════════════════════════
   {
@@ -149,12 +156,21 @@ const CHART_DEFS = [
   {
     id: "purchase-1", title: "Purchase Report Monthwise", badge: "Monthly", category: "purchase", type: "bar", status: "active",
     tags: ["Purchase", "Bar Chart"], filename: "purchase-report-monthwise.png",
-    config: { type: "bar", data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: "Raw Material (₹L)", data: [30,35,32,38,40,42,37,44,39,45,48,52], backgroundColor: "#3b82f6", borderRadius: 3 }, { label: "Consumables (₹L)", data: [8,9,7,10,11,10,9,12,10,11,13,14], backgroundColor: "#06b6d4", borderRadius: 3 }, { label: "Tooling (₹L)", data: [5,6,4,7,6,8,7,9,6,8,9,10], backgroundColor: "#f97316", borderRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { stacked: true, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { font: { size: 9 } } } } } },
+    config: {
+      type: "bar",
+      data: { labels: [], datasets: [] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { stacked: true, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { font: { size: 9 } }, title: { display: true, text: "₹ Lakhs", font: { size: 8 } } } } }
+    },
   },
+  // ✅ Updated: Empty data placeholder so it fetches from API
   {
     id: "purchase-2", title: "Supplier Rating", badge: "Monthly", category: "purchase", type: "bar", status: "active",
     tags: ["Purchase", "Bar Chart"], filename: "supplier-rating.png",
-    config: { type: "bar", data: { labels: ["Supp-A","Supp-B","Supp-C","Supp-D","Supp-E","Supp-F","Supp-G"], datasets: [{ label: "Rating Score", data: [87,92,74,95,68,83,89], backgroundColor: ["#10b981","#3b82f6","#f97316","#10b981","#ef4444","#3b82f6","#10b981"], borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.x} / 100` } } }, scales: { x: { min: 0, max: 100, ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } } } },
+    config: {
+      type: "bar",
+      data: { labels: [], datasets: [] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.x} / 100` } } }, scales: { x: { min: 0, max: 100, ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } } }
+    },
   },
   // ══ VENDOR (2 charts) ══════════════════════════════════════
   {
@@ -165,7 +181,11 @@ const CHART_DEFS = [
   {
     id: "vendor-2", title: "Vendor Rejections", badge: "Monthly", category: "vendor", type: "line", status: "active",
     tags: ["Vendor", "Line Chart"], filename: "vendor-rejections.png",
-    config: { type: "line", data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: "Vendor-1", data: [6,8,5,9,4,3,5,4,3,2,3,1], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.06)", tension: 0.4, fill: false, pointRadius: 3 }, { label: "Vendor-2", data: [4,5,7,6,5,4,3,5,4,3,2,2], borderColor: "#f97316", backgroundColor: "rgba(249,115,22,0.06)", tension: 0.4, fill: false, pointRadius: 3 }, { label: "Vendor-3", data: [2,3,4,2,3,2,1,2,1,2,1,1], borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.06)", tension: 0.4, fill: false, pointRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } } } },
+    config: {
+      type: "line",
+      data: { labels: [], datasets: [] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } } }
+    },
   },
 ];
 
@@ -188,6 +208,23 @@ function formatLocalDate(d) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+
+/** Vendor rejection API → Chart.js line datasets (numbers + colors guaranteed). */
+function normalizeVendorRejectionChartDatasets(datasets) {
+  const palette = ["#3b82f6", "#f97316", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#f43f5e"];
+  return (Array.isArray(datasets) ? datasets : []).map((ds, i) => ({
+    ...ds,
+    fill: ds.fill !== undefined ? !!ds.fill : false,
+    tension: typeof ds.tension === "number" ? ds.tension : 0.4,
+    pointRadius: typeof ds.pointRadius === "number" ? ds.pointRadius : 2,
+    borderColor: ds.borderColor || palette[i % palette.length],
+    backgroundColor: ds.backgroundColor || "rgba(59,130,246,0.06)",
+    data: Array.isArray(ds.data) ? ds.data.map(v => {
+      const n = typeof v === "number" && Number.isFinite(v) ? v : Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }) : [],
+  }));
 }
 function hexToRgb(hex) {
   const clean = hex.replace("#", "");
@@ -295,6 +332,55 @@ function OperatorDropdown({ value, onChange, operators, loading }) {
   );
 }
 
+// ─── ✅ NEW: Compact Machine Dropdown ───────
+function MachineDropdown({ value, onChange, machines, loading }) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState({});
+  const ref = useRef(null);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    const h = e => {
+      const inTrigger = ref.current && ref.current.contains(e.target);
+      const inMenu = menuRef.current && menuRef.current.contains(e.target);
+      if (!inTrigger && !inMenu) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const calc = () => {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const estimatedMenuH = Math.min(machines.length * 34 + 8, 250);
+      const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+    };
+    calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
+    return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
+  }, [open, machines.length]);
+  return (
+    <div className="ch-dd ch-dd--compact" ref={ref}>
+      <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading machines..." : value || "Select Machine"}>
+        <span className="ch-dd__icon">⚙️</span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Machine")}</span>
+        <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
+      </button>
+      {open && createPortal(
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
+          {machines.length === 0 ? (<div style={{ padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>No machines found</div>) : machines.map(mac => (
+            <button key={mac} className={`ch-dd__item ${value === mac ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(mac); setOpen(false); }} type="button">
+              <span className="ch-dd__item-icon">⚙️</span><span>{mac}</span>
+              {value === mac && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+            </button>
+          ))}
+        </div>, document.body
+      )}
+    </div>
+  );
+}
+
 // ─── Chart Card ───────────────────────────────────────────────
 function ChartCard({ def, onPreview, idx, dateRange }) {
   const canvasRef = useRef(null);
@@ -302,55 +388,79 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
   const [fyLabel, setFyLabel] = useState("Monthly");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Operator states
   const [operators, setOperators] = useState([]);
   const [selectedOpr, setSelectedOpr] = useState(null);
   const [oprLoading, setOprLoading] = useState(() => def.id === "production-1");
+  
+  // ✅ Machine states for production-4
+  const [machines, setMachines] = useState([]);
+  const [selectedMac, setSelectedMac] = useState(null);
+  const [macLoading, setMacLoading] = useState(() => def.id === "production-4");
 
   useEffect(() => {
     if (def.id === "production-1") {
       setOprLoading(true);
-      fetch("/api/production/operators/", { credentials: "include" })
+      fetch(api("/production/operators/"), { credentials: "include" })
         .then(res => res.json())
         .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); setSelectedOpr(data.default || data.operators[0]); } })
         .catch(err => { setOprLoading(false); console.error(err); });
+    }
+    // ✅ Fetch machines for production-4
+    if (def.id === "production-4") {
+      setMacLoading(true);
+      fetch(api("/production/machines/"), { credentials: "include" })
+        .then(res => res.json())
+        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); setSelectedMac(data.default || data.machines[0]); } })
+        .catch(err => { setMacLoading(false); console.error(err); });
     }
   }, [def.id]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
     if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+    
     // ── API charts ─────────
-    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "operations-1" || def.id === "operations-2") {
+    // ✅ Added def.id === "production-4" and def.id === "purchase-2"
+    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") {
       setLoading(true); setError(null);
       if (def.id === "production-1" && !selectedOpr) { if (oprLoading) return () => {}; setLoading(false); setError(operators.length === 0 ? "No operators found." : null); return () => {}; }
+      // ✅ Machine check
+      if (def.id === "production-4" && !selectedMac) { if (macLoading) return () => {}; setLoading(false); setError(machines.length === 0 ? "No machines found." : null); return () => {}; }
+
       const ac = new AbortController();
-      let endpoint = "/api/po-vs-sales/";
-      if (def.id === "sales-2") endpoint = "/api/otd-report/";
-      if (def.id === "quality-1") endpoint = "/api/customer-complaints/";
-      if (def.id === "quality-2") endpoint = "/api/quality/rejection-monthwise/";
-      if (def.id === "quality-3") endpoint = "/api/quality/rework-monthwise/";
-      if (def.id === "quality-4") endpoint = "/api/quality/mac-rejection-ppm/";
-      if (def.id === "production-1") endpoint = "/api/production/operator-efficiency/";
-      if (def.id === "production-2") endpoint = "/api/production/overall-operator-efficiency/";
-      if (def.id === "production-3") endpoint = "/api/production/machine-idle-time/";
-      if (def.id === "operations-1") endpoint = "/api/operations/overall-efficiency/";
-      if (def.id === "operations-2") endpoint = "/api/operations/production-value/";
-      
+      let endpoint = api("/po-vs-sales/");
+      if (def.id === "sales-2") endpoint = api("/otd-report/");
+      if (def.id === "quality-1") endpoint = api("/customer-complaints/");
+      if (def.id === "quality-2") endpoint = api("/quality/rejection-monthwise/");
+      if (def.id === "quality-3") endpoint = api("/quality/rework-monthwise/");
+      if (def.id === "quality-4") endpoint = api("/quality/mac-rejection-ppm/");
+      if (def.id === "production-1") endpoint = api("/production/operator-efficiency/");
+      if (def.id === "production-2") endpoint = api("/production/overall-operator-efficiency/");
+      if (def.id === "production-3") endpoint = api("/production/machine-idle-time/");
+      if (def.id === "production-4") endpoint = api("/production/machine-efficiency-monthwise/");
+      if (def.id === "operations-1") endpoint = api("/operations/overall-efficiency/");
+      if (def.id === "operations-2") endpoint = api("/operations/production-value/");
+      if (def.id === "purchase-1") endpoint = api("/purchase/report-monthwise/");
+      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/");
+      if (def.id === "vendor-2") endpoint = api("/vendor/rejection-monthwise/");
+
       let url = endpoint;
       if (dateRange?.from && dateRange?.to) { const from = formatLocalDate(dateRange.from); const to = formatLocalDate(dateRange.to); url += `?from=${from}&to=${to}`; }
       if (def.id === "production-1" && selectedOpr) url += (url.includes("?") ? "&" : "?") + `oprname=${encodeURIComponent(selectedOpr)}`;
-      
+      if (def.id === "production-4" && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`; // ✅
+
       fetch(url, { credentials: "include", signal: ac.signal })
         .then(async (res) => {
           const text = await res.text();
           let data = {};
-          try {
-            data = text ? JSON.parse(text) : {};
-          } catch {
-            throw new Error("Invalid response from server.");
-          }
+          try { data = text ? JSON.parse(text) : {}; } catch { throw new Error("Invalid response from server."); }
           if (!res.ok) {
-            const msg = data.error || data.detail || `Request failed (${res.status})`;
+            let msg = data.error || data.detail || `Request failed (${res.status})`;
+            if (res.status === 502 || res.status === 504) {
+              msg = `${msg} — Backend unreachable or timed out: run Django on the port configured in vite.config (default localhost:8000), or set VITE_DEV_BACKEND_URL in Frontend/.env.`;
+            }
             throw new Error(msg);
           }
           return data;
@@ -361,6 +471,8 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           if (data.error) { setError(data.error); return; }
           if (data.fy) setFyLabel(data.fy);
           if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+          
+          // ... existing chart logic ...
           if (def.id === "sales-1") chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: { labels: data.labels || [], datasets: [{ label: "PO Value (₹L)", data: data.po || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Sales Value (₹L)", data: data.sales || [], backgroundColor: "#10b981", borderRadius: 4 }] }, options: { ...def.config.options } });
           else if (def.id === "sales-2") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: "OTD % Actual", data: data.data || [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 90%", data: Array(12).fill(90), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
           else if (def.id === "quality-1") chartRef.current = new Chart(canvasRef.current, { type: "pie", data: { labels: data.labels || [], datasets: [{ label: "Complaint Count", data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }] }, options: { ...def.config.options } });
@@ -372,75 +484,59 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           else if (def.id === "production-3") {
             const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
             chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: (data.labels || []).map((_, i) => palette[i % palette.length]), borderRadius: 3 }] }, options: { ...machineIdleBarChartOptions(), layout: { padding: { top: 2, bottom: 2, left: 0, right: 2 } } } });
-          } else if (def.id === "operations-1") {
+          } 
+          // ✅ NEW: production-4 Machine Efficiency
+          else if (def.id === "production-4") {
             chartRef.current = new Chart(canvasRef.current, {
               type: "line",
               data: {
                 labels: data.labels || [],
                 datasets: [{
-                  label: `Actual Efficiency % — ${data.fy || ""}`,
+                  label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`,
                   data: data.data || [],
-                  borderColor: "#10b981",
-                  backgroundColor: "rgba(16,185,129,0.1)",
+                  borderColor: "#3b82f6",
+                  backgroundColor: "rgba(59,130,246,0.1)",
                   tension: 0.4, fill: true, pointRadius: 3
-                }, {
-                  label: "Target 88%",
-                  data: Array(12).fill(88),
-                  borderColor: "#ef4444",
-                  backgroundColor: "transparent",
-                  borderDash: [6,3], tension: 0, fill: false, pointRadius: 0
                 }]
               },
               options: {
                 ...def.config.options,
-                plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } },
+                plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } },
                 scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } }
               }
             });
           }
-          else if (def.id === "operations-2") {
+          // ✅ NEW: purchase-2 Supplier Rating
+          else if (def.id === "purchase-2") {
+            const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
             chartRef.current = new Chart(canvasRef.current, {
               type: "bar",
               data: {
                 labels: data.labels || [],
-                datasets: [
-                  {
-                    label: `Actual (₹L) — ${data.fy || ""}`,
-                    data: data.actual || [],
-                    backgroundColor: "#10b981",
-                    borderRadius: 4,
-                  },
-                  {
-                    label: "Target (₹L)",
-                    data: data.target || [],
-                    backgroundColor: "rgba(59,130,246,0.35)",
-                    borderRadius: 4,
-                  },
-                ],
+                datasets: [{
+                  label: "Final Supplier Rating",
+                  data: data.data || [],
+                  backgroundColor: (data.data || []).map(v => getRatingColor(v)),
+                  borderRadius: 5
+                }]
               },
               options: {
                 ...def.config.options,
-                plugins: {
-                  ...def.config.options.plugins,
-                  title: {
-                    display: true,
-                    text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`,
-                    font: { size: 10 },
-                    color: "#64748b",
-                    padding: { bottom: 8 },
-                  },
-                },
-                scales: {
-                  ...def.config.options.scales,
-                  y: {
-                    ticks: {
-                      font: { size: 9 },
-                      callback: val => `₹${val}L`,
-                    },
-                  },
-                },
-              },
+                plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }
+              }
             });
+          }
+          else if (def.id === "operations-1") {
+            chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 88%", data: Array(12).fill(88), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
+          }
+          else if (def.id === "operations-2") {
+            chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [ { label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [], backgroundColor: "#10b981", borderRadius: 4 }, { label: "Target (₹L)", data: data.target || [], backgroundColor: "rgba(59,130,246,0.35)", borderRadius: 4 }, ], }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => `₹${val}L` } } }, } });
+          }
+          else if (def.id === "purchase-1") {
+            chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [ { label: "Raw Material (₹L)", data: data.raw_material || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Store Material (₹L)", data: data.store_material || [], backgroundColor: "#06b6d4", borderRadius: 4 }, { label: "General / Service (₹L)", data: data.general_service || [], backgroundColor: "#f97316", borderRadius: 4 } ] }, options: { ...def.config.options } });
+          }
+          else if (def.id === "vendor-2") {
+            chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: normalizeVendorRejectionChartDatasets(data.datasets) }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } });
           }
         })
         .catch(err => {
@@ -453,7 +549,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
     } else {
       chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: JSON.parse(JSON.stringify(def.config.data)), options: { ...def.config.options } });
     }
-  }, [def, dateRange, selectedOpr, oprLoading, operators.length]);
+  }, [def, dateRange, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length]); // ✅ Updated deps
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
@@ -465,12 +561,16 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
       <div className="ch-card__accent" />
       <div className="ch-card__hd">
         <div className="ch-card__hd-left"><span className="ch-card__title">{def.title}</span>{def.id === "production-1" && selectedOpr && (<span className="ch-card__subtitle">· {selectedOpr}</span>)}</div>
-        {def.id === "production-1" && (<div className="ch-card__hd-right"><OperatorDropdown value={selectedOpr} onChange={setSelectedOpr} operators={operators} loading={oprLoading} /></div>)}
+        <div className="ch-card__hd-right">
+          {def.id === "production-1" && (<OperatorDropdown value={selectedOpr} onChange={setSelectedOpr} operators={operators} loading={oprLoading} />)}
+          {/* ✅ Machine Dropdown */}
+          {def.id === "production-4" && (<MachineDropdown value={selectedMac} onChange={setSelectedMac} machines={machines} loading={macLoading} />)}
+        </div>
       </div>
       <div className="ch-card__tags">
         {def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}
         <span className={`ch-tag ch-tag--${def.category}`} style={{ opacity: 0.75, fontStyle: "italic" }}>
-          {(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "operations-1" || def.id === "operations-2") ? fyLabel : def.badge}
+          {(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") ? fyLabel : def.badge}
         </span>
         {def.status === "archived" && <span className="ch-tag ch-tag--archived">Archived</span>}
       </div>
@@ -492,51 +592,74 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
   const [operators, setOperators] = useState([]);
   const [oprLoading, setOprLoading] = useState(() => def?.id === "production-1");
   const [closing, setClosing] = useState(false);
+  
+  // ✅ Machine states for modal
+  const [machines, setMachines] = useState([]);
+  const [selectedMac, setSelectedMac] = useState(null);
+  const [macLoading, setMacLoading] = useState(() => def?.id === "production-4");
+
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
+
   useEffect(() => {
     if (def.id === "production-1") {
       setOprLoading(true);
-      fetch("/api/production/operators/", { credentials: "include" })
+      fetch(api("/production/operators/"), { credentials: "include" })
         .then(res => res.json())
         .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); if (!modalOperator) setModalOperator(data.default || data.operators[0]); } })
         .catch(err => { setOprLoading(false); console.error(err); });
     }
+    if (def.id === "production-4") {
+      setMacLoading(true);
+      fetch(api("/production/machines/"), { credentials: "include" })
+        .then(res => res.json())
+        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); if (!selectedMac) setSelectedMac(data.default || data.machines[0]); } })
+        .catch(err => { setMacLoading(false); console.error(err); });
+    }
   }, [def.id]);
+
   const animatedClose = () => { setClosing(true); setTimeout(() => onClose(), 220); };
+
   useEffect(() => {
     if (!def || !canvasRef.current) return;
-   if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "operations-1" || def.id === "operations-2") {
+    // ✅ Added purchase-2 to modal API fetch list
+    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") {
       if (chartRef.current) chartRef.current.destroy();
       if (def.id === "production-1" && !modalOperator) { if (oprLoading) return () => {}; return () => {}; }
+      if (def.id === "production-4" && !selectedMac) { if (macLoading) return () => {}; return () => {}; }
+
       const ac = new AbortController();
-      let endpoint = "/api/po-vs-sales/";
-      if (def.id === "sales-2") endpoint = "/api/otd-report/";
-      if (def.id === "quality-1") endpoint = "/api/customer-complaints/";
-      if (def.id === "quality-2") endpoint = "/api/quality/rejection-monthwise/";
-      if (def.id === "quality-3") endpoint = "/api/quality/rework-monthwise/";
-      if (def.id === "quality-4") endpoint = "/api/quality/mac-rejection-ppm/";
-      if (def.id === "production-1") endpoint = "/api/production/operator-efficiency/";
-      if (def.id === "production-2") endpoint = "/api/production/overall-operator-efficiency/";
-      if (def.id === "production-3") endpoint = "/api/production/machine-idle-time/";
-      if (def.id === "operations-1") endpoint = "/api/operations/overall-efficiency/";
-      if (def.id === "operations-2") endpoint = "/api/operations/production-value/";
-      
+      let endpoint = api("/po-vs-sales/");
+      if (def.id === "sales-2") endpoint = api("/otd-report/");
+      if (def.id === "quality-1") endpoint = api("/customer-complaints/");
+      if (def.id === "quality-2") endpoint = api("/quality/rejection-monthwise/");
+      if (def.id === "quality-3") endpoint = api("/quality/rework-monthwise/");
+      if (def.id === "quality-4") endpoint = api("/quality/mac-rejection-ppm/");
+      if (def.id === "production-1") endpoint = api("/production/operator-efficiency/");
+      if (def.id === "production-2") endpoint = api("/production/overall-operator-efficiency/");
+      if (def.id === "production-3") endpoint = api("/production/machine-idle-time/");
+      if (def.id === "production-4") endpoint = api("/production/machine-efficiency-monthwise/");
+      if (def.id === "operations-1") endpoint = api("/operations/overall-efficiency/");
+      if (def.id === "operations-2") endpoint = api("/operations/production-value/");
+      if (def.id === "purchase-1") endpoint = api("/purchase/report-monthwise/");
+      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/");
+      if (def.id === "vendor-2") endpoint = api("/vendor/rejection-monthwise/");
+
       let url = endpoint;
       if (modalDateRange.from && modalDateRange.to) { const from = formatLocalDate(modalDateRange.from); const to = formatLocalDate(modalDateRange.to); url += `?from=${from}&to=${to}`; }
       if (def.id === "production-1" && modalOperator) url += (url.includes("?") ? "&" : "?") + `oprname=${encodeURIComponent(modalOperator)}`;
-      
+      if (def.id === "production-4" && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`; // ✅
+
       fetch(url, { credentials: "include", signal: ac.signal })
         .then(async (res) => {
           const text = await res.text();
           let data = {};
-          try {
-            data = text ? JSON.parse(text) : {};
-          } catch {
-            throw new Error("Invalid response from server.");
-          }
+          try { data = text ? JSON.parse(text) : {}; } catch { throw new Error("Invalid response from server."); }
           if (!res.ok) {
-            const msg = data.error || data.detail || `Request failed (${res.status})`;
+            let msg = data.error || data.detail || `Request failed (${res.status})`;
+            if (res.status === 502 || res.status === 504) {
+              msg = `${msg} — Backend unreachable or timed out: run Django on the port configured in vite.config (default localhost:8000), or set VITE_DEV_BACKEND_URL in Frontend/.env.`;
+            }
             throw new Error(msg);
           }
           return data;
@@ -545,6 +668,8 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
           if (ac.signal.aborted || !canvasRef.current) return;
           if (data.error) { console.error(data.error); return; }
           if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+          
+          // ... existing modal chart logic ...
           if (def.id === "sales-1") chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: { labels: data.labels || [], datasets: [{ label: `PO Value (₹L) — ${data.fy || ""}`, data: data.po || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: `Sales Value (₹L) — ${data.fy || ""}`, data: data.sales || [], backgroundColor: "#10b981", borderRadius: 4 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `${data.company || ""} · ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } });
           else if (def.id === "sales-2") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: `OTD % Actual — ${data.fy || ""}`, data: data.data || [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 90%", data: Array(12).fill(90), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `OTD Report ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
           else if (def.id === "quality-1") chartRef.current = new Chart(canvasRef.current, { type: "pie", data: { labels: data.labels || [], datasets: [{ label: `Complaints — ${data.fy || ""}`, data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Complaint Distribution ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } });
@@ -557,76 +682,28 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
             const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
             const base = machineIdleBarChartOptions();
             chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: (data.labels || []).map((_, i) => palette[i % palette.length]), borderRadius: 4 }] }, options: { ...base, plugins: { ...base.plugins, title: { display: true, text: `Machine Idle Time ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } });
-          } else if (def.id === "operations-1") {
+          } 
+          // ✅ NEW: Modal production-4
+          else if (def.id === "production-4") {
             chartRef.current = new Chart(canvasRef.current, {
               type: "line",
-              data: {
-                labels: data.labels || [],
-                datasets: [{
-                  label: `Actual Efficiency % — ${data.fy || ""}`,
-                  data: data.data || [],
-                  borderColor: "#10b981",
-                  backgroundColor: "rgba(16,185,129,0.1)",
-                  tension: 0.4, fill: true, pointRadius: 3
-                }, {
-                  label: "Target 88%",
-                  data: Array(12).fill(88),
-                  borderColor: "#ef4444",
-                  backgroundColor: "transparent",
-                  borderDash: [6,3], tension: 0, fill: false, pointRadius: 0
-                }]
-              },
-              options: {
-                ...def.config.options,
-                plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } },
-                scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } }
-              }
+              data: { labels: data.labels || [], datasets: [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }] },
+              options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }
             });
           }
-          else if (def.id === "operations-2") {
+          // ✅ NEW: Modal purchase-2
+          else if (def.id === "purchase-2") {
+            const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
             chartRef.current = new Chart(canvasRef.current, {
               type: "bar",
-              data: {
-                labels: data.labels || [],
-                datasets: [
-                  {
-                    label: `Actual (₹L) — ${data.fy || ""}`,
-                    data: data.actual || [],
-                    backgroundColor: "#10b981",
-                    borderRadius: 4,
-                  },
-                  {
-                    label: "Target (₹L)",
-                    data: data.target || [],
-                    backgroundColor: "rgba(59,130,246,0.35)",
-                    borderRadius: 4,
-                  },
-                ],
-              },
-              options: {
-                ...def.config.options,
-                plugins: {
-                  ...def.config.options.plugins,
-                  title: {
-                    display: true,
-                    text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`,
-                    font: { size: 10 },
-                    color: "#64748b",
-                    padding: { bottom: 8 },
-                  },
-                },
-                scales: {
-                  ...def.config.options.scales,
-                  y: {
-                    ticks: {
-                      font: { size: 9 },
-                      callback: val => `₹${val}L`,
-                    },
-                  },
-                },
-              },
+              data: { labels: data.labels || [], datasets: [{ label: "Final Supplier Rating", data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)), borderRadius: 5 }] },
+              options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }
             });
           }
+          else if (def.id === "operations-1") { chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 88%", data: Array(12).fill(88), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } }); }
+          else if (def.id === "operations-2") { chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [], backgroundColor: "#10b981", borderRadius: 4 }, { label: "Target (₹L)", data: data.target || [], backgroundColor: "rgba(59,130,246,0.35)", borderRadius: 4 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => `₹${val}L` } } } } }); }
+          else if (def.id === "purchase-1") { chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [ { label: "Raw Material (₹L)", data: data.raw_material || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Store Material (₹L)", data: data.store_material || [], backgroundColor: "#06b6d4", borderRadius: 4 }, { label: "General / Service (₹L)", data: data.general_service || [], backgroundColor: "#f97316", borderRadius: 4 } ] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Purchase Report Monthwise ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } }); }
+          else if (def.id === "vendor-2") { chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: normalizeVendorRejectionChartDatasets(data.datasets) }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } }); }
         })
         .catch(err => { if (err.name !== "AbortError") console.error(err); });
       return () => { ac.abort(); if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
@@ -634,8 +711,8 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: JSON.parse(JSON.stringify(def.config.data)), options: { ...def.config.options } });
     }
-  }, [def, modalDateRange, modalOperator, oprLoading, operators.length]);
-  
+  }, [def, modalDateRange, modalOperator, oprLoading, operators.length, selectedMac, macLoading, machines.length]); // ✅ Updated deps
+
   const handleDownload = () => {
     if (!canvasRef.current) return;
     const imgData = canvasRef.current.toDataURL("image/png", 1.0);
@@ -658,6 +735,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
     });
     pdf.setFontSize(17); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 58, 138); pdf.text(def.title, 10, 28);
     if (def.id === "production-1" && modalOperator) { pdf.setFontSize(10); pdf.setFont("helvetica", "normal"); pdf.setTextColor(100, 116, 139); pdf.text(`Operator: ${modalOperator}`, 10, 34); }
+    if (def.id === "production-4" && selectedMac) { pdf.setFontSize(10); pdf.setFont("helvetica", "normal"); pdf.setTextColor(100, 116, 139); pdf.text(`Machine: ${selectedMac}`, 10, 34); }
     pdf.setFontSize(8); pdf.setFont("helvetica", "normal"); pdf.setTextColor(148, 163, 184);
     const stamp = `Generated: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`;
     pdf.text(stamp, pageW - 10, 14, { align: "right" });
@@ -676,6 +754,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
     pdf.setFont("helvetica", "normal"); pdf.setTextColor(148, 163, 184); pdf.text("Page 1 of 1", pageW - 10, pageH - 5.5, { align: "right" });
     const pdfName = def.filename.replace(/\.png$/i, ".pdf"); pdf.save(pdfName);
   };
+
   return createPortal(
     <div className={`ch-modal${closing ? " ch-modal--closing" : ""}`} onMouseDown={e => { if (e.target === e.currentTarget) animatedClose(); }}>
       <div className="ch-modal__content" style={{ backgroundColor: "#ffffff" }}>
@@ -684,6 +763,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
           <div className="ch-modal__hd-left">{def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}</div>
           <div className="ch-modal__hd-right" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: "10px", flexShrink: 0 }}>
             {def.id === "production-1" && (<OperatorDropdown value={modalOperator} onChange={setModalOperator} operators={operators} loading={oprLoading} />)}
+            {def.id === "production-4" && (<MachineDropdown value={selectedMac} onChange={setSelectedMac} machines={machines} loading={macLoading} />)}
             <button className="ch-modal__close" onClick={animatedClose} aria-label="Close modal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
           </div>
         </div>
@@ -731,7 +811,7 @@ export default function Charts() {
       {visible.length > 0 ? (
         <div className="ch-grid">
           {visible.map((def, idx) => (
-           <ChartCard key={def.id} def={def} idx={idx} onPreview={handlePreview} dateRange={(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "operations-1" || def.id === "operations-2") ? dateRange : undefined} />
+            <ChartCard key={def.id} def={def} idx={idx} onPreview={handlePreview} dateRange={(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") ? dateRange : undefined} />
           ))}
         </div>
       ) : (
