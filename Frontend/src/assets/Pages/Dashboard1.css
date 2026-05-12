@@ -449,6 +449,23 @@
 .d1-cc__body { flex: 1; min-height: 0; overflow: hidden; transition: opacity .25s ease, transform .25s ease; }
 .d1-cc--collapsed .d1-cc__body   { opacity: 0; transform: translateY(-4px); pointer-events: none; flex: 0; max-height: 0; }
 .d1-cc--collapsed .d1-cc__legend { display: none; }
+.d1-cc__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.d1-cc__foot-val {
+    font-size: 10px;
+    font-weight: 600;
+    font-family: "DM Sans", sans-serif;
+    line-height: 1.35;
+}
+.d1-cc__foot-val--sales { color: #1a56db; }
+.d1-cc__foot-val--po { color: #b45309; }
+.d1-cc--collapsed .d1-cc__foot { display: none; }
 
 /* ════════════════════════════════════════════════════════════
    TABLE CARDS

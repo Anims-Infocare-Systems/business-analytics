@@ -349,7 +349,7 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
 // ════════════════════════════════════════════
 //  Chart Card (UNCHANGED)
 // ════════════════════════════════════════════
-function ChartCard({ title, legend, drawFn, deps, collapsed }) {
+function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer }) {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -376,8 +376,9 @@ function ChartCard({ title, legend, drawFn, deps, collapsed }) {
                 </div>
             </div>
             <div className="d1-cc__body">
-                <canvas ref={canvasRef} height="118" />
+                <canvas ref={canvasRef} height={canvasHeight} />
             </div>
+            {footer ? <div className="d1-cc__foot">{footer}</div> : null}
         </div>
     );
 }
@@ -568,6 +569,16 @@ export default function Dashboard1() {
                 ]
             ),
             deps: [salesProjectionsData, period],
+            footer: (
+                <>
+                    <span className="d1-cc__foot-val d1-cc__foot-val--sales">
+                        Sales: {formatRupees(salesProjectionsData?.sales_rupees?.[0] ?? 0)}
+                    </span>
+                    <span className="d1-cc__foot-val d1-cc__foot-val--po">
+                        Projections: {formatRupees(salesProjectionsData?.po_rupees?.[0] ?? 0)}
+                    </span>
+                </>
+            ),
         },
         {
             title: "Purchase Projections in Lakhs",
