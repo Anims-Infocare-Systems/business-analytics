@@ -27,6 +27,9 @@ from .views_dashboard1 import (
     dashboard1_purchase_kpi,
     dashboard1_production_kpi,
     dashboard1_sales_projections,
+    dashboard1_purchase_projections,
+    dashboard1_oa_efficiency_weekly,
+    dashboard1_quality_rejections_weekly,
 )
 urlpatterns = [
     # ── Authentication ────────────────────────────────────────
@@ -76,4 +79,7 @@ urlpatterns = [
     path('dashboard1/purchase-kpi/', dashboard1_purchase_kpi, name='dashboard1_purchase_kpi'),
     path('dashboard1/production-kpi/', dashboard1_production_kpi, name='dashboard1_production_kpi'),
     path('dashboard1/sales-projections/', dashboard1_sales_projections, name='dashboard1_sales_projections'),
+    path('dashboard1/purchase-projections/', dashboard1_purchase_projections, name='dashboard1_purchase_projections'),
+    path('dashboard1/oa-efficiency-weekly/', dashboard1_oa_efficiency_weekly, name='dashboard1_oa_efficiency_weekly'),
+    path('dashboard1/quality-rejections-weekly/', dashboard1_quality_rejections_weekly, name='dashboard1_quality_rejections_weekly'),
 ]
