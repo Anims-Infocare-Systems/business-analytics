@@ -42,6 +42,54 @@ def parse_dashboard1_period(request):
     return start, end, today.year, today.month
 
 
+def dashboard1_analysis_today_yesterday(selected_year, selected_month):
+    """
+    Today / YDA for Sales & Purchase analysis tables: same day-of-month as the
+    real calendar today, but in the selected month (e.g. select Jan → 15 Jan / 14 Jan
+    when today is 15 May). Short months clamp (e.g. 31 → last day of Feb).
+    """
+    actual_today = date.today()
+    if selected_month == 12:
+        last_day_of_month = date(selected_year, 12, 31).day
+    else:
+        last_day_of_month = (date(selected_year, selected_month + 1, 1) - timedelta(days=1)).day
+    day = min(actual_today.day, last_day_of_month)
+    today_date = date(selected_year, selected_month, day)
+    yesterday_date = today_date - timedelta(days=1)
+    return today_date, yesterday_date
+
+
+SALES_ANALYSIS_BTYPE_SQL = """
+    SELECT
+        ISNULL(btype, '') AS btype,
+        SUM(ISNULL(tamt, 0)) AS total_amount
+    FROM Bill_Mas
+    WHERE deleted = 0
+      AND ISNULL(btype, '') <> 'Sales Return'
+      AND CAST(invdt AS DATE) BETWEEN ? AND ?
+    GROUP BY ISNULL(btype, '')
+"""
+
+
+def fetch_sales_analysis_bucket(cursor, start_date, end_date):
+    cursor.execute(SALES_ANALYSIS_BTYPE_SQL, (start_date, end_date))
+    bucket = {"sales": 0.0, "lab": 0.0, "exp": 0.0, "total": 0.0}
+
+    for btype, total_amount in cursor.fetchall():
+        amount = float(total_amount or 0)
+        normalized_btype = (btype or "").strip().lower()
+        bucket["total"] += amount
+
+        if normalized_btype == "labour charges":
+            bucket["lab"] += amount
+        elif normalized_btype == "export invoice":
+            bucket["exp"] += amount
+        else:
+            bucket["sales"] += amount
+
+    return bucket
+
+
 @api_view(["GET"])
 def dashboard1_sales_kpi(request):
     """
@@ -59,7 +107,14 @@ def dashboard1_sales_kpi(request):
     fy_start_year = selected_year if selected_month >= 4 else selected_year - 1
     fy_start_date = datetime(fy_start_year, 4, 1)
     fy_end_date = datetime(fy_start_year + 1, 3, 31)
-    
+    quarter_months = get_quarter_months(selected_month)
+    quarter_start_date = datetime(selected_year, quarter_months[0], 1)
+    if quarter_months[-1] == 12:
+        quarter_end_date = datetime(selected_year, 12, 31)
+    else:
+        quarter_end_date = datetime(selected_year, quarter_months[-1] + 1, 1) - timedelta(days=1)
+    today_date, yesterday_date = dashboard1_analysis_today_yesterday(selected_year, selected_month)
+
     try:
         cursor = conn.cursor()
         
@@ -123,6 +178,14 @@ def dashboard1_sales_kpi(request):
         
         prev_month_row = cursor.fetchone()
         prev_month_total = float(prev_month_row[0] or 0) if prev_month_row else 0
+
+        sales_analysis = {
+            "today": fetch_sales_analysis_bucket(cursor, today_date, today_date),
+            "yesterday": fetch_sales_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "month": fetch_sales_analysis_bucket(cursor, current_month_start, current_month_end),
+            "quarter": fetch_sales_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "financial_year": fetch_sales_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        }
         
         cursor.close()
         conn.close()
@@ -140,7 +203,6 @@ def dashboard1_sales_kpi(request):
         if mk in sales_map:
             sales_map[mk] = float(total or 0)
 
-    quarter_months = get_quarter_months(selected_month)
     quarter_total_rupees = sum(sales_map.get(m, 0) for m in quarter_months)
     fy_total_rupees = sum(sales_map.values())
 
@@ -177,7 +239,8 @@ def dashboard1_sales_kpi(request):
             "delta_type": delta_type,
             "spark_data": sparkline_data,
             "month_labels": ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"],
-            "month_values": [sales_map_lakhs[m] for m in month_order]
+            "month_values": [sales_map_lakhs[m] for m in month_order],
+            "analysis": sales_analysis,
         }
     })
 
@@ -209,6 +272,31 @@ PURCHASE_TOTAL_SQL = """
     WHERE deleted = 0
       AND CAST(podate AS DATE) BETWEEN ? AND ?
       AND ISNULL(dtype, '') <> 'Job Order'
+"""
+
+
+PURCHASE_ANALYSIS_PO_SQL = """
+    SELECT SUM(ISNULL(amount, 0)) AS total_amount
+    FROM PODet
+    WHERE pono IN (
+        SELECT DISTINCT pono
+        FROM POMas
+        WHERE CAST(podate AS DATE) BETWEEN ? AND ?
+          AND deleted = 0
+    )
+      AND deleted = 0
+"""
+
+PURCHASE_ANALYSIS_GRN_SQL = """
+    SELECT SUM(ISNULL(Amount, 0)) AS total_amount
+    FROM Grn_RateDet
+    WHERE grnno IN (
+        SELECT grnno
+        FROM grn_mas
+        WHERE CAST(grndate AS DATE) BETWEEN ? AND ?
+          AND deleted = 0
+    )
+      AND deleted = 0
 """
 
 
@@ -263,6 +351,15 @@ def fetch_period_total(cursor, sql, start_date, end_date):
     return float(row[0] or 0) if row else 0.0
 
 
+def fetch_purchase_analysis_bucket(cursor, start_date, end_date):
+    po_amount = fetch_period_total(cursor, PURCHASE_ANALYSIS_PO_SQL, start_date, end_date)
+    grn_amount = fetch_period_total(cursor, PURCHASE_ANALYSIS_GRN_SQL, start_date, end_date)
+    return {
+        "po": po_amount,
+        "grn": grn_amount,
+    }
+
+
 @api_view(["GET"])
 def dashboard1_purchase_kpi(request):
     """Dashboard1 - Purchase Value KPI using purchase report monthwise logic."""
@@ -275,6 +372,13 @@ def dashboard1_purchase_kpi(request):
     fy_start_year = selected_year if selected_month >= 4 else selected_year - 1
     fy_start_date = datetime(fy_start_year, 4, 1)
     fy_end_date = datetime(fy_start_year + 1, 3, 31)
+    quarter_months = get_quarter_months(selected_month)
+    quarter_start_date = datetime(selected_year, quarter_months[0], 1)
+    if quarter_months[-1] == 12:
+        quarter_end_date = datetime(selected_year, 12, 31)
+    else:
+        quarter_end_date = datetime(selected_year, quarter_months[-1] + 1, 1) - timedelta(days=1)
+    today_date, yesterday_date = dashboard1_analysis_today_yesterday(selected_year, selected_month)
 
     current_month_start = datetime(selected_year, selected_month, 1)
     if selected_month == 12:
@@ -290,21 +394,31 @@ def dashboard1_purchase_kpi(request):
         month_totals = fetch_month_totals(cursor, PURCHASE_MONTHWISE_SQL, fy_start_date, fy_end_date)
         current_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, current_month_start, current_month_end)
         prev_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, prev_month_start, prev_month_end)
+        purchase_analysis = {
+            "today": fetch_purchase_analysis_bucket(cursor, today_date, today_date),
+            "yesterday": fetch_purchase_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "month": fetch_purchase_analysis_bucket(cursor, current_month_start, current_month_end),
+            "quarter": fetch_purchase_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "financial_year": fetch_purchase_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        }
         cursor.close()
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
+    payload = build_dashboard1_kpi_payload(
+        "Purchase Value",
+        current_month_total,
+        prev_month_total,
+        month_totals,
+        selected_month,
+        fy_start_year,
+    )
+    payload["analysis"] = purchase_analysis
+
     return Response({
         "success": True,
-        "data": build_dashboard1_kpi_payload(
-            "Purchase Value",
-            current_month_total,
-            prev_month_total,
-            month_totals,
-            selected_month,
-            fy_start_year,
-        ),
+        "data": payload,
     })
 
 
@@ -370,9 +484,266 @@ def fetch_production_period_total(cursor, start_date, end_date):
     return float(row[0] or 0) if row else 0.0
 
 
+def overall_efficiency_date_params(start_date, end_date):
+    return [start_date, end_date, start_date, end_date, start_date, end_date]
+
+
+OVERALL_EFFICIENCY_AVG_SQL = """
+SELECT AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF
+FROM (
+    SELECT proddate AS dt, OAEFF FROM ProductionEntry
+    WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+    UNION ALL
+    SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry
+    WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+    UNION ALL
+    SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod
+    WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+) AS X
+"""
+
+
+def fetch_overall_efficiency_avg(cursor, start_date, end_date):
+    """Same OA efficiency logic as overall_efficiency_monthwise, for a date range."""
+    cursor.execute(OVERALL_EFFICIENCY_AVG_SQL, overall_efficiency_date_params(start_date, end_date))
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return 0.0
+    return round(float(row[0] or 0), 2)
+
+
+def fetch_production_analysis_bucket(cursor, start_date, end_date):
+    return {"oa_eff": fetch_overall_efficiency_avg(cursor, start_date, end_date)}
+
+
 @api_view(["GET"])
 def dashboard1_production_kpi(request):
     """Dashboard1 - Production Value KPI using production value monthwise logic."""
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    _, _, selected_year, selected_month = parse_dashboard1_period(request)
+    fy_start_year = selected_year if selected_month >= 4 else selected_year - 1
+    fy_start_date = datetime(fy_start_year, 4, 1)
+    fy_end_date = datetime(fy_start_year + 1, 3, 31)
+    quarter_months = get_quarter_months(selected_month)
+    quarter_start_date = datetime(selected_year, quarter_months[0], 1)
+    if quarter_months[-1] == 12:
+        quarter_end_date = datetime(selected_year, 12, 31)
+    else:
+        quarter_end_date = datetime(selected_year, quarter_months[-1] + 1, 1) - timedelta(days=1)
+    today_date, yesterday_date = dashboard1_analysis_today_yesterday(selected_year, selected_month)
+
+    current_month_start = datetime(selected_year, selected_month, 1)
+    if selected_month == 12:
+        current_month_end = datetime(selected_year, 12, 31)
+    else:
+        current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
+
+    prev_month_end = current_month_start - timedelta(days=1)
+    prev_month_start = prev_month_end.replace(day=1)
+
+    try:
+        cursor = conn.cursor()
+        month_totals = fetch_production_month_totals(cursor, fy_start_date, fy_end_date)
+        current_month_total = fetch_production_period_total(cursor, current_month_start, current_month_end)
+        prev_month_total = fetch_production_period_total(cursor, prev_month_start, prev_month_end)
+        production_analysis = {
+            "today": fetch_production_analysis_bucket(cursor, today_date, today_date),
+            "yesterday": fetch_production_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "month": fetch_production_analysis_bucket(cursor, current_month_start, current_month_end),
+            "quarter": fetch_production_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "financial_year": fetch_production_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        }
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    payload = build_dashboard1_kpi_payload(
+        "Production Value",
+        current_month_total,
+        prev_month_total,
+        month_totals,
+        selected_month,
+        fy_start_year,
+    )
+    payload["analysis"] = production_analysis
+
+    return Response({
+        "success": True,
+        "data": payload,
+    })
+
+
+QUALITY_VALUE_BASE_CTE = """
+WITH CTE_Rejection AS (
+    SELECT
+        CONVERT(DATE, IM.inspdate) AS RejDate,
+        DATENAME(MONTH, IM.inspdate) + '-' + CAST(YEAR(IM.inspdate) AS VARCHAR) AS Mnth,
+        D.PartNo,
+        D.Process,
+        CAST(ISNULL(D.matrej, 0) + ISNULL(D.macrej, 0) AS FLOAT) AS RejectionQty,
+        'INJOB' AS RejSource
+    FROM InJob_Det D
+    INNER JOIN InJob_Mas IM
+        ON D.inspno = IM.inspno
+    WHERE
+        ISNULL(D.deleted, 0) = 0
+        AND ISNULL(IM.deleted, 0) = 0
+        AND (ISNULL(D.matrej, 0) > 0 OR ISNULL(D.macrej, 0) > 0)
+
+    UNION ALL
+
+    SELECT
+        CONVERT(DATE, FM.finspdate) AS RejDate,
+        DATENAME(MONTH, FM.finspdate) + '-' + CAST(YEAR(FM.finspdate) AS VARCHAR) AS Mnth,
+        F.PartNo,
+        F.Process,
+        CAST(ISNULL(F.qty, 0) AS FLOAT) AS RejectionQty,
+        'FINAL INSPECTION' AS RejSource
+    FROM FinalInspRejectionEntryOrg F
+    INNER JOIN FinalInspectionEntry FM
+        ON F.finspno = FM.finspno
+    WHERE
+        ISNULL(F.deleted, 0) = 0
+        AND ISNULL(FM.deleted, 0) = 0
+
+    UNION ALL
+
+    SELECT
+        CONVERT(DATE, IIM.inter_inspdate) AS RejDate,
+        DATENAME(MONTH, IIM.inter_inspdate) + '-' + CAST(YEAR(IIM.inter_inspdate) AS VARCHAR) AS Mnth,
+        IR.PartNo,
+        IR.Process,
+        CAST(ISNULL(IR.qty, 0) AS FLOAT) AS RejectionQty,
+        'INTER INSPECTION' AS RejSource
+    FROM Insp_RejectionEntry IR
+    INNER JOIN InterInspectionEntry IIM
+        ON IR.inter_inspno = IIM.inter_inspno
+    WHERE
+        ISNULL(IR.deleted, 0) = 0
+        AND ISNULL(IIM.deleted, 0) = 0
+),
+CTE_PartType AS (
+    SELECT
+        R.*,
+        CASE
+            WHEN WM.PartNo IS NOT NULL THEN 'With Material'
+            WHEN CJ.PartNo IS NOT NULL THEN 'Customer Job Raw Material'
+            WHEN PM.PartNo IS NOT NULL THEN 'Customer Product'
+            ELSE 'Unknown'
+        END AS PartType,
+        WM.RmName,
+        WM.Rmuom,
+        CAST(WM.WtQty AS FLOAT) AS WtQty,
+        CAST(WM.TotMmLength AS FLOAT) AS TotMmLength
+    FROM CTE_Rejection R
+    LEFT JOIN WithMatMas WM
+        ON R.PartNo = WM.PartNo
+        AND ISNULL(WM.deleted, 0) = 0
+    LEFT JOIN CustJobRawMat CJ
+        ON R.PartNo = CJ.PartNo
+        AND ISNULL(CJ.deleted, 0) = 0
+    LEFT JOIN ProductMast PM
+        ON R.PartNo = PM.PartNo
+        AND ISNULL(PM.deleted, 0) = 0
+),
+CTE_RejSeq AS (
+    SELECT
+        P.*,
+        PSD.seq AS RejSeq
+    FROM CTE_PartType P
+    LEFT JOIN ProcessSeqDet PSD
+        ON P.PartNo = PSD.partno
+        AND P.Process = PSD.process
+        AND ISNULL(PSD.deleted, 0) = 0
+),
+CTE_ProcessCalc AS (
+    SELECT
+        R.*,
+        (
+            SELECT
+                SUM(CAST(ISNULL(CPD.Rate, 0) AS FLOAT))
+            FROM ProcessSeqDet PSD
+            LEFT JOIN Commer_ProcDet CPD
+                ON PSD.partno = CPD.PartNo
+                AND PSD.process = CPD.Process
+                AND ISNULL(CPD.deleted, 0) = 0
+            WHERE
+                PSD.partno = R.PartNo
+                AND ISNULL(PSD.deleted, 0) = 0
+                AND PSD.seq <= R.RejSeq
+        ) AS ProcessRate,
+        (
+            SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
+            FROM Commer_BaseRateDet CBD
+            WHERE
+                CBD.PartNo = R.PartNo
+                AND ISNULL(CBD.deleted, 0) = 0
+            ORDER BY CBD.BReffdt DESC
+        ) AS FallbackBaseRate
+    FROM CTE_RejSeq R
+),
+CTE_RMRate AS (
+    SELECT
+        C.*,
+        (
+            SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
+            FROM Commer_BaseRateDet CBD
+            INNER JOIN Commer_Mas CM
+                ON CBD.cmno = CM.cmno
+            WHERE
+                CBD.PartNo = C.RmName
+                AND ISNULL(CBD.deleted, 0) = 0
+                AND ISNULL(CM.deleted, 0) = 0
+                AND CM.btype = 'Raw Material'
+            ORDER BY CBD.BReffdt DESC
+        ) AS RMRate
+    FROM CTE_ProcessCalc C
+),
+CTE_QualityValue AS (
+    SELECT
+        RejDate,
+        (
+            CASE
+                WHEN PartType = 'With Material' AND Rmuom = 'NOS' THEN ISNULL(RMRate, 0) * RejectionQty
+                WHEN PartType = 'With Material' AND Rmuom = 'KGS' THEN ISNULL(WtQty, 0) * ISNULL(RMRate, 0) * RejectionQty
+                WHEN PartType = 'With Material' AND Rmuom = 'MTRS' THEN (ISNULL(TotMmLength, 0) / 1000.0) * ISNULL(RMRate, 0) * RejectionQty
+                ELSE 0
+            END
+        ) + (
+            CASE
+                WHEN ISNULL(ProcessRate, 0) > 0 THEN ProcessRate * RejectionQty
+                ELSE ISNULL(FallbackBaseRate, 0) * RejectionQty
+            END
+        ) AS TotalQualityValue
+    FROM CTE_RMRate
+)
+"""
+
+QUALITY_VALUE_MONTHWISE_SQL = QUALITY_VALUE_BASE_CTE + """
+SELECT
+    MONTH(RejDate) AS month_num,
+    SUM(TotalQualityValue) AS total_amount
+FROM CTE_QualityValue
+WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
+GROUP BY MONTH(RejDate)
+ORDER BY month_num
+"""
+
+QUALITY_VALUE_TOTAL_SQL = QUALITY_VALUE_BASE_CTE + """
+SELECT SUM(TotalQualityValue) AS total_amount
+FROM CTE_QualityValue
+WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
+"""
+
+
+@api_view(["GET"])
+def dashboard1_quality_value_kpi(request):
+    """Dashboard1 - Quality Value KPI using rejection cost logic."""
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
@@ -394,9 +765,9 @@ def dashboard1_production_kpi(request):
 
     try:
         cursor = conn.cursor()
-        month_totals = fetch_production_month_totals(cursor, fy_start_date, fy_end_date)
-        current_month_total = fetch_production_period_total(cursor, current_month_start, current_month_end)
-        prev_month_total = fetch_production_period_total(cursor, prev_month_start, prev_month_end)
+        month_totals = fetch_month_totals(cursor, QUALITY_VALUE_MONTHWISE_SQL, fy_start_date, fy_end_date)
+        current_month_total = fetch_period_total(cursor, QUALITY_VALUE_TOTAL_SQL, current_month_start, current_month_end)
+        prev_month_total = fetch_period_total(cursor, QUALITY_VALUE_TOTAL_SQL, prev_month_start, prev_month_end)
         cursor.close()
         conn.close()
     except Exception as e:
@@ -405,7 +776,7 @@ def dashboard1_production_kpi(request):
     return Response({
         "success": True,
         "data": build_dashboard1_kpi_payload(
-            "Production Value",
+            "Quality Value",
             current_month_total,
             prev_month_total,
             month_totals,
@@ -731,15 +1102,112 @@ QUALITY_REJECTIONS_WEEKLY_SQL = """
 """
 
 
+QUALITY_REJECTIONS_PERIOD_SUM_SQL = """
+SELECT
+    SUM(MaterialQty) AS MaterialQty,
+    SUM(MachineQty) AS MachineQty
+FROM (
+    SELECT
+        CAST(ISNULL(D.matrej, 0) AS FLOAT) AS MaterialQty,
+        CAST(ISNULL(D.macrej, 0) AS FLOAT) AS MachineQty
+    FROM InJob_Det D
+    INNER JOIN InJob_Mas M
+        ON D.inspno = M.inspno
+    WHERE
+        CAST(M.inspdate AS DATE) BETWEEN ? AND ?
+        AND ISNULL(M.deleted, 0) = 0
+        AND ISNULL(D.deleted, 0) = 0
+        AND (ISNULL(D.macrej, 0) > 0 OR ISNULL(D.matrej, 0) > 0)
+
+    UNION ALL
+
+    SELECT
+        CASE
+            WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(ISNULL(R.qty, 0) AS FLOAT)
+            ELSE CAST(0 AS FLOAT)
+        END AS MaterialQty,
+        CASE
+            WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(0 AS FLOAT)
+            ELSE CAST(ISNULL(R.qty, 0) AS FLOAT)
+        END AS MachineQty
+    FROM Insp_RejectionEntry R
+    INNER JOIN InterInspectionEntry I
+        ON R.inter_inspno = I.inter_inspno
+    INNER JOIN Rejection REJ
+        ON R.rejection = REJ.rejection
+    WHERE
+        CAST(I.inter_inspdate AS DATE) BETWEEN ? AND ?
+        AND ISNULL(I.deleted, 0) = 0
+        AND ISNULL(R.deleted, 0) = 0
+        AND ISNULL(REJ.deleted, 0) = 0
+        AND ISNULL(R.qty, 0) > 0
+
+    UNION ALL
+
+    SELECT
+        CASE
+            WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(ISNULL(F.qty, 0) AS FLOAT)
+            ELSE CAST(0 AS FLOAT)
+        END AS MaterialQty,
+        CASE
+            WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(0 AS FLOAT)
+            ELSE CAST(ISNULL(F.qty, 0) AS FLOAT)
+        END AS MachineQty
+    FROM FinalInspRejectionEntryOrg F
+    INNER JOIN FinalInspectionEntry FI
+        ON F.finspno = FI.finspno
+    INNER JOIN Rejection REJ
+        ON F.rejection = REJ.rejection
+    WHERE
+        CAST(FI.finspdate AS DATE) BETWEEN ? AND ?
+        AND ISNULL(FI.deleted, 0) = 0
+        AND ISNULL(F.deleted, 0) = 0
+        AND ISNULL(REJ.deleted, 0) = 0
+        AND ISNULL(F.qty, 0) > 0
+) AS RejectionTotals
+"""
+
+
+def fetch_quality_rejection_period_totals(cursor, start_date, end_date):
+    cursor.execute(
+        QUALITY_REJECTIONS_PERIOD_SUM_SQL,
+        [start_date, end_date, start_date, end_date, start_date, end_date],
+    )
+    row = cursor.fetchone()
+    if not row:
+        return {"material": 0.0, "machine": 0.0}
+    return {
+        "material": round(float(row[0] or 0), 2),
+        "machine": round(float(row[1] or 0), 2),
+    }
+
+
 @api_view(["GET"])
 def dashboard1_quality_rejections_weekly(request):
-    """Dashboard1 - Material and Machine rejection qty grouped week-wise inside the selected month."""
+    """Dashboard1 — week-wise rejection chart for selected month + analysis buckets for the Quality Analysis table."""
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date, selected_year, selected_month = parse_dashboard1_period(request)
+    fy_start_year = selected_year if selected_month >= 4 else selected_year - 1
+    fy_start_date = datetime(fy_start_year, 4, 1)
+    fy_end_date = datetime(fy_start_year + 1, 3, 31)
+    quarter_months = get_quarter_months(selected_month)
+    quarter_start_date = datetime(selected_year, quarter_months[0], 1)
+    if quarter_months[-1] == 12:
+        quarter_end_date = datetime(selected_year, 12, 31)
+    else:
+        quarter_end_date = datetime(selected_year, quarter_months[-1] + 1, 1) - timedelta(days=1)
+
+    today_date, yesterday_date = dashboard1_analysis_today_yesterday(selected_year, selected_month)
+    current_month_start = datetime(selected_year, selected_month, 1)
+    if selected_month == 12:
+        current_month_end = datetime(selected_year, 12, 31)
+    else:
+        current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
+
     labels = ["W1", "W2", "W3", "W4", "W5"]
     material_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
     machine_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
@@ -749,6 +1217,15 @@ def dashboard1_quality_rejections_weekly(request):
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(QUALITY_REJECTIONS_WEEKLY_SQL, params)
         rows = cursor.fetchall()
+
+        analysis = {
+            "today": fetch_quality_rejection_period_totals(cursor, today_date, today_date),
+            "yesterday": fetch_quality_rejection_period_totals(cursor, yesterday_date, yesterday_date),
+            "month": fetch_quality_rejection_period_totals(cursor, current_month_start, current_month_end),
+            "quarter": fetch_quality_rejection_period_totals(cursor, quarter_start_date, quarter_end_date),
+            "financial_year": fetch_quality_rejection_period_totals(cursor, fy_start_date, fy_end_date),
+        }
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -766,7 +1243,10 @@ def dashboard1_quality_rejections_weekly(request):
             "labels": labels,
             "material": [material_map[1], material_map[2], material_map[3], material_map[4], material_map[5]],
             "machine": [machine_map[1], machine_map[2], machine_map[3], machine_map[4], machine_map[5]],
+            "analysis": analysis,
+            "fy_label": f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}",
             "year": selected_year,
             "month": selected_month,
         },
     })
+

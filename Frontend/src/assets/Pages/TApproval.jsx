@@ -1,121 +1,41 @@
 /**
- * TApproval.jsx  —  T-Approval Dashboard (Transport / Travel Approvals)
+ * TApproval.jsx  —  T-Approval Dashboard (Invoices + DC approvals)
  * Prefix: tap-   |   Theme: Teal / Emerald
- * Updated: collapsible groups + rich E-Approval-style detail preview modal
+ * Data from Django /api/tapproval/* (Bill_Mas invoices + DC_Mas delivery challans)
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import "./TApproval.css";
 import DateRangePicker from "./DateRangePicker";
+import { resolveApiBase } from "../../apiBase";
 
-// ─── Data ────────────────────────────────────────────────────
-const T_CARDS = [
-    {
-        id: 101, type: "Returnable DC Issue - Material Issue", status: "Pending",
-        vendor: "RAJESH LOGISTICS PVT LTD", poNo: "TR250601", poDate: "01/12/2025",
-        countLabel: "Distance (km)", countVal: 320,
-        items: [
-            { sNo: 1, codeNo: "RM-001", description: "ALUMINIUM BILLETS 6082", uom: "KGS", qty: 500, qtyOthers: 500, rate: 185, amount: 92500 },
-            { sNo: 2, codeNo: "RM-002", description: "STEEL RODS 10MM", uom: "KGS", qty: 300, qtyOthers: 300, rate: 72, amount: 21600 },
-        ],
-        discount: 0, bfTaxPF: 500, afTaxPF: 0, cgstPct: 9, sgstPct: 9, roundOff: 0.5,
-    },
-    {
-        id: 102, type: "Returnable DC Issue - Material Issue", status: "Approved",
-        vendor: "AMIT KUMAR (EMP-1042)", poNo: "TR250602", poDate: "02/12/2025",
-        countLabel: "Amount", countVal: 3500,
-        items: [
-            { sNo: 1, codeNo: "RM-010", description: "COPPER SHEETS 2MM", uom: "KGS", qty: 120, qtyOthers: 120, rate: 650, amount: 78000 },
-        ],
-        discount: 500, bfTaxPF: 0, afTaxPF: 0, cgstPct: 9, sgstPct: 9, roundOff: -0.22,
-    },
-    {
-        id: 103, type: "Returnable DC Issue - Service Issue", status: "Pending",
-        vendor: "SWIFT TRAVELS & TOURS", poNo: "TR250603", poDate: "03/12/2025",
-        countLabel: "Amount", countVal: 7200,
-        items: [
-            { sNo: 1, codeNo: "SV-001", description: "HYDRAULIC SERVICE CHARGE", uom: "JOB", qty: 1, qtyOthers: 1, rate: 4500, amount: 4500 },
-            { sNo: 2, codeNo: "SV-002", description: "TRANSPORT TO SITE", uom: "NOS", qty: 2, qtyOthers: 2, rate: 1200, amount: 2400 },
-        ],
-        discount: 200, bfTaxPF: 300, afTaxPF: 0, cgstPct: 18, sgstPct: 18, roundOff: 0.12,
-    },
-    {
-        id: 104, type: "Returnable DC Issue - Service Issue", status: "Approved",
-        vendor: "BLUE DART LOGISTICS", poNo: "TR250604", poDate: "04/12/2025",
-        countLabel: "Weight (kg)", countVal: 850,
-        items: [
-            { sNo: 1, codeNo: "SV-010", description: "COURIER CHARGES — BULK", uom: "KGS", qty: 850, qtyOthers: 850, rate: 18, amount: 15300 },
-            { sNo: 2, codeNo: "SV-011", description: "PACKING MATERIAL", uom: "NOS", qty: 50, qtyOthers: 50, rate: 35, amount: 1750 },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 250, cgstPct: 18, sgstPct: 18, roundOff: -0.38,
-    },
-    {
-        id: 105, type: "Invoice - General", status: "Pending",
-        vendor: "PRIYA MEHTA (EMP-1078)", poNo: "TR250605", poDate: "05/12/2025",
-        countLabel: "Amount", countVal: 1800,
-        items: [
-            { sNo: 1, codeNo: "INV-01", description: "TRAVEL REIMBURSEMENT", uom: "NOS", qty: 1, qtyOthers: 1, rate: 1800, amount: 1800 },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 0, cgstPct: 0, sgstPct: 0, roundOff: 0,
-    },
-    {
-        id: 106, type: "Invoice - General", status: "Approved",
-        vendor: "EXPRESS CARGO SOLUTIONS", poNo: "TR250606", poDate: "06/12/2025",
-        countLabel: "Distance (km)", countVal: 540,
-        items: [
-            { sNo: 1, codeNo: "INV-10", description: "FREIGHT CHARGES — OUTWARD", uom: "KMS", qty: 540, qtyOthers: 540, rate: 12, amount: 6480 },
-            { sNo: 2, codeNo: "INV-11", description: "TOLL & MISC CHARGES", uom: "NOS", qty: 1, qtyOthers: 1, rate: 850, amount: 850 },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 0, cgstPct: 9, sgstPct: 9, roundOff: 0.3,
-    },
-    {
-        id: 107, type: "Invoice - General Labour", status: "Pending",
-        vendor: "NATIONAL TRANSPORT CO.", poNo: "TR250607", poDate: "07/12/2025",
-        countLabel: "Amount", countVal: 9500,
-        items: [
-            { sNo: 1, codeNo: "LB-001", description: "LOADING LABOUR CHARGES", uom: "NOS", qty: 10, qtyOthers: 10, rate: 450, amount: 4500 },
-            { sNo: 2, codeNo: "LB-002", description: "UNLOADING LABOUR CHARGES", uom: "NOS", qty: 10, qtyOthers: 10, rate: 400, amount: 4000 },
-            { sNo: 3, codeNo: "LB-003", description: "OVERTIME CHARGES", uom: "HRS", qty: 4, qtyOthers: 4, rate: 250, amount: 1000 },
-        ],
-        discount: 500, bfTaxPF: 0, afTaxPF: 0, cgstPct: 18, sgstPct: 18, roundOff: 0.45,
-    },
-    {
-        id: 108, type: "Invoice - General Labour", status: "Pending",
-        vendor: "STAR FREIGHT SOLUTIONS", poNo: "TR250608", poDate: "08/12/2025",
-        countLabel: "Amount", countVal: 4200,
-        items: [
-            { sNo: 1, codeNo: "LB-010", description: "SKILLED LABOUR — DAILY", uom: "DAYS", qty: 6, qtyOthers: 6, rate: 700, amount: 4200 },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 0, cgstPct: 18, sgstPct: 18, roundOff: -0.1,
-    },
-];
+const API = resolveApiBase();
 
-const T_STATS = [
-    { label: "Pending Trips", value: "38", change: "↑ 5 added today" },
-    { label: "Approved Today", value: "14", change: "↑ 8% vs yesterday" },
-    { label: "Avg. Approval Time", value: "1.7h", change: "↓ 22% improvement" },
+function toYMD(d) {
+    if (!d) return "";
+    const x = d instanceof Date ? d : new Date(d);
+    const p = n => String(n).padStart(2, "0");
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+}
+
+const DEFAULT_STATS = [
+    { label: "Total Documents", value: "—", change: "" },
+    { label: "Approved", value: "—", change: "" },
+    { label: "Pending", value: "—", change: "" },
 ];
 
 const TYPE_ORDER = [
-    "Returnable DC Issue - Material Issue",
-    "Returnable DC Issue - Service Issue",
     "Invoice - General",
     "Invoice - General Labour",
+    "Invoice - Scrap",
+    "Invoice - Debit Note",
+    "DC - General",
+    "DC - General Labour",
+    "DC - Customer Rework",
+    "Returnable DC - Material Issue",
 ];
 
 const TYPE_ICONS = {
-    "Returnable DC Issue - Material Issue": (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="1" y="3" width="15" height="13" />
-            <polygon points="16,8 20,8 23,11 23,16 16,16 16,8" />
-            <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-        </svg>
-    ),
-    "Returnable DC Issue - Service Issue": (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-        </svg>
-    ),
     "Invoice - General": (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -129,95 +49,307 @@ const TYPE_ICONS = {
             <circle cx="12" cy="7" r="4" />
         </svg>
     ),
+    "Invoice - Scrap": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="1,4 1,10 7,10" />
+            <polyline points="23,20 23,14 17,14" />
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+        </svg>
+    ),
+    "Invoice - Debit Note": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="9" y1="13" x2="15" y2="13" />
+        </svg>
+    ),
+    "DC - General": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="1" y="3" width="15" height="13" rx="1" />
+            <path d="M16 8h4l3 3v5h-7V8z" />
+            <circle cx="5.5" cy="18.5" r="2.5" />
+            <circle cx="18.5" cy="18.5" r="2.5" />
+        </svg>
+    ),
+    "DC - General Labour": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </svg>
+    ),
+    "DC - Customer Rework": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="1,4 1,10 7,10" />
+            <polyline points="23,20 23,14 17,14" />
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+        </svg>
+    ),
+    "Returnable DC - Material Issue": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+    ),
 };
 
-function parseCardDate(str) {
-    const [d, m, y] = str.split("/").map(Number);
-    return new Date(y, m - 1, d);
+const BtnSpinner = () => (
+    <svg className="tap-btn-spin" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3" />
+        <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+);
+
+function Toast({ toasts }) {
+    return createPortal(
+        <div className="tap-toast-stack">
+            {toasts.map(t => (
+                <div key={t.id} className={`tap-toast tap-toast--${t.type}`}>
+                    <span className="tap-toast__msg">{t.msg}</span>
+                </div>
+            ))}
+        </div>,
+        document.body
+    );
 }
 
-// ─── Rich Detail Preview Modal — mirrors EApproval, teal theme ───────────────
-function DetailModal({ card, onClose, onApprove }) {
+function legacyFinancialFromCard(card) {
+    const fin = card.financial;
+    const items = card.items || [];
+    const lineSum = items.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const totalAmount = fin ? Number(fin.totalAmount) || lineSum : lineSum;
+    const discount = Number(fin ? fin.discount : card.discount) || 0;
+    const bfTaxPF = Number(fin ? fin.beforeTaxPF : card.bfTaxPF) || 0;
+    const afTaxPF = Number(fin ? fin.afterTaxPF : card.afTaxPF) || 0;
+    const roundOff = Number(fin ? fin.roundOff : card.roundOff) || 0;
+    const taxes = fin?.taxes || [];
+
+    let cgstPct = 0;
+    let sgstPct = 0;
+    let cgstAmt = 0;
+    let sgstAmt = 0;
+
+    const pick = re => taxes.find(t => re.test(String(t.ttype || "")));
+    const cgst = pick(/cgst/i);
+    const sgst = pick(/sgst/i);
+    if (cgst) {
+        cgstPct = Number(cgst.tp) || 0;
+        cgstAmt = Number(cgst.txAmt) || 0;
+    }
+    if (sgst) {
+        sgstPct = Number(sgst.tp) || 0;
+        sgstAmt = Number(sgst.txAmt) || 0;
+    }
+    if (!cgst && !sgst && taxes.length >= 1) {
+        cgstAmt = Number(taxes[0].txAmt) || 0;
+        cgstPct = Number(taxes[0].tp) || 0;
+    }
+    if (!cgst && !sgst && taxes.length >= 2) {
+        sgstAmt = Number(taxes[1].txAmt) || 0;
+        sgstPct = Number(taxes[1].tp) || 0;
+    }
+
+    const grandTotal = fin
+        ? Math.round(Number(fin.grandTotal) || 0)
+        : Math.round(totalAmount - discount + bfTaxPF + afTaxPF + cgstAmt + sgstAmt + roundOff);
+
+    return {
+        totalAmount,
+        discount,
+        bfTaxPF,
+        afTaxPF,
+        roundOff,
+        cgstPct,
+        sgstPct,
+        cgstAmt,
+        sgstAmt,
+        grandTotal,
+        summaryRows: fin?.summaryRows,
+    };
+}
+
+function formatSummaryRows(fin, fmt) {
+    if (fin.summaryRows?.length) {
+        return fin.summaryRows.map(row => {
+            let val;
+            if (row.label === "Discount") val = `- ${fmt(row.value)}`;
+            else if (row.label === "Round Off") val = (row.value >= 0 ? "+ " : "") + fmt(row.value);
+            else if (row.grand) val = `₹ ${fmt(row.value)}`;
+            else val = fmt(row.value);
+            return { label: row.label, val, sub: row.sub, grand: row.grand };
+        });
+    }
+    return [
+        { label: "Total Amount", val: fmt(fin.totalAmount), sub: false },
+        { label: "Discount", val: `- ${fmt(fin.discount)}`, sub: true },
+        { label: "Before Tax P & F", val: fmt(fin.bfTaxPF), sub: true },
+        { label: "After Tax P & F", val: fmt(fin.afTaxPF), sub: true },
+        { label: `Tax CGST @ ${fin.cgstPct} %`, val: fmt(fin.cgstAmt), sub: false },
+        { label: `Tax SGST @ ${fin.sgstPct} %`, val: fmt(fin.sgstAmt), sub: false },
+        { label: "Round Off", val: (fin.roundOff >= 0 ? "+ " : "") + fmt(fin.roundOff), sub: true },
+        { label: "Grand Total", val: `₹ ${fmt(fin.grandTotal)}`, sub: false, grand: true },
+    ];
+}
+
+function docLabels(card) {
+    const k = (card?.docKind || "").toLowerCase();
+    if (k === "ret_dc") {
+        return {
+            docNoLabel: "Ret. Issue No",
+            docDateLabel: "Issue Date",
+            docTitle: "Returnable DC",
+            approveLabel: "Approve Returnable DC",
+        };
+    }
+    if (k === "dc") {
+        return {
+            docNoLabel: "DC No",
+            docDateLabel: "DC Date",
+            docTitle: "DC",
+            approveLabel: "Approve DC",
+        };
+    }
+    return {
+        docNoLabel: "Invoice No",
+        docDateLabel: "Invoice Date",
+        docTitle: "Invoice",
+        approveLabel: "Approve Invoice",
+    };
+}
+
+function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onModify }) {
+    if (!card && !isLoading) return null;
+
+    if (isLoading) {
+        return createPortal(
+            <div className="tap-modal tap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
+                <div className="tap-preview-box">
+                    <div className="tap-prev__hd">
+                        <div className="tap-prev__hd-left">
+                            <div className="tap-prev__hd-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14,2 14,8 20,8" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div className="tap-prev__hd-title">Loading document…</div>
+                                <div className="tap-prev__hd-sub">Fetching invoice / DC details</div>
+                            </div>
+                        </div>
+                        <div className="tap-prev__hd-right">
+                            <button type="button" className="tap-prev__close" onClick={onClose} aria-label="Close">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="tap-prev__body tap-prev-loading">
+                        <div className="tap-pvl__center">
+                            <div className="tap-pvl__arc-wrap">
+                                <svg className="tap-pvl__arc" viewBox="0 0 64 64" fill="none">
+                                    <circle cx="32" cy="32" r="26" stroke="rgba(13,148,136,.12)" strokeWidth="5" />
+                                    <circle
+                                        className="tap-pvl__arc-ring"
+                                        cx="32"
+                                        cy="32"
+                                        r="26"
+                                        stroke="url(#tap-pvl-grad)"
+                                        strokeWidth="5"
+                                        strokeLinecap="round"
+                                        strokeDasharray="60 103"
+                                    />
+                                    <defs>
+                                        <linearGradient id="tap-pvl-grad" x1="0" y1="0" x2="1" y2="1">
+                                            <stop offset="0%" stopColor="#14b8a6" />
+                                            <stop offset="100%" stopColor="#0ea5e9" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div className="tap-pvl__dots">
+                                    <span />
+                                    <span />
+                                    <span />
+                                </div>
+                            </div>
+                            <p className="tap-pvl__label">Fetching document…</p>
+                        </div>
+                        <div className="tap-pvl__skel-rows">
+                            {[100, 75, 90, 60, 85, 70].map((w, i) => (
+                                <div key={i} className="tap-pvl__skel-row" style={{ animationDelay: `${i * 0.07}s` }}>
+                                    <div className="tap-pvl__sk" style={{ width: `${w * 0.35}%` }} />
+                                    <div className="tap-pvl__sk tap-pvl__sk--val" style={{ width: `${w * 0.2}%` }} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="tap-prev__footer">
+                        <button type="button" className="tap-prev-btn tap-prev-btn--ghost" onClick={onClose}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>,
+            document.body
+        );
+    }
+
     if (!card) return null;
 
-    const totalAmount = card.items.reduce((s, r) => s + r.amount, 0);
-    const afterDiscount = totalAmount - (card.discount || 0);
-    const bfTax = afterDiscount + (card.bfTaxPF || 0);
-    const cgstAmt = +(bfTax * card.cgstPct / 100).toFixed(2);
-    const sgstAmt = +(bfTax * card.sgstPct / 100).toFixed(2);
-    const afTax = bfTax + (card.afTaxPF || 0);
-    const grandTotal = Math.round(afTax + cgstAmt + sgstAmt + (card.roundOff || 0));
+    const fin = legacyFinancialFromCard(card);
     const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const items = card.items || [];
+    const summaryRows = formatSummaryRows(fin, fmt);
+    const docNo = card.poNo;
+    const labels = docLabels(card);
 
     return createPortal(
         <div className="tap-modal tap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="tap-preview-box">
-
-                {/* ── Header ── */}
                 <div className="tap-prev__hd">
                     <div className="tap-prev__hd-left">
                         <div className="tap-prev__hd-icon">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                 <polyline points="14,2 14,8 20,8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                                <line x1="10" y1="9" x2="8" y2="9" />
                             </svg>
                         </div>
                         <div>
                             <div className="tap-prev__hd-title">T-Approval Detail Preview</div>
-                            <div className="tap-prev__hd-sub">Transport Order — {card.poNo}</div>
+                            <div className="tap-prev__hd-sub">{labels.docTitle} — {docNo}</div>
                         </div>
                     </div>
                     <div className="tap-prev__hd-right">
                         <span className={`tap-prev__badge tap-prev__badge--${card.status.toLowerCase()}`}>
-                            {card.status === "Approved"
-                                ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg> Approved</>
-                                : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg> Pending</>
-                            }
+                            {card.status === "Approved" ? "Approved" : "Pending"}
                         </span>
-                        <button className="tap-prev__close" onClick={onClose}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                        </button>
+                        <button type="button" className="tap-prev__close" onClick={onClose}>×</button>
                     </div>
                 </div>
 
-                {/* ── Meta row ── */}
                 <div className="tap-prev__meta">
                     <div className="tap-prev__meta-item">
-                        <span className="tap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                            Request Date
-                        </span>
+                        <span className="tap-prev__meta-label">{labels.docDateLabel}</span>
                         <span className="tap-prev__meta-val">{card.poDate}</span>
                     </div>
                     <div className="tap-prev__meta-item">
-                        <span className="tap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                            Vendor / Requested By
-                        </span>
+                        <span className="tap-prev__meta-label">Customer</span>
                         <span className="tap-prev__meta-val tap-prev__meta-val--vendor">{card.vendor}</span>
                     </div>
                     <div className="tap-prev__meta-item">
-                        <span className="tap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
-                            Type
-                        </span>
+                        <span className="tap-prev__meta-label">Type</span>
                         <span className="tap-prev__meta-val">{card.type}</span>
                     </div>
                 </div>
 
-                {/* ── Scrollable body ── */}
                 <div className="tap-prev__body">
-
-                    <div className="tap-prev__section-label">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /></svg>
-                        Line Items
-                    </div>
-
+                    <div className="tap-prev__section-label">Line Items</div>
                     <div className="tap-prev__table-wrap">
                         <table className="tap-prev__table">
                             <thead>
@@ -233,15 +365,15 @@ function DetailModal({ card, onClose, onApprove }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {card.items.map((row, i) => (
-                                    <tr key={i} className={i % 2 === 0 ? "tap-prev__tr--even" : ""}>
+                                {items.map((row, i) => (
+                                    <tr key={i}>
                                         <td className="tap-prev__td--center">{row.sNo}</td>
                                         <td><span className="tap-prev__code">{row.codeNo}</span></td>
                                         <td className="tap-prev__td--desc">{row.description}</td>
-                                        <td className="tap-prev__td--center"><span className="tap-prev__uom">{row.uom}</span></td>
-                                        <td className="tap-prev__td--num">{row.qty.toLocaleString("en-IN")}</td>
-                                        <td className="tap-prev__td--num">{row.qtyOthers.toLocaleString("en-IN")}</td>
-                                        <td className="tap-prev__td--num">{row.rate.toLocaleString("en-IN")}</td>
+                                        <td className="tap-prev__td--center">{row.uom}</td>
+                                        <td className="tap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
+                                        <td className="tap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
+                                        <td className="tap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
                                         <td className="tap-prev__td--num tap-prev__td--amt">{fmt(row.amount)}</td>
                                     </tr>
                                 ))}
@@ -250,47 +382,44 @@ function DetailModal({ card, onClose, onApprove }) {
                     </div>
 
                     <div className="tap-prev__summary-wrap">
-                        <div className="tap-prev__section-label">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
-                            Financial Summary
-                        </div>
+                        <div className="tap-prev__section-label">Financial Summary</div>
                         <div className="tap-prev__summary">
-                            {[
-                                { label: "Total Amount", val: fmt(totalAmount), sub: false },
-                                { label: "Discount", val: `- ${fmt(card.discount)}`, sub: true },
-                                { label: "Before Tax P & F", val: fmt(card.bfTaxPF), sub: true },
-                                { label: "After Tax P & F", val: fmt(card.afTaxPF), sub: true },
-                                { label: `Tax CGST @ ${card.cgstPct} %`, val: fmt(cgstAmt), sub: false },
-                                { label: `Tax SGST @ ${card.sgstPct} %`, val: fmt(sgstAmt), sub: false },
-                                { label: "Round Off", val: (card.roundOff >= 0 ? "+ " : "") + fmt(card.roundOff), sub: true },
-                            ].map(r => (
-                                <div key={r.label} className={`tap-prev__sum-row${r.sub ? " tap-prev__sum-row--sub" : ""}`}>
+                            {summaryRows.map(r => (
+                                <div
+                                    key={r.label}
+                                    className={`tap-prev__sum-row${r.sub ? " tap-prev__sum-row--sub" : ""}${r.grand ? " tap-prev__sum-row--grand" : ""}`}
+                                >
                                     <span className="tap-prev__sum-label">{r.label}</span>
-                                    <span className="tap-prev__sum-val">{r.val}</span>
+                                    <span className="tap-prev__sum-val">{r.grand ? r.val : r.val}</span>
                                 </div>
                             ))}
-                            <div className="tap-prev__sum-row tap-prev__sum-row--grand">
-                                <span className="tap-prev__sum-label">Grand Total</span>
-                                <span className="tap-prev__sum-val">₹ {fmt(grandTotal)}</span>
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* ── Footer ── */}
                 <div className="tap-prev__footer">
-                    <button className="tap-prev-btn tap-prev-btn--ghost" onClick={onClose}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                        Close
-                    </button>
-                    {card.status !== "Approved" && (
-                        <button className="tap-prev-btn tap-prev-btn--approve" onClick={() => onApprove(card)}>
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <polyline points="20,6 9,17 4,12" />
-                            </svg>
-                            Approve Order
+                    <button type="button" className="tap-prev-btn tap-prev-btn--ghost" onClick={onClose}>Close</button>
+                    {card.status === "Approved" ? (
+                        <button
+                            type="button"
+                            className="tap-prev-btn tap-prev-btn--modify"
+                            disabled={!!actionLoading}
+                            onClick={() => onModify(card)}
+                        >
+                            {actionLoading?.pono === docNo && actionLoading?.type === "modify"
+                                ? <><BtnSpinner /> Modifying…</>
+                                : "Modify Open"}
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            className="tap-prev-btn tap-prev-btn--approve"
+                            disabled={!!actionLoading}
+                            onClick={() => onApprove(card)}
+                        >
+                            {actionLoading?.pono === docNo && actionLoading?.type === "approve"
+                                ? <><BtnSpinner /> Approving…</>
+                                : labels.approveLabel}
                         </button>
                     )}
                 </div>
@@ -300,8 +429,7 @@ function DetailModal({ card, onClose, onApprove }) {
     );
 }
 
-// ─── Collapsible Group ────────────────────────────────────────
-function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, resolvedStatus }) {
+function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus }) {
     const pendingCount = cards.filter(c => resolvedStatus(c) === "Pending").length;
     const approvedCount = cards.filter(c => resolvedStatus(c) === "Approved").length;
 
@@ -309,20 +437,13 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
         <div className="tap-group">
             <div className="tap-group__hd" onClick={onToggle}>
                 <div className="tap-group__hd-left">
-                    <span className="tap-group__hd-icon">{TYPE_ICONS[type]}</span>
+                    <span className="tap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS["Invoice - General"]}</span>
                     <span className="tap-group__hd-title">{type}</span>
-                    <span className="tap-group__hd-count">{cards.length} request{cards.length !== 1 ? "s" : ""}</span>
+                    <span className="tap-group__hd-count">{cards.length} document{cards.length !== 1 ? "s" : ""}</span>
                     {pendingCount > 0 && <span className="tap-group__pill tap-group__pill--pending">{pendingCount} Pending</span>}
                     {approvedCount > 0 && <span className="tap-group__pill tap-group__pill--approved">{approvedCount} Approved</span>}
                 </div>
-                <button className="tap-group__collapse-btn" aria-label={collapsed ? "Expand" : "Collapse"}>
-                    <svg
-                        className={`tap-group__chevron${collapsed ? " tap-group__chevron--collapsed" : ""}`}
-                        width="14" height="14" viewBox="0 0 24 24"
-                        fill="none" stroke="currentColor" strokeWidth="2.5"
-                    >
-                        <polyline points="18,15 12,9 6,15" />
-                    </svg>
+                <button type="button" className="tap-group__collapse-btn">
                     <span>{collapsed ? "Expand" : "Collapse"}</span>
                 </button>
             </div>
@@ -331,6 +452,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
                 <div className="tap-grid tap-grid--group">
                     {cards.map((card, i) => {
                         const status = resolvedStatus(card);
+                        const labels = docLabels(card);
                         return (
                             <div
                                 key={card.id}
@@ -345,29 +467,42 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
                                 <div className="tap-card__vendor">{card.vendor}</div>
                                 <div className="tap-card__info">
                                     <div className="tap-info-row">
-                                        <span className="tap-info-label">Reference No</span>
+                                        <span className="tap-info-label">{labels.docNoLabel}</span>
                                         <span className="tap-info-val">{card.poNo}</span>
                                     </div>
                                     <div className="tap-info-row">
-                                        <span className="tap-info-label">Request Date</span>
+                                        <span className="tap-info-label">{labels.docDateLabel}</span>
                                         <span className="tap-info-val">{card.poDate}</span>
                                     </div>
                                 </div>
                                 <div className="tap-card__count">
                                     <div className="tap-count-row">
-                                        <span className="tap-count-label">{card.countLabel}:</span>
-                                        <span className="tap-count-val">{card.countVal.toLocaleString()}</span>
+                                        <span className="tap-count-label">Amount:</span>
+                                        <span className="tap-count-val">₹ {Number(card.countVal).toLocaleString("en-IN")}</span>
                                     </div>
                                 </div>
                                 <div className="tap-card__actions">
-                                    <button className="tap-action-btn"
+                                    <button type="button" className="tap-action-btn"
                                         onClick={e => { e.stopPropagation(); onPreview({ ...card, status }); }}>
                                         Preview
                                     </button>
-                                    <button className="tap-action-btn tap-action-btn--primary"
-                                        onClick={e => { e.stopPropagation(); onApprove(card); }}>
-                                        Approve
-                                    </button>
+                                    {status === "Approved" ? (
+                                        <button type="button" className="tap-action-btn tap-action-btn--modify"
+                                            disabled={!!actionLoading}
+                                            onClick={e => { e.stopPropagation(); onModify(card); }}>
+                                            {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
+                                                ? <><BtnSpinner /> Modifying…</>
+                                                : "Modify Open"}
+                                        </button>
+                                    ) : (
+                                        <button type="button" className="tap-action-btn tap-action-btn--primary"
+                                            disabled={!!actionLoading}
+                                            onClick={e => { e.stopPropagation(); onApprove(card); }}>
+                                            {actionLoading?.pono === card.poNo && actionLoading?.type === "approve"
+                                                ? <><BtnSpinner /> Approving…</>
+                                                : "Approve"}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -378,36 +513,73 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
     );
 }
 
-// ─── Main ─────────────────────────────────────────────────────
 export default function TApproval() {
     const [search, setSearch] = useState("");
+    const [cards, setCards] = useState([]);
+    const [stats, setStats] = useState(DEFAULT_STATS);
     const [selected, setSelected] = useState(null);
     const [approved, setApproved] = useState([]);
-    const [dateRange, setDateRange] = useState({
-        from: new Date(2025, 8, 1),
-        to: new Date(2026, 0, 25),
-    });
+    const today = new Date();
+    const [dateRange, setDateRange] = useState({ from: today, to: today });
     const [collapsedGroups, setCollapsedGroups] = useState({});
+    const [isLoading, setIsLoading] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [actionLoading, setActionLoading] = useState(null); // { pono, type } — same shape as E-Approval
+    const [toasts, setToasts] = useState([]);
+    // Detail cache — key: list card id (docKind:docNo); cleared on date change / approve / modify
+    const detailCache = useRef({});
+
+    const addToast = useCallback((msg, type = "success-approve") => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
+    }, []);
 
     const toggleGroup = type =>
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
 
+    const resolvedStatus = card => (approved.includes(card.id) ? "Approved" : card.status);
+
+    const refreshBoard = useCallback(async () => {
+        const from = toYMD(dateRange.from);
+        const to = toYMD(dateRange.to || dateRange.from);
+        if (!from) return;
+        detailCache.current = {};
+        setIsLoading(true);
+        try {
+            const qsList = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
+            const qsStats = new URLSearchParams({ from, to });
+            const [resList, resStats] = await Promise.all([
+                fetch(`${API}/tapproval/list/?${qsList}`, { credentials: "include" }),
+                fetch(`${API}/tapproval/stats/?${qsStats}`, { credentials: "include" }),
+            ]);
+            const dataList = await resList.json();
+            const dataStats = await resStats.json();
+            if (resList.ok) setCards(dataList.cards || []);
+            else { console.error(dataList.error); setCards([]); }
+            if (resStats.ok && dataStats.success && Array.isArray(dataStats.stats))
+                setStats(dataStats.stats);
+            else setStats(DEFAULT_STATS);
+        } catch (e) {
+            console.error(e);
+            setCards([]);
+            setStats(DEFAULT_STATS);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [dateRange.from, dateRange.to]);
+
+    useEffect(() => { refreshBoard(); }, [refreshBoard]);
+
     const filtered = useMemo(() => {
-        const q = search.toLowerCase();
-        return T_CARDS.filter(c => {
-            const matchText = !q ||
-                c.vendor.toLowerCase().includes(q) ||
-                c.poNo.toLowerCase().includes(q) ||
-                c.type.toLowerCase().includes(q);
-            let matchDate = true;
-            if (dateRange.from || dateRange.to) {
-                const cardDate = parseCardDate(c.poDate);
-                if (dateRange.from && cardDate < dateRange.from) matchDate = false;
-                if (dateRange.to && cardDate > dateRange.to) matchDate = false;
-            }
-            return matchText && matchDate;
-        });
-    }, [search, dateRange]);
+        const q = search.toLowerCase().trim();
+        if (!q) return cards;
+        return cards.filter(c =>
+            (c.vendor || "").toLowerCase().includes(q) ||
+            (c.poNo || "").toLowerCase().includes(q) ||
+            (c.type || "").toLowerCase().includes(q)
+        );
+    }, [cards, search]);
 
     const grouped = useMemo(() => {
         const map = {};
@@ -420,14 +592,108 @@ export default function TApproval() {
         return [...ordered, ...extras];
     }, [filtered]);
 
-    const resolvedStatus = card => approved.includes(card.id) ? "Approved" : card.status;
-    const handleApprove = card => { setApproved(prev => [...prev, card.id]); setSelected(null); };
+    const openPreview = useCallback(async (listCard) => {
+        const invno = listCard.poNo;
+        const docKind = (listCard.docKind || "invoice").toLowerCase();
+        const cacheKey = listCard.id || `${docKind}:${invno}`;
+        if (detailCache.current[cacheKey]) {
+            const cached = { ...detailCache.current[cacheKey] };
+            cached.status = approved.includes(listCard.id) ? "Approved" : cached.status;
+            setSelected(cached);
+            return;
+        }
+        const qs = new URLSearchParams({
+            invno,
+            doc_kind: docKind,
+            from: toYMD(dateRange.from),
+            to: toYMD(dateRange.to || dateRange.from),
+        });
+        setPreviewLoading(true);
+        setSelected({ ...listCard, items: [], financial: null, _loading: true });
+        try {
+            const res = await fetch(`${API}/tapproval/detail/?${qs}`, { credentials: "include" });
+            const data = await res.json();
+            if (res.ok && data.success && data.card) {
+                const merged = { ...data.card, id: listCard.id };
+                merged.status = approved.includes(listCard.id) ? "Approved" : merged.status;
+                detailCache.current[cacheKey] = merged;
+                setSelected(merged);
+            } else {
+                console.error(data.error || res.statusText);
+                setSelected({ ...listCard, items: listCard.items || [], financial: null });
+            }
+        } catch (e) {
+            console.error(e);
+            setSelected({ ...listCard, items: listCard.items || [] });
+        } finally {
+            setPreviewLoading(false);
+        }
+    }, [dateRange.from, dateRange.to, approved]);
+
+    const handleApprove = useCallback(async (card) => {
+        const invno = card.poNo;
+        const docKind = (card.docKind || "invoice").toLowerCase();
+        const cacheKey = card.id || `${docKind}:${invno}`;
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice";
+        if (!invno || actionLoading) return;
+        setActionLoading({ pono: card.poNo, type: "approve" });
+        try {
+            const res = await fetch(`${API}/tapproval/approve/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ invno, doc_kind: docKind }),
+            });
+            const data = await res.json();
+            if (!res.ok) { addToast(data.error || "Approve failed", "error"); return; }
+            delete detailCache.current[cacheKey];
+            setApproved(prev => (prev.includes(card.id) ? prev : [...prev, card.id]));
+            setCards(prev => prev.map(c =>
+                (c.poNo === invno || c.id === card.id) ? { ...c, status: "Approved" } : c
+            ));
+            setSelected(null);
+            addToast(`${docLabel} ${invno} approved`, "success-approve");
+        } catch (e) {
+            addToast("Network error — please try again", "error");
+        } finally {
+            setActionLoading(null);
+        }
+    }, [actionLoading, addToast]);
+
+    const handleModify = useCallback(async (card) => {
+        const invno = card.poNo;
+        const docKind = (card.docKind || "invoice").toLowerCase();
+        const cacheKey = card.id || `${docKind}:${invno}`;
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice";
+        if (!invno || actionLoading) return;
+        setActionLoading({ pono: card.poNo, type: "modify" });
+        try {
+            const res = await fetch(`${API}/tapproval/modify/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ invno, doc_kind: docKind }),
+            });
+            const data = await res.json();
+            if (!res.ok) { addToast(data.error || "Modify failed", "error"); return; }
+            delete detailCache.current[cacheKey];
+            setApproved(prev => prev.filter(id => id !== card.id));
+            setCards(prev => prev.map(c =>
+                (c.poNo === invno || c.id === card.id) ? { ...c, status: "Pending" } : c
+            ));
+            setSelected(null);
+            addToast(`${docLabel} ${invno} moved to Pending`, "success-modify");
+        } catch (e) {
+            addToast("Network error — please try again", "error");
+        } finally {
+            setActionLoading(null);
+        }
+    }, [actionLoading, addToast]);
 
     return (
         <div className="tap-root">
-
             <div className="tap-stats">
-                {T_STATS.map(s => (
+                {stats.map(s => (
                     <div className="tap-stat" key={s.label}>
                         <div className="tap-stat__label">{s.label}</div>
                         <div className="tap-stat__value">{s.value}</div>
@@ -441,36 +707,78 @@ export default function TApproval() {
                 <input
                     className="tap-filter__search"
                     type="text"
-                    placeholder="Search transport approvals…"
+                    placeholder="Search invoices & DCs…"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                 />
-                <button className="tap-filter__btn">🔍 Search</button>
+                <button type="button" className="tap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
             </div>
 
-            <div className="tap-groups">
-                {grouped.length === 0 ? (
-                    <div className="tap-empty">
-                        <div className="tap-empty__icon">🚚</div>
-                        <div className="tap-empty__txt">No transport approvals match your search</div>
+            {isLoading ? (
+                <div className="tap-loader">
+                    <div className="tap-loader__bar">
+                        <div className="tap-loader__bar-track">
+                            <div className="tap-loader__bar-fill" />
+                        </div>
+                        <div className="tap-loader__bar-label">
+                            <span className="tap-loader__spinner" />
+                            Fetching documents…
+                        </div>
                     </div>
-                ) : (
-                    grouped.map(([type, cards]) => (
-                        <TypeGroup
-                            key={type}
-                            type={type}
-                            cards={cards}
-                            collapsed={!!collapsedGroups[type]}
-                            onToggle={() => toggleGroup(type)}
-                            onPreview={setSelected}
-                            onApprove={handleApprove}
-                            resolvedStatus={resolvedStatus}
-                        />
-                    ))
-                )}
-            </div>
+                    <div className="tap-skeleton-grid">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="tap-skeleton-card" style={{ animationDelay: `${i * 0.08}s` }}>
+                                <div className="tap-sk tap-sk--hd">
+                                    <div className="tap-sk tap-sk--badge" />
+                                    <div className="tap-sk tap-sk--status" />
+                                </div>
+                                <div className="tap-sk tap-sk--vendor" />
+                                <div className="tap-sk tap-sk--line" />
+                                <div className="tap-sk tap-sk--line tap-sk--line-short" />
+                                <div className="tap-sk tap-sk--amount" />
+                                <div className="tap-sk tap-sk--actions">
+                                    <div className="tap-sk tap-sk--btn" />
+                                    <div className="tap-sk tap-sk--btn" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className="tap-groups">
+                    {grouped.length === 0 ? (
+                        <div className="tap-empty">
+                            <div className="tap-empty__icon">📄</div>
+                            <div className="tap-empty__txt">No documents match your search</div>
+                        </div>
+                    ) : (
+                        grouped.map(([type, groupCards]) => (
+                            <TypeGroup
+                                key={type}
+                                type={type}
+                                cards={groupCards}
+                                collapsed={!!collapsedGroups[type]}
+                                onToggle={() => toggleGroup(type)}
+                                onPreview={openPreview}
+                                onApprove={handleApprove}
+                                onModify={handleModify}
+                                actionLoading={actionLoading}
+                                resolvedStatus={resolvedStatus}
+                            />
+                        ))
+                    )}
+                </div>
+            )}
 
-            <DetailModal card={selected} onClose={() => setSelected(null)} onApprove={handleApprove} />
+            <DetailModal
+                card={selected}
+                isLoading={previewLoading}
+                actionLoading={actionLoading}
+                onClose={() => { setSelected(null); setPreviewLoading(false); }}
+                onApprove={handleApprove}
+                onModify={handleModify}
+            />
+            <Toast toasts={toasts} />
         </div>
     );
 }

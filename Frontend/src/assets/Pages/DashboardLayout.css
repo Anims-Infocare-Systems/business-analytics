@@ -798,109 +798,59 @@
     margin: 10px 4px;
 }
 
-/* ── Toggle button ────────────────────────────────────────── */
-.dl-sidebar__toggle-btn {
+
+/* ── Collapse / Expand button (bottom of sidebar) ─────────── */
+.dl-sidebar__collapse-btn {
     display: flex;
     align-items: center;
-    background: transparent;
-    border: none;
+    justify-content: flex-start;
+    gap: 10px;
+    width: calc(100% - 24px);
+    margin: 8px 12px 14px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, .10);
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 10px;
     cursor: pointer;
-    color: rgba(255, 255, 255, .65);
-    padding: 8px 14px;
-    transition: color .18s, transform .18s;
+    color: rgba(255, 255, 255, .80);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
     flex-shrink: 0;
     position: relative;
     z-index: 1;
+    transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
 }
 
-.dl-sidebar__toggle-btn:hover {
+.dl-sidebar__collapse-btn:hover {
+    background: rgba(255, 255, 255, .18);
+    border-color: rgba(255, 255, 255, .32);
     color: #fff;
-    transform: scale(1.1);
-}
-
-.dl-sidebar__toggle-btn--right {
-    justify-content: flex-end;
-}
-
-.dl-sidebar__toggle-btn--center {
-    justify-content: center;
-}
-
-/* ── Promo card ───────────────────────────────────────────── */
-.dl-promo {
-    margin: 6px 12px 16px;
-    background: linear-gradient(135deg, #1a48c8 0%, #2d6de8 100%);
-    border-radius: 14px;
-    padding: 14px;
-    border: 1px solid rgba(255, 255, 255, .20);
-    overflow: hidden;
-    flex-shrink: 0;
-    position: relative;
-    transition: transform .2s ease, box-shadow .2s ease;
-}
-
-.dl-promo:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
-}
-
-/* floating orb */
-.dl-promo__orb {
-    position: absolute;
-    top: -18px;
-    right: -18px;
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 70%);
-    animation: dl-orb-float 5s ease-in-out infinite;
-    pointer-events: none;
-}
-
-.dl-promo__title {
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.4;
-    margin-bottom: 10px;
-    position: relative;
-}
-
-.dl-promo__chart {
-    height: 64px;
-    background: rgba(255, 255, 255, .07);
-    border-radius: 8px;
-    margin-bottom: 10px;
-    overflow: hidden;
-}
-
-.dl-promo__btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    background: linear-gradient(90deg, #f5a623, #f76b1c);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 9px 0;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 3px 10px rgba(247, 107, 28, .42);
-    transition: opacity .18s, transform .18s, box-shadow .18s;
-}
-
-.dl-promo__btn:hover {
-    opacity: .94;
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(247, 107, 28, .50);
 }
 
-.dl-promo__btn:active {
-    transform: translateY(0) scale(0.98);
+.dl-sidebar__collapse-btn:active {
+    transform: translateY(0) scale(0.97);
 }
+
+/* collapsed state — icon only, centred */
+.dl-sidebar--collapsed .dl-sidebar__collapse-btn {
+    width: calc(100% - 16px);
+    margin: 8px 8px 14px;
+    padding: 10px 0;
+    justify-content: center;
+    border-radius: 10px;
+}
+
+.dl-sidebar__collapse-label {
+    flex: 1;
+    text-align: left;
+    animation: dl-slide-in-left .22s ease both;
+}
+
+
 
 /* ══════════════════════════════════════════════════════════
    MAIN AREA
@@ -1132,7 +1082,15 @@
 /* ── Page transition wrapper ──────────────────────────────── */
 .dl-page-wrap {
     width: 100%;
+}
+
+.dl-page-wrap--plant {
     height: 100%;
+    min-height: calc(100vh - 140px);
+    display: flex;
+    flex-direction: column;
+    animation: none;
+    opacity: 1;
 }
 
 .dl-page-wrap--out {

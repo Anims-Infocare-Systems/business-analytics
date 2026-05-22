@@ -1,8 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    IdleTimeReport.css  —  Anims ERP · Blue/White Theme
-   Prefixes:
+   Prefix:
      itr-   →  IdleTimeReport component
-     idrp-  →  DateRangePicker component
 ═══════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap');
@@ -481,6 +480,25 @@
 ═══════════════════════════════════ */
 .itr-table-scroll { overflow-x: auto; border-radius: 10px; -webkit-overflow-scrolling: touch; }
 
+/* Continuous idle card — fixed height, vertical scroll; header stays fixed */
+.itr-table-scroll--continuous {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.itr-table-scroll--continuous .itr-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.itr-table-scroll--continuous .itr-thead--red th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--itr-red-light);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+}
+
 .itr-table {
   width: 100%;
   border-collapse: collapse;
@@ -628,444 +646,6 @@
 ::-webkit-scrollbar-thumb:hover  { background: #94a3b8; }
 
 
-/* ╔═══════════════════════════════════════════════════════════════╗
-   ║  idrp-  —  DateRangePicker (fixed-position dropdown)        ║
-   ╚═══════════════════════════════════════════════════════════════╝ */
-
-@keyframes idrp-open {
-  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)     scale(1); }
-}
-
-/* ── Outer wrapper ─────────────────────────────────────────── */
-.idrp-wrap {
-  position: relative;
-  display: inline-block;
-  font-family: var(--itr-sans);
-}
-
-/* ── Trigger button ────────────────────────────────────────── */
-.idrp-trigger {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #fff;
-  border: 1.5px solid var(--itr-border);
-  border-radius: 10px;
-  padding: 8px 14px;
-  cursor: pointer;
-  font-family: var(--itr-sans);
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-  min-width: 300px;
-  white-space: nowrap;
-}
-.idrp-trigger:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 2px 10px rgba(37,99,235,0.10);
-}
-.idrp-trigger--open {
-  border-color: var(--itr-blue);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.14);
-  background: var(--itr-blue-light);
-}
-
-.idrp-trig-icon { font-size: 1rem; flex-shrink: 0; }
-
-.idrp-trig-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-}
-
-.idrp-trig-label {
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: var(--itr-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.55px;
-  line-height: 1;
-}
-
-.idrp-trig-range {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: nowrap;
-}
-
-.idrp-trig-date {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--itr-text);
-  font-family: var(--itr-mono);
-}
-
-.idrp-trig-sep {
-  font-size: 0.75rem;
-  color: var(--itr-dim);
-  font-weight: 600;
-}
-
-.idrp-trig-pill {
-  background: var(--itr-blue-mid);
-  color: var(--itr-blue);
-  font-size: 0.67rem;
-  font-weight: 800;
-  padding: 1px 8px;
-  border-radius: 20px;
-  letter-spacing: 0.2px;
-}
-
-.idrp-trig-chevron {
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
-.idrp-trig-chevron--up { transform: rotate(180deg); }
-
-/* ── Dropdown — FIXED POSITIONING to escape all overflow contexts ── */
-.idrp-dropdown {
-  /* default hidden state */
-  display: none;
-}
-
-.idrp-dropdown--fixed {
-  /* fixed = escapes any parent overflow:hidden or transform stacking */
-  display: block;
-  position: fixed;
-  z-index: 99999;          /* above everything */
-  background: #fff;
-  border: 1.5px solid #dde5f0;
-  border-radius: 16px;
-  box-shadow:
-    0 24px 64px rgba(37,99,235,0.18),
-    0 8px 24px rgba(0,0,0,0.10);
-  overflow: hidden;
-  overflow-y: auto;
-  /* closed state */
-  opacity: 0;
-  transform: translateY(-10px) scale(0.975);
-  pointer-events: none;
-  transition:
-    opacity  0.22s cubic-bezier(0.22,1,0.36,1),
-    transform 0.22s cubic-bezier(0.22,1,0.36,1);
-}
-
-.idrp-dropdown--visible {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-  animation: idrp-open 0.22s cubic-bezier(0.22,1,0.36,1) both;
-}
-
-.idrp-dropdown-body {
-  display: flex;
-}
-
-/* ── Presets sidebar ───────────────────────────────────────── */
-.idrp-sidebar {
-  width: 148px;
-  flex-shrink: 0;
-  border-right: 1px solid #f0f4fb;
-  padding: 14px 10px;
-  background: #fafbff;
-}
-
-.idrp-sidebar-title {
-  font-size: 0.62rem;
-  font-weight: 800;
-  color: var(--itr-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.65px;
-  margin-bottom: 8px;
-  padding-left: 4px;
-}
-
-.idrp-preset {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 8px;
-  margin-bottom: 2px;
-  border: none;
-  background: transparent;
-  font-family: var(--itr-sans);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--itr-muted);
-  cursor: pointer;
-  transition: background 0.13s, color 0.13s, transform 0.1s;
-}
-.idrp-preset:hover {
-  background: #eff6ff;
-  color: var(--itr-blue);
-  transform: translateX(3px);
-}
-
-/* ── Calendar section ──────────────────────────────────────── */
-.idrp-calendar-section {
-  flex: 1;
-  padding: 14px 18px 14px 16px;
-  min-width: 0;
-}
-
-/* ── Month navigation ──────────────────────────────────────── */
-.idrp-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.idrp-nav-arrow {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1.5px solid var(--itr-border);
-  background: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--itr-muted);
-  transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.1s;
-  flex-shrink: 0;
-}
-.idrp-nav-arrow:hover {
-  background: var(--itr-blue-light);
-  border-color: #93c5fd;
-  color: var(--itr-blue);
-  transform: scale(1.08);
-}
-
-.idrp-nav-labels {
-  display: flex;
-  gap: 36px;
-  flex: 1;
-  justify-content: center;
-}
-
-.idrp-nav-month {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--itr-text);
-  min-width: 130px;
-  text-align: center;
-  letter-spacing: 0.2px;
-}
-
-/* ── Instruction hint ──────────────────────────────────────── */
-.idrp-hint-row {
-  text-align: center;
-  margin-bottom: 10px;
-}
-
-.idrp-hint {
-  display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 800;
-  padding: 3px 14px;
-  border-radius: 20px;
-  background: var(--itr-blue-light);
-  color: var(--itr-blue);
-  border: 1px solid var(--itr-blue-mid);
-  letter-spacing: 0.2px;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
-}
-.idrp-hint--end {
-  background: var(--itr-orange-light);
-  color: var(--itr-orange);
-  border-color: #fed7aa;
-}
-
-/* ── Two calendars ─────────────────────────────────────────── */
-.idrp-cals {
-  display: flex;
-  gap: 18px;
-}
-
-.idrp-cal-sep {
-  width: 1px;
-  background: #edf2fb;
-  flex-shrink: 0;
-  align-self: stretch;
-}
-
-/* ── Single month grid ─────────────────────────────────────── */
-.idrp-month {
-  flex: 1 1 200px;
-  min-width: 190px;
-}
-
-.idrp-wdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
-  margin-bottom: 4px;
-}
-
-.idrp-wday {
-  text-align: center;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: var(--itr-dim);
-  padding: 3px 0;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-
-.idrp-daygrid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
-}
-
-/* ── Cell & range strips ───────────────────────────────────── */
-.idrp-cell-empty { }
-
-.idrp-cell {
-  position: relative;
-}
-
-.idrp-strip {
-  position: absolute;
-  top: 0; bottom: 0;
-  left: 0; right: 0;
-  background: #eff6ff;
-  pointer-events: none;
-  z-index: 0;
-}
-.idrp-strip--mid       { left: 0; right: 0; }
-.idrp-strip--end       { right: 50%; }
-.idrp-strip--start-ext { left: 50%; right: 0; background: #eff6ff; }
-.idrp-strip--hover     { right: 50%; background: #eff6ff; }
-
-/* ── Day cell ──────────────────────────────────────────────── */
-.idrp-day {
-  position: relative;
-  z-index: 1;
-  text-align: center;
-  padding: 6px 2px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--itr-text);
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, transform 0.1s;
-  user-select: none;
-  line-height: 1.3;
-}
-.idrp-day:hover {
-  background: #dbeafe;
-  color: var(--itr-blue);
-  transform: scale(1.1);
-}
-
-.idrp-day--range {
-  background: #eff6ff;
-  color: #1e40af;
-  border-radius: 0;
-  font-weight: 700;
-}
-.idrp-day--hover {
-  background: #dbeafe;
-  color: var(--itr-blue);
-  font-weight: 700;
-}
-.idrp-day--sel {
-  background: var(--itr-blue) !important;
-  color: #fff !important;
-  font-weight: 900;
-  border-radius: 7px !important;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.35);
-  transform: scale(1.05);
-}
-
-/* ── Footer bar ────────────────────────────────────────────── */
-.idrp-foot {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #edf2fb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.idrp-foot-info {
-  font-size: 0.75rem;
-  color: var(--itr-muted);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.idrp-foot-info strong { color: var(--itr-text); font-weight: 800; }
-.idrp-foot-arrow       { color: var(--itr-dim); font-size: 0.72rem; }
-
-.idrp-foot-days {
-  background: var(--itr-blue-light);
-  color: var(--itr-blue);
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 1px 8px;
-  border-radius: 20px;
-  margin-left: 3px;
-}
-
-.idrp-foot-hint { color: var(--itr-orange); font-style: italic; font-weight: 700; }
-
-.idrp-foot-btns { display: flex; gap: 7px; flex-shrink: 0; }
-
-.idrp-btn-clear {
-  padding: 5px 13px;
-  border-radius: 7px;
-  border: 1.5px solid var(--itr-border);
-  background: #fff;
-  font-family: var(--itr-sans);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--itr-muted);
-  cursor: pointer;
-  transition: background 0.14s, border-color 0.14s, color 0.14s;
-}
-.idrp-btn-clear:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: var(--itr-text);
-}
-
-.idrp-btn-apply {
-  padding: 5px 16px;
-  border-radius: 7px;
-  border: none;
-  background: #dbeafe;
-  color: #93c5fd;
-  font-family: var(--itr-sans);
-  font-size: 0.75rem;
-  font-weight: 800;
-  cursor: not-allowed;
-  transition: background 0.16s, color 0.16s, box-shadow 0.16s, transform 0.1s;
-}
-.idrp-btn-apply--on {
-  background: var(--itr-blue);
-  color: #fff;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.30);
-}
-.idrp-btn-apply--on:hover {
-  background: #1d4ed8;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(37,99,235,0.38);
-}
-.idrp-btn-apply--on:active { transform: translateY(0); }
-
 
 /* ═══════════════════════════════════
    RESPONSIVE BREAKPOINTS
@@ -1111,38 +691,6 @@
   .itr-filter-group--daterange {
     grid-column: 1 / -1;
   }
-  .idrp-trigger {
-    min-width: 100%;
-    width: 100%;
-  }
-  .idrp-dropdown--fixed {
-    left: 12px !important;
-    right: 12px !important;
-    width: auto !important;
-  }
-  .idrp-cals {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .idrp-cal-sep {
-    width: auto;
-    height: 1px;
-    align-self: stretch;
-  }
-  .idrp-nav-labels { gap: 20px; }
-  .idrp-dropdown-body { flex-direction: column; }
-  .idrp-sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #f0f4fb;
-    padding: 10px 14px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
-  .idrp-sidebar-title { width: 100%; margin-bottom: 0; }
-  .idrp-preset { margin-bottom: 0; }
   .itr-footer-stats { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -1171,27 +719,6 @@
   .itr-footer-stats   { grid-template-columns: 1fr 1fr; }
   .itr-body           { padding: 0.8rem; }
   .itr-kpi-value      { font-size: 1.25rem; }
-
-  /* mobile: bottom sheet for date picker */
-  .idrp-dropdown--fixed {
-    position: fixed !important;
-    top: auto !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
-    max-height: 88vh !important;
-    animation: idrp-open-mobile 0.28s cubic-bezier(0.22,1,0.36,1) both;
-  }
-  @keyframes idrp-open-mobile {
-    from { opacity: 0; transform: translateY(40px) scale(0.98); }
-    to   { opacity: 1; transform: translateY(0)     scale(1); }
-  }
-
-  .idrp-trig-date { font-size: 0.76rem; }
-  .idrp-nav-month { font-size: 0.76rem; min-width: 100px; }
-  .idrp-trigger   { min-width: 100%; }
 }
 
 /* ── 360px very small ── */

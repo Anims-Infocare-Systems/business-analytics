@@ -13,6 +13,12 @@ function formatRupees(rupees) {
     return amount.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function formatMetric(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return "0";
+    return amount.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 // ════════════════════════════════════════════
 //  Canvas Chart Helpers (UNCHANGED)
 // ════════════════════════════════════════════
@@ -110,12 +116,14 @@ function drawBarChart(canvas, labels, sets, h = 118) {
     labels.forEach((l, i) => ctx.fillText(l, pad.l + i * bw + bw / 2, h - 4));
 }
 
-function drawLineChart(canvas, sets, range, h = 118) {
-    const s = setupCanvas(canvas, h);
+function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
+    const labels = Array.isArray(labelsOrHeight) ? labelsOrHeight : [];
+    const chartHeight = typeof labelsOrHeight === "number" ? labelsOrHeight : h;
+    const s = setupCanvas(canvas, chartHeight);
     if (!s) return;
     const { ctx, w } = s;
     const pad = { l: 32, r: 6, t: 6, b: 20 };
-    const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+    const cw = w - pad.l - pad.r, ch = chartHeight - pad.t - pad.b;
     const [mn, mx] = range;
     const span = mx - mn || 1;
     for (let i = 0; i <= 4; i++) {
@@ -132,6 +140,7 @@ function drawLineChart(canvas, sets, range, h = 118) {
             pad.l - 4, y + 3
         );
     }
+
     sets.forEach((ds) => {
         const n = ds.data.length;
         if (n < 2) return;
@@ -164,6 +173,44 @@ function drawLineChart(canvas, sets, range, h = 118) {
             ctx.strokeStyle = ds.color; ctx.lineWidth = 2; ctx.stroke();
         }
     });
+
+    if (labels.length) {
+        const pxLabel = (i) => (
+            labels.length <= 1
+                ? pad.l + cw / 2
+                : pad.l + i * (cw / (labels.length - 1))
+        );
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "9px 'DM Sans',sans-serif";
+        ctx.textAlign = "center";
+        labels.forEach((label, i) => ctx.fillText(label, pxLabel(i), chartHeight - 8));
+    }
+}
+
+function getOaWeeklyRange(data) {
+    const values = Array.isArray(data) ? data.map((v) => Number(v)).filter((v) => Number.isFinite(v)) : [];
+    if (!values.length) return [60, 80];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (min === max) {
+        const pad = min === 0 ? 10 : 5;
+        return [Math.max(0, min - pad), Math.min(100, max + pad)];
+    }
+    const pad = Math.max(2, (max - min) * 0.2);
+    return [Math.max(0, min - pad), Math.min(100, max + pad)];
+}
+
+function getWeeklyQuantityRange(seriesCollection) {
+    const values = Array.isArray(seriesCollection)
+        ? seriesCollection.flatMap((series) => (Array.isArray(series) ? series : [series]))
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
+        : [];
+    if (!values.length) return [0, 10];
+    const max = Math.max(...values, 0);
+    if (max <= 0) return [0, 10];
+    const pad = Math.max(5, max * 0.15);
+    return [0, max + pad];
 }
 
 // ════════════════════════════════════════════
@@ -459,7 +506,11 @@ export default function Dashboard1() {
     const [salesData, setSalesData] = useState(null);
     const [purchaseData, setPurchaseData] = useState(null);
     const [productionData, setProductionData] = useState(null);
+    const [qualityValueData, setQualityValueData] = useState(null);
     const [salesProjectionsData, setSalesProjectionsData] = useState(null);
+    const [purchaseProjectionsData, setPurchaseProjectionsData] = useState(null);
+    const [oaEfficiencyWeeklyData, setOaEfficiencyWeeklyData] = useState(null);
+    const [qualityRejectionsWeeklyData, setQualityRejectionsWeeklyData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const [kpiCollapsed, setKpiCollapsed] = useState(false);
@@ -470,31 +521,53 @@ export default function Dashboard1() {
         setLoading(true);
         const periodQuery = `year=${period.year}&month=${period.month}`;
         try {
-            const [salesResponse, purchaseResponse, productionResponse, salesProjectionsResponse] = await Promise.all([
+            const [salesResponse, purchaseResponse, productionResponse, qualityValueResponse, salesProjectionsResponse, purchaseProjectionsResponse, oaEfficiencyWeeklyResponse, qualityRejectionsWeeklyResponse] = await Promise.all([
                 fetch(`${API_BASE}/dashboard1/sales-kpi/?${periodQuery}`, { credentials: "include" }),
                 fetch(`${API_BASE}/dashboard1/purchase-kpi/?${periodQuery}`, { credentials: "include" }),
                 fetch(`${API_BASE}/dashboard1/production-kpi/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/quality-value-kpi/?${periodQuery}`, { credentials: "include" }),
                 fetch(`${API_BASE}/dashboard1/sales-projections/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/purchase-projections/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/oa-efficiency-weekly/?${periodQuery}`, { credentials: "include" }),
+                fetch(`${API_BASE}/dashboard1/quality-rejections-weekly/?${periodQuery}`, { credentials: "include" }),
             ]);
-            const [salesResult, purchaseResult, productionResult, salesProjectionsResult] = await Promise.all([
+            const [salesResult, purchaseResult, productionResult, qualityValueResult, salesProjectionsResult, purchaseProjectionsResult, oaEfficiencyWeeklyResult, qualityRejectionsWeeklyResult] = await Promise.all([
                 salesResponse.json(),
                 purchaseResponse.json(),
                 productionResponse.json(),
+                qualityValueResponse.json(),
                 salesProjectionsResponse.json(),
+                purchaseProjectionsResponse.json(),
+                oaEfficiencyWeeklyResponse.json(),
+                qualityRejectionsWeeklyResponse.json(),
             ]);
 
             setSalesData(salesResponse.ok && salesResult.success ? salesResult.data : null);
             setPurchaseData(purchaseResponse.ok && purchaseResult.success ? purchaseResult.data : null);
             setProductionData(productionResponse.ok && productionResult.success ? productionResult.data : null);
+            setQualityValueData(qualityValueResponse.ok && qualityValueResult.success ? qualityValueResult.data : null);
             setSalesProjectionsData(
                 salesProjectionsResponse.ok && salesProjectionsResult.success ? salesProjectionsResult.data : null
+            );
+            setPurchaseProjectionsData(
+                purchaseProjectionsResponse.ok && purchaseProjectionsResult.success ? purchaseProjectionsResult.data : null
+            );
+            setOaEfficiencyWeeklyData(
+                oaEfficiencyWeeklyResponse.ok && oaEfficiencyWeeklyResult.success ? oaEfficiencyWeeklyResult.data : null
+            );
+            setQualityRejectionsWeeklyData(
+                qualityRejectionsWeeklyResponse.ok && qualityRejectionsWeeklyResult.success ? qualityRejectionsWeeklyResult.data : null
             );
         } catch (error) {
             console.error("Error fetching dashboard data:", error);
             setSalesData(null);
             setPurchaseData(null);
             setProductionData(null);
+            setQualityValueData(null);
             setSalesProjectionsData(null);
+            setPurchaseProjectionsData(null);
+            setOaEfficiencyWeeklyData(null);
+            setQualityRejectionsWeeklyData(null);
         } finally {
             setLoading(false);
         }
@@ -511,7 +584,59 @@ export default function Dashboard1() {
         });
     };
 
-    // Build KPI Cards - Only Sales Value is dynamic, others remain static
+    const getSalesAnalysisValue = (periodKey, metricKey) => {
+        const value = salesData?.analysis?.[periodKey]?.[metricKey];
+        return Number.isFinite(Number(value)) ? Number(value) : 0;
+    };
+
+    const getSalesAnalysisCell = (periodKey, metricKey) => {
+        const value = getSalesAnalysisValue(periodKey, metricKey);
+        return {
+            val: formatRupees(value),
+            cls: value ? "d1-td-num" : "d1-td-zero",
+        };
+    };
+
+    const getPurchaseAnalysisValue = (periodKey, metricKey) => {
+        const value = purchaseData?.analysis?.[periodKey]?.[metricKey];
+        return Number.isFinite(Number(value)) ? Number(value) : 0;
+    };
+
+    const getPurchaseAnalysisCell = (periodKey, metricKey) => {
+        const value = getPurchaseAnalysisValue(periodKey, metricKey);
+        return {
+            val: formatRupees(value),
+            cls: value ? "d1-td-num" : "d1-td-zero",
+        };
+    };
+
+    const getProductionAnalysisValue = (periodKey) => {
+        const value = productionData?.analysis?.[periodKey]?.oa_eff;
+        return Number.isFinite(Number(value)) ? Number(value) : 0;
+    };
+
+    const getProductionAnalysisCell = (periodKey) => {
+        const value = getProductionAnalysisValue(periodKey);
+        return {
+            val: value ? `${formatMetric(value)}%` : "0",
+            cls: value ? "d1-td-num" : "d1-td-zero",
+        };
+    };
+
+    const getQualityRejectionAnalysisValue = (periodKey, metricKey) => {
+        const value = qualityRejectionsWeeklyData?.analysis?.[periodKey]?.[metricKey];
+        return Number.isFinite(Number(value)) ? Number(value) : 0;
+    };
+
+    const getQualityRejectionAnalysisCell = (periodKey, metricKey) => {
+        const value = getQualityRejectionAnalysisValue(periodKey, metricKey);
+        return {
+            val: formatMetric(value),
+            cls: value ? "d1-td-num" : "d1-td-zero",
+        };
+    };
+
+    // Build KPI Cards
     const kpiCards = [
         {
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
@@ -524,7 +649,6 @@ export default function Dashboard1() {
             sparkData: salesData ? salesData.spark_data : [278, 305, 292, 328, 310, 335, 317],
             sparkColor: "#1a56db",
         },
-        // Other KPIs remain unchanged (static data)
         {
             kgrad: "linear-gradient(90deg,#f59e0b,#fbbf24)", kbg: "#fffbeb", kclr: "#b45309", animDelay: ".07s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>),
@@ -550,9 +674,13 @@ export default function Dashboard1() {
         {
             kgrad: "linear-gradient(90deg,#8b5cf6,#c4b5fd)", kbg: "#f5f3ff", kclr: "#7c3aed", animDelay: ".21s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>),
-            delta: "↑ 5.2%", deltaType: "up", label: "Quality Value",
-            value: "1,66,71,682", footer: `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: [152, 160, 145, 168, 157, 164, 167], sparkColor: "#8b5cf6",
+            delta: qualityValueData ? `${qualityValueData.delta_type === "up" ? "↑" : "↓"} ${qualityValueData.delta}%` : "↑ 5.2%",
+            deltaType: qualityValueData ? qualityValueData.delta_type : "up",
+            label: "Quality Value",
+            value: qualityValueData ? formatRupees(qualityValueData.current_value) : "1,66,71,682",
+            footer: qualityValueData ? `${MONTHS_FULL[period.month]} ${period.year} · ${qualityValueData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
+            sparkData: qualityValueData ? qualityValueData.spark_data : [152, 160, 145, 168, 157, 164, 167],
+            sparkColor: "#8b5cf6",
         },
     ];
 
@@ -583,23 +711,98 @@ export default function Dashboard1() {
         {
             title: "Purchase Projections in Lakhs",
             legend: [{ label: "PO", color: "#1a56db" }, { label: "GRN", color: "#f59e0b" }],
-            drawFn: (c) => drawBarChart(c, ["M1", "M2", "M3", "M4", "M5"], [
-                { data: [2760, 3050, 2900, 3450, 3078], color: "#1a56db" },
-                { data: [175, 204, 192, 228, 205], color: "#f59e0b" },
-            ]),
+            drawFn: (c) => drawBarChart(
+                c,
+                purchaseProjectionsData?.labels?.length ? purchaseProjectionsData.labels : [MONTHS_SHORT[period.month]],
+                [
+                    { data: purchaseProjectionsData?.po ?? [0], color: "#1a56db" },
+                    { data: purchaseProjectionsData?.grn ?? [0], color: "#f59e0b" },
+                ]
+            ),
+            deps: [purchaseProjectionsData, period],
+            footer: (
+                <>
+                    <span className="d1-cc__foot-val d1-cc__foot-val--sales">
+                        PO: {formatRupees(purchaseProjectionsData?.po_amount?.[0] ?? 0)}
+                    </span>
+                    <span className="d1-cc__foot-val d1-cc__foot-val--po">
+                        GRN: {formatRupees(purchaseProjectionsData?.grn_amount?.[0] ?? 0)}
+                    </span>
+                </>
+            ),
         },
         {
             title: "OA Efficiency % — Weekly",
             legend: [{ label: "OA %", color: "#10b981", round: true }],
-            drawFn: (c) => drawLineChart(c, [{ data: [71, 74.5, 67.8, 70.5, 73.2, 69.8, 72.01], color: "#10b981" }], [60, 80]),
+            drawFn: (c) => {
+                const oaWeeklyLabels = oaEfficiencyWeeklyData?.labels?.length
+                    ? oaEfficiencyWeeklyData.labels
+                    : ["W1", "W2", "W3", "W4", "W5"];
+                const oaWeeklySeries = oaEfficiencyWeeklyData?.data?.length
+                    ? oaEfficiencyWeeklyData.data
+                    : [71, 74.5, 67.8, 70.5, 73.2];
+                drawLineChart(
+                    c,
+                    [{ data: oaWeeklySeries, color: "#10b981" }],
+                    getOaWeeklyRange(oaWeeklySeries),
+                    oaWeeklyLabels,
+                    86
+                );
+            },
+            deps: [oaEfficiencyWeeklyData, period],
+            footer: (
+                <>
+                    {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : ["W1", "W2", "W3", "W4", "W5"]).map((label, index) => (
+                        <span key={label} className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "9px" }}>
+                            {label}: {formatMetric(oaEfficiencyWeeklyData?.data?.[index] ?? 0)}%
+                        </span>
+                    ))}
+                </>
+            ),
+            canvasHeight: 86,
         },
         {
             title: "Quality Rejections — Weekly",
             legend: [{ label: "Mac Rej", color: "#ef4444", round: true }, { label: "Mat Rej", color: "#1a56db", round: true }],
-            drawFn: (c) => drawLineChart(c, [
-                { data: [27000, 31500, 14500, 23000, 37000, 21500, 23262], color: "#ef4444" },
-                { data: [34000, 39500, 19500, 29000, 41000, 35500, 39292], color: "#1a56db" },
-            ], [-2000, 46000]),
+            drawFn: (c) => {
+                const qualityWeeklyLabels = qualityRejectionsWeeklyData?.labels?.length
+                    ? qualityRejectionsWeeklyData.labels
+                    : ["W1", "W2", "W3", "W4", "W5"];
+                const machineSeries = qualityRejectionsWeeklyData?.machine?.length
+                    ? qualityRejectionsWeeklyData.machine
+                    : [27000, 31500, 14500, 23000, 37000];
+                const materialSeries = qualityRejectionsWeeklyData?.material?.length
+                    ? qualityRejectionsWeeklyData.material
+                    : [34000, 39500, 19500, 29000, 41000];
+                drawLineChart(
+                    c,
+                    [
+                        { data: machineSeries, color: "#ef4444" },
+                        { data: materialSeries, color: "#1a56db" },
+                    ],
+                    getWeeklyQuantityRange([machineSeries, materialSeries]),
+                    qualityWeeklyLabels,
+                    74
+                );
+            },
+            deps: [qualityRejectionsWeeklyData, period],
+            footer: (
+                <>
+                    {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : ["W1", "W2", "W3", "W4", "W5"]).map((label, index) => (
+                        <span key={label} className="d1-cc__foot-val" style={{ fontSize: "8.5px" }}>
+                            {label}:{" "}
+                            <span style={{ color: "#ef4444" }}>
+                                Mac {formatMetric(qualityRejectionsWeeklyData?.machine?.[index] ?? 0)}
+                            </span>{" "}
+                            /{" "}
+                            <span style={{ color: "#1a56db" }}>
+                                Mat {formatMetric(qualityRejectionsWeeklyData?.material?.[index] ?? 0)}
+                            </span>
+                        </span>
+                    ))}
+                </>
+            ),
+            canvasHeight: 74,
         },
     ];
 
@@ -609,11 +812,11 @@ export default function Dashboard1() {
             badgeLabel: "Sales", badgeBg: "#eff4ff", badgeColor: "#1a56db",
             headers: ["Desc", "Sales", "LAB", "Exp", "Total"],
             rows: [
-                { cells: [{ val: "Today" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { cells: [{ val: "YDA" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: salesData ? formatRupees(salesData.current_value) : "35,09,948", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.current_value) : "35,09,948", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: salesData ? formatRupees(salesData.quarter_value) : "6,10,56,000", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.quarter_value) : "6,10,56,000", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: salesData ? formatRupees(salesData.fy_value) : "25,85,37,000", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }, { val: salesData ? formatRupees(salesData.fy_value) : "25,85,37,000", cls: "d1-td-num" }] },
+                { cells: [{ val: "Today" }, getSalesAnalysisCell("today", "sales"), getSalesAnalysisCell("today", "lab"), getSalesAnalysisCell("today", "exp"), getSalesAnalysisCell("today", "total")] },
+                { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), getSalesAnalysisCell("yesterday", "total")] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), getSalesAnalysisCell("month", "total")] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), getSalesAnalysisCell("quarter", "total")] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getSalesAnalysisCell("financial_year", "sales"), getSalesAnalysisCell("financial_year", "lab"), getSalesAnalysisCell("financial_year", "exp"), getSalesAnalysisCell("financial_year", "total")] },
             ],
         },
         {
@@ -621,11 +824,11 @@ export default function Dashboard1() {
             badgeLabel: "Purchase", badgeBg: "#fffbeb", badgeColor: "#b45309",
             headers: ["Description", "PO", "GRN"],
             rows: [
-                { cells: [{ val: "Today" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { cells: [{ val: "YDA" }, { val: "0", cls: "d1-td-zero" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, { val: purchaseData ? formatRupees(purchaseData.current_value) : "2,05,32,587", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, { val: purchaseData ? formatRupees(purchaseData.quarter_value) : "11,58,20,900", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, { val: purchaseData ? formatRupees(purchaseData.fy_value) : "34,41,59,700", cls: "d1-td-num" }, { val: "0", cls: "d1-td-zero" }] },
+                { cells: [{ val: "Today" }, getPurchaseAnalysisCell("today", "po"), getPurchaseAnalysisCell("today", "grn")] },
+                { cells: [{ val: "YDA" }, getPurchaseAnalysisCell("yesterday", "po"), getPurchaseAnalysisCell("yesterday", "grn")] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getPurchaseAnalysisCell("month", "po"), getPurchaseAnalysisCell("month", "grn")] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getPurchaseAnalysisCell("quarter", "po"), getPurchaseAnalysisCell("quarter", "grn")] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getPurchaseAnalysisCell("financial_year", "po"), getPurchaseAnalysisCell("financial_year", "grn")] },
             ],
         },
         {
@@ -633,22 +836,26 @@ export default function Dashboard1() {
             badgeLabel: "OA %", badgeBg: "#ecfdf5", badgeColor: "#059669",
             headers: ["Description", "%"],
             rows: [
-                { cells: [{ val: "Todays OA Eff %" }, { val: "0", cls: "d1-td-zero" }] },
-                { cells: [{ val: "Yesterdays OA Eff %" }, { val: "0", cls: "d1-td-zero" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, { val: "72.01", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, { val: "72.37", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Fin OA Eff %" }, { val: "69.09", cls: "d1-td-num" }] },
+                { cells: [{ val: "Todays OA Eff %" }, getProductionAnalysisCell("today")] },
+                { cells: [{ val: "Yesterdays OA Eff %" }, getProductionAnalysisCell("yesterday")] },
+                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, getProductionAnalysisCell("month")] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, getProductionAnalysisCell("quarter")] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin OA Eff %" }, getProductionAnalysisCell("financial_year")] },
             ],
         },
         {
-            title: "Quality Analysis", sub: "Rejection Numbers",
+            title: "Quality Analysis",
+            sub: qualityRejectionsWeeklyData?.fy_label
+                ? `Material vs machine rejection qty · ${qualityRejectionsWeeklyData.fy_label}`
+                : "Material vs machine rejection qty",
             badgeLabel: "Nos", badgeBg: "#f5f3ff", badgeColor: "#7c3aed",
-            headers: ["Description", "Numbers"],
+            headers: ["Description", "Mat Rej", "Mac Rej"],
             rows: [
-                { cells: [{ val: "Mat Rej" }, { val: "39,292", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-month", cells: [{ val: "Mac Rej" }, { val: "23,262", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Rework" }, { val: "22,613", cls: "d1-td-num" }] },
-                { rowClass: "d1-row-fin", cells: [{ val: "Customer Complaint" }, { val: "0", cls: "d1-td-zero" }] },
+                { cells: [{ val: "Today" }, getQualityRejectionAnalysisCell("today", "material"), getQualityRejectionAnalysisCell("today", "machine")] },
+                { cells: [{ val: "YDA" }, getQualityRejectionAnalysisCell("yesterday", "material"), getQualityRejectionAnalysisCell("yesterday", "machine")] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getQualityRejectionAnalysisCell("month", "material"), getQualityRejectionAnalysisCell("month", "machine")] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getQualityRejectionAnalysisCell("quarter", "material"), getQualityRejectionAnalysisCell("quarter", "machine")] },
+                { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getQualityRejectionAnalysisCell("financial_year", "material"), getQualityRejectionAnalysisCell("financial_year", "machine")] },
             ],
         },
     ];

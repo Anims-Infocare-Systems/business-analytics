@@ -1,13 +1,14 @@
 from django.urls import path
 from .views import (
-    # Login & Company
+    # Health & Authentication
+    health_check,
     login_view, get_company,
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise,
     mac_rejection_ppm, otd_report,
     # Purchase
-    purchase_report_monthwise, supplier_rating_monthwise, # ✅ NEW
-    # Vendor (NEW)
+    purchase_report_monthwise, supplier_rating_monthwise,
+    # Vendor
     vendor_rejection_monthwise,
     # Operations
     overall_efficiency_monthwise, production_value_monthwise,
@@ -26,40 +27,93 @@ from .views_dashboard1 import (
     dashboard1_sales_kpi,
     dashboard1_purchase_kpi,
     dashboard1_production_kpi,
+    dashboard1_quality_value_kpi,
     dashboard1_sales_projections,
     dashboard1_purchase_projections,
     dashboard1_oa_efficiency_weekly,
     dashboard1_quality_rejections_weekly,
 )
+from .views_plantperformance import (
+    plant_performance_bundle,
+    plant_performance_kpis,
+    plant_performance_production_by_shift,
+    plant_performance_idle_hours,
+    plant_performance_downtime_by_reason,
+    plant_performance_customer_complaints,
+    plant_performance_po_pipeline,
+    plant_performance_inspection_pending_snapshot,
+    plant_performance_grn_pending_pipeline,
+    plant_performance_iqc_rejections,
+    plant_performance_otd,
+    plant_performance_final_inspection_kpi,
+    plant_performance_injob_inspection,
+    plant_performance_inter_inspection,
+    plant_performance_final_inspection_org_rej_rwk,
+    plant_performance_top_defect_categories,
+)
+from .views_eapproval import (
+    eapproval_list,
+    eapproval_stats,
+    eapproval_detail,
+    eapproval_approve,
+    eapproval_modify,
+)
+from .views_tapproval import (
+    tapproval_list,
+    tapproval_stats,
+    tapproval_detail,
+    tapproval_approve,
+    tapproval_modify,
+)
+from .views_userrights import (
+    user_rights_list,
+    user_rights_update,
+    user_rights_bulk_save,
+)
+from .views_sales_analysis import (
+    sales_analysis_summary_strip,
+    sales_analysis_weekly_trend,
+    sales_analysis_revenue_charts,
+    sales_analysis_month_summary,
+    sales_analysis_invoice_details,
+    sales_analysis_top_products,
+)
+from .views_idle_time_report import idle_time_report
+
 urlpatterns = [
-    # ── Authentication ────────────────────────────────────────
+    # ── Health & Authentication ────────────────────────────────────────
+    path('health/', health_check, name='health_check'),
     path('login/', login_view, name='login'),
     path('company/<str:code>/', get_company, name='get_company'),
-    # ── Charts (Sabarish - Monthwise) ─────────────────────────
+
+    # ── Charts (Sabarish - Monthwise) ─────────────────────────────────
     path('po-vs-sales/', po_vs_sales, name='po_vs_sales'),
     path('customer-complaints/', customer_complaints, name='customer_complaints'),
     path('quality/rejection-monthwise/', rejection_monthwise, name='rejection_monthwise'),
     path('quality/rework-monthwise/', rework_monthwise, name='rework_monthwise'),
     path('quality/mac-rejection-ppm/', mac_rejection_ppm, name='mac_rejection_ppm'),
     path('otd-report/', otd_report, name='otd_report'),
-    # ── Purchase ──────────────────────────────────────────────
+
+    # ── Purchase ──────────────────────────────────────────────────────
     path('purchase/report-monthwise/', purchase_report_monthwise, name='purchase_report_monthwise'),
-    # ✅ NEW: Supplier Rating Endpoint
     path('purchase/supplier-rating/', supplier_rating_monthwise, name='supplier_rating_monthwise'),
-    # ── Vendor (NEW) ──────────────────────────────────────────
+
+    # ── Vendor ────────────────────────────────────────────────────────
     path('vendor/rejection-monthwise/', vendor_rejection_monthwise, name='vendor_rejection_monthwise'),
-    # ── Operations ────────────────────────────────────────────
+
+    # ── Operations ────────────────────────────────────────────────────
     path('operations/overall-efficiency/', overall_efficiency_monthwise, name='overall_efficiency_monthwise'),
     path('operations/production-value/', production_value_monthwise, name='production_value_monthwise'),
-    # ── Production - Operator Efficiency & Machine Idle Time ──
+
+    # ── Production - Operator Efficiency & Machine Idle Time ──────────
     path('production/operators/', get_operators, name='get_operators'),
     path('production/operator-efficiency/', operator_efficiency, name='operator_efficiency'),
     path('production/overall-operator-efficiency/', overall_operator_efficiency, name='overall_operator_efficiency'),
     path('production/machine-idle-time/', machine_wise_idle_time, name='machine_wise_idle_time'),
-    # ── ✅ NEW: Machine Efficiency Endpoints ─────────────────
     path('production/machines/', get_machines, name='get_machines'),
     path('production/machine-efficiency-monthwise/', machine_efficiency_monthwise, name='machine_efficiency_monthwise'),
-    # ── Dashboard2 (Pranesh - Full Implementation) ────────────
+
+    # ── Dashboard2 (Pranesh - Full Implementation) ────────────────────
     path('dashboard2/kpis/', dashboard2_kpis, name='dashboard2_kpis'),
     path('dashboard2/production-by-shift/', dashboard2_production_by_shift, name='dashboard2_production_by_shift'),
     path('dashboard2/idle-hours/', dashboard2_idle_hours, name='dashboard2_idle_hours'),
@@ -75,11 +129,62 @@ urlpatterns = [
     path('dashboard2/inter-inspection/', dashboard2_inter_inspection, name='dashboard2_inter_inspection'),
     path('dashboard2/final-inspection-org-rej-rwk/', dashboard2_final_inspection_org_rej_rwk, name='dashboard2_final_inspection_org_rej_rwk'),
     path('dashboard2/top-defect-categories/', dashboard2_top_defect_categories, name='dashboard2_top_defect_categories'),
+
+    # ── Plant Performance (Dashboard3) ────────────────────────────────
+    path('plant-performance/bundle/', plant_performance_bundle, name='plant_performance_bundle'),
+    path('plant-performance/kpis/', plant_performance_kpis, name='plant_performance_kpis'),
+    path('plant-performance/production-by-shift/', plant_performance_production_by_shift, name='plant_performance_production_by_shift'),
+    path('plant-performance/idle-hours/', plant_performance_idle_hours, name='plant_performance_idle_hours'),
+    path('plant-performance/downtime-by-reason/', plant_performance_downtime_by_reason, name='plant_performance_downtime_by_reason'),
+    path('plant-performance/customer-complaints/', plant_performance_customer_complaints, name='plant_performance_customer_complaints'),
+    path('plant-performance/po-pipeline/', plant_performance_po_pipeline, name='plant_performance_po_pipeline'),
+    path('plant-performance/inspection-pending-snapshot/', plant_performance_inspection_pending_snapshot, name='plant_performance_inspection_pending_snapshot'),
+    path('plant-performance/grn-pending-pipeline/', plant_performance_grn_pending_pipeline, name='plant_performance_grn_pending_pipeline'),
+    path('plant-performance/iqc-rejections/', plant_performance_iqc_rejections, name='plant_performance_iqc_rejections'),
+    path('plant-performance/otd/', plant_performance_otd, name='plant_performance_otd'),
+    path('plant-performance/final-inspection-kpi/', plant_performance_final_inspection_kpi, name='plant_performance_final_inspection_kpi'),
+    path('plant-performance/injob-inspection/', plant_performance_injob_inspection, name='plant_performance_injob_inspection'),
+    path('plant-performance/inter-inspection/', plant_performance_inter_inspection, name='plant_performance_inter_inspection'),
+    path('plant-performance/final-inspection-org-rej-rwk/', plant_performance_final_inspection_org_rej_rwk, name='plant_performance_final_inspection_org_rej_rwk'),
+    path('plant-performance/top-defect-categories/', plant_performance_top_defect_categories, name='plant_performance_top_defect_categories'),
+
+    # ── Dashboard1 ────────────────────────────────────────────────────
     path('dashboard1/sales-kpi/', dashboard1_sales_kpi, name='dashboard1_sales_kpi'),
     path('dashboard1/purchase-kpi/', dashboard1_purchase_kpi, name='dashboard1_purchase_kpi'),
     path('dashboard1/production-kpi/', dashboard1_production_kpi, name='dashboard1_production_kpi'),
+    path('dashboard1/quality-value-kpi/', dashboard1_quality_value_kpi, name='dashboard1_quality_value_kpi'),
     path('dashboard1/sales-projections/', dashboard1_sales_projections, name='dashboard1_sales_projections'),
     path('dashboard1/purchase-projections/', dashboard1_purchase_projections, name='dashboard1_purchase_projections'),
     path('dashboard1/oa-efficiency-weekly/', dashboard1_oa_efficiency_weekly, name='dashboard1_oa_efficiency_weekly'),
     path('dashboard1/quality-rejections-weekly/', dashboard1_quality_rejections_weekly, name='dashboard1_quality_rejections_weekly'),
+
+    # ── Sales Analysis ──────────────────────────────────────────────────
+    path('sales-analysis/summary-strip/', sales_analysis_summary_strip, name='sales_analysis_summary_strip'),
+    path('sales-analysis/weekly-trend/', sales_analysis_weekly_trend, name='sales_analysis_weekly_trend'),
+    path('sales-analysis/revenue-charts/', sales_analysis_revenue_charts, name='sales_analysis_revenue_charts'),
+    path('sales-analysis/month-summary/', sales_analysis_month_summary, name='sales_analysis_month_summary'),
+    path('sales-analysis/invoice-details/', sales_analysis_invoice_details, name='sales_analysis_invoice_details'),
+    path('sales-analysis/top-products/', sales_analysis_top_products, name='sales_analysis_top_products'),
+
+    # ── Idle Time Report ────────────────────────────────────────────────
+    path('idle-time-report/', idle_time_report, name='idle_time_report'),
+
+    # ── E-Approval Module ───────────────────────────────────────────────
+    path('eapproval/list/', eapproval_list, name='eapproval_list'),
+    path('eapproval/stats/', eapproval_stats, name='eapproval_stats'),
+    path('eapproval/detail/', eapproval_detail, name='eapproval_detail'),
+    path('eapproval/approve/', eapproval_approve, name='eapproval_approve'),
+    path('eapproval/modify/', eapproval_modify, name='eapproval_modify'),
+
+    # ── T-Approval Module ───────────────────────────────────────────────
+    path('tapproval/list/', tapproval_list, name='tapproval_list'),
+    path('tapproval/stats/', tapproval_stats, name='tapproval_stats'),
+    path('tapproval/detail/', tapproval_detail, name='tapproval_detail'),
+    path('tapproval/approve/', tapproval_approve, name='tapproval_approve'),
+    path('tapproval/modify/', tapproval_modify, name='tapproval_modify'),
+
+    # ── User Rights ─────────────────────────────────────────────────────
+    path('user-rights/list/', user_rights_list, name='user_rights_list'),
+    path('user-rights/update/', user_rights_update, name='user_rights_update'),
+    path('user-rights/bulk-save/', user_rights_bulk_save, name='user_rights_bulk_save'),
 ]

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./DashboardLayout.css";
 import Dashboard1 from "./Dashboard1";
 import Dashboard2 from "./Dashboard2";
+import Dashboard3 from "./Dashboard3";
 import Charts from "./Charts";
 import EApproval from "./EApproval";
 import TApproval from "./TApproval";
@@ -12,8 +13,6 @@ import SalesAnalysis from "./SalesAnalysis";
 import PurchaseAnalysis from "./PurchaseAnalysis";
 import QualityAnalysis from "./QualityAnalysis";
 import ProductionAnalysis from "./ProductionAnalysis";
-import StoreAnalysis from "./StoreAnalysis";
-import PackingDispatch from "./PackingDispatch";
 import UserRights from "./UserRights";
 import AnimsUtility from "./AnimsUtility";
 
@@ -24,28 +23,27 @@ function getInitialExpanded() { return window.innerWidth >= BP_TABLET; }
 
 /* ── Icons ───────────────────────────────────────────────── */
 const Icons = {
-    Dashboard:  () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>),
-    Approvals:  () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" /></svg>),
-    Reports:    () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="2" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="8" y1="16" x2="12" y2="16" /></svg>),
-    Dispatch:   () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="14" height="12" rx="1" /><path d="M16 10l4 2v5h-4" /><circle cx="6" cy="20" r="2" /><circle cx="18" cy="20" r="2" /></svg>),
-    MIS:        () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="8" y1="17" x2="8" y2="12" /><line x1="12" y1="17" x2="12" y2="8" /><line x1="16" y1="17" x2="16" y2="14" /></svg>),
-    Charts:     () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,17 8,11 13,14 21,6" /><polyline points="17,6 21,6 21,10" /></svg>),
-    Logout:     () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16,17 21,12 16,7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>),
-    Chevron:    ({ open }) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`dl-chevron ${open ? "dl-chevron--open" : ""}`}><polyline points="6,9 12,15 18,9" /></svg>),
+    Dashboard: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>),
+    Approvals: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" /></svg>),
+    Reports: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="2" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="8" y1="16" x2="12" y2="16" /></svg>),
+    MIS: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="8" y1="17" x2="8" y2="12" /><line x1="12" y1="17" x2="12" y2="8" /><line x1="16" y1="17" x2="16" y2="14" /></svg>),
+    Charts: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,17 8,11 13,14 21,6" /><polyline points="17,6 21,6 21,10" /></svg>),
+    Logout: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16,17 21,12 16,7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>),
+    Chevron: ({ open }) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`dl-chevron ${open ? "dl-chevron--open" : ""}`}><polyline points="6,9 12,15 18,9" /></svg>),
     ChevronRight: () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,6 15,12 9,18" /></svg>),
-    Spinner:    () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /></svg>),
-    SidebarExpand:   () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><polyline points="13,9 17,12 13,15" /></svg>),
+    Spinner: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /></svg>),
+    SidebarExpand: () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><polyline points="13,9 17,12 13,15" /></svg>),
     SidebarCollapse: () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><polyline points="15,9 11,12 15,15" /></svg>),
-    Utility:    () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>),
-    Hamburger:  () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>),
-    Close:      () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>),
+    Utility: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>),
+    Hamburger: () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>),
+    Close: () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>),
 };
 
 const MENU_ITEMS = [
     {
         key: "Dashboard",
         icon: Icons.Dashboard,
-        children: ["Dashboard1", "Dashboard2"],
+        children: ["Dashboard1", "Dashboard2", "Plant Performance"],
     },
     {
         key: "Approvals",
@@ -60,13 +58,7 @@ const MENU_ITEMS = [
             "Purchase Analysis",
             "Quality Analysis",
             "Production Analysis",
-            "Store Analysis",
         ],
-    },
-    {
-        key: "Dispatch / Packing",
-        icon: Icons.Dispatch,
-        children: [],
     },
     {
         key: "MIS",
@@ -87,21 +79,20 @@ const MENU_ITEMS = [
 
 /* ── Topbar heading map ───────────────────────────────────── */
 const HEADING_MAP = {
-    "Dashboard1":           "Top Management Dashboard",
-    "Dashboard2":           "Plant Performance Dashboard",
-    "E-Approval":           "E-Approval Workflow",
-    "T-Approval":           "T-Approval Workflow",
-    "Sales Analysis":       "Reports — Sales Analysis",
-    "Purchase Analysis":    "Reports — Purchase Analysis",
-    "Quality Analysis":     "Reports — Quality Analysis",
-    "Production Analysis":  "Reports — Production Analysis",
-    "Store Analysis":       "Reports — Store Analysis",
-    "Dispatch / Packing":   "Packing & Dispatch Dashboard",
-    "Idle Time Report":     "MIS — Idle Time Report",
-    "Efficiency Report":    "MIS — Efficiency Report",
-    "Charts":               "Charts & Visualizations",
-    "User Rights":          "Utility — User Rights",
-    "Anims Utility":        "Utility — Anims Utility",
+    "Dashboard1": "Top Management Dashboard",
+    "Dashboard2": "Plant Performance Dashboard",
+    "Plant Performance": "Plant Performance",
+    "E-Approval": "E-Approval Workflow",
+    "T-Approval": "T-Approval Workflow",
+    "Sales Analysis": "Reports — Sales Analysis",
+    "Purchase Analysis": "Reports — Purchase Analysis",
+    "Quality Analysis": "Reports — Quality Analysis",
+    "Production Analysis": "Reports — Production Analysis",
+    "Idle Time Report": "MIS — Idle Time Report",
+    "Efficiency Report": "MIS — Efficiency Report",
+    "Charts": "Charts & Visualizations",
+    "User Rights": "Utility — User Rights",
+    "Anims Utility": "Utility — Anims Utility",
 };
 
 /* ── Page content with fade+slide transition ─────────────── */
@@ -126,21 +117,20 @@ function PageContent({ activeSubItem, activeItem }) {
 
     let node;
 
-    if      (si === "Dashboard1")           node = <Dashboard1 />;
-    else if (si === "Dashboard2")           node = <Dashboard2 />;
-    else if (si === "E-Approval")           node = <EApproval />;
-    else if (si === "T-Approval")           node = <TApproval />;
-    else if (si === "Sales Analysis")       node = <SalesAnalysis />;
-    else if (si === "Purchase Analysis")    node = <PurchaseAnalysis />;
-    else if (si === "Quality Analysis")     node = <QualityAnalysis />;
-    else if (si === "Production Analysis")  node = <ProductionAnalysis />;
-    else if (si === "Store Analysis")       node = <StoreAnalysis />;
-    else if (ai === "Dispatch / Packing")   node = <PackingDispatch />;
-    else if (si === "Idle Time Report")     node = <IdleTimeReport />;
-    else if (si === "Efficiency Report")    node = <EfficiencyReport />;
-    else if (ai === "Charts")               node = <Charts />;
-    else if (si === "User Rights")          node = <UserRights />;
-    else if (si === "Anims Utility")        node = <AnimsUtility />;
+    if (si === "Dashboard1") node = <Dashboard1 />;
+    else if (si === "Dashboard2") node = <Dashboard2 />;
+    else if (si === "Plant Performance") node = <Dashboard3 />;
+    else if (si === "E-Approval") node = <EApproval />;
+    else if (si === "T-Approval") node = <TApproval />;
+    else if (si === "Sales Analysis") node = <SalesAnalysis />;
+    else if (si === "Purchase Analysis") node = <PurchaseAnalysis />;
+    else if (si === "Quality Analysis") node = <QualityAnalysis />;
+    else if (si === "Production Analysis") node = <ProductionAnalysis />;
+    else if (si === "Idle Time Report") node = <IdleTimeReport />;
+    else if (si === "Efficiency Report") node = <EfficiencyReport />;
+    else if (ai === "Charts") node = <Charts />;
+    else if (si === "User Rights") node = <UserRights />;
+    else if (si === "Anims Utility") node = <AnimsUtility />;
     else node = (
         <div className="dl-content__placeholder dl-content__placeholder--labeled">
             <div className="dl-placeholder-icon">
@@ -155,8 +145,10 @@ function PageContent({ activeSubItem, activeItem }) {
         </div>
     );
 
+    const isPlant = si === "Plant Performance";
+
     return (
-        <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}`}>
+        <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}${isPlant ? " dl-page-wrap--plant" : ""}`}>
             {node}
         </div>
     );
@@ -170,13 +162,13 @@ function Clock() {
         return () => clearInterval(t);
     }, []);
 
-    const DAYS   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-    const h    = time.getHours();
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const h = time.getHours();
     const ampm = h >= 12 ? "PM" : "AM";
-    const h12  = String(h % 12 || 12).padStart(2, "0");
-    const mm   = String(time.getMinutes()).padStart(2, "0");
-    const ss   = String(time.getSeconds()).padStart(2, "0");
+    const h12 = String(h % 12 || 12).padStart(2, "0");
+    const mm = String(time.getMinutes()).padStart(2, "0");
+    const ss = String(time.getSeconds()).padStart(2, "0");
 
     return (
         <div className="dl-clock">
@@ -198,7 +190,7 @@ function Clock() {
 /* ── Animated topbar heading ─────────────────────────────── */
 function TopbarHeading({ text }) {
     const [displayed, setDisplayed] = useState(text);
-    const [phase, setPhase]         = useState("idle");
+    const [phase, setPhase] = useState("idle");
 
     useEffect(() => {
         if (text === displayed) return;
@@ -217,13 +209,13 @@ function TopbarHeading({ text }) {
 
 /* ── SidebarItem ─────────────────────────────────────────── */
 function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, onSubClick, activeSubItem, index }) {
-    const [hovered,   setHovered]   = useState(false);
+    const [hovered, setHovered] = useState(false);
     const [rippleKey, setRippleKey] = useState(0);
     const leaveTimer = useRef(null);
 
-    const IconComp    = item.icon;
+    const IconComp = item.icon;
     const hasChildren = item.children && item.children.length > 0;
-    const showMenu    = isOpen || hovered;
+    const showMenu = isOpen || hovered;
     const collapsedMode = !isExpanded && !isMobile;
 
     const handleMouseEnter = () => { clearTimeout(leaveTimer.current); setHovered(true); };
@@ -320,43 +312,6 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
     );
 }
 
-/* ── PromoCard ───────────────────────────────────────────── */
-function PromoCard() {
-    return (
-        <div className="dl-promo">
-            <div className="dl-promo__orb" />
-            <p className="dl-promo__title">Improve Your Sales Efficiency</p>
-            <div className="dl-promo__chart">
-                <svg width="100%" height="100%" viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <defs>
-                        <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="rgba(255,255,255,0.22)" />
-                            <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
-                        </linearGradient>
-                    </defs>
-                    <polygon
-                        points="0,60 0,52 30,42 55,37 75,27 95,32 115,17 140,12 160,6 200,3 200,60"
-                        fill="url(#pg)"
-                    />
-                    <polyline
-                        points="0,52 30,42 55,37 75,27 95,32 115,17 140,12 160,6 200,3"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.75)"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    />
-                </svg>
-            </div>
-            <button className="dl-promo__btn">
-                <span>Start Now</span>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="9,6 15,12 9,18" />
-                </svg>
-            </button>
-        </div>
-    );
-}
 
 /* ══════════════════════════════════════════════════════════
    DashboardLayout — root component
@@ -371,12 +326,12 @@ export default function DashboardLayout() {
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isMobile = screenWidth < BP_MOBILE;
 
-    const [expanded,      setExpanded]      = useState(getInitialExpanded);
-    const [drawerOpen,    setDrawerOpen]    = useState(false);
-    const [openMenu,      setOpenMenu]      = useState("Dashboard");
-    const [activeItem,    setActiveItem]    = useState("Dashboard");
+    const [expanded, setExpanded] = useState(getInitialExpanded);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [openMenu, setOpenMenu] = useState("Dashboard");
+    const [activeItem, setActiveItem] = useState("Dashboard");
     const [activeSubItem, setActiveSubItem] = useState("Dashboard1");
-    const [mounted,       setMounted]       = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     const sidebarRef = useRef(null);
     const contentRef = useRef(null);
@@ -392,9 +347,9 @@ export default function DashboardLayout() {
         const onResize = () => {
             const w = window.innerWidth;
             setScreenWidth(w);
-            if      (w >= BP_TABLET) { setExpanded(true);  setDrawerOpen(false); }
+            if (w >= BP_TABLET) { setExpanded(true); setDrawerOpen(false); }
             else if (w >= BP_MOBILE) { setExpanded(false); setDrawerOpen(false); }
-            else                     { setExpanded(true);  setDrawerOpen(false); }
+            else { setExpanded(true); setDrawerOpen(false); }
         };
         window.addEventListener("resize", onResize);
         return () => window.removeEventListener("resize", onResize);
@@ -436,14 +391,14 @@ export default function DashboardLayout() {
         if (parent) setActiveItem(parent.key);
         setActiveSubItem(sub);
         if (!expanded) setOpenMenu(null);
-        if (isMobile)  setDrawerOpen(false);
+        if (isMobile) setDrawerOpen(false);
     };
 
-    const handleLogout  = () => navigate("/");
-    const showExpanded  = isMobile ? true : expanded;
+    const handleLogout = () => navigate("/");
+    const showExpanded = isMobile ? true : expanded;
     const topbarHeading = activeSubItem
         ? (HEADING_MAP[activeSubItem] || activeSubItem)
-        : (HEADING_MAP[activeItem]    || activeItem);
+        : (HEADING_MAP[activeItem] || activeItem);
 
     return (
         <div className={`dl-root ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
@@ -459,9 +414,9 @@ export default function DashboardLayout() {
                 className={[
                     "dl-sidebar",
                     showExpanded ? "dl-sidebar--expanded" : "dl-sidebar--collapsed",
-                    isMobile  ? "dl-sidebar--mobile"      : "",
+                    isMobile ? "dl-sidebar--mobile" : "",
                     isMobile && drawerOpen ? "dl-sidebar--mobile-open" : "",
-                    mounted   ? "dl-sidebar--mounted"     : "",
+                    mounted ? "dl-sidebar--mounted" : "",
                 ].join(" ")}
             >
                 <div className="dl-sidebar__glow-stripe" />
@@ -502,18 +457,18 @@ export default function DashboardLayout() {
                     </div>
                 </nav>
 
-                {/* Collapse / expand toggle (desktop only) */}
+                {/* ── Collapse / expand toggle (desktop only) — bottom of sidebar ── */}
                 {!isMobile && (
                     <button
-                        className={`dl-sidebar__toggle-btn ${expanded ? "dl-sidebar__toggle-btn--right" : "dl-sidebar__toggle-btn--center"}`}
+                        className="dl-sidebar__collapse-btn"
                         onClick={() => { setExpanded(e => !e); setOpenMenu(null); }}
                         title={expanded ? "Collapse sidebar" : "Expand sidebar"}
                     >
-                        {expanded ? <Icons.SidebarCollapse /> : <Icons.SidebarExpand />}
+                        {expanded
+                            ? <><Icons.SidebarCollapse /><span className="dl-sidebar__collapse-label">Collapse</span></>
+                            : <Icons.SidebarExpand />}
                     </button>
                 )}
-
-                {showExpanded && <PromoCard />}
             </aside>
 
             {/* ── Main area ────────────────────────────────── */}

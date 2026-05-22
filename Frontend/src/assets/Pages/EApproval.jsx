@@ -1,113 +1,231 @@
 /**
  * EApproval.jsx  —  E-Approval Dashboard (Electronic Purchase / Material Approvals)
  * Prefix: eap-   |   Theme: Indigo / Blue
- * Updated: collapsible groups by type (Raw Material, Store Material, Capital Item)
+ * Data from Django /api/eapproval/*; layout matches the original static UI.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import "./EApproval.css";
 import DateRangePicker from "./DateRangePicker";
+import { resolveApiBase } from "../../apiBase";
 
-// ─── Data ────────────────────────────────────────────────────
-const E_CARDS = [
-    {
-        id: 1, type: "Raw Material", status: "Approved",
-        vendor: "NAHATAL ALLOYS PRIVATE LIMITED", poNo: "AD250495", poDate: "29/11/2025",
-        countLabel: "Amount", countVal: 8800,
-        items: [
-            { sNo: 1, codeNo: "ADC 12",  description: "ALUMINIUM INGOTS",      dia: 1, uom: "KGS", qty: 3289, qtyOthers: 3289, rate: 227,  amount: 746603 },
-            { sNo: 2, codeNo: "ADC 10",  description: "ALUMINIUM ALLOY RODS",  dia: 2, uom: "KGS", qty: 500,  qtyOthers: 500,  rate: 210,  amount: 105000 },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 0,
-        cgstPct: 9, sgstPct: 9, roundOff: 0.438,
-    },
-    {
-        id: 2, type: "Raw Material", status: "Pending",
-        vendor: "NAHATAL ALLOYS PRIVATE LIMITED", poNo: "AD250495", poDate: "27/11/2025",
-        countLabel: "Amount", countVal: 2000,
-        items: [
-            { sNo: 1, codeNo: "ALU-88",  description: "ALUMINIUM SHEETS 2MM",  dia: 2, uom: "KGS", qty: 200,  qtyOthers: 200,  rate: 215,  amount: 43000  },
-        ],
-        discount: 500, bfTaxPF: 0, afTaxPF: 200,
-        cgstPct: 9, sgstPct: 9, roundOff: 0.12,
-    },
-    {
-        id: 3, type: "Raw Material", status: "Pending",
-        vendor: "ALU TECH ENSG", poNo: "AD250493", poDate: "26/11/2025",
-        countLabel: "Amount", countVal: 5000,
-        items: [
-            { sNo: 1, codeNo: "AT-001",  description: "COPPER WIRE COIL",      dia: 3, uom: "MTR", qty: 150,  qtyOthers: 150,  rate: 320,  amount: 48000  },
-            { sNo: 2, codeNo: "AT-002",  description: "BRASS FITTINGS 10MM",   dia: 1, uom: "NOS", qty: 80,   qtyOthers: 80,   rate: 95,   amount: 7600   },
-        ],
-        discount: 200, bfTaxPF: 100, afTaxPF: 0,
-        cgstPct: 12, sgstPct: 12, roundOff: -0.22,
-    },
-    {
-        id: 4, type: "Store Material", status: "Pending",
-        vendor: "STAR SUPPLIES LIMITED", poNo: "AD250500", poDate: "30/11/2025",
-        countLabel: "Amount", countVal: 12000,
-        items: [
-            { sNo: 1, codeNo: "SS-101",  description: "SAFETY GLOVES (PAIR)",  dia: "-", uom: "NOS", qty: 100, qtyOthers: 100, rate: 45,   amount: 4500   },
-            { sNo: 2, codeNo: "SS-102",  description: "SAFETY HELMET",          dia: "-", uom: "NOS", qty: 50,  qtyOthers: 50,  rate: 120,  amount: 6000   },
-            { sNo: 3, codeNo: "SS-103",  description: "FIRST AID BOX",          dia: "-", uom: "NOS", qty: 10,  qtyOthers: 10,  rate: 850,  amount: 8500   },
-        ],
-        discount: 0, bfTaxPF: 0, afTaxPF: 0,
-        cgstPct: 9, sgstPct: 9, roundOff: 0.55,
-    },
-    {
-        id: 5, type: "Store Material", status: "Pending",
-        vendor: "VEND TECH SOLUTIONS", poNo: "AD250501", poDate: "01/12/2025",
-        countLabel: "Amount", countVal: 8000,
-        items: [
-            { sNo: 1, codeNo: "VT-010",  description: "INDUSTRIAL LUBRICANT 5L", dia: "-", uom: "LTR", qty: 30, qtyOthers: 30, rate: 260,  amount: 7800   },
-        ],
-        discount: 0, bfTaxPF: 50, afTaxPF: 50,
-        cgstPct: 18, sgstPct: 18, roundOff: 0.1,
-    },
-    {
-        id: 6, type: "Service Po", status: "Approved",
-        vendor: "OMEGA MACHINES LTD", poNo: "AD250510", poDate: "02/12/2025",
-        countLabel: "Amount", countVal: 45000,
-        items: [
-            { sNo: 1, codeNo: "OM-501",  description: "HYDRAULIC PRESS 50T",   dia: "-", uom: "NOS", qty: 1,   qtyOthers: 1,   rate: 42000, amount: 42000  },
-            { sNo: 2, codeNo: "OM-502",  description: "INSTALLATION CHARGES",  dia: "-", uom: "JOB", qty: 1,   qtyOthers: 1,   rate: 3000,  amount: 3000   },
-        ],
-        discount: 1500, bfTaxPF: 500, afTaxPF: 0,
-        cgstPct: 18, sgstPct: 18, roundOff: -0.33,
-    },
-];
+const API = resolveApiBase();
 
-const E_STATS = [
-    { label: "Total Pending",        value: "145",  change: "↑ 12 waiting action" },
-    { label: "Approved Today",       value: "28",   change: "↑ 15% vs yesterday"  },
-    { label: "Avg. Processing Time", value: "2.3h", change: "↓ 30% improvement"   },
-];
+function toYMD(d) {
+    if (!d) return "";
+    const x = d instanceof Date ? d : new Date(d);
+    const p = n => String(n).padStart(2, "0");
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+}
 
-// Type order and icon map
-const TYPE_ORDER = ["Raw Material", "Store Material", "Service Po"];
+const TYPE_ORDER = ["Raw Material", "Store Material", "Service Po", "General"];
 const TYPE_ICONS = {
     "Raw Material":   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
     "Store Material": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16,8 20,8 23,11 23,16 16,16 16,8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
-    "Service Po":   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>,
+    "Service Po":     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>,
+    "General":        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
 };
 
-function parseCardDate(str) {
-    const [d, m, y] = str.split("/").map(Number);
-    return new Date(y, m - 1, d);
+const DEFAULT_STATS = [
+    { label: "Total PO's", value: "—", change: "" },
+    { label: "Approved", value: "—", change: "" },
+    { label: "Pending", value: "—", change: "" },
+];
+
+// ─── Inline spinner SVG ─────────────────────────────────
+const BtnSpinner = () => (
+    <svg className="eap-btn-spin" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3"/>
+        <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+    </svg>
+);
+
+// ─── Toast notification ─────────────────────────────
+function Toast({ toasts }) {
+    return createPortal(
+        <div className="eap-toast-stack">
+            {toasts.map(t => (
+                <div key={t.id} className={`eap-toast eap-toast--${t.type}`}>
+                    <span className="eap-toast__icon">
+                        {t.type === "success-approve" && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+                        )}
+                        {t.type === "success-modify" && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        )}
+                        {t.type === "error" && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        )}
+                    </span>
+                    <span className="eap-toast__msg">{t.msg}</span>
+                </div>
+            ))}
+        </div>,
+        document.body
+    );
 }
 
-// ─── Detail Preview Modal ─────────────────────────────────────
-function DetailModal({ card, onClose, onApprove }) {
-    if (!card) return null;
+function parseCardDate(str) {
+    if (!str || typeof str !== "string") return new Date(NaN);
+    const parts = str.split("/");
+    if (parts.length !== 3) return new Date(NaN);
+    const [d, m, y] = parts.map(Number);
+    if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) return new Date(NaN);
+    const dt = new Date(y, m - 1, d);
+    return Number.isNaN(dt.getTime()) ? new Date(NaN) : dt;
+}
 
-    const totalAmount = card.items.reduce((s, r) => s + r.amount, 0);
-    const afterDiscount = totalAmount - (card.discount || 0);
-    const bfTax = afterDiscount + (card.bfTaxPF || 0);
-    const cgstAmt = +(bfTax * card.cgstPct / 100).toFixed(2);
-    const sgstAmt = +(bfTax * card.sgstPct  / 100).toFixed(2);
-    const afTax = bfTax + (card.afTaxPF || 0);
-    const grandTotal = Math.round(afTax + cgstAmt + sgstAmt + (card.roundOff || 0));
+/** Map API financial + taxes → legacy CGST/SGST summary numbers (same layout as original UI). */
+function legacyFinancialFromCard(card) {
+    const items = card.items || [];
+    const fin = card.financial;
+    const lineSum = items.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const totalAmount = fin ? Number(fin.lineItemsTotal) || lineSum : lineSum;
+    const discount = Number(fin ? fin.discount : card.discount) || 0;
+    const bfTaxPF = Number(fin ? fin.beforeTaxPF : card.bfTaxPF) || 0;
+    const afTaxPF = Number(fin ? fin.afterTaxPF : card.afTaxPF) || 0;
+    const roundOff = Number(fin ? fin.roundOff : card.roundOff) || 0;
+    const taxes = fin?.taxes || [];
+
+    let cgstPct = Number(card.cgstPct) || 0;
+    let sgstPct = Number(card.sgstPct) || 0;
+    let cgstAmt = 0;
+    let sgstAmt = 0;
+
+    const pick = re => taxes.find(t => re.test(String(t.ttype || "")));
+    const cgst = pick(/cgst/i);
+    const sgst = pick(/sgst/i);
+    if (cgst) {
+        cgstPct = Number(cgst.tp) || cgstPct;
+        cgstAmt = Number(cgst.txAmt) || 0;
+    }
+    if (sgst) {
+        sgstPct = Number(sgst.tp) || sgstPct;
+        sgstAmt = Number(sgst.txAmt) || 0;
+    }
+    if (!cgst && !sgst && taxes.length >= 1) {
+        cgstAmt = Number(taxes[0].txAmt) || 0;
+        cgstPct = Number(taxes[0].tp) || 0;
+    }
+    if (!cgst && !sgst && taxes.length >= 2) {
+        sgstAmt = Number(taxes[1].txAmt) || 0;
+        sgstPct = Number(taxes[1].tp) || 0;
+    }
+
+    const afterDiscount = totalAmount - discount;
+    const bfTax = afterDiscount + bfTaxPF;
+    if ((!fin || taxes.length === 0) && cgstAmt === 0 && sgstAmt === 0) {
+        cgstAmt = +(bfTax * cgstPct / 100).toFixed(2);
+        sgstAmt = +(bfTax * sgstPct / 100).toFixed(2);
+    }
+
+    const afTax = bfTax + afTaxPF;
+    const grandTotal = fin
+        ? Math.round(Number(fin.grandTotal) || 0)
+        : Math.round(afTax + cgstAmt + sgstAmt + roundOff);
+
+    return {
+        totalAmount,
+        discount,
+        bfTaxPF,
+        afTaxPF,
+        roundOff,
+        cgstPct,
+        sgstPct,
+        cgstAmt,
+        sgstAmt,
+        grandTotal,
+    };
+}
+
+// ─── Detail Preview Modal (original financial layout) ─────────
+function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onModify }) {
+    if (!card && !isLoading) return null;
+
+    // ── Skeleton body shown while fetching detail ──
+    if (isLoading) return createPortal(
+        <div className="eap-modal eap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="eap-preview-box">
+                {/* Top stripe */}
+                <div className="eap-prev__hd">
+                    <div className="eap-prev__hd-left">
+                        <div className="eap-prev__hd-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div className="eap-prev__hd-title">Loading PO Details…</div>
+                            <div className="eap-prev__hd-sub">Fetching purchase order information</div>
+                        </div>
+                    </div>
+                    <div className="eap-prev__hd-right">
+                        <button type="button" className="eap-prev__close" onClick={onClose}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                </div>
+                {/* Skeleton body */}
+                <div className="eap-prev__body eap-prev-loading">
+                    {/* Arc spinner */}
+                    <div className="eap-pvl__center">
+                        <div className="eap-pvl__arc-wrap">
+                            <svg className="eap-pvl__arc" viewBox="0 0 64 64" fill="none">
+                                <circle cx="32" cy="32" r="26" stroke="rgba(99,102,241,.1)" strokeWidth="5"/>
+                                <circle className="eap-pvl__arc-ring" cx="32" cy="32" r="26"
+                                    stroke="url(#pvl-grad)" strokeWidth="5"
+                                    strokeLinecap="round" strokeDasharray="60 103"
+                                />
+                                <defs>
+                                    <linearGradient id="pvl-grad" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%"  stopColor="#6366f1"/>
+                                        <stop offset="100%" stopColor="#06b6d4"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div className="eap-pvl__dots">
+                                <span/><span/><span/>
+                            </div>
+                        </div>
+                        <p className="eap-pvl__label">Fetching purchase order…</p>
+                    </div>
+                    {/* Skeleton rows */}
+                    <div className="eap-pvl__skel-rows">
+                        {[100, 75, 90, 60, 85, 70].map((w, i) => (
+                            <div key={i} className="eap-pvl__skel-row" style={{ animationDelay: `${i * 0.07}s` }}>
+                                <div className="eap-pvl__sk" style={{ width: `${w * 0.35}%` }} />
+                                <div className="eap-pvl__sk eap-pvl__sk--val" style={{ width: `${w * 0.2}%` }} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="eap-prev__footer">
+                    <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+
+    const {
+        totalAmount,
+        discount,
+        bfTaxPF,
+        afTaxPF,
+        roundOff,
+        cgstPct,
+        sgstPct,
+        cgstAmt,
+        sgstAmt,
+        grandTotal,
+    } = legacyFinancialFromCard(card);
+
     const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const items = card.items || [];
 
     return createPortal(
         <div className="eap-modal eap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -137,7 +255,7 @@ function DetailModal({ card, onClose, onApprove }) {
                                 : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Pending</>
                             }
                         </span>
-                        <button className="eap-prev__close" onClick={onClose}>
+                        <button type="button" className="eap-prev__close" onClick={onClose}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
                     </div>
@@ -191,15 +309,15 @@ function DetailModal({ card, onClose, onApprove }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {card.items.map((row, i) => (
+                                {items.map((row, i) => (
                                     <tr key={i} className={i % 2 === 0 ? "eap-prev__tr--even" : ""}>
                                         <td className="eap-prev__td--center">{row.sNo}</td>
                                         <td><span className="eap-prev__code">{row.codeNo}</span></td>
                                         <td className="eap-prev__td--desc">{row.description}</td>
                                         <td className="eap-prev__td--center"><span className="eap-prev__uom">{row.uom}</span></td>
-                                        <td className="eap-prev__td--num">{row.qty.toLocaleString("en-IN")}</td>
-                                        <td className="eap-prev__td--num">{row.qtyOthers.toLocaleString("en-IN")}</td>
-                                        <td className="eap-prev__td--num">{row.rate.toLocaleString("en-IN")}</td>
+                                        <td className="eap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
+                                        <td className="eap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
+                                        <td className="eap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
                                         <td className="eap-prev__td--num eap-prev__td--amt">{fmt(row.amount)}</td>
                                     </tr>
                                 ))}
@@ -214,13 +332,13 @@ function DetailModal({ card, onClose, onApprove }) {
                         </div>
                         <div className="eap-prev__summary">
                             {[
-                                { label: "Total Amount",        val: fmt(totalAmount),    highlight: false },
-                                { label: "Discount",            val: `- ${fmt(card.discount)}`, highlight: false, sub: true },
-                                { label: "Before Tax P & F",    val: fmt(card.bfTaxPF),   highlight: false, sub: true },
-                                { label: "After Tax P & F",     val: fmt(card.afTaxPF),   highlight: false, sub: true },
-                                { label: `Tax CGST @ ${card.cgstPct} %`, val: fmt(cgstAmt), highlight: false },
-                                { label: `Tax SGST @ ${card.sgstPct} %`, val: fmt(sgstAmt), highlight: false },
-                                { label: "Round Off",           val: (card.roundOff >= 0 ? "+ " : "") + fmt(card.roundOff), highlight: false, sub: true },
+                                { label: "Total Amount", val: fmt(totalAmount), sub: false },
+                                { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
+                                { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
+                                { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
+                                { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
+                                { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
+                                { label: "Round Off", val: (roundOff >= 0 ? "+ " : "") + fmt(roundOff), sub: true },
                             ].map(r => (
                                 <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
                                     <span className="eap-prev__sum-label">{r.label}</span>
@@ -237,14 +355,33 @@ function DetailModal({ card, onClose, onApprove }) {
 
                 {/* ── Footer actions ── */}
                 <div className="eap-prev__footer">
-                    <button className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
+                    <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         Close
                     </button>
-                    {card.status !== "Approved" && (
-                        <button className="eap-prev-btn eap-prev-btn--approve" onClick={() => onApprove(card)}>
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
-                            Approve Order
+                    {card.status === "Approved" ? (
+                        <button
+                            type="button"
+                            className="eap-prev-btn eap-prev-btn--modify"
+                            disabled={!!actionLoading}
+                            onClick={() => onModify(card)}
+                        >
+                            {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
+                                ? <><BtnSpinner /> Modifying…</>
+                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modify Open</>
+                            }
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            className="eap-prev-btn eap-prev-btn--approve"
+                            disabled={!!actionLoading}
+                            onClick={() => onApprove(card)}
+                        >
+                            {actionLoading?.pono === card.poNo && actionLoading?.type === "approve"
+                                ? <><BtnSpinner /> Approving…</>
+                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg> Approve Order</>
+                            }
                         </button>
                     )}
                 </div>
@@ -255,22 +392,22 @@ function DetailModal({ card, onClose, onApprove }) {
 }
 
 // ─── Collapsible Group Section ────────────────────────────────
-function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, resolvedStatus }) {
-    const pendingCount   = cards.filter(c => resolvedStatus(c) === "Pending").length;
-    const approvedCount  = cards.filter(c => resolvedStatus(c) === "Approved").length;
+function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus }) {
+    const pendingCount = cards.filter(c => resolvedStatus(c) === "Pending").length;
+    const approvedCount = cards.filter(c => resolvedStatus(c) === "Approved").length;
 
     return (
         <div className="eap-group">
             {/* Group header — styled like the KPI/Charts section header in Image 2 */}
             <div className="eap-group__hd" onClick={onToggle}>
                 <div className="eap-group__hd-left">
-                    <span className="eap-group__hd-icon">{TYPE_ICONS[type]}</span>
+                    <span className="eap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS.General}</span>
                     <span className="eap-group__hd-title">{type}</span>
                     <span className="eap-group__hd-count">{cards.length} order{cards.length !== 1 ? "s" : ""}</span>
-                    {pendingCount  > 0 && <span className="eap-group__pill eap-group__pill--pending">{pendingCount} Pending</span>}
+                    {pendingCount > 0 && <span className="eap-group__pill eap-group__pill--pending">{pendingCount} Pending</span>}
                     {approvedCount > 0 && <span className="eap-group__pill eap-group__pill--approved">{approvedCount} Approved</span>}
                 </div>
-                <button className="eap-group__collapse-btn" aria-label={collapsed ? "Expand" : "Collapse"}>
+                <button type="button" className="eap-group__collapse-btn" aria-label={collapsed ? "Expand" : "Collapse"}>
                     <svg
                         className={`eap-group__chevron${collapsed ? " eap-group__chevron--collapsed" : ""}`}
                         width="14" height="14" viewBox="0 0 24 24"
@@ -312,18 +449,39 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
                                 <div className="eap-card__count">
                                     <div className="eap-count-row">
                                         <span className="eap-count-label">{card.countLabel}:</span>
-                                        <span className="eap-count-val">₹ {card.countVal.toLocaleString()}</span>
+                                        <span className="eap-count-val">₹ {Number(card.countVal).toLocaleString()}</span>
                                     </div>
                                 </div>
                                 <div className="eap-card__actions">
-                                    <button className="eap-action-btn"
+                                    <button type="button" className="eap-action-btn"
                                         onClick={e => { e.stopPropagation(); onPreview({ ...card, status }); }}>
                                         Preview
                                     </button>
-                                    <button className="eap-action-btn eap-action-btn--primary"
-                                        onClick={e => { e.stopPropagation(); onApprove(card); }}>
-                                        Approve
-                                    </button>
+                                    {status === "Approved" ? (
+                                        <button
+                                            type="button"
+                                            className="eap-action-btn eap-action-btn--modify"
+                                            disabled={!!actionLoading}
+                                            onClick={e => { e.stopPropagation(); onModify(card); }}
+                                        >
+                                            {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
+                                                ? <><BtnSpinner /> Modifying…</>
+                                                : "Modify Open"
+                                            }
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="eap-action-btn eap-action-btn--primary"
+                                            disabled={!!actionLoading}
+                                            onClick={e => { e.stopPropagation(); onApprove(card); }}
+                                        >
+                                            {actionLoading?.pono === card.poNo && actionLoading?.type === "approve"
+                                                ? <><BtnSpinner /> Approving…</>
+                                                : "Approve"
+                                            }
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -336,57 +494,187 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, res
 
 // ─── Main ─────────────────────────────────────────────────────
 export default function EApproval() {
-    const [search,    setSearch]   = useState("");
-    const [selected,  setSelected] = useState(null);
-    const [approved,  setApproved] = useState([]);
+    const [search, setSearch] = useState("");
+    const [cards, setCards] = useState([]);
+    const [stats, setStats] = useState(DEFAULT_STATS);
+    const [selected, setSelected] = useState(null);
+    const [approved, setApproved] = useState([]);
+    const today = new Date();
     const [dateRange, setDateRange] = useState({
-        from: new Date(2025, 8, 1),
-        to:   new Date(2026, 0, 25),
+        from: today,
+        to: today,
     });
-
-    // Track which groups are collapsed — default all expanded
     const [collapsedGroups, setCollapsedGroups] = useState({});
+    const [isLoading, setIsLoading] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [actionLoading, setActionLoading] = useState(null); // { pono, type }
+    const [toasts, setToasts] = useState([]);
+
+    // Detail cache — key: pono, value: full card object from API
+    // Cleared when date range changes (refreshBoard) or on approve/modify
+    const detailCache = useRef({});
+
+    const addToast = useCallback((msg, type = "success-approve") => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
+    }, []);
 
     const toggleGroup = type =>
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
 
-    const filtered = useMemo(() => {
-        const q = search.toLowerCase();
-        return E_CARDS.filter(c => {
-            const matchText = !q ||
-                c.vendor.toLowerCase().includes(q) ||
-                c.poNo.toLowerCase().includes(q)   ||
-                c.type.toLowerCase().includes(q);
-            let matchDate = true;
-            if (dateRange.from || dateRange.to) {
-                const cardDate = parseCardDate(c.poDate);
-                if (dateRange.from && cardDate < dateRange.from) matchDate = false;
-                if (dateRange.to   && cardDate > dateRange.to)   matchDate = false;
-            }
-            return matchText && matchDate;
-        });
-    }, [search, dateRange]);
+    const resolvedStatus = card => (approved.includes(card.id) ? "Approved" : card.status);
 
-    // Group cards by type in the defined order
+    const refreshBoard = useCallback(async () => {
+        const from = toYMD(dateRange.from);
+        const to   = toYMD(dateRange.to || dateRange.from);
+        if (!from) return;
+        detailCache.current = {}; // invalidate on date change
+        setIsLoading(true);
+        try {
+            const qsList  = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
+            const qsStats = new URLSearchParams({ from, to });
+            const [resList, resStats] = await Promise.all([
+                fetch(`${API}/eapproval/list/?${qsList}`,  { credentials: "include" }),
+                fetch(`${API}/eapproval/stats/?${qsStats}`, { credentials: "include" }),
+            ]);
+            const dataList  = await resList.json();
+            const dataStats = await resStats.json();
+            if (resList.ok) setCards(dataList.cards || []);
+            else { console.error(dataList.error || resList.statusText); setCards([]); }
+            if (resStats.ok && dataStats.success && Array.isArray(dataStats.stats))
+                setStats(dataStats.stats);
+            else setStats(DEFAULT_STATS);
+        } catch (e) {
+            console.error(e);
+            setCards([]);
+            setStats(DEFAULT_STATS);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [dateRange.from, dateRange.to]);
+
+    useEffect(() => { refreshBoard(); }, [refreshBoard]);
+
+    // Only text-search filter — API already scopes by date range
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase().trim();
+        if (!q) return cards;
+        return cards.filter(c =>
+            (c.vendor || "").toLowerCase().includes(q) ||
+            (c.poNo   || "").toLowerCase().includes(q) ||
+            (c.type   || "").toLowerCase().includes(q)
+        );
+    }, [cards, search]);
+
     const grouped = useMemo(() => {
         const map = {};
         filtered.forEach(c => {
             if (!map[c.type]) map[c.type] = [];
             map[c.type].push(c);
         });
-        // Return ordered list of [type, cards[]]
-        return TYPE_ORDER.filter(t => map[t]?.length > 0).map(t => [t, map[t]]);
+        const ordered = TYPE_ORDER.filter(t => map[t]?.length > 0).map(t => [t, map[t]]);
+        const extras = Object.entries(map).filter(([t]) => !TYPE_ORDER.includes(t));
+        return [...ordered, ...extras];
     }, [filtered]);
 
-    const resolvedStatus = card => approved.includes(card.id) ? "Approved" : card.status;
-    const handleApprove  = card => { setApproved(prev => [...prev, card.id]); setSelected(null); };
+    const openPreview = useCallback(async (listCard) => {
+        const pono = listCard.poNo;
+        // Cache hit — no network call needed
+        if (detailCache.current[pono]) {
+            const cached = { ...detailCache.current[pono] };
+            cached.status = approved.includes(listCard.id) ? "Approved" : cached.status;
+            setSelected(cached);
+            return;
+        }
+        const qs = new URLSearchParams({
+            pono,
+            from: toYMD(dateRange.from),
+            to:   toYMD(dateRange.to || dateRange.from),
+        });
+        setPreviewLoading(true);
+        setSelected({ ...listCard, items: [], financial: null, _loading: true });
+        try {
+            const res  = await fetch(`${API}/eapproval/detail/?${qs}`, { credentials: "include" });
+            const data = await res.json();
+            if (res.ok && data.success && data.card) {
+                const merged = { ...data.card, id: listCard.id };
+                merged.status = approved.includes(listCard.id) ? "Approved" : merged.status;
+                detailCache.current[pono] = merged; // store in cache
+                setSelected(merged);
+            } else {
+                console.error(data.error || res.statusText);
+                setSelected({ ...listCard, items: listCard.items || [], financial: null });
+            }
+        } catch (e) {
+            setSelected({ ...listCard, items: listCard.items || [] });
+        } finally {
+            setPreviewLoading(false);
+        }
+    }, [dateRange.from, dateRange.to, approved]);
+
+    const handleApprove = useCallback(async (card) => {
+        const pono = card.poNo;
+        if (!pono || actionLoading) return;
+        setActionLoading({ pono, type: "approve" });
+        try {
+            const res = await fetch(`${API}/eapproval/approve/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pono }),
+            });
+            const data = await res.json();
+            if (!res.ok) { addToast(`Failed: ${data.error || res.statusText}`, "error"); return; }
+            delete detailCache.current[pono]; // invalidate cached detail
+            setApproved(prev => (prev.includes(card.id) ? prev : [...prev, card.id]));
+            setCards(prev => prev.map(c =>
+                (c.poNo === pono || c.id === card.id) ? { ...c, status: "Approved" } : c
+            ));
+            setSelected(null);
+            addToast(`PO ${pono} approved successfully`, "success-approve");
+        } catch (e) {
+            addToast("Network error — please try again", "error");
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    }, [actionLoading, addToast]);
+
+    const handleModify = useCallback(async (card) => {
+        const pono = card.poNo;
+        if (!pono || actionLoading) return;
+        setActionLoading({ pono, type: "modify" });
+        try {
+            const res = await fetch(`${API}/eapproval/modify/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pono }),
+            });
+            const data = await res.json();
+            if (!res.ok) { addToast(`Failed: ${data.error || res.statusText}`, "error"); return; }
+            delete detailCache.current[pono]; // invalidate cached detail
+            setApproved(prev => prev.filter(id => id !== card.id));
+            setCards(prev => prev.map(c =>
+                (c.poNo === pono || c.id === card.id) ? { ...c, status: "Pending" } : c
+            ));
+            setSelected(null);
+            addToast(`PO ${pono} moved back to Pending`, "success-modify");
+        } catch (e) {
+            addToast("Network error — please try again", "error");
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    }, [actionLoading, addToast]);
 
     return (
         <div className="eap-root">
 
             {/* ── Stats ── */}
             <div className="eap-stats">
-                {E_STATS.map(s => (
+                {stats.map(s => (
                     <div className="eap-stat" key={s.label}>
                         <div className="eap-stat__label">{s.label}</div>
                         <div className="eap-stat__value">{s.value}</div>
@@ -410,34 +698,80 @@ export default function EApproval() {
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                 />
-                <button className="eap-filter__btn">🔍 Search</button>
+                <button type="button" className="eap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
             </div>
 
-            {/* ── Grouped Sections ── */}
-            <div className="eap-groups">
-                {grouped.length === 0 ? (
-                    <div className="eap-empty">
-                        <div className="eap-empty__icon">📭</div>
-                        <div className="eap-empty__txt">No e-approvals match your search</div>
+            {/* ── Grouped Sections / Loader ── */}
+            {isLoading ? (
+                <div className="eap-loader">
+                    {/* Spinner bar */}
+                    <div className="eap-loader__bar">
+                        <div className="eap-loader__bar-track">
+                            <div className="eap-loader__bar-fill" />
+                        </div>
+                        <div className="eap-loader__bar-label">
+                            <span className="eap-loader__spinner" />
+                            Fetching purchase orders…
+                        </div>
                     </div>
-                ) : (
-                    grouped.map(([type, cards]) => (
-                        <TypeGroup
-                            key={type}
-                            type={type}
-                            cards={cards}
-                            collapsed={!!collapsedGroups[type]}
-                            onToggle={() => toggleGroup(type)}
-                            onPreview={setSelected}
-                            onApprove={handleApprove}
-                            resolvedStatus={resolvedStatus}
-                        />
-                    ))
-                )}
-            </div>
+                    {/* Skeleton cards */}
+                    <div className="eap-skeleton-grid">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="eap-skeleton-card" style={{ animationDelay: `${i * 0.08}s` }}>
+                                <div className="eap-sk eap-sk--hd">
+                                    <div className="eap-sk eap-sk--badge" />
+                                    <div className="eap-sk eap-sk--status" />
+                                </div>
+                                <div className="eap-sk eap-sk--vendor" />
+                                <div className="eap-sk eap-sk--line" />
+                                <div className="eap-sk eap-sk--line eap-sk--line-short" />
+                                <div className="eap-sk eap-sk--amount" />
+                                <div className="eap-sk eap-sk--actions">
+                                    <div className="eap-sk eap-sk--btn" />
+                                    <div className="eap-sk eap-sk--btn" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className="eap-groups">
+                    {grouped.length === 0 ? (
+                        <div className="eap-empty">
+                            <div className="eap-empty__icon">📭</div>
+                            <div className="eap-empty__txt">No e-approvals match your search</div>
+                        </div>
+                    ) : (
+                        grouped.map(([type, groupCards]) => (
+                            <TypeGroup
+                                key={type}
+                                type={type}
+                                cards={groupCards}
+                                collapsed={!!collapsedGroups[type]}
+                                onToggle={() => toggleGroup(type)}
+                                onPreview={openPreview}
+                                onApprove={handleApprove}
+                                onModify={handleModify}
+                                actionLoading={actionLoading}
+                                resolvedStatus={resolvedStatus}
+                            />
+                        ))
+                    )}
+                </div>
+            )}
 
             {/* ── Preview Modal ── */}
-            <DetailModal card={selected} onClose={() => setSelected(null)} onApprove={handleApprove} />
+            <DetailModal
+                card={selected}
+                isLoading={previewLoading}
+                actionLoading={actionLoading}
+                onClose={() => { setSelected(null); setPreviewLoading(false); }}
+                onApprove={handleApprove}
+                onModify={handleModify}
+            />
+
+            {/* ── Toast Notifications ── */}
+            <Toast toasts={toasts} />
         </div>
     );
 }

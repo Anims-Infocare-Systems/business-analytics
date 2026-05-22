@@ -599,3 +599,79 @@
     .ur-stats { grid-template-columns: 1fr 1fr; }
     .ur-stat__icon { width: 36px; height: 36px; font-size: 1.1rem; }
 }
+
+/* ── API / loading / banner ───────────────────────────────── */
+.ur-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .75rem 1rem;
+    border-radius: 10px;
+    font-size: .86rem;
+    font-weight: 600;
+}
+.ur-banner--error {
+    background: #fef2f2;
+    border: 1.5px solid #fecaca;
+    color: #b91c1c;
+}
+.ur-banner__close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: inherit;
+    opacity: .7;
+}
+.ur-banner__close:hover { opacity: 1; }
+
+.ur-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 4rem 2rem;
+    color: #64748b;
+    font-weight: 600;
+}
+.ur-loading__spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #e0e7ff;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: ur-ring-spin .8s linear infinite;
+}
+
+.ur-toggle--disabled {
+    opacity: .45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.ur-th--compact { min-width: 88px; max-width: 110px; }
+.ur-th--compact .ur-th__label {
+    font-size: .62rem;
+    line-height: 1.2;
+    max-height: 2.4em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.ur-user__badge {
+    display: inline-block;
+    margin-top: .15rem;
+    padding: .1rem .45rem;
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    color: #dc2626;
+    background: #fef2f2;
+    border-radius: 4px;
+}
