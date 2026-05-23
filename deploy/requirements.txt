@@ -1,0 +1,7 @@
+# Local dev (Python 3.10+). On server with Python 3.9 only, use requirements-py39.txt
+Django==5.2.6
+djangorestframework==3.16.1
+django-cors-headers==4.8.0
+mssql-django==1.6
+pyodbc==5.2.0
+gunicorn==23.0.0

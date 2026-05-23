@@ -1,0 +1,21 @@
+[Unit]
+Description=Anims ERP Business Analytics (Gunicorn)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/animserp/backend
+EnvironmentFile=/etc/animserp/backend.env
+ExecStart=/var/www/animserp/venv/bin/gunicorn \
+    --workers 3 \
+    --bind 127.0.0.1:8001 \
+    --timeout 300 \
+    --access-logfile /var/log/animserp/gunicorn-access.log \
+    --error-logfile /var/log/animserp/gunicorn-error.log \
+    backend.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

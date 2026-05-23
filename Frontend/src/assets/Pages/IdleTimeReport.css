@@ -499,6 +499,14 @@
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
 }
 
+.itr-table-scroll--continuous .itr-thead--amber th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--itr-amber-light);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+}
+
 .itr-table {
   width: 100%;
   border-collapse: collapse;

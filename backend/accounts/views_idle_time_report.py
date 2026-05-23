@@ -1234,6 +1234,368 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
     return int(row[0] or 0) if row else 0
 
 
+def _fmt_date_short(entry_date):
+    if hasattr(entry_date, "day") and hasattr(entry_date, "month"):
+        return f"{int(entry_date.day)} {month_abbr[int(entry_date.month)]}"
+    text = str(entry_date or "").strip()
+    if len(text) >= 10:
+        try:
+            parts = text[:10].split("-")
+            return f"{int(parts[2])} {month_abbr[int(parts[1])]}"
+        except (ValueError, IndexError):
+            pass
+    return text
+
+
+def _shift_label_for_ui(shift_name):
+    name = (shift_name or "").strip()
+    if not name:
+        return "—"
+    return _SHIFT_UI_LABELS.get(name, name)
+
+
+def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift"):
+    clauses = []
+    params = []
+    if machine:
+        clauses.append(
+            f"AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) = ?"
+        )
+        params.append(machine)
+    if shift:
+        clauses.append(
+            f"AND LTRIM(RTRIM(CAST({shift_col} AS NVARCHAR(128)))) = ?"
+        )
+        params.append(shift)
+    return "\n".join(clauses), params
+
+
+def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
+    """
+    Per machine / shift / date: shift hours − (production run time + idle time)
+    = balance (idle time not entered). Uses shift master, idle union, production union.
+    """
+    empty = {
+        "rows": [],
+        "summary": {"not_entered": 0, "partial_entry": 0, "completed": 0},
+    }
+    if not table_exists(cursor, "shift") or not table_exists(cursor, "MacMaster"):
+        return empty
+
+    gap_threshold = 60
+    date_params = _union_date_params(start_date, end_date)
+    prod_date_params = _productive_date_params(start_date, end_date)
+
+    shift_clause_exp = ""
+    shift_clause_rec = ""
+    machine_clause_exp = ""
+    machine_clause_rec = ""
+    if shift:
+        shift_clause_exp = "AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) = ?"
+        shift_clause_rec = "AND LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) = ?"
+    if machine:
+        machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
+        machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
+
+    idle_slot_sql, idle_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="A.MacNo", shift_col="A.Shift",
+    )
+    prod_slot_sql, prod_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="P.macno", shift_col="P.shift",
+    )
+    opr_slot_sql, opr_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="macno", shift_col="shift",
+    )
+
+    sql = f"""
+    WITH SHIFT_HOURS AS (
+        {_SHIFT_HOURS_CTE}
+    ),
+    Dates AS (
+        SELECT CAST(? AS DATE) AS EntryDate
+        UNION ALL
+        SELECT DATEADD(DAY, 1, EntryDate) FROM Dates WHERE EntryDate < CAST(? AS DATE)
+    ),
+    RegularShifts AS (
+        SELECT LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) AS ShiftName
+        FROM shift
+        WHERE ISNULL(deleted, 0) = 0
+          AND ISNULL(IsRegularShift, 0) = 1
+          AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) <> N''
+          {shift_clause_exp}
+    ),
+    ActiveMachines AS (
+        SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) AS MacNo
+        FROM MacMaster
+        WHERE ISNULL(deleted, 0) = 0
+          AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) <> N''
+          {machine_clause_exp}
+    ),
+    Expected AS (
+        SELECT d.EntryDate, rs.ShiftName, am.MacNo
+        FROM Dates d
+        CROSS JOIN RegularShifts rs
+        CROSS JOIN ActiveMachines am
+    ),
+    IDLE_DATA AS (
+        SELECT
+            CAST(A.EntryDate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) AS MacNo,
+            SUM(A.IdleSeconds) AS TotalIdleSeconds
+        FROM (
+            {_IDLE_UNION_SQL}
+        ) A
+        WHERE 1 = 1
+        {idle_slot_sql}
+        GROUP BY
+            CAST(A.EntryDate AS DATE),
+            LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512))))
+    ),
+    PRODUCTIVE_DATA AS (
+        SELECT
+            CAST(P.EntryDate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(P.shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
+            SUM(P.ProductiveSeconds) AS TotalProductiveSeconds
+        FROM (
+            {_PRODUCTIVE_UNION_SQL}
+        ) P
+        WHERE 1 = 1
+        {prod_slot_sql}
+        GROUP BY
+            CAST(P.EntryDate AS DATE),
+            LTRIM(RTRIM(CAST(P.shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512))))
+    ),
+    OPERATOR_DATA AS (
+        SELECT
+            CAST(proddate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) AS MacNo,
+            MAX(NULLIF(LTRIM(RTRIM(CAST(oprname AS NVARCHAR(256)))), N'')) AS OperatorName
+        FROM ProductionEntry
+        WHERE proddate BETWEEN ? AND ?
+          AND deleted = 0
+          {opr_slot_sql}
+        GROUP BY
+            CAST(proddate AS DATE),
+            LTRIM(RTRIM(CAST(shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+    ),
+    MACHINE_IDLE_RECORDED AS (
+        SELECT DISTINCT
+            CAST(M.proddate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) AS MacNo
+        FROM Machine_IdleEntryDet D
+        INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+        WHERE M.proddate BETWEEN ? AND ?
+          AND M.deleted = 0
+          AND D.deleted = 0
+          {shift_clause_rec}
+          {machine_clause_rec}
+    ),
+    SLOTS AS (
+        SELECT
+            e.EntryDate,
+            e.ShiftName,
+            e.MacNo,
+            ISNULL(S.ShiftSeconds, 0) AS ShiftSeconds,
+            ISNULL(I.TotalIdleSeconds, 0) AS IdleSeconds,
+            ISNULL(P.TotalProductiveSeconds, 0) AS ProductiveSeconds,
+            CASE
+                WHEN R.EntryDate IS NOT NULL THEN 1
+                ELSE 0
+            END AS HasMachineIdleEntry,
+            O.OperatorName
+        FROM Expected e
+        LEFT JOIN IDLE_DATA I
+            ON e.EntryDate = I.EntryDate
+           AND e.ShiftName = I.ShiftName
+           AND e.MacNo = I.MacNo
+        LEFT JOIN PRODUCTIVE_DATA P
+            ON e.EntryDate = P.EntryDate
+           AND e.ShiftName = P.ShiftName
+           AND e.MacNo = P.MacNo
+        LEFT JOIN SHIFT_HOURS S
+            ON e.ShiftName = S.Shift
+        LEFT JOIN OPERATOR_DATA O
+            ON e.EntryDate = O.EntryDate
+           AND e.ShiftName = O.ShiftName
+           AND e.MacNo = O.MacNo
+        LEFT JOIN MACHINE_IDLE_RECORDED R
+            ON e.EntryDate = R.EntryDate
+           AND e.ShiftName = R.ShiftName
+           AND e.MacNo = R.MacNo
+    )
+    SELECT
+        EntryDate,
+        ShiftName,
+        MacNo,
+        ShiftSeconds,
+        IdleSeconds,
+        ProductiveSeconds,
+        ShiftSeconds - IdleSeconds - ProductiveSeconds AS NotEnteredSeconds,
+        HasMachineIdleEntry,
+        OperatorName
+    FROM SLOTS
+    OPTION (MAXRECURSION 366)
+    """
+
+    params = [start_date, end_date]
+    if shift:
+        params.append(shift)
+    if machine:
+        params.append(machine)
+    params.extend(date_params)
+    params.extend(idle_slot_params)
+    params.extend(prod_date_params)
+    params.extend(prod_slot_params)
+    params.extend([start_date, end_date])
+    params.extend(opr_slot_params)
+    params.extend([start_date, end_date])
+    if shift:
+        params.append(shift)
+    if machine:
+        params.append(machine)
+
+    cursor.execute(sql, params)
+
+    rows_out = []
+    not_entered = 0
+    partial_entry = 0
+    completed = 0
+
+    for row in cursor.fetchall() or []:
+        entry_date, shift_name, mac_no, shift_secs, idle_secs, prod_secs, gap_secs, has_entry, operator = row
+        shift_secs = int(shift_secs or 0)
+        idle_secs = int(idle_secs or 0)
+        prod_secs = int(prod_secs or 0)
+        gap_secs = int(gap_secs or 0)
+        has_entry = int(has_entry or 0)
+
+        if gap_secs <= gap_threshold:
+            completed += 1
+            continue
+
+        if has_entry:
+            partial_entry += 1
+        else:
+            not_entered += 1
+
+        mac_label = (str(mac_no).strip() if mac_no else "") or "—"
+        opr = (str(operator).strip() if operator else "") or "Pending"
+        rows_out.append({
+            "machine": mac_label,
+            "shift": _shift_label_for_ui(shift_name),
+            "date": _fmt_date_short(entry_date),
+            "operator": opr,
+            "not_entered_hours": _fmt_hm(gap_secs),
+            "not_entered_seconds": gap_secs,
+            "shift_seconds": shift_secs,
+            "idle_seconds": idle_secs,
+            "productive_seconds": prod_secs,
+        })
+
+    rows_out.sort(key=lambda r: (-r["not_entered_seconds"], r["machine"], r["date"]))
+
+    return {
+        "rows": rows_out,
+        "summary": {
+            "not_entered": not_entered,
+            "partial_entry": partial_entry,
+            "completed": completed,
+        },
+    }
+
+
+def _detail_row_level(pct):
+    if pct > 5:
+        return "high"
+    if pct > 2:
+        return "medium"
+    if pct > 0:
+        return "low"
+    return None
+
+
+def _fetch_reason_machine_detail(cursor, date_params, outer_sql, outer_params):
+    """
+    Pivot: idle reasons (rows) × machines (columns), cell values = idle hours (H:MM).
+    Uses filtered idle union for the report date range and filters.
+    """
+    empty = {"column_headers": [], "rows": [], "footer": {"cols": [], "total": "0:00:00", "pct": "0"}}
+    base = _filtered_cte_sql(outer_sql)
+    cursor.execute(
+        base
+        + """
+        SELECT
+            LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) AS Reason,
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
+            SUM(IdleSeconds) AS IdleSeconds
+        FROM FilteredIdle
+        WHERE LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) <> N''
+          AND LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) <> N''
+        GROUP BY
+            LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))),
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
+        """,
+        date_params + outer_params,
+    )
+
+    pivot = defaultdict(lambda: defaultdict(int))
+    machine_totals = defaultdict(int)
+    reason_totals = defaultdict(int)
+
+    for row in cursor.fetchall() or []:
+        reason = (str(row[0]).strip() if row[0] else "") or "—"
+        mac = (str(row[1]).strip() if row[1] else "") or "—"
+        secs = int(row[2] or 0)
+        if not reason or not mac or secs <= 0:
+            continue
+        pivot[reason][mac] += secs
+        machine_totals[mac] += secs
+        reason_totals[reason] += secs
+
+    if not reason_totals:
+        return empty
+
+    grand_total = sum(reason_totals.values())
+    column_headers = sorted(
+        machine_totals.keys(),
+        key=lambda m: (-machine_totals[m], m.lower()),
+    )
+
+    rows_out = []
+    for reason in sorted(reason_totals.keys(), key=lambda r: (-reason_totals[r], r.lower())):
+        reason_secs = reason_totals[reason]
+        pct = round((reason_secs * 100.0) / grand_total, 2) if grand_total > 0 else 0.0
+        cols = [
+            _fmt_hm(pivot[reason].get(mac, 0)) if pivot[reason].get(mac, 0) else "0:00"
+            for mac in column_headers
+        ]
+        rows_out.append({
+            "reason": reason,
+            "cols": cols,
+            "total": _fmt_hm(reason_secs),
+            "pct": f"{pct:.2f}",
+            "lvl": _detail_row_level(pct),
+        })
+
+    footer_cols = [_fmt_hm(machine_totals[mac]) for mac in column_headers]
+    return {
+        "column_headers": column_headers,
+        "rows": rows_out,
+        "footer": {
+            "cols": footer_cols,
+            "total": _fmt_hms(grand_total),
+            "pct": "100",
+        },
+    }
+
+
 @api_view(["GET"])
 def idle_time_report(request):
     """
@@ -1325,6 +1687,12 @@ def idle_time_report(request):
         continuous_idle_reasons = _fetch_continuous_idle_reasons(
             cursor, date_params, outer_sql, outer_params,
         )
+        idle_time_not_entered = _fetch_idle_time_not_entered(
+            cursor, start_date, end_date, machine, shift,
+        )
+        reason_machine_detail = _fetch_reason_machine_detail(
+            cursor, date_params, outer_sql, outer_params,
+        )
 
         cursor.close()
         conn.close()
@@ -1366,4 +1734,6 @@ def idle_time_report(request):
         "shift_wise_idle": shift_wise_idle,
         "idle_pct_ranking": idle_pct_ranking,
         "continuous_idle_reasons": continuous_idle_reasons,
+        "idle_time_not_entered": idle_time_not_entered,
+        "reason_machine_detail": reason_machine_detail,
     })

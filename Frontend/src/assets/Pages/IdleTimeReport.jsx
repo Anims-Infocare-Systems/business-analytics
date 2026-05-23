@@ -144,26 +144,36 @@ const CONTINUOUS = [
   { machine:"TC-20",    reason:"MACHINE CLEANING",   hours:"4:10", shifts:1, status:"MEDIUM"   },
 ];
 
-const NOT_ENTERED = [
-  { machine:"TC-15",    shift:"Shift 1", date:"25 Mar", operator:"Rajan K"   },
-  { machine:"VMC-05",   shift:"Shift 2", date:"26 Mar", operator:"Murugan S" },
-  { machine:"TC-28",    shift:"Shift 3", date:"26 Mar", operator:"Pending"   },
-  { machine:"BROACH-3", shift:"Shift 1", date:"27 Mar", operator:"Karthik P" },
-  { machine:"VTL-02",   shift:"Shift 2", date:"25 Mar", operator:"Pending"   },
-];
+const DEFAULT_NOT_ENTERED = {
+  rows: [
+    { machine:"TC-15",    shift:"Shift 1", date:"25 Mar", operator:"Rajan K"   },
+    { machine:"VMC-05",   shift:"Shift 2", date:"26 Mar", operator:"Murugan S" },
+    { machine:"TC-28",    shift:"Shift 3", date:"26 Mar", operator:"Pending"   },
+    { machine:"BROACH-3", shift:"Shift 1", date:"27 Mar", operator:"Karthik P" },
+    { machine:"VTL-02",   shift:"Shift 2", date:"25 Mar", operator:"Pending"   },
+  ],
+  summary: { not_entered: 14, partial_entry: 8, completed: 68 },
+};
 
-const TABLE_ROWS = [
-  { reason:"NO PLAN",            cols:["3:30","12:00","19:00","14:00","48:00","38:00","161:00"], total:"458:15",  pct:"7.62", lvl:"high"   },
-  { reason:"NMP",                cols:["24:15","52:30","55:00","28:30","62:30","65:00","72:00"], total:"361:25",  pct:"6.02", lvl:"high"   },
-  { reason:"INSERT CHANGE",      cols:["0:30","0:30","8:00","16:20","21:30","22:25","6:45"],     total:"912:55",  pct:"1.52", lvl:"medium" },
-  { reason:"MACHINE CLEANING",   cols:["14:45","7:15","19:30","17:15","21:15","25:15","13:00"],  total:"1210:15", pct:"2.01", lvl:"medium" },
-  { reason:"LUNCH HOURS",        cols:["7:30","3:00","5:00","12:30","11:30","11:00","3:00"],     total:"679:20",  pct:"1.13", lvl:"low"    },
-  { reason:"MACHINE BREAKDOWN",  cols:["5:00","32:30","31:00","8:30","120:00","87:30","3:30"],   total:"343:00",  pct:"0.57", lvl:"high"   },
-  { reason:"NO LOAD",            cols:["18:15","62:45","2:00","6:00","2:30","15:00","45:00"],    total:"1033:00", pct:"1.72", lvl:"medium" },
-  { reason:"SETTING",            cols:["21:30","0:30","1:00","1:00","0:30","3:00","14:00"],      total:"106:00",  pct:"0.18", lvl:"medium" },
-  { reason:"WAITING FOR SETTER", cols:["0:00","5:30","8:30","8:30","7:00","1:30","3:30"],        total:"118:15",  pct:"0.20", lvl:null     },
-];
-const COL_HDR = ["BROACH-1","BROACH-2","TC-01","TC-02","VMC-01","VMC-02","VTL-03"];
+const DEFAULT_REASON_MACHINE_DETAIL = {
+  column_headers: ["BROACH-1","BROACH-2","TC-01","TC-02","VMC-01","VMC-02","VTL-03"],
+  rows: [
+    { reason:"NO PLAN",            cols:["3:30","12:00","19:00","14:00","48:00","38:00","161:00"], total:"458:15",  pct:"7.62", lvl:"high"   },
+    { reason:"NMP",                cols:["24:15","52:30","55:00","28:30","62:30","65:00","72:00"], total:"361:25",  pct:"6.02", lvl:"high"   },
+    { reason:"INSERT CHANGE",      cols:["0:30","0:30","8:00","16:20","21:30","22:25","6:45"],     total:"912:55",  pct:"1.52", lvl:"medium" },
+    { reason:"MACHINE CLEANING",   cols:["14:45","7:15","19:30","17:15","21:15","25:15","13:00"],  total:"1210:15", pct:"2.01", lvl:"medium" },
+    { reason:"LUNCH HOURS",        cols:["7:30","3:00","5:00","12:30","11:30","11:00","3:00"],     total:"679:20",  pct:"1.13", lvl:"low"    },
+    { reason:"MACHINE BREAKDOWN",  cols:["5:00","32:30","31:00","8:30","120:00","87:30","3:30"],   total:"343:00",  pct:"0.57", lvl:"high"   },
+    { reason:"NO LOAD",            cols:["18:15","62:45","2:00","6:00","2:30","15:00","45:00"],    total:"1033:00", pct:"1.72", lvl:"medium" },
+    { reason:"SETTING",            cols:["21:30","0:30","1:00","1:00","0:30","3:00","14:00"],      total:"106:00",  pct:"0.18", lvl:"medium" },
+    { reason:"WAITING FOR SETTER", cols:["0:00","5:30","8:30","8:30","7:00","1:30","3:30"],        total:"118:15",  pct:"0.20", lvl:null     },
+  ],
+  footer: {
+    cols: ["118:00","179:30","174:15","177:00","166:00","168:00","130:15"],
+    total: "13,418:40",
+    pct: "100",
+  },
+};
 
 const SHIFT_DATA = {
   labels:["BROACH-1","BROACH-2","TC-01","TC-02","VMC-01","VMC-02","VTL-03"],
@@ -295,6 +305,8 @@ export default function IdleTimeReport() {
   const [costMachineData, setCostMachineData] = useState(COST_MACHINE);
   const [pctMachineData, setPctMachineData] = useState(PCT_MACHINE);
   const [continuousIdle, setContinuousIdle] = useState(CONTINUOUS);
+  const [idleTimeNotEntered, setIdleTimeNotEntered] = useState(DEFAULT_NOT_ENTERED);
+  const [reasonMachineDetail, setReasonMachineDetail] = useState(DEFAULT_REASON_MACHINE_DETAIL);
 
   const cnv = {
     topReasons: useRef(null),
@@ -395,6 +407,19 @@ export default function IdleTimeReport() {
         }
         if (Array.isArray(data?.continuous_idle_reasons)) {
           setContinuousIdle(data.continuous_idle_reasons);
+        }
+        if (data?.idle_time_not_entered) {
+          setIdleTimeNotEntered({
+            rows: data.idle_time_not_entered.rows ?? [],
+            summary: data.idle_time_not_entered.summary ?? DEFAULT_NOT_ENTERED.summary,
+          });
+        }
+        if (data?.reason_machine_detail) {
+          setReasonMachineDetail({
+            column_headers: data.reason_machine_detail.column_headers ?? [],
+            rows: data.reason_machine_detail.rows ?? [],
+            footer: data.reason_machine_detail.footer ?? DEFAULT_REASON_MACHINE_DETAIL.footer,
+          });
         }
       })
       .catch((err) => console.error("idle-time-report:", err));
@@ -933,12 +958,14 @@ export default function IdleTimeReport() {
             </div>
           </Card>
 
-          <Card title="⚠ Idle Time Not Entered" badge="14 Pending" badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#d97706">
+          <Card title="⚠ Idle Time Not Entered"
+                badge={`${idleTimeNotEntered.summary.not_entered ?? 0} Pending`}
+                badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#d97706">
             <div className="itr-notent-grid">
               {[
-                { lbl:"Not Entered",   val:14, c:"#dc2626", bg:"rgba(220,38,38,0.06)",  bc:"rgba(220,38,38,0.2)"  },
-                { lbl:"Partial Entry", val:8,  c:"#d97706", bg:"rgba(217,119,6,0.06)",  bc:"rgba(217,119,6,0.2)"  },
-                { lbl:"Completed",     val:68, c:"#16a34a", bg:"rgba(22,163,74,0.06)",  bc:"rgba(22,163,74,0.2)"  },
+                { lbl:"Not Entered",   val: idleTimeNotEntered.summary.not_entered ?? 0, c:"#dc2626", bg:"rgba(220,38,38,0.06)",  bc:"rgba(220,38,38,0.2)"  },
+                { lbl:"Partial Entry", val: idleTimeNotEntered.summary.partial_entry ?? 0, c:"#d97706", bg:"rgba(217,119,6,0.06)",  bc:"rgba(217,119,6,0.2)"  },
+                { lbl:"Completed",     val: idleTimeNotEntered.summary.completed ?? 0, c:"#16a34a", bg:"rgba(22,163,74,0.06)",  bc:"rgba(22,163,74,0.2)"  },
               ].map((item,i) => (
                 <div key={i} className="itr-notent-tile" style={{ background:item.bg, border:`1.5px solid ${item.bc}` }}>
                   <div className="itr-notent-val"   style={{ color:item.c }}>{item.val}</div>
@@ -946,13 +973,17 @@ export default function IdleTimeReport() {
                 </div>
               ))}
             </div>
-            <div className="itr-table-scroll">
+            <div className="itr-table-scroll itr-table-scroll--continuous">
               <table className="itr-table">
                 <thead className="itr-thead--amber">
                   <tr><th>Machine</th><th>Shift</th><th>Date</th><th>Operator</th></tr>
                 </thead>
                 <tbody>
-                  {NOT_ENTERED.map((r,i) => (
+                  {idleTimeNotEntered.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="itr-td-muted itr-td-center">No idle time gaps in this period.</td>
+                    </tr>
+                  ) : idleTimeNotEntered.rows.map((r, i) => (
                     <tr key={i}>
                       <td className="itr-td-name">{r.machine}</td>
                       <td className="itr-td-muted">{r.shift}</td>
@@ -981,16 +1012,22 @@ export default function IdleTimeReport() {
               <thead className="itr-thead--blue">
                 <tr>
                   <th>Idle Reason</th>
-                  {COL_HDR.map(h => <th key={h} className="right">{h}</th>)}
+                  {reasonMachineDetail.column_headers.map(h => <th key={h} className="right">{h}</th>)}
                   <th className="right">Total</th>
                   <th className="right">%</th>
                 </tr>
               </thead>
               <tbody>
-                {TABLE_ROWS.map((row,i) => (
+                {reasonMachineDetail.rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={reasonMachineDetail.column_headers.length + 3} className="itr-td-muted itr-td-center">
+                      No idle data for this period.
+                    </td>
+                  </tr>
+                ) : reasonMachineDetail.rows.map((row, i) => (
                   <tr key={i}>
                     <td style={{ fontWeight:800,color:"#1e293b",whiteSpace:"nowrap" }}>{row.reason}</td>
-                    {row.cols.map((val,j) => <td key={j} className={levelTd(row.lvl)}>{val}</td>)}
+                    {row.cols.map((val, j) => <td key={j} className={levelTd(row.lvl)}>{val}</td>)}
                     <td className={levelTd(row.lvl)} style={{ fontWeight:900 }}>{row.total}</td>
                     <td style={{ textAlign:"right",fontWeight:700,
                                  color:parseFloat(row.pct)>5?"#dc2626":parseFloat(row.pct)>2?"#f97316":"#64748b" }}>
@@ -998,14 +1035,16 @@ export default function IdleTimeReport() {
                     </td>
                   </tr>
                 ))}
+                {reasonMachineDetail.rows.length > 0 && (
                 <tr className="itr-tr-total">
                   <td>TOTAL</td>
-                  {["118:00","179:30","174:15","177:00","166:00","168:00","130:15"].map((v,i) => (
+                  {reasonMachineDetail.footer.cols.map((v, i) => (
                     <td key={i}>{v}</td>
                   ))}
-                  <td style={{ fontWeight:900 }}>13,418:40</td>
-                  <td>100%</td>
+                  <td style={{ fontWeight:900 }}>{reasonMachineDetail.footer.total}</td>
+                  <td>{reasonMachineDetail.footer.pct}%</td>
                 </tr>
+                )}
               </tbody>
             </table>
           </div>

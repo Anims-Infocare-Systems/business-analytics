@@ -1,0 +1,348 @@
+/* ============================================================
+   EfficiencyReportDatePicker.css
+   Prefix: erdp-
+   Theme: #2d6de8 (Efficiency Report blue)
+   ============================================================ */
+
+/* ── Theme tokens ─────────────────────────────────────────── */
+.erdp-wrap,
+.erdp-portal-wrap {
+    --erdp-accent:     #2d6de8;
+    --erdp-accent2:    #1a56cc;
+    --erdp-accent-lt:  #eff6ff;
+    --erdp-accent-rng: rgba(45,109,232,.10);
+    --erdp-accent-txt: #1e40af;
+    --erdp-focus-ring: rgba(45,109,232,.22);
+
+    --erdp-bg:         #ffffff;
+    --erdp-surface:    #f8fafc;
+    --erdp-border:     #e2e8f0;
+    --erdp-text:       #0f172a;
+    --erdp-sub:        #475569;
+    --erdp-muted:      #94a3b8;
+    --erdp-today-ring: #f59e0b;
+    --erdp-radius:     12px;
+    --erdp-tr:         .22s cubic-bezier(.23,1,.32,1);
+
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--erdp-text);
+}
+
+/* ── Root wrapper ─────────────────────────────────────────── */
+.erdp-wrap {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    max-width: 360px;
+}
+
+.erdp-portal-wrap { display: block; }
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes erdp-pop {
+    from { opacity: 0; transform: translateY(8px) scale(.97); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ── Trigger button ───────────────────────────────────────── */
+.erdp-trigger {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    width: 100%;
+    padding: .65rem 1rem;
+    background: #ffffff;
+    border: 1.5px solid var(--erdp-border);
+    border-radius: 9px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: .86rem;
+    font-weight: 500;
+    color: var(--erdp-sub);
+    transition: border-color var(--erdp-tr), box-shadow var(--erdp-tr), background var(--erdp-tr);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.erdp-trigger:hover {
+    border-color: var(--erdp-accent);
+    box-shadow: 0 0 0 3px var(--erdp-focus-ring);
+    background: var(--erdp-surface);
+}
+.erdp-trigger--open {
+    border-color: var(--erdp-accent);
+    box-shadow: 0 0 0 3px var(--erdp-focus-ring);
+    background: var(--erdp-surface);
+}
+.erdp-trigger__icon  { color: var(--erdp-accent); flex-shrink: 0; }
+.erdp-trigger__label { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--erdp-text); font-weight: 600; font-size: .83rem; }
+.erdp-trigger__caret { flex-shrink: 0; color: var(--erdp-muted); transition: transform var(--erdp-tr); }
+.erdp-trigger__caret--up { transform: rotate(180deg); }
+
+/* ── Popup ────────────────────────────────────────────────── */
+.erdp-popup {
+    background: #ffffff;
+    border: 1.5px solid var(--erdp-border);
+    border-radius: 16px;
+    box-shadow:
+        0 24px 60px rgba(15,23,42,.18),
+        0 6px 18px rgba(15,23,42,.10);
+    overflow: hidden;
+    animation: erdp-pop .2s cubic-bezier(.23,1,.32,1) both;
+    min-width: 680px;
+    width: max-content;
+}
+
+/* ── Presets ──────────────────────────────────────────────── */
+.erdp-presets {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    padding: .9rem 1.1rem .7rem;
+    border-bottom: 1px solid var(--erdp-border);
+    background: var(--erdp-surface);
+}
+.erdp-preset {
+    padding: .32rem .78rem;
+    border: 1.5px solid var(--erdp-border);
+    border-radius: 20px;
+    background: #ffffff;
+    color: var(--erdp-sub);
+    font-size: .75rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--erdp-tr);
+    white-space: nowrap;
+}
+.erdp-preset:hover {
+    background: var(--erdp-accent-lt);
+    border-color: var(--erdp-accent);
+    color: var(--erdp-accent-txt);
+}
+.erdp-preset--active {
+    background: var(--erdp-accent);
+    border-color: var(--erdp-accent);
+    color: #ffffff;
+}
+
+/* ── Calendars wrapper ────────────────────────────────────── */
+.erdp-calendars {
+    display: flex;
+    gap: 0;
+    padding: 1rem 1.1rem .8rem;
+}
+.erdp-divider {
+    width: 1px;
+    background: var(--erdp-border);
+    margin: 0 1rem;
+    flex-shrink: 0;
+}
+
+/* ── Single month ─────────────────────────────────────────── */
+.erdp-month-col { flex: 1; min-width: 220px; }
+
+.erdp-month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .75rem;
+}
+.erdp-month-label {
+    font-size: .87rem;
+    font-weight: 700;
+    color: var(--erdp-text);
+    letter-spacing: -.2px;
+}
+.erdp-nav-btn {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    border: 1.5px solid var(--erdp-border);
+    background: #ffffff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--erdp-sub);
+    transition: all var(--erdp-tr);
+    padding: 0;
+}
+.erdp-nav-btn:hover {
+    background: var(--erdp-accent-lt);
+    border-color: var(--erdp-accent);
+    color: var(--erdp-accent-txt);
+}
+
+/* ── Day grid ─────────────────────────────────────────────── */
+.erdp-cal__head {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: .3rem;
+}
+.erdp-cal__dow {
+    text-align: center;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--erdp-muted);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    padding: .25rem 0;
+}
+.erdp-cal__body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px 0;
+}
+
+/* ── Day cell ─────────────────────────────────────────────── */
+.erdp-day {
+    text-align: center;
+    padding: .48rem .2rem;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background var(--erdp-tr), color var(--erdp-tr);
+    position: relative;
+    line-height: 1.4;
+    color: var(--erdp-text);
+}
+.erdp-day:hover:not(.erdp-day--empty) {
+    background: var(--erdp-accent-lt);
+    color: var(--erdp-accent-txt);
+    font-weight: 700;
+}
+.erdp-day--empty { cursor: default; }
+
+.erdp-day--in {
+    background: var(--erdp-accent-rng);
+    border-radius: 0;
+    color: var(--erdp-accent-txt);
+    font-weight: 600;
+}
+
+.erdp-day--from,
+.erdp-day--to {
+    background: linear-gradient(135deg, #2d6de8, #1a56cc) !important;
+    color: #ffffff !important;
+    font-weight: 800;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(45,109,232,.4);
+}
+
+.erdp-day--today:not(.erdp-day--from):not(.erdp-day--to)::after {
+    content: "";
+    position: absolute;
+    bottom: 4px; left: 50%;
+    transform: translateX(-50%);
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--erdp-today-ring);
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.erdp-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .8rem 1.1rem .9rem;
+    border-top: 1px solid var(--erdp-border);
+    background: var(--erdp-surface);
+    flex-wrap: wrap;
+}
+.erdp-footer__range {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    color: var(--erdp-muted);
+    flex: 1;
+}
+.erdp-footer__field {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .7rem;
+    background: #ffffff;
+    border: 1.5px solid var(--erdp-border);
+    border-radius: 7px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--erdp-sub);
+    white-space: nowrap;
+}
+.erdp-footer__days {
+    padding: .3rem .6rem;
+    background: var(--erdp-accent-lt);
+    border-radius: 6px;
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--erdp-accent-txt);
+    white-space: nowrap;
+}
+.erdp-footer__btns { display: flex; gap: .55rem; }
+
+.erdp-footer-btn {
+    padding: .55rem 1.1rem;
+    border-radius: 8px;
+    font-size: .82rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: all var(--erdp-tr);
+}
+.erdp-footer-btn--sec {
+    background: #ffffff;
+    color: var(--erdp-sub);
+    border: 1.5px solid var(--erdp-border);
+}
+.erdp-footer-btn--sec:hover {
+    background: var(--erdp-surface);
+    border-color: var(--erdp-accent);
+    color: var(--erdp-accent-txt);
+}
+.erdp-footer-btn--pri {
+    background: linear-gradient(135deg, #2d6de8, #1a56cc);
+    color: #ffffff;
+    box-shadow: 0 3px 12px rgba(45,109,232,.35);
+}
+.erdp-footer-btn--pri:hover {
+    box-shadow: 0 6px 20px rgba(45,109,232,.45);
+    transform: translateY(-1px);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .erdp-popup {
+        min-width: 320px;
+        width: min(96vw, 420px);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .erdp-calendars { flex-direction: column; gap: 0; }
+    .erdp-divider   { width: 100%; height: 1px; margin: .6rem 0; }
+    .erdp-month-col { min-width: unset; }
+}
+
+@media (max-width: 600px) {
+    .erdp-wrap { max-width: 100%; }
+    .erdp-portal-wrap .erdp-popup {
+        position: fixed !important;
+        bottom: 0 !important; left: 0 !important;
+        top: auto !important; right: 0 !important;
+        width: 100% !important;
+        border-radius: 20px 20px 0 0;
+        animation: erdp-slide-up .25s cubic-bezier(.23,1,.32,1) both;
+    }
+    .erdp-presets { gap: .3rem; }
+    .erdp-footer  { flex-direction: column; align-items: stretch; }
+    .erdp-footer__range { justify-content: center; flex-wrap: wrap; }
+    .erdp-footer__btns  { justify-content: stretch; }
+    .erdp-footer-btn    { flex: 1; padding: .7rem; }
+    .erdp-day           { padding: .44rem .1rem; font-size: .75rem; }
+}
+
+@keyframes erdp-slide-up {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: none; }
+}

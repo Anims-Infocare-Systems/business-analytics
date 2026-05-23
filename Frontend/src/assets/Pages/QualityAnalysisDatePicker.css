@@ -1,0 +1,339 @@
+/* ============================================================
+   QualityAnalysisDatePicker.css
+   Prefix: qadp-
+   Theme: #8b5cf6 (Quality Analysis purple)
+   ============================================================ */
+
+/* ── Theme tokens ─────────────────────────────────────────── */
+.qadp-wrap,
+.qadp-portal-wrap {
+    --qadp-accent:     #8b5cf6;
+    --qadp-accent2:    #7c3aed;
+    --qadp-accent-lt:  #ede9fe;
+    --qadp-accent-rng: rgba(139,92,246,.10);
+    --qadp-accent-txt: #6d28d9;
+    --qadp-focus-ring: rgba(139,92,246,.22);
+
+    --qadp-bg:         #ffffff;
+    --qadp-surface:    #f8fafc;
+    --qadp-border:     #e2e8f0;
+    --qadp-text:       #0f172a;
+    --qadp-sub:        #475569;
+    --qadp-muted:      #94a3b8;
+    --qadp-today-ring: #f59e0b;
+    --qadp-radius:     12px;
+    --qadp-tr:         .22s cubic-bezier(.23,1,.32,1);
+
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--qadp-text);
+}
+
+/* ── Root wrapper ─────────────────────────────────────────── */
+.qadp-wrap {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    max-width: 340px;
+}
+
+.qadp-portal-wrap { display: block; }
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes qadp-pop {
+    from { opacity: 0; transform: translateY(8px) scale(.97); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ── Trigger button ───────────────────────────────────────── */
+.qadp-trigger {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    width: 100%;
+    padding: .65rem 1rem;
+    background: #ffffff;
+    border: 1.5px solid var(--qadp-border);
+    border-radius: 9px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: .86rem;
+    font-weight: 500;
+    color: var(--qadp-sub);
+    transition: border-color var(--qadp-tr), box-shadow var(--qadp-tr), background var(--qadp-tr);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.qadp-trigger:hover {
+    border-color: var(--qadp-accent);
+    box-shadow: 0 0 0 3px var(--qadp-focus-ring);
+    background: var(--qadp-surface);
+}
+.qadp-trigger--open {
+    border-color: var(--qadp-accent);
+    box-shadow: 0 0 0 3px var(--qadp-focus-ring);
+    background: var(--qadp-surface);
+}
+.qadp-trigger__icon  { color: var(--qadp-accent); flex-shrink: 0; }
+.qadp-trigger__label { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--qadp-text); font-weight: 600; font-size: .83rem; }
+.qadp-trigger__caret { flex-shrink: 0; color: var(--qadp-muted); transition: transform var(--qadp-tr); }
+.qadp-trigger__caret--up { transform: rotate(180deg); }
+
+/* ── Popup ────────────────────────────────────────────────── */
+.qadp-popup {
+    background: #ffffff;
+    border: 1.5px solid var(--qadp-border);
+    border-radius: 16px;
+    box-shadow:
+        0 24px 60px rgba(15,23,42,.18),
+        0 6px 18px rgba(15,23,42,.10);
+    overflow: hidden;
+    animation: qadp-pop .2s cubic-bezier(.23,1,.32,1) both;
+    min-width: 680px;
+    width: max-content;
+}
+
+/* ── Presets ──────────────────────────────────────────────── */
+.qadp-presets {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    padding: .9rem 1.1rem .7rem;
+    border-bottom: 1px solid var(--qadp-border);
+    background: var(--qadp-surface);
+}
+.qadp-preset {
+    padding: .32rem .78rem;
+    border: 1.5px solid var(--qadp-border);
+    border-radius: 20px;
+    background: #ffffff;
+    color: var(--qadp-sub);
+    font-size: .75rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--qadp-tr);
+    white-space: nowrap;
+}
+.qadp-preset:hover {
+    background: var(--qadp-accent-lt);
+    border-color: var(--qadp-accent);
+    color: var(--qadp-accent-txt);
+}
+.qadp-preset--active {
+    background: var(--qadp-accent);
+    border-color: var(--qadp-accent);
+    color: #ffffff;
+}
+
+/* ── Calendars wrapper ────────────────────────────────────── */
+.qadp-calendars {
+    display: flex;
+    gap: 0;
+    padding: 1rem 1.1rem .8rem;
+}
+.qadp-divider {
+    width: 1px;
+    background: var(--qadp-border);
+    margin: 0 1rem;
+    flex-shrink: 0;
+}
+
+/* ── Single month ─────────────────────────────────────────── */
+.qadp-month-col { flex: 1; min-width: 220px; }
+
+.qadp-month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .75rem;
+}
+.qadp-month-label {
+    font-size: .87rem;
+    font-weight: 700;
+    color: var(--qadp-text);
+    letter-spacing: -.2px;
+}
+.qadp-nav-btn {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    border: 1.5px solid var(--qadp-border);
+    background: #ffffff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--qadp-sub);
+    transition: all var(--qadp-tr);
+    padding: 0;
+}
+.qadp-nav-btn:hover {
+    background: var(--qadp-accent-lt);
+    border-color: var(--qadp-accent);
+    color: var(--qadp-accent-txt);
+}
+
+/* ── Day grid ─────────────────────────────────────────────── */
+.qadp-cal__head {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: .3rem;
+}
+.qadp-cal__dow {
+    text-align: center;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--qadp-muted);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    padding: .25rem 0;
+}
+.qadp-cal__body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px 0;
+}
+
+/* ── Day cell ─────────────────────────────────────────────── */
+.qadp-day {
+    text-align: center;
+    padding: .48rem .2rem;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background var(--qadp-tr), color var(--qadp-tr);
+    position: relative;
+    line-height: 1.4;
+    color: var(--qadp-text);
+}
+.qadp-day:hover:not(.qadp-day--empty) {
+    background: var(--qadp-accent-lt);
+    color: var(--qadp-accent-txt);
+    font-weight: 700;
+}
+.qadp-day--empty { cursor: default; }
+
+.qadp-day--in {
+    background: var(--qadp-accent-rng);
+    border-radius: 0;
+    color: var(--qadp-accent-txt);
+    font-weight: 600;
+}
+
+.qadp-day--from,
+.qadp-day--to {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important;
+    color: #ffffff !important;
+    font-weight: 800;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(139,92,246,.4);
+}
+
+.qadp-day--today:not(.qadp-day--from):not(.qadp-day--to)::after {
+    content: "";
+    position: absolute;
+    bottom: 4px; left: 50%;
+    transform: translateX(-50%);
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--qadp-today-ring);
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.qadp-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .8rem 1.1rem .9rem;
+    border-top: 1px solid var(--qadp-border);
+    background: var(--qadp-surface);
+    flex-wrap: wrap;
+}
+.qadp-footer__range {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    color: var(--qadp-muted);
+    flex: 1;
+}
+.qadp-footer__field {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .7rem;
+    background: #ffffff;
+    border: 1.5px solid var(--qadp-border);
+    border-radius: 7px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--qadp-sub);
+    white-space: nowrap;
+}
+.qadp-footer__btns { display: flex; gap: .55rem; }
+
+.qadp-footer-btn {
+    padding: .55rem 1.1rem;
+    border-radius: 8px;
+    font-size: .82rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: all var(--qadp-tr);
+}
+.qadp-footer-btn--sec {
+    background: #ffffff;
+    color: var(--qadp-sub);
+    border: 1.5px solid var(--qadp-border);
+}
+.qadp-footer-btn--sec:hover {
+    background: var(--qadp-surface);
+    border-color: var(--qadp-accent);
+    color: var(--qadp-accent-txt);
+}
+.qadp-footer-btn--pri {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: #ffffff;
+    box-shadow: 0 3px 12px rgba(139,92,246,.35);
+}
+.qadp-footer-btn--pri:hover {
+    box-shadow: 0 6px 20px rgba(139,92,246,.45);
+    transform: translateY(-1px);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .qadp-popup {
+        min-width: 320px;
+        width: min(96vw, 420px);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .qadp-calendars { flex-direction: column; gap: 0; }
+    .qadp-divider   { width: 100%; height: 1px; margin: .6rem 0; }
+    .qadp-month-col { min-width: unset; }
+}
+
+@media (max-width: 600px) {
+    .qadp-wrap { max-width: 100%; }
+    .qadp-portal-wrap .qadp-popup {
+        position: fixed !important;
+        bottom: 0 !important; left: 0 !important;
+        top: auto !important; right: 0 !important;
+        width: 100% !important;
+        border-radius: 20px 20px 0 0;
+        animation: qadp-slide-up .25s cubic-bezier(.23,1,.32,1) both;
+    }
+    .qadp-presets { gap: .3rem; }
+    .qadp-footer  { flex-direction: column; align-items: stretch; }
+    .qadp-footer__range { justify-content: center; }
+    .qadp-footer__btns  { justify-content: stretch; }
+    .qadp-footer-btn    { flex: 1; padding: .7rem; }
+    .qadp-day           { padding: .44rem .1rem; font-size: .75rem; }
+}
+
+@keyframes qadp-slide-up {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: none; }
+}

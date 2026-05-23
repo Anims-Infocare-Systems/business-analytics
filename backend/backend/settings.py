@@ -3,9 +3,12 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-zj%!nwe5_$pw+q0=ngelf(-ce+2t%s55f!iek@#il+)^xddykb'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-zj%!nwe5_$pw+q0=ngelf(-ce+2t%s55f!iek@#il+)^xddykb",
+)
 
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 ALLOWED_HOSTS += [x.strip() for x in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if x.strip()]
@@ -88,6 +91,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+CORS_ALLOWED_ORIGINS += [
+    x.strip()
+    for x in os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
+    if x.strip()
+]
 
 # DEBUG only: LAN (`vite --host`), non‑default ports; still credential-safe (regex is host:port scoped).
 if DEBUG:
@@ -115,9 +123,17 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
 # ─── Session ──────────────────────────────────────────────────
 SESSION_ENGINE          = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_SAMESITE = "Lax"   # ✅ allows cookie across ports on localhost
-SESSION_COOKIE_SECURE   = False   # ✅ False for HTTP localhost (no HTTPS needed)
+SESSION_COOKIE_SECURE   = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE      = 86400   # ✅ session lives 24 hours (in seconds)
+# Cross-subdomain login (e.g. anims.* frontend + api-businessanalytics.* API): set DJANGO_SESSION_COOKIE_DOMAIN=.animserp.com
+_session_domain = os.environ.get("DJANGO_SESSION_COOKIE_DOMAIN", "").strip()
+if _session_domain:
+    SESSION_COOKIE_DOMAIN = _session_domain
+
+if not DEBUG:
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # ─── CSRF ─────────────────────────────────────────────────────
@@ -150,6 +166,7 @@ USE_TZ        = True
 
 
 # ─── Static files ─────────────────────────────────────────────
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles"))
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

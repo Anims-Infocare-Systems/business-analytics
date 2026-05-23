@@ -1,0 +1,20 @@
+# React SPA — /home/animserp/public_html/.htaccess
+# Serve index.html first (not old default.aspx / ASP.NET)
+
+DirectoryIndex index.html index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Let real files and folders through (assets, index.html)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Django /api is handled by cPanel Python app — do not rewrite /api
+  RewriteRule ^api/ - [L]
+
+  # All other routes → React (Login, /AnimsBusinessAnalytics, etc.)
+  RewriteRule ^ index.html [L]
+</IfModule>
