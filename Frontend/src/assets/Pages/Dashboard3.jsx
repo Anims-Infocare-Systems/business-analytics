@@ -4,9 +4,12 @@
  * Live metrics from Dashboard2 APIs · fixed-height columns with inner scroll
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Chart, registerables } from "chart.js";
 import "./Dashboard3.css";
 import Dashboard3DatePicker from "./Dashboard3DatePicker";
 import Dashboard3ProductionDataView from "./Dashboard3ProductionDataView";
+
+Chart.register(...registerables);
 
 const CURRENT_STATE_CARDS = [
   { id: "production_output", title: "Production Output", icon: "⚙️", color: "#0ea5e9", colorLight: "#e0f7ff" },
@@ -375,6 +378,276 @@ function buildBottomTable(cardId, panel, data) {
   };
 }
 
+/* ── Downtime helpers (mirrors Dashboard2 exactly) ─────────── */
+const DOWNTIME_BAR_COLORS = [
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#14b8a6", "#0ea5e9",
+  "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+];
+
+const DT_TOOLTIP_CFG = {
+  backgroundColor: "#ffffff",
+  titleColor: "#0f172a",
+  bodyColor: "#64748b",
+  borderColor: "#e4e9f2",
+  borderWidth: 1,
+  padding: 10,
+};
+
+function downtimeReasonChartToken(reasons) {
+  if (!Array.isArray(reasons) || !reasons.length) return "empty";
+  return reasons.map((r) => `${r.reason}:${r.hours}`).join(";");
+}
+
+function buildDowntimeChartSeries(reasons, maxReasons = 12) {
+  const list = Array.isArray(reasons) ? reasons : [];
+  if (!list.length) return { labels: ["No non-accepted idle in range"], hours: [0] };
+  if (list.length <= maxReasons)
+    return { labels: list.map((r) => r.reason || "—"), hours: list.map((r) => Number(r.hours) || 0) };
+  const top = list.slice(0, maxReasons);
+  const otherH = list.slice(maxReasons).reduce((s, r) => s + (Number(r.hours) || 0), 0);
+  return {
+    labels: [...top.map((r) => r.reason || "—"), `Other (${list.length - maxReasons} reasons)`],
+    hours: [...top.map((r) => Number(r.hours) || 0), otherH],
+  };
+}
+
+/** Chart.js canvas — same pattern as Dashboard2 ChartCanvas */
+function ChartJsCanvas({ setup, height = 200, rebuildToken = 0 }) {
+  const ref = useRef(null);
+  const chartRef = useRef(null);
+  const setupRef = useRef(setup);
+  setupRef.current = setup;
+  useEffect(() => {
+    if (!ref.current) return;
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+    chartRef.current = setupRef.current(ref.current);
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [rebuildToken]);
+  return <canvas ref={ref} height={height} />;
+}
+
+/**
+ * DowntimeReasonView — renders exact Dashboard2 "Downtime by Reason" card
+ * shown in center panel when the "Downtime by Reason" action card is clicked.
+ */
+function DowntimeReasonView({ data, from, to, loading, uid }) {
+  const reasons = data?.downtime?.reasons;
+  const rangeHint =
+    data?.downtime?.from && data?.downtime?.to
+      ? `${data.downtime.from} → ${data.downtime.to}`
+      : from && to
+        ? `${formatLocalYmd(from)} → ${formatLocalYmd(to)}`
+        : "Selected range";
+
+  const setupChart = useCallback(
+    (canvas) => {
+      const { labels, hours } = buildDowntimeChartSeries(reasons);
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: `Hours (${rangeHint}, non-accepted)`,
+            data: hours,
+            backgroundColor: labels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  return `${v.toFixed(1)} h`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: "rgba(228,233,242,.6)" },
+              ticks: { color: "#94a3b8" },
+              title: { display: true, text: "Hours", color: "#94a3b8", font: { size: 10 } },
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false },
+            },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reasons, rangeHint]
+  );
+
+  const rebuildToken = downtimeReasonChartToken(reasons);
+  const chartHeight = Math.max(180, (Array.isArray(reasons) ? Math.min(reasons.length, 12) : 1) * 26 + 40);
+
+  return (
+    <div className="d3-dt-view" key={uid}>
+      <div className="d3-detail__titlebar">
+        {/* <span className="d3-detail__bullet" style={{ background: "#ef4444" }} /> */}
+        {/* <p className="d3-detail__heading">Downtime by Reason</p> */}
+      </div>
+      <div className="d3-dt-card">
+        <div className="d3-dt-card__hd">
+          <div>
+            <div className="d3-dt-card__title">Downtime by Reason</div>
+            {/* <div className="d3-dt-card__sub">
+              Non-accepted idle (IdleReasons.IsAccept&nbsp;=&nbsp;0) — Machine_IdleEntry ·
+              Prod_IdleEntry · conv_IdleEntry, by date range
+            </div> */}
+          </div>
+        </div>
+        <div
+          className="d3-dt-chart-wrap"
+          style={{ height: chartHeight, opacity: loading ? 0.5 : 1, transition: "opacity 0.2s" }}
+        >
+          <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken} />
+        </div>
+        {!loading && (!Array.isArray(reasons) || !reasons.length) && (
+          <p className="d3-dt-card__empty">No non-accepted idle hours recorded for this date range.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Quality Split helpers (mirrors Dashboard2 exactly) ─────── */
+function qualitySplitD3Metrics(data) {
+  const ok = Number(data.fi?.total_ok_qty ?? 0) || 0;
+  const rejection = Number(data.prod?.kpis?.rejection_qty ?? 0) || 0;
+  const rework = Number(data.prod?.kpis?.rework_grand_total ?? 0) || 0;
+  const from = data.fi?.from || data.prod?.from || "";
+  const to = data.fi?.to || data.prod?.to || "";
+  const total = ok + rejection + rework;
+  const pct = (v) => (total > 0 ? ((v / total) * 100).toFixed(1) : "0.0");
+  return { ok, rejection, rework, total, from, to, pctOk: pct(ok), pctRej: pct(rejection), pctRwk: pct(rework) };
+}
+
+function qualSplitToken(data) {
+  const m = qualitySplitD3Metrics(data);
+  return `${m.from}|${m.to}|${m.ok}|${m.rejection}|${m.rework}`;
+}
+
+const QS_TOOLTIP_CFG = {
+  backgroundColor: "#ffffff",
+  titleColor: "#0f172a",
+  bodyColor: "#64748b",
+  borderColor: "#e4e9f2",
+  borderWidth: 1,
+  padding: 10,
+};
+
+/**
+ * QualitySplitView — renders exact Dashboard2 "Quality Split" card
+ * shown when Quality Split action card is clicked in Dashboard3.
+ */
+function QualitySplitView({ data, loading, uid }) {
+  const m = qualitySplitD3Metrics(data);
+  const { ok, rejection, rework, total, from, to } = m;
+  const rangeLine = from && to ? `${from} → ${to}` : "Uses the dashboard date range";
+
+  const setupChart = useCallback(
+    (canvas) => {
+      // ensure every segment always renders a visible minimum arc (0.5% of total)
+      // so even 0% rejection shows a thin red sliver; tooltip still shows real values
+      const minSlice = total > 0 ? total * 0.005 : 0;
+      let chartData = total > 0
+        ? [Math.max(ok, minSlice), Math.max(rejection, minSlice), Math.max(rework, minSlice)]
+        : [1, 1, 1];
+      return new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Final inspection OK", "Rejection", "Rework"],
+          datasets: [{
+            data: chartData,
+            backgroundColor: total > 0
+              ? ["rgba(16,185,129,.88)", "rgba(239,68,68,.85)", "rgba(245,158,11,.88)"]
+              : ["#e2e8f0", "#e2e8f0", "#cbd5e1"],
+            borderColor: "#ffffff",
+            borderWidth: 3,
+            hoverOffset: 6,
+          }],
+        },
+        options: {
+          cutout: "72%",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...QS_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const lbl = ctx.label || "";
+                  if (total <= 0) return `${lbl}: no data in range`;
+                  const v = [ok, rejection, rework][ctx.dataIndex] ?? 0;
+                  return `${lbl}: ${v.toLocaleString()} (${((v / total) * 100).toFixed(1)}%)`;
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ok, rejection, rework, total]
+  );
+
+  const rebuildToken = qualSplitToken(data);
+
+  return (
+    <div className="d3-qs-view" key={uid}>
+      <div className="d3-qs-card">
+        <div className="d3-qs-card__hd">
+          <div>
+            <div className="d3-qs-card__title">Quality Split</div>
+            {/* <div className="d3-qs-card__sub">
+              FinalInspectionEntry OK (finspdate) · Rejection &amp; rework from GET
+              /api/dashboard2/kpis/ (InJob + Inter + Final)
+            </div> */}
+          </div>
+        </div>
+        {/* <div className="d3-qs-range">{rangeLine}</div> */}
+        <div
+          className="d3-qs-chart-wrap"
+          style={{ height: 250, opacity: loading ? 0.5 : 1, transition: "opacity 0.2s" }}
+        >
+          <ChartJsCanvas setup={setupChart} height={150} rebuildToken={rebuildToken} />
+        </div>
+        <div className="d3-qs-leg">
+          <div className="d3-qs-leg__item">
+            <span className="d3-qs-leg__dot" style={{ background: "#10b981" }} />
+            Final inspection OK · {m.pctOk}% · {ok.toLocaleString()} qty
+          </div>
+          <div className="d3-qs-leg__item">
+            <span className="d3-qs-leg__dot" style={{ background: "#ef4444" }} />
+            Rejection · {m.pctRej}% · {rejection.toLocaleString()} qty
+          </div>
+          <div className="d3-qs-leg__item">
+            <span className="d3-qs-leg__dot" style={{ background: "#f59e0b" }} />
+            Rework · {m.pctRwk}% · {rework.toLocaleString()} qty
+          </div>
+        </div>
+        {!loading && total <= 0 && (
+          <p className="d3-qs-empty">No OK / rejection / rework quantities in this range.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Charts (same as original UI) ───────────────────────────── */
 function Sparkline({ data, color }) {
   const W = 100, H = 32;
@@ -518,14 +791,7 @@ function CenterKpiDetail({ detail, uid, loading }) {
           </div>
         </div>
       )}
-      {d.chartMode === "downtime" && d.barChart && (
-        <div className="d3-charts-zone d3-charts-zone--solo">
-          <div className="d3-chart-card d3-chart-card--full">
-            <p className="d3-chart-card__lbl">{d.barChart.label}</p>
-            <BarChart bars={d.barChart.bars} uid={uid} raw />
-          </div>
-        </div>
-      )}
+      {/* downtime chart is rendered via DowntimeReasonView in the main branch */}
       <Insights insights={d.insights} />
     </div>
   );
@@ -751,7 +1017,7 @@ export default function Dashboard3() {
           <section className="d3-center">
             <div className="d3-center__glow" />
             <div className="d3-center__scroll">
-              {selAction && activeActionCard ? (
+              {selAction && activeActionCard && selAction !== "downtime_reason" && selAction !== "quality_split" ? (
                 <CenterActionDetail
                   action={activeActionCard}
                   view={activeActionView}
@@ -764,6 +1030,20 @@ export default function Dashboard3() {
                   to={dateRange.to}
                   productionKpis={data.prod}
                   shiftsPayload={data.shifts}
+                  uid={centerKey}
+                />
+              ) : selectionId === "downtime_reason" ? (
+                <DowntimeReasonView
+                  data={data}
+                  from={dateRange.from}
+                  to={dateRange.to}
+                  loading={loading}
+                  uid={centerKey}
+                />
+              ) : selectionId === "quality_split" ? (
+                <QualitySplitView
+                  data={data}
+                  loading={loading}
                   uid={centerKey}
                 />
               ) : (
