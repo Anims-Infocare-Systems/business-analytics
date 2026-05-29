@@ -14,10 +14,8 @@ Chart.register(...registerables);
 const CURRENT_STATE_CARDS = [
   { id: "production_output", title: "Production Output", icon: "⚙️", color: "#0ea5e9", colorLight: "#e0f7ff" },
   { id: "final_inspection_ok", title: "Final Inspection OK Qty", icon: "✅", color: "#10b981", colorLight: "#d1fae5" },
-  { id: "rejection_qty", title: "Rejection Qty", icon: "⚠️", color: "#ef4444", colorLight: "#fee2e2" },
-  { id: "rework_qty", title: "Rework Qty", icon: "🔧", color: "#f59e0b", colorLight: "#fef3c7" },
   { id: "oee_efficiency", title: "OEE Efficiency", icon: "📈", color: "#1a56db", colorLight: "#dbeafe" },
-  { id: "machine_efficiency", title: "Machine efficiency", icon: "🚚", color: "#8b5cf6", colorLight: "#ede9fe" },
+  { id: "machine_efficiency", title: "Operator efficiency", icon: "🚚", color: "#8b5cf6", colorLight: "#ede9fe" },
   { id: "idle_summary", title: "Idle time summary", icon: "⏱️", color: "#0ea5e9", colorLight: "#e0f7ff" },
   { id: "production_data", title: "Production Data", icon: "📊", color: "#2d6de8", colorLight: "#e8eeff" },
   { id: "otd_trend", title: "On-Time Delivery Trend", icon: "📅", color: "#7c3aed", colorLight: "#ede9fe" },
@@ -64,8 +62,22 @@ function qualitySplit(data) {
   const fi = data.fi;
   const kpis = data.prod?.kpis ?? {};
   const ok = Number(fi?.total_ok_qty ?? 0) || 0;
-  const rejection = Number(kpis.rejection_qty ?? 0) || 0;
-  const rework = Number(kpis.rework_grand_total ?? 0) || 0;
+
+  // Job Order (InJob) Inspection
+  const jobRej = Number(data.injob?.total_rejection ?? kpis.rejection_qty ?? 0) || 0;
+  const jobRwk = Number(data.injob?.total_rework ?? kpis.rework_grand_total ?? 0) || 0;
+
+  // Intermediate Inspection
+  const interRej = Number(data.inter?.total_rejection ?? 0) || 0;
+  const interRwk = Number(data.inter?.total_rework ?? 0) || 0;
+
+  // Final Inspection
+  const finalRej = Number(data.finalOrg?.total_rejection ?? 0) || 0;
+  const finalRwk = Number(data.finalOrg?.total_rework ?? 0) || 0;
+
+  const rejection = jobRej + interRej + finalRej;
+  const rework = jobRwk + interRwk + finalRwk;
+
   const total = ok + rejection + rework;
   const pct = (v) => (total > 0 ? Number(((v / total) * 100).toFixed(1)) : 0);
   return { ok, rejection, rework, total, pctOk: pct(ok), pctRej: pct(rejection), pctRwk: pct(rework) };
@@ -81,11 +93,11 @@ function buildStateSidebar(card, data, loading) {
 
   const map = {
     production_output: { value: fmtNum(kpis.production_output), unit: "units", sub: "Range total", trend: 0 },
-    final_inspection_ok: { value: fmtNum(fi?.total_ok_qty), unit: "units", sub: fi?.first_pass_yield != null ? `FPY ${fmtPct(fi.first_pass_yield)}` : "Final insp", trend: (fi?.first_pass_yield ?? 0) >= 98 ? 1 : -1 },
+    final_inspection_ok: { value: fmtNum(fi?.total_ok_qty), unit: "units", sub: "Approved compliant qty", trend: Number(fi?.total_ok_qty) > 0 ? 1 : 0 },
     rejection_qty: { value: fmtNum(kpis.rejection_qty), unit: "Qty", sub: "All inspection types", trend: -1 },
     rework_qty: { value: fmtNum(kpis.rework_grand_total), unit: "Qty", sub: "Rework total", trend: 0 },
     oee_efficiency: { value: (kpis.oa_efficiency ?? 0).toFixed(2), unit: "%", sub: "Target 80%", trend: (kpis.oa_efficiency ?? 0) >= 80 ? 1 : -1 },
-    machine_efficiency: { value: otd.on_time_delivery_pct != null ? fmtPct(otd.on_time_delivery_pct) : "—", unit: "", sub: `${otd.delayed_lines ?? 0} delayed lines`, trend: (otd.on_time_delivery_pct ?? 0) >= 95 ? 1 : -1 },
+    machine_efficiency: { value: (kpis.oa_efficiency ?? 0).toFixed(2), unit: "%", sub: "Overall avg", trend: (kpis.oa_efficiency ?? 0) >= 80 ? 1 : -1 },
     idle_summary: { value: fmtHours(idle.total_idle_hours), unit: "", sub: `Non-acc ${fmtHours(idle.non_accepted_hours)}`, trend: 0 },
     production_data: { value: shifts.length ? `${shifts.length}` : "—", unit: "shifts", sub: "By shift", trend: 0 },
     otd_trend: { value: otd.on_time_delivery_pct != null ? fmtPct(otd.on_time_delivery_pct) : "—", unit: "", sub: `${data.otd?.trend?.length ?? 0} months`, trend: 0 },
@@ -173,28 +185,26 @@ function buildCenterDetail(cardId, panel, data) {
       case "production_output":
         kpisStrip = [
           chip("Output", fmtNum(kpis.production_output), "units", "📦", "#0ea5e9"),
-          chip("Rejection", fmtNum(kpis.rejection_qty), "qty", "❌", "#ef4444"),
-          chip("Rework", fmtNum(kpis.rework_grand_total), "qty", "🔄", "#f59e0b"),
-          chip("OAEFF", (kpis.oa_efficiency ?? 0).toFixed(2), "%", "📈", "#1a56db"),
         ];
-        insights = [{ type: "info", text: "Production output and quality totals for selected date range." }];
+        insights = [{ type: "info", text: "Production output totals for selected date range." }];
         break;
       case "final_inspection_ok":
         kpisStrip = [
           chip("OK Qty", fmtNum(fi?.total_ok_qty), "", "✅", "#10b981"),
-          chip("Total Qty", fmtNum(fi?.total_qty), "", "📊", "#2d6de8"),
-          chip("FPY", fmtPct(fi?.first_pass_yield ?? 0), "", "🎯", "#8b5cf6"),
-          chip("Inspections", fmtNum(fi?.inspection_count), "", "📋", "#64748b"),
         ];
         break;
       case "rejection_qty":
       case "rework_qty":
-      case "oee_efficiency":
         kpisStrip = [
           chip("Output", fmtNum(kpis.production_output), "units", "📦", "#0ea5e9"),
           chip("Rejection", fmtNum(kpis.rejection_qty), "qty", "❌", "#ef4444"),
           chip("Rework", fmtNum(kpis.rework_grand_total), "qty", "🔄", "#f59e0b"),
           chip("OAEFF", (kpis.oa_efficiency ?? 0).toFixed(2), "%", "📈", "#1a56db"),
+        ];
+        break;
+      case "oee_efficiency":
+        kpisStrip = [
+          chip("OA Efficiency", (kpis.oa_efficiency ?? 0).toFixed(2), "%", "📈", "#1a56db"),
         ];
         break;
       case "machine_efficiency":
@@ -217,18 +227,7 @@ function buildCenterDetail(cardId, panel, data) {
         /* Chart rendered by Dashboard3ProductionDataView (same as Dashboard2) */
         break;
       case "otd_trend":
-        chartMode = "otd";
-        lineChart = {
-          label: "On-time delivery % by month",
-          xLabels: (otd?.trend ?? []).map((p) => p.label?.slice(0, 6) ?? ""),
-          series: [{ name: "OTD %", color: "#2d6de8", data: (otd?.trend ?? []).map((p) => p.on_time_delivery_pct ?? 0) }],
-        };
-        kpisStrip = [
-          chip("OTD %", fmtPct(otd?.kpis?.on_time_delivery_pct), "", "📅", "#8b5cf6"),
-          chip("On-time qty", fmtNum(otd?.kpis?.on_time_qty), "", "✅", "#10b981"),
-          chip("Total del.", fmtNum(otd?.kpis?.total_del_qty), "", "🚚", "#2d6de8"),
-          chip("Delayed", fmtNum(otd?.kpis?.delayed_lines), "", "⚠️", "#ef4444"),
-        ];
+        /* Rendered by OtdTrendView */
         break;
       case "po_status":
         kpisStrip = [
@@ -321,12 +320,6 @@ function buildBottomTable(cardId, panel, data) {
       (data.po?.rows ?? []).slice(0, 12).forEach((r) => {
         rows.push([r.po_number ?? "—", (r.vendor_name ?? "—").slice(0, 18), (r.material ?? "—").slice(0, 22), fmtNum(r.value)]);
       });
-    } else if (cardId === "otd_trend") {
-      tableTitle = "OTD trend by month";
-      columns = ["Month", "OTD %", "Total qty"];
-      (data.otd?.trend ?? []).forEach((p) => {
-        rows.push([p.label ?? "—", p.on_time_delivery_pct != null ? fmtPct(p.on_time_delivery_pct) : "—", fmtNum(p.total_qty)]);
-      });
     } else if (cardId === "idle_summary") {
       tableTitle = "Idle — accepted lines";
       columns = ["Reason", "Hours"];
@@ -376,6 +369,26 @@ function buildBottomTable(cardId, panel, data) {
     highlight: rows.length - 1,
     recs: [{ icon: "💡", text: `Showing live ERP data for ${tableTitle.toLowerCase()}.` }],
   };
+}
+
+const OTD_TARGET_PCT = 90;
+
+/** Chart.js options — same base as Charts.jsx sales-2 (OTD line) */
+const OTD_LINE_CHART_BASE = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { font: { size: 9 } } },
+  },
+  scales: {
+    x: { ticks: { font: { size: 9 } }, grid: { color: "rgba(228, 233, 242, 0.65)" } },
+    y: { min: 0, max: 100, ticks: { font: { size: 9 }, stepSize: 10 }, grid: { color: "rgba(228, 233, 242, 0.65)" } },
+  },
+};
+
+function otdReportChartToken(report) {
+  if (!report?.labels?.length) return "empty";
+  return `${report.fy}|${report.from}|${report.to}|${report.labels.join(",")}|${(report.data || []).join(",")}`;
 }
 
 /* ── Downtime helpers (mirrors Dashboard2 exactly) ─────────── */
@@ -526,8 +539,22 @@ function DowntimeReasonView({ data, from, to, loading, uid }) {
 /* ── Quality Split helpers (mirrors Dashboard2 exactly) ─────── */
 function qualitySplitD3Metrics(data) {
   const ok = Number(data.fi?.total_ok_qty ?? 0) || 0;
-  const rejection = Number(data.prod?.kpis?.rejection_qty ?? 0) || 0;
-  const rework = Number(data.prod?.kpis?.rework_grand_total ?? 0) || 0;
+
+  // Job Order (InJob) Inspection
+  const jobRej = Number(data.injob?.total_rejection ?? data.prod?.kpis?.rejection_qty ?? 0) || 0;
+  const jobRwk = Number(data.injob?.total_rework ?? data.prod?.kpis?.rework_grand_total ?? 0) || 0;
+
+  // Intermediate Inspection
+  const interRej = Number(data.inter?.total_rejection ?? 0) || 0;
+  const interRwk = Number(data.inter?.total_rework ?? 0) || 0;
+
+  // Final Inspection
+  const finalRej = Number(data.finalOrg?.total_rejection ?? 0) || 0;
+  const finalRwk = Number(data.finalOrg?.total_rework ?? 0) || 0;
+
+  const rejection = jobRej + interRej + finalRej;
+  const rework = jobRwk + interRwk + finalRwk;
+
   const from = data.fi?.from || data.prod?.from || "";
   const to = data.fi?.to || data.prod?.to || "";
   const total = ok + rejection + rework;
@@ -560,12 +587,8 @@ function QualitySplitView({ data, loading, uid }) {
 
   const setupChart = useCallback(
     (canvas) => {
-      // ensure every segment always renders a visible minimum arc (0.5% of total)
-      // so even 0% rejection shows a thin red sliver; tooltip still shows real values
-      const minSlice = total > 0 ? total * 0.005 : 0;
-      let chartData = total > 0
-        ? [Math.max(ok, minSlice), Math.max(rejection, minSlice), Math.max(rework, minSlice)]
-        : [1, 1, 1];
+      let chartData = [ok, rejection, rework];
+      if (total <= 0) chartData = [1, 1, 1];
       return new Chart(canvas, {
         type: "doughnut",
         data: {
@@ -648,7 +671,1810 @@ function QualitySplitView({ data, loading, uid }) {
   );
 }
 
-/* ── Charts (same as original UI) ───────────────────────────── */
+/* ── Top Defect Categories (mirrors Downtime by Reason style exactly) */
+function topDefectsChartToken(data) {
+  const rows = data?.topDefects?.rows;
+  if (!Array.isArray(rows) || !rows.length) return "empty";
+  return rows.map((r) => `${r.partno}:${r.total_rejection_qty}`).join(";");
+}
+
+function TopDefectsView({ data, loading, uid }) {
+  const rows = data?.topDefects?.rows ?? [];
+  const from = data?.topDefects?.from ?? "";
+  const to = data?.topDefects?.to ?? "";
+  const rangeHint = from && to ? `${from} → ${to}` : "Selected range";
+  const chartHeight = Math.max(180, rows.length * 34 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      const labels = rows.length ? rows.map((r) => r.partno || "—") : ["No data"];
+      const values = rows.length ? rows.map((r) => Number(r.total_rejection_qty) || 0) : [0];
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: `Rejection Qty (${rangeHint})`,
+            data: values,
+            backgroundColor: labels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  const total = data?.topDefects?.total_rejection_qty || 0;
+                  const pct = total > 0 ? ` (${((v / total) * 100).toFixed(1)}%)` : "";
+                  return `${Math.round(v).toLocaleString()} qty${pct}`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: "rgba(228,233,242,.6)" },
+              ticks: { color: "#94a3b8" },
+              title: { display: true, text: "Rejection Qty", color: "#94a3b8", font: { size: 10 } },
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false },
+            },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, rangeHint]
+  );
+
+  const rebuildToken = topDefectsChartToken(data);
+
+  return (
+    <div className="d3-dt-view" key={uid}>
+      <div className="d3-dt-card">
+        <div className="d3-dt-card__hd">
+          <div>
+            <div className="d3-dt-card__title">Top Defect Categories</div>
+            {/* <div className="d3-dt-card__sub">
+              By rejection qty · FinalInspRejectionEntryOrg + InterInspectionEntry · {rangeHint}
+            </div> */}
+          </div>
+        </div>
+        <div
+          className="d3-dt-chart-wrap"
+          style={{ height: chartHeight, opacity: loading ? 0.5 : 1, transition: "opacity 0.2s" }}
+        >
+          <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken} />
+        </div>
+        {!loading && !rows.length && (
+          <p className="d3-dt-card__empty">No rejection data for this date range.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Customer Complaints View ─────────────────────────────── */
+const CC_STATUS_CFG = {
+  Closed: { c: "#10b981", bg: "#d1fae5" },
+  Open: { c: "#ef4444", bg: "#fee2e2" },
+  "In Progress": { c: "#f59e0b", bg: "#fef3c7" },
+};
+
+function ccStatusStyle(status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s.includes("close")) return CC_STATUS_CFG["Closed"];
+  if (s.includes("open") && !s.includes("close")) return CC_STATUS_CFG["Open"];
+  if (s.includes("progress") || s.includes("pending") || s.includes("wip")) return CC_STATUS_CFG["In Progress"];
+  return { c: "#64748b", bg: "#f1f5f9" };
+}
+
+function ccChartToken(rows) {
+  if (!rows.length) return "empty";
+  return rows.map((r) => `${r.complaint_id}:${r.status}`).join("|");
+}
+
+function CustomerComplaintsView({ data, loading, uid }) {
+  const rows = data?.complaints?.complaints ?? [];
+  const from = data?.complaints?.from ?? "";
+  const to = data?.complaints?.to ?? "";
+  const rangeLine = from && to ? `${from} → ${to}` : "Uses dashboard date range";
+
+  const total = rows.length;
+  const closed = rows.filter((r) => String(r.status || "").toLowerCase().includes("close")).length;
+  const openLike = rows.filter((r) => { const s = String(r.status || "").toLowerCase(); return s.includes("open") && !s.includes("close"); }).length;
+  const inProg = total - closed - openLike;
+
+  /* status bar chart — one bar per unique customer, stacked or grouped */
+  const customerCounts = {};
+  rows.forEach((r) => {
+    const cust = r.customer_name || "Unknown";
+    if (!customerCounts[cust]) customerCounts[cust] = { open: 0, closed: 0, other: 0 };
+    const s = String(r.status || "").toLowerCase();
+    if (s.includes("close")) customerCounts[cust].closed++;
+    else if (s.includes("open")) customerCounts[cust].open++;
+    else customerCounts[cust].other++;
+  });
+  const custLabels = Object.keys(customerCounts);
+  const chartH = Math.max(120, custLabels.length * 32 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!custLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: custLabels,
+          datasets: [
+            {
+              label: "Open",
+              data: custLabels.map((c) => customerCounts[c].open),
+              backgroundColor: "rgba(239,68,68,.80)",
+              borderRadius: 4,
+              borderSkipped: false,
+            },
+            {
+              label: "Closed",
+              data: custLabels.map((c) => customerCounts[c].closed),
+              backgroundColor: "rgba(16,185,129,.80)",
+              borderRadius: 4,
+              borderSkipped: false,
+            },
+            {
+              label: "Other",
+              data: custLabels.map((c) => customerCounts[c].other),
+              backgroundColor: "rgba(245,158,11,.75)",
+              borderRadius: 4,
+              borderSkipped: false,
+            },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "top", labels: { boxWidth: 10, font: { size: 10 }, color: "#64748b" } },
+            tooltip: { ...DT_TOOLTIP_CFG },
+          },
+          scales: {
+            x: { stacked: true, beginAtZero: true, grid: { color: "rgba(228,233,242,.6)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+            y: { stacked: true, grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [custLabels.join(",")]
+  );
+
+  const rebuildToken = ccChartToken(rows);
+
+  return (
+    <div className="d3-cc-view" key={uid}>
+      {/* ── Header ── */}
+      <div className="d3-cc-hd">
+        <div className="d3-cc-hd__left">
+          <div className="d3-cc-hd__title">Customer Complaints</div>
+          {/* <div className="d3-cc-hd__sub">CustCompMas · CustCompDet · CustMast — {rangeLine}</div> */}
+        </div>
+      </div>
+
+      {/* ── Stat strip ── */}
+      <div className="d3-cc-strip">
+        <div className="d3-cc-stat d3-cc-stat--age">
+          <div className="d3-cc-stat__val">{loading ? "…" : total}</div>
+          <div className="d3-cc-stat__lbl">In range</div>
+        </div>
+        <div className="d3-cc-stat d3-cc-stat--open">
+          <div className="d3-cc-stat__val">{loading ? "…" : openLike}</div>
+          <div className="d3-cc-stat__lbl">Open-like</div>
+        </div>
+        <div className="d3-cc-stat d3-cc-stat--closed">
+          <div className="d3-cc-stat__val">{loading ? "…" : closed}</div>
+          <div className="d3-cc-stat__lbl">Closed-like</div>
+        </div>
+        {inProg > 0 && (
+          <div className="d3-cc-stat d3-cc-stat--prog">
+            <div className="d3-cc-stat__val">{inProg}</div>
+            <div className="d3-cc-stat__lbl">In Progress</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Chart ── */}
+      {!loading && custLabels.length > 0 && (
+        <div className="d3-cc-chart-card">
+          <div className="d3-cc-chart-title">Complaints by Customer &amp; Status</div>
+          <div
+            className="d3-cc-chart-wrap"
+            style={{ height: chartH, position: "relative" }}
+          >
+            <ChartJsCanvas setup={setupChart} height={chartH} rebuildToken={rebuildToken} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Table ── (rendered in bottom panel below) */}
+    </div>
+  );
+}
+
+function CustomerComplaintsBottomTable({ data, loading, uid }) {
+  const rows = data?.complaints?.complaints ?? [];
+  return (
+    <div className="d3-cc-bot" key={uid}>
+      <div className="d3-cc-bot__hd">Complaints List</div>
+      <div className="d3-cc-tbl-wrap" style={{ maxHeight: 300 }}>
+        <table className="d3-cc-tbl">
+          <thead>
+            <tr>
+              <th>Complaint ID</th>
+              <th>Customer</th>
+              <th>Product</th>
+              <th>Complaint Description</th>
+              <th>Action Taken</th>
+              <th>Date</th>
+              <th>Corrective Action</th>
+              <th>Permanent Action</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} className="d3-cc-tbl__empty">Loading complaints…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={9} className="d3-cc-tbl__empty">No complaints in this date range.</td></tr>
+            ) : (
+              rows.map((c, i) => {
+                const stcfg = ccStatusStyle(c.status);
+                return (
+                  <tr key={`${c.complaint_id}-${i}`} className="d3-cc-tbl__tr">
+                    <td className="d3-cc-tbl__id">{c.complaint_id || "—"}</td>
+                    <td className="d3-cc-tbl__bold">{c.customer_name || "—"}</td>
+                    <td className="d3-cc-tbl__narrow" title={c.product}>{c.product || "—"}</td>
+                    <td className="d3-cc-tbl__text" title={c.complaint_description}>{c.complaint_description || "—"}</td>
+                    <td className="d3-cc-tbl__text" title={c.action_taken}>{c.action_taken || "—"}</td>
+                    <td className="d3-cc-tbl__mono">{c.complaint_date || "—"}</td>
+                    <td className="d3-cc-tbl__text" title={c.corrective_action}>{c.corrective_action || "—"}</td>
+                    <td className="d3-cc-tbl__text" title={c.permanent_action}>{c.permanent_action || "—"}</td>
+                    <td>
+                      <span className="d3-cc-badge" style={{ background: stcfg.bg, color: stcfg.c }}>
+                        {c.status || "—"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── IQC — Incoming Quality Rejections ──────────────────── */
+function iqcChartToken(data) {
+  const rows = data?.iqc?.rows;
+  if (!Array.isArray(rows) || !rows.length) return "empty";
+  return rows.map((r) => `${r.vendor_name}:${r.total_rejection_qty}`).join("|");
+}
+
+function IqcRejectionView({ data, loading, uid }) {
+  const iqc = data?.iqc;
+  const rows = Array.isArray(iqc?.rows) ? iqc.rows : [];
+  const totalRec = iqc?.summary?.total_record_count ?? 0;
+  const totalRej = iqc?.summary?.total_rejection_qty ?? 0;
+  const from = iqc?.from ?? "";
+  const to = iqc?.to ?? "";
+  const rangeLine = from && to ? `${from} \u2192 ${to}` : "Dashboard date range";
+
+  /* vendor aggregation for chart */
+  const vendorMap = {};
+  rows.forEach((r) => {
+    const v = r.vendor_name || "Unknown";
+    vendorMap[v] = (vendorMap[v] || 0) + (Number(r.total_rejection_qty) || 0);
+  });
+  const topVendors = Object.entries(vendorMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  const chartLabels = topVendors.map(([v]) => v);
+  const chartValues = topVendors.map(([, q]) => q);
+  const chartH = Math.max(140, chartLabels.length * 30 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: "Rejection Qty by Vendor",
+            data: chartValues,
+            backgroundColor: chartLabels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  return `${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })} qty`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(228,233,242,.6)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+            y: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartLabels.join(",")]
+  );
+
+  const rebuildToken = iqcChartToken(data);
+
+  return (
+    <div className="d3-iqc-view" key={uid}>
+      {/* ── Header ── */}
+      <div className="d3-iqc-hd">
+        <div className="d3-iqc-hd__title">IQC — Incoming Quality Rejections</div>
+        {/* <div className="d3-iqc-hd__sub">grn_mas · inspmas · inspdet · CustMast — {rangeLine}</div> */}
+      </div>
+
+      {/* ── Two big stat cards (matches D2 exactly) ── */}
+      <div className="d3-iqc-stats">
+        <div className="d3-iqc-stat d3-iqc-stat--red">
+          <div className="d3-iqc-stat__icon">🔴</div>
+          <div className="d3-iqc-stat__body">
+            <div className="d3-iqc-stat__val">
+              {loading ? "…" : totalRec.toLocaleString("en-IN")}
+            </div>
+            <div className="d3-iqc-stat__lbl">Total Records</div>
+          </div>
+        </div>
+        <div className="d3-iqc-stat d3-iqc-stat--orange">
+          <div className="d3-iqc-stat__icon">📊</div>
+          <div className="d3-iqc-stat__body">
+            <div className="d3-iqc-stat__val">
+              {loading ? "…" : totalRej.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            </div>
+            <div className="d3-iqc-stat__lbl">Total Rejection Qty</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Chart: Top vendors by rejection qty ── */}
+      {!loading && chartLabels.length > 0 && (
+        <div className="d3-iqc-chart-card">
+          <div className="d3-iqc-chart-title">Top Vendors by Rejection Qty</div>
+          <div className="d3-iqc-chart-wrap" style={{ height: chartH, position: "relative" }}>
+            <ChartJsCanvas setup={setupChart} height={chartH} rebuildToken={rebuildToken} />
+          </div>
+        </div>
+      )}
+
+      {!loading && !rows.length && (
+        <p className="d3-iqc-empty">No IQC rejection lines in this date range.</p>
+      )}
+    </div>
+  );
+}
+
+function IqcRejectionBottomTable({ data, loading, uid }) {
+  const rows = Array.isArray(data?.iqc?.rows) ? data.iqc.rows : [];
+  return (
+    <div className="d3-cc-bot" key={uid}>
+      <div className="d3-cc-bot__hd">IQC Rejection Lines</div>
+      <div className="d3-cc-tbl-wrap" style={{ maxHeight: 300 }}>
+        <table className="d3-cc-tbl" style={{ minWidth: 700 }}>
+          <thead>
+            <tr>
+              <th>GRN Insp No</th>
+              <th>GRN Insp Date</th>
+              <th>Type</th>
+              <th>Vendor / Supplier</th>
+              <th>Material</th>
+              <th>Qty Rejected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} className="d3-cc-tbl__empty">Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6} className="d3-cc-tbl__empty">No IQC rejection lines in this range.</td></tr>
+            ) : (
+              rows.map((r, i) => (
+                <tr key={`${r.grn_insp_no}-${i}`} className="d3-cc-tbl__tr">
+                  <td className="d3-cc-tbl__id">{r.grn_insp_no || "—"}</td>
+                  <td className="d3-cc-tbl__mono">{r.grn_insp_date || "—"}</td>
+                  <td>
+                    <span className="d3-cc-badge" style={{ background: "#f1f5f9", color: "#475569" }}>
+                      {r.type || "—"}
+                    </span>
+                  </td>
+                  <td className="d3-cc-tbl__bold">{r.vendor_name || "—"}</td>
+                  <td className="d3-cc-tbl__narrow" title={r.material || ""}>{r.material || "—"}</td>
+                  <td className="d3-iqc-tbl__qty">{(Number(r.total_rejection_qty) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Idle Time Summary ─────────────────────────────────────── */
+function idleChartToken(data) {
+  const accepted = data?.idle?.accepted;
+  if (!Array.isArray(accepted) || !accepted.length) return "empty";
+  return accepted.map((r) => `${r.reason ?? r.idle_reason}:${r.hours}`).slice(0, 15).join("|");
+}
+
+function IdleTimeView({ data, loading, uid }) {
+  const idleData = data?.idle;
+  const s = idleData?.summary ?? {};
+  const accTotal = Number(s.accepted_hours) || 0;
+  const naTotal = Number(s.non_accepted_hours) || 0;
+  const grand = Number(s.total_idle_hours) || 0;
+  const otherH = Math.max(0, Number(s.other_hours) || 0);
+  const fmt = (n) => Number(n).toFixed(2);
+
+  const accPctW = grand > 0 ? (accTotal / grand) * 100 : 0;
+  const naPctW = grand > 0 ? (naTotal / grand) * 100 : 0;
+  const otherPctW = grand > 0 ? (otherH / grand) * 100 : 0;
+  const accPctStr = grand > 0 ? ((accTotal / grand) * 100).toFixed(0) : "0";
+  const naPctStr = grand > 0 ? ((naTotal / grand) * 100).toFixed(0) : "0";
+  const otherPctStr = grand > 0 ? ((otherH / grand) * 100).toFixed(0) : "0";
+
+  /* bar chart: accepted idle by reason */
+  const accRows = Array.isArray(idleData?.accepted) ? idleData.accepted : [];
+  const chartLabels = accRows.slice(0, 10).map((r) => r.reason || r.idle_reason || "Unknown");
+  const chartValues = accRows.slice(0, 10).map((r) => Number(r.hours) || 0);
+  const chartH = Math.max(100, chartLabels.length * 30 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: "Accepted Idle Hours by Reason",
+            data: chartValues,
+            backgroundColor: chartLabels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  return ` ${v.toFixed(2)} h`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(228,233,242,.6)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+            y: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartLabels.join(",")]
+  );
+  const rebuildToken = idleChartToken(data);
+
+  return (
+    <div className="d3-idle-view" key={uid}>
+      {/* Header */}
+      <div className="d3-idle-hd">
+        <div className="d3-idle-hd__title">Idle Time Summary</div>
+        {/* <div className="d3-idle-hd__sub">
+          Machine_IdleEntry · Prod_IdleEntry + ProductionEntry · conv_IdleEntry — hours from SUM(DATEDIFF minute ÷ 60).
+          Accepted vs non-accepted from IdleReasons.IsAccept; other bucket for unmatched / NULL reasons.
+        </div> */}
+      </div>
+
+      {/* 3 stat tiles */}
+      <div className="d3-idle-grid">
+        <div className="d3-idle-tile d3-idle-tile--acc">
+          <div className="d3-idle-tile__dot" />
+          <div className="d3-idle-tile__lbl">Accepted idle</div>
+          <div className="d3-idle-tile__val">
+            {loading ? "…" : <>{fmt(accTotal)}<span className="d3-idle-tile__unit">h</span></>}
+          </div>
+          <div className="d3-idle-tile__hint">IsAccept = 1</div>
+        </div>
+        <div className="d3-idle-tile d3-idle-tile--na">
+          <div className="d3-idle-tile__dot d3-idle-tile__dot--na" />
+          <div className="d3-idle-tile__lbl">Non-accepted idle</div>
+          <div className="d3-idle-tile__val d3-idle-tile__val--na">
+            {loading ? "…" : <>{fmt(naTotal)}<span className="d3-idle-tile__unit">h</span></>}
+          </div>
+          <div className="d3-idle-tile__hint">IsAccept = 0</div>
+        </div>
+        <div className="d3-idle-tile d3-idle-tile--all">
+          <div className="d3-idle-tile__dot d3-idle-tile__dot--all" />
+          <div className="d3-idle-tile__lbl">Total idle</div>
+          <div className="d3-idle-tile__val d3-idle-tile__val--all">
+            {loading ? "…" : <>{fmt(grand)}<span className="d3-idle-tile__unit">h</span></>}
+          </div>
+          <div className="d3-idle-tile__hint">All lines (SUM of minutes ÷ 60)</div>
+        </div>
+        {otherH > 0 && (
+          <div className="d3-idle-tile d3-idle-tile--oth">
+            <div className="d3-idle-tile__dot d3-idle-tile__dot--oth" />
+            <div className="d3-idle-tile__lbl">Other</div>
+            <div className="d3-idle-tile__val d3-idle-tile__val--oth">
+              {loading ? "…" : <>{fmt(otherH)}<span className="d3-idle-tile__unit">h</span></>}
+            </div>
+            <div className="d3-idle-tile__hint">Unmatched reason / NULL</div>
+          </div>
+        )}
+      </div>
+
+      {/* Segmented proportion bar */}
+      {!loading && grand > 0 && (
+        <div className="d3-idle-split">
+          <div className="d3-idle-split__bar">
+            <div className="d3-idle-split__acc" style={{ width: `${accPctW}%` }} />
+            <div className="d3-idle-split__na" style={{ width: `${naPctW}%` }} />
+            {otherPctW > 0 && <div className="d3-idle-split__oth" style={{ width: `${otherPctW}%` }} />}
+          </div>
+          <div className="d3-idle-split__note">
+            <span className="d3-idle-leg d3-idle-leg--acc">● Accepted {accPctStr}%</span>
+            <span className="d3-idle-leg d3-idle-leg--na">● Non-accepted {naPctStr}%</span>
+            {otherH > 0 && <span className="d3-idle-leg d3-idle-leg--oth">● Other {otherPctStr}%</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Chart: accepted by reason */}
+      {!loading && chartLabels.length > 0 && (
+        <div className="d3-idle-chart-card">
+          <div className="d3-idle-chart-title">Accepted Idle by Reason</div>
+          <div style={{ height: chartH, position: "relative" }}>
+            <ChartJsCanvas setup={setupChart} height={chartH} rebuildToken={rebuildToken} />
+          </div>
+        </div>
+      )}
+
+      {!loading && grand <= 0 && (
+        <p className="d3-idle-empty">No idle hours recorded for this date range.</p>
+      )}
+    </div>
+  );
+}
+
+/* ── OEE Efficiency Detail View ────────────────────────────────────────── */
+function OeeEfficiencyView({ data, loading, uid, from, to }) {
+  const [trendReport, setTrendReport] = useState(null);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [trendError, setTrendError] = useState(null);
+
+  const kpis = data.prod?.kpis ?? {};
+  const oaEff = Number(kpis.oa_efficiency ?? 0);
+  const targetOa = 80.0;
+  const isTargetMet = oaEff >= targetOa;
+
+  // Extract year and month for weekly trend from the "from" Date parameter
+  useEffect(() => {
+    if (!from) return;
+    const dateObj = new Date(from);
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth(); // 0-11 for JS, matches 0-11 for backend parse_dashboard1_period!
+
+    const ctrl = new AbortController();
+    setTrendLoading(true);
+    setTrendError(null);
+    const url = `/api/dashboard1/oa-efficiency-weekly/?year=${year}&month=${month}`;
+    fetch(url, { credentials: "include", signal: ctrl.signal })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          setTrendReport(json.data);
+        } else {
+          setTrendError(json.error || "Failed to load OEE weekly trend");
+        }
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setTrendError(e.message || "Failed to load OEE weekly trend");
+      })
+      .finally(() => setTrendLoading(false));
+
+    return () => ctrl.abort();
+  }, [from]);
+
+  // Chart setup using Chart.js line configuration
+  const setupChart = useCallback(
+    (canvas) => {
+      const chartLabels = trendReport?.labels ?? ["W1", "W2", "W3", "W4", "W5"];
+      const chartData = trendReport?.data ?? [];
+      if (!chartData.length) return null;
+
+      const n = chartLabels.length;
+      return new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: "Weekly OA Eff %",
+              data: chartData,
+              borderColor: "#1a56db",
+              backgroundColor: "rgba(26, 86, 219, 0.05)",
+              tension: 0.35,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: "#1a56db",
+              pointBorderColor: "#fff",
+              pointBorderWidth: 1.5,
+              borderWidth: 2.5,
+            },
+            {
+              label: "Target 80%",
+              data: Array(n).fill(80),
+              borderColor: "#ef4444",
+              borderDash: [5, 5],
+              fill: false,
+              pointRadius: 0,
+              borderWidth: 1.5,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(26, 42, 94, 0.95)",
+              titleColor: "#fff",
+              bodyColor: "#fff",
+              padding: 10,
+              cornerRadius: 6,
+              displayColors: false,
+              callbacks: {
+                label(ctx) {
+                  return `Efficiency: ${Number(ctx.raw).toFixed(2)}%`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#64748b", font: { size: 10, weight: "500" } },
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: {
+                stepSize: 20,
+                callback: (v) => `${v}%`,
+                color: "#64748b",
+                font: { size: 10, weight: "500" },
+              },
+              grid: { borderDash: [3, 3], color: "#e2e8f0" },
+            },
+          },
+        },
+      });
+    },
+    [trendReport]
+  );
+
+  const rebuildToken = trendReport ? trendReport.data.join(",") : "empty";
+
+  // SVG Gauge calculations
+  const radius = 45;
+  const circ = 2 * Math.PI * radius;
+  const strokeDashoffset = circ - (circ * Math.min(100, Math.max(0, oaEff))) / 100;
+
+  // Gauge color based on value
+  let gaugeColor = "#ef4444"; // red
+  let statusText = "Attention Needed";
+  let statusClass = "d3-oee-status--danger";
+  let statusDesc = "Efficiency is below target. Review uptime bottlenecks or rejections below.";
+  if (oaEff >= 80) {
+    gaugeColor = "#10b981"; // green
+    statusText = "Target Met";
+    statusClass = "d3-oee-status--success";
+    statusDesc = "Plant operating at optimal efficiency. High productivity level maintained.";
+  } else if (oaEff >= 65) {
+    gaugeColor = "#f59e0b"; // amber
+    statusText = "Warning: Below Target";
+    statusClass = "d3-oee-status--warning";
+    statusDesc = "Slight underperformance. Review minor bottlenecks in downtime or quality rejections.";
+  }
+
+  // Quality Split helper
+  const qs = qualitySplit(data);
+  const idle = data.idle?.summary ?? {};
+  const fi = data.fi ?? {};
+
+  // Formatted values
+  const formattedOutput = fmtNum(kpis.production_output);
+  const formattedRejections = fmtNum(qs.rejection);
+  const formattedRework = fmtNum(qs.rework);
+  const formattedFirstPassYield = fi.first_pass_yield != null ? fmtPct(fi.first_pass_yield) : `${qs.pctOk}%`;
+
+  return (
+    <div className="d3-oee-view" key={uid}>
+      <div className="d3-oee-header">
+        <div className="d3-oee-header__accent" />
+        <h3 className="d3-oee-header__title">OEE Efficiency Analysis</h3>
+        <p className="d3-oee-header__subtitle">Operational Average (OAEFF) and component breakdowns</p>
+      </div>
+
+      <div className="d3-oee-dashboard">
+        <div className="d3-oee-gauge-card">
+          <div className="d3-oee-gauge-wrap">
+            <svg viewBox="0 0 120 120" className="d3-oee-gauge-svg">
+              <circle cx="60" cy="60" r={radius} className="d3-oee-gauge-bg" />
+              <circle
+                cx="60"
+                cy="60"
+                r={radius}
+                className="d3-oee-gauge-fill"
+                style={{
+                  stroke: gaugeColor,
+                  strokeDasharray: circ,
+                  strokeDashoffset: strokeDashoffset,
+                }}
+              />
+            </svg>
+            <div className="d3-oee-gauge-center">
+              <span className="d3-oee-gauge-val">{oaEff.toFixed(2)}%</span>
+              <span className="d3-oee-gauge-lbl">OAEFF</span>
+            </div>
+          </div>
+          <div className="d3-oee-gauge-info">
+            <span className={`d3-oee-status-badge ${statusClass}`}>{statusText}</span>
+            <div className="d3-oee-target-row">
+              <span>Target: <strong>80.00%</strong></span>
+              <span className="d3-oee-target-sep">|</span>
+              <span>Gap: <strong style={{ color: isTargetMet ? "#10b981" : "#ef4444" }}>{(oaEff - 80).toFixed(2)}%</strong></span>
+            </div>
+            <p className="d3-oee-status-desc">{statusDesc}</p>
+          </div>
+        </div>
+
+        <div className="d3-oee-metrics-grid">
+          <div className="d3-oee-card">
+            <div className="d3-oee-card__hd">
+              <span className="d3-oee-card__icon">⏱️</span>
+              <span className="d3-oee-card__title">Availability</span>
+            </div>
+            <div className="d3-oee-card__body">
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Total Idle</span>
+                <span className="d3-oee-metric-val">{fmtHours(idle.total_idle_hours)}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Non-Accepted</span>
+                <span className="d3-oee-metric-val d3-oee-metric-val--red">{fmtHours(idle.non_accepted_hours)}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Accepted Idle</span>
+                <span className="d3-oee-metric-val d3-oee-metric-val--green">{fmtHours(idle.accepted_hours)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="d3-oee-card">
+            <div className="d3-oee-card__hd">
+              <span className="d3-oee-card__icon">📦</span>
+              <span className="d3-oee-card__title">Performance</span>
+            </div>
+            <div className="d3-oee-card__body">
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Production</span>
+                <span className="d3-oee-metric-val">{formattedOutput}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Shifts</span>
+                <span className="d3-oee-metric-val">{data.shifts?.shifts?.length ?? "—"}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Active Period</span>
+                <span className="d3-oee-metric-val" style={{ textTransform: "capitalize", fontSize: "11px", fontWeight: "600" }}>{data.prod?.from ? "Live Data" : "Current"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="d3-oee-card">
+            <div className="d3-oee-card__hd">
+              <span className="d3-oee-card__icon">🎯</span>
+              <span className="d3-oee-card__title">Quality Split</span>
+            </div>
+            <div className="d3-oee-card__body">
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Quality Rate</span>
+                <span className="d3-oee-metric-val d3-oee-metric-val--green">{formattedFirstPassYield}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Rejections</span>
+                <span className="d3-oee-metric-val d3-oee-metric-val--red">{formattedRejections}</span>
+              </div>
+              <div className="d3-oee-metric-row">
+                <span className="d3-oee-metric-lbl">Rework Qty</span>
+                <span className="d3-oee-metric-val d3-oee-metric-val--orange">{formattedRework}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="d3-oee-trend-card">
+          <div className="d3-oee-trend-card__hd">
+            <span className="d3-oee-trend-card__icon">📈</span>
+            <span className="d3-oee-trend-card__title">Weekly Efficiency Trend</span>
+          </div>
+          <div className="d3-oee-trend-chart-wrap">
+            {trendLoading && <p className="d3-oee-trend-empty">Loading weekly trend…</p>}
+            {trendError && !trendLoading && <p className="d3-oee-trend-empty d3-oee-trend-empty--error">{trendError}</p>}
+            {!trendLoading && !trendError && (
+              <div style={{ height: 160, position: "relative" }}>
+                <ChartJsCanvas setup={setupChart} height={160} rebuildToken={rebuildToken} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── On-Time Delivery Trend — Charts.jsx OTD line chart (embedded) ─ */
+function OtdTrendView({ loading, uid, from, to }) {
+  const [report, setReport] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState(null);
+
+  useEffect(() => {
+    if (!from || !to) {
+      setReport(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setChartLoading(true);
+    setChartError(null);
+    const url = buildUrl("/api/otd-report/", from, to);
+    fetch(url, { credentials: "include", signal: ctrl.signal })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) {
+          setReport(null);
+          setChartError(json?.error || "Failed to load OTD chart");
+          return;
+        }
+        setReport(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setReport(null);
+        setChartError(e.message || "Failed to load OTD chart");
+      })
+      .finally(() => setChartLoading(false));
+    return () => ctrl.abort();
+  }, [from, to]);
+
+  const chartLabels = report?.labels ?? [];
+  const chartData = report?.data ?? [];
+  const fy = report?.fy ?? "";
+  const reportFrom = report?.from ?? (from ? formatLocalYmd(from) : "");
+  const reportTo = report?.to ?? (to ? formatLocalYmd(to) : "");
+  const chartTitle = `On-Time Delivery Trend ${fy} (${reportFrom} → ${reportTo})`;
+  const hasChart = chartLabels.length > 0;
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      const n = chartLabels.length;
+      return new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: `OTD % Actual — ${fy}`,
+              data: chartData,
+              borderColor: "#3b82f6",
+              backgroundColor: "rgba(59, 130, 246, 0.1)",
+              tension: 0.4,
+              fill: true,
+              pointRadius: 3,
+            },
+            {
+              label: `Target ${OTD_TARGET_PCT}%`,
+              data: Array(n).fill(OTD_TARGET_PCT),
+              borderColor: "#ef4444",
+              backgroundColor: "transparent",
+              borderDash: [6, 3],
+              tension: 0,
+              fill: false,
+              pointRadius: 0,
+            },
+          ],
+        },
+        options: {
+          ...OTD_LINE_CHART_BASE,
+          plugins: {
+            ...OTD_LINE_CHART_BASE.plugins,
+            title: {
+              display: true,
+              text: chartTitle,
+              font: { size: 10 },
+              color: "#64748b",
+              padding: { bottom: 8 },
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const v = ctx.parsed.y;
+                  if (v == null || Number.isNaN(v)) return `${ctx.dataset.label}: —`;
+                  return `${ctx.dataset.label}: ${Number(v).toFixed(2)}`;
+                },
+              },
+            },
+          },
+          scales: {
+            ...OTD_LINE_CHART_BASE.scales,
+            y: {
+              ...OTD_LINE_CHART_BASE.scales.y,
+              ticks: {
+                ...OTD_LINE_CHART_BASE.scales.y.ticks,
+                callback: (val) => `${val}%`,
+              },
+            },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartLabels.join(","), chartData.join(","), fy, chartTitle]
+  );
+
+  const rebuildToken = otdReportChartToken(report);
+  const chartBusy = loading || chartLoading;
+
+  return (
+    <div className="d3-otd-view" key={uid}>
+      <div className="d3-otd-chart-panel">
+        <div className="d3-otd-chart-panel__accent" />
+        <div className="d3-otd-chart-panel__hd">
+          <div className="d3-otd-chart-panel__tags">
+            {/* <span className="d3-otd-tag d3-otd-tag--sales">Sales</span> */}
+            {/* <span className="d3-otd-tag d3-otd-tag--sales">Line Chart</span> */}
+          </div>
+        </div>
+        {/* <h3 className="d3-otd-chart-panel__title">On-Time Delivery Trend</h3> */}
+        {/* <div className="d3-otd-chart-panel__date-row">
+          <span className="d3-otd-date-chip">{rangeLabel}</span>
+          {daysSel > 0 && <span className="d3-otd-date-badge">{daysSel}d</span>}
+          {from && to && (
+            <span className="d3-otd-days-txt">{daysSel} days selected</span>
+          )}
+        </div> */}
+        <div
+          className="d3-otd-canvas-wrap"
+          style={{ opacity: chartBusy ? 0 : 1, transition: "opacity 0.3s" }}
+        >
+          {chartError && !chartBusy && (
+            <p className="d3-otd-chart-empty">{chartError}</p>
+          )}
+          {!chartError && hasChart && !chartBusy && (
+            <ChartJsCanvas setup={setupChart} height={420} rebuildToken={rebuildToken} />
+          )}
+          {!chartError && !hasChart && !chartBusy && (
+            <p className="d3-otd-chart-empty">No OTD data for this date range.</p>
+          )}
+        </div>
+        {chartBusy && <D3ChartLoader label="Loading On-Time Delivery…" height={380} />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Production Output Detail View (Sky Blue Rich UI) ────────────────────── */
+function ProductionOutputView({ data, loading, uid }) {
+  const kpis = data?.prod?.kpis ?? {};
+  const outputQty = Number(kpis.production_output ?? 0);
+  const formattedOutput = Math.round(outputQty).toLocaleString("en-IN");
+
+  return (
+    <div className="d3-prodout-view" key={uid}>
+      <div className="d3-prodout-card">
+        <div className="d3-prodout-card__accent" />
+        <div className="d3-prodout-hd">
+          <div className="d3-prodout-hd__left">
+            <div className="d3-prodout-hd__icon">📦</div>
+            <div>
+              <div className="d3-prodout-hd__title">Production Output</div>
+              {/* <div className="d3-prodout-hd__sub">Total completed and scanned production units</div> */}
+            </div>
+          </div>
+          <span className="d3-prodout-chip d3-prodout-chip--active">Active Log</span>
+        </div>
+
+        <div className="d3-prodout-body">
+          <div className="d3-prodout-display">
+            <div className="d3-prodout-metric">
+              <span className="d3-prodout-metric__label">Completed Output</span>
+              <span className="d3-prodout-metric__value">{loading ? "..." : formattedOutput}</span>
+            </div>
+
+            <div className="d3-prodout-visual">
+              <svg className="d3-prodout-gauge" viewBox="0 0 120 120">
+                <circle className="d3-prodout-gauge__bg" cx="60" cy="60" r="50" />
+                <circle className="d3-prodout-gauge__fill" cx="60" cy="60" r="50" />
+                <g className="d3-prodout-gauge__content">
+                  <text className="d3-prodout-gauge__icon" x="60" y="55">⚙️</text>
+                  <text className="d3-prodout-gauge__status" x="60" y="80">RUNNING</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div className="d3-prodout-highlight">
+            <div className="d3-prodout-highlight__item">
+              <span className="d3-prodout-highlight__bullet">●</span>
+              <span><strong>Total Completed Output:</strong> Shows the grand total of finished goods and components successfully logged and verified from live shopfloor records.</span>
+            </div>
+            <div className="d3-prodout-highlight__item">
+              <span className="d3-prodout-highlight__bullet">●</span>
+              <span><strong>ERP Integrated:</strong> Real-time production records synced dynamically from active shifts and machinery logs.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Final Inspection OK Quantity Detail View (Emerald Rich UI) ────────────── */
+function FinalInspectionOkView({ data, loading, uid }) {
+  const fi = data?.fi;
+  const okQty = Number(fi?.total_ok_qty ?? 0);
+  const formattedOk = Math.round(okQty).toLocaleString("en-IN");
+
+  return (
+    <div className="d3-fiok-view" key={uid}>
+      <div className="d3-fiok-card">
+        <div className="d3-fiok-card__accent" />
+        <div className="d3-fiok-hd">
+          <div className="d3-fiok-hd__left">
+            <div className="d3-fiok-hd__icon">✨</div>
+            <div>
+              <div className="d3-fiok-hd__title">Final Quality OK Quantity</div>
+              {/* <div className="d3-fiok-hd__sub">Finished goods meeting 100% QA compliance standards</div> */}
+            </div>
+          </div>
+          <span className="d3-fiok-chip d3-fiok-chip--active">QA Approved</span>
+        </div>
+
+        <div className="d3-fiok-body">
+          <div className="d3-fiok-display">
+            <div className="d3-fiok-metric">
+              <span className="d3-fiok-metric__label">Approved Quantity</span>
+              <span className="d3-fiok-metric__value">{loading ? "..." : formattedOk}</span>
+              {/* <span className="d3-fiok-metric__unit">compliant units</span> */}
+            </div>
+
+            <div className="d3-fiok-visual">
+              <svg className="d3-fiok-gauge" viewBox="0 0 120 120">
+                <circle className="d3-fiok-gauge__bg" cx="60" cy="60" r="50" />
+                <circle className="d3-fiok-gauge__fill" cx="60" cy="60" r="50" />
+                <g className="d3-fiok-gauge__content">
+                  <text className="d3-fiok-gauge__icon" x="60" y="55">✅</text>
+                  <text className="d3-fiok-gauge__status" x="60" y="80">OK</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div className="d3-fiok-highlight">
+            <div className="d3-fiok-highlight__item">
+              <span className="d3-fiok-highlight__bullet">●</span>
+              <span><strong>Guaranteed Quality:</strong> Represents only parts that successfully passed all dimensional, visual, and performance checks.</span>
+            </div>
+            <div className="d3-fiok-highlight__item">
+              <span className="d3-fiok-highlight__bullet">●</span>
+              <span><strong>Ready for Dispatch:</strong> All compliant units are instantly logged in ERP stock and available for delivery scheduling.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Overall Operator Efficiency Monthwise Detail View ─────────────────────── */
+function OperatorEfficiencyView({ loading, uid, from, to }) {
+  const [report, setReport] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState(null);
+
+  useEffect(() => {
+    if (!from || !to) {
+      setReport(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setChartLoading(true);
+    setChartError(null);
+    const url = buildUrl("/api/production/overall-operator-efficiency/", from, to);
+    fetch(url, { credentials: "include", signal: ctrl.signal })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Load failed (${res.status})`);
+        }
+        return res.json();
+      })
+      .then((json) => {
+        if (json.error) {
+          throw new Error(json.error);
+        }
+        setReport(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setReport(null);
+        setChartError(e.message || "Failed to load Operator Efficiency chart");
+      })
+      .finally(() => setChartLoading(false));
+
+    return () => ctrl.abort();
+  }, [from, to]);
+
+  const chartLabels = report?.labels ?? [];
+  const chartData = report?.data ?? [];
+  const fy = report?.fy ?? "";
+  const reportFrom = report?.from ?? (from ? formatLocalYmd(from) : "");
+  const reportTo = report?.to ?? (to ? formatLocalYmd(to) : "");
+  const chartTitle = `Overall Operator Efficiency ${fy} (${reportFrom} → ${reportTo})`;
+  const hasChart = chartLabels.length > 0;
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: `Overall Efficiency % — ${fy}`,
+              data: chartData,
+              backgroundColor: "#06b6d4",
+              hoverBackgroundColor: "#0891b2",
+              borderRadius: 5,
+              borderWidth: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: chartTitle,
+              font: { size: 10, weight: "700" },
+              color: "#64748b",
+              padding: { bottom: 8 },
+            },
+            tooltip: {
+              backgroundColor: "rgba(26, 42, 94, 0.95)",
+              titleColor: "#fff",
+              bodyColor: "#fff",
+              padding: 10,
+              cornerRadius: 6,
+              displayColors: false,
+              callbacks: {
+                label(ctx) {
+                  const v = ctx.parsed.y;
+                  if (v == null || Number.isNaN(v)) return "Efficiency: —";
+                  return `Efficiency: ${Number(v).toFixed(2)}%`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#64748b", font: { size: 10, weight: "500" } },
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: {
+                stepSize: 20,
+                callback: (val) => `${val}%`,
+                color: "#64748b",
+                font: { size: 10, weight: "500" },
+              },
+              grid: { borderDash: [3, 3], color: "#e2e8f0" },
+            },
+          },
+        },
+      });
+    },
+    [chartLabels, chartData, fy, chartTitle]
+  );
+
+  const rebuildToken = report ? `${report.labels.join(",")}|${report.data.join(",")}` : "empty";
+  const chartBusy = loading || chartLoading;
+
+  return (
+    <div className="d3-opeff-view" key={uid}>
+      <div className="d3-opeff-chart-panel">
+        <div className="d3-opeff-chart-panel__accent" />
+        <div className="d3-opeff-chart-panel__hd">
+          <div className="d3-opeff-chart-panel__title-group">
+            <h3 className="d3-opeff-chart-panel__title">Operator Efficiency Analysis</h3>
+            {/* <p className="d3-opeff-chart-panel__subtitle">Overall Operator Efficiency Monthwise</p> */}
+          </div>
+        </div>
+        <div
+          className="d3-opeff-canvas-wrap"
+          style={{ opacity: chartBusy ? 0 : 1, transition: "opacity 0.3s" }}
+        >
+          {chartError && !chartBusy && (
+            <p className="d3-opeff-chart-empty">{chartError}</p>
+          )}
+          {!chartError && hasChart && !chartBusy && (
+            <ChartJsCanvas setup={setupChart} height={300} rebuildToken={rebuildToken} />
+          )}
+          {!chartError && !hasChart && !chartBusy && (
+            <p className="d3-opeff-chart-empty">No Operator Efficiency data for this date range.</p>
+          )}
+        </div>
+        {chartBusy && <D3ChartLoader label="Loading Operator Efficiency…" height={260} />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Purchase Order Status ─────────────────────────────────── */
+const fmtInr = (v) => {
+  const n = Number(v);
+  if (!n || Number.isNaN(n)) return "₹0";
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+};
+
+function poChartToken(data) {
+  const rows = data?.po?.rows;
+  if (!Array.isArray(rows) || !rows.length) return "empty";
+  return rows.map((r) => `${r.po_type}:${r.value}`).slice(0, 20).join("|");
+}
+
+function PurchaseOrderView({ data, loading, uid }) {
+  const po = data?.po;
+  const s = po?.summary ?? {};
+  const rows = Array.isArray(po?.rows) ? po.rows : [];
+  const from = po?.from ?? ""; const to = po?.to ?? "";
+  const rangeLine = from && to ? `${from} → ${to}` : "Dashboard date range";
+
+  const TILES = [
+    { label: "Total POs", val: s.total_pos ?? 0, icon: "📦", c: "#1a56db", bg: "#dbeafe", isMoney: false },
+    { label: "Approved", val: s.approved ?? 0, icon: "✅", c: "#0ea5e9", bg: "#e0f2fe", isMoney: false },
+    { label: "Approval Pending", val: s.pending_approval ?? 0, icon: "⏳", c: "#f59e0b", bg: "#fef3c7", isMoney: false },
+    { label: "GRN Done", val: s.grn_done ?? 0, icon: "🏭", c: "#10b981", bg: "#d1fae5", isMoney: false },
+    { label: "GRN Pending", val: s.grn_pending ?? 0, icon: "🔄", c: "#ef4444", bg: "#fee2e2", isMoney: false },
+    { label: "Total PO Value", val: s.total_po_value ?? 0, icon: "💰", c: "#1a56db", bg: "#dbeafe", isMoney: true },
+    { label: "Total GRN Value", val: s.total_grn_value ?? 0, icon: "📋", c: "#10b981", bg: "#d1fae5", isMoney: true },
+  ];
+
+  /* bar chart: value by po_type */
+  const typeMap = {};
+  rows.forEach((r) => {
+    const t = r.po_type || "Unknown";
+    typeMap[t] = (typeMap[t] || 0) + (Number(r.value) || 0);
+  });
+  const typeEntries = Object.entries(typeMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const chartLabels = typeEntries.map(([t]) => t);
+  const chartValues = typeEntries.map(([, v]) => v);
+  const chartH = Math.max(100, chartLabels.length * 32 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: "PO Value by Type",
+            data: chartValues,
+            backgroundColor: chartLabels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  return ` ${fmtInr(v)}`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(228,233,242,.6)" }, ticks: { color: "#94a3b8", font: { size: 10 }, callback: (v) => fmtInr(v) } },
+            y: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartLabels.join(",")]
+  );
+  const rebuildToken = poChartToken(data);
+
+  return (
+    <div className="d3-po-view" key={uid}>
+      {/* Header */}
+      <div className="d3-po-hd">
+        <div className="d3-po-hd__title">🛒 Purchase Order Status</div>
+        {/* <div className="d3-po-hd__sub">POmas · POdet · grn_mas · grn_det · CustMast — {rangeLine}</div> */}
+      </div>
+
+      {/* Row 1: Count tiles (5 across) */}
+      <div className="d3-po-tiles-count">
+        {TILES.filter((t) => !t.isMoney).map((t) => (
+          <div key={t.label} className="d3-po-tile" style={{ background: t.bg, borderColor: `${t.c}30` }}>
+            <div className="d3-po-tile__icon">{t.icon}</div>
+            <div className="d3-po-tile__val" style={{ color: t.c }}>
+              {loading ? "…" : Number(t.val).toLocaleString("en-IN")}
+            </div>
+            <div className="d3-po-tile__lbl">{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Row 2: Money tiles (2 across, wider) */}
+      <div className="d3-po-tiles-money">
+        {TILES.filter((t) => t.isMoney).map((t) => (
+          <div key={t.label} className="d3-po-tile" style={{ background: t.bg, borderColor: `${t.c}30` }}>
+            <div className="d3-po-tile__icon">{t.icon}</div>
+            <div className="d3-po-tile__val" style={{ color: t.c }}>
+              {loading ? "…" : fmtInr(t.val)}
+            </div>
+            <div className="d3-po-tile__lbl">{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart */}
+      {!loading && chartLabels.length > 0 && (
+        <div className="d3-po-chart-card">
+          <div className="d3-po-chart-title">PO Value by Type</div>
+          <div style={{ height: chartH, position: "relative" }}>
+            <ChartJsCanvas setup={setupChart} height={chartH} rebuildToken={rebuildToken} />
+          </div>
+        </div>
+      )}
+
+      {!loading && !rows.length && (
+        <p className="d3-po-empty">No PO lines in this date range.</p>
+      )}
+    </div>
+  );
+}
+
+function PurchaseOrderBottomTable({ data, loading, uid }) {
+  const rows = Array.isArray(data?.po?.rows) ? data.po.rows : [];
+  const fmtDate = (d) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    if (isNaN(dt)) return d;
+    return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  };
+  return (
+    <div className="d3-cc-bot" key={uid}>
+      <div className="d3-cc-bot__hd">Purchase Orders</div>
+      <div className="d3-cc-tbl-wrap" style={{ maxHeight: 300 }}>
+        <table className="d3-cc-tbl" style={{ minWidth: 820 }}>
+          <thead>
+            <tr>
+              <th>PO Number</th>
+              <th>PO Type</th>
+              <th>Vendor / Supplier</th>
+              <th>Material</th>
+              <th>Qty</th>
+              <th>Value</th>
+              <th>PO Date</th>
+              <th>GRN No</th>
+              <th>GRN Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} className="d3-cc-tbl__empty" style={{ padding: 0 }}><D3TableLoader rows={4} cols={9} /></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={9} className="d3-cc-tbl__empty">No PO lines in this range.</td></tr>
+            ) : (
+              rows.map((r, i) => (
+                <tr key={`${r.po_number}-${i}`} className="d3-cc-tbl__tr">
+                  <td className="d3-cc-tbl__id">{r.po_number || "—"}</td>
+                  <td><span className="d3-cc-badge" style={{ background: "#f1f5f9", color: "#475569" }}>{r.po_type || "—"}</span></td>
+                  <td style={{ fontWeight: 600, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.vendor_name || ""}>{(r.vendor_name || "").trim() || "—"}</td>
+                  <td className="d3-cc-tbl__narrow" title={r.material || ""}>{r.material || "—"}</td>
+                  <td className="d3-cc-tbl__mono">{r.po_qty || "—"}</td>
+                  <td className="d3-cc-tbl__mono" style={{ color: "#1a56db", fontWeight: 700 }}>{fmtInr(r.value)}</td>
+                  <td className="d3-cc-tbl__mono">{fmtDate(r.po_date)}</td>
+                  <td className="d3-cc-tbl__id">{(r.grn_no || "").trim() || "—"}</td>
+                  <td className="d3-cc-tbl__mono">{fmtDate(r.grn_date)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── GRN Pending Pipeline ──────────────────────────────────── */
+function grnChartToken(data) {
+  const rows = data?.grn?.rows;
+  if (!Array.isArray(rows) || !rows.length) return "empty";
+  return rows.map((r) => `${r.type_ || ""}:${r.qty_ || ""}`).join("|");
+}
+
+function GrnPipelineView({ data, loading, uid }) {
+  const grn = data?.grn;
+  const rows = Array.isArray(grn?.rows) ? grn.rows : [];
+  const s = grn?.summary;
+  const totalCount = typeof s?.total_record_count === "number" ? s.total_record_count : 0;
+  const totalQty = typeof s?.total_qty === "number" ? s.total_qty : 0;
+  const totalQtyFmt = totalQty.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  const from = grn?.from ?? "";
+  const to = grn?.to ?? "";
+  const rangeLine = from && to ? `${from} \u2192 ${to}` : "Dashboard date range";
+
+  const typeMap = {};
+  rows.forEach((r) => {
+    const t = r.type_ || r.type || "Unknown";
+    const numMatch = String(r.qty_ || r.qty || "0").match(/[-\d.]+/);
+    const num = numMatch ? parseFloat(numMatch[0]) : 0;
+    typeMap[t] = (typeMap[t] || 0) + (isNaN(num) ? 0 : num);
+  });
+  const typeEntries = Object.entries(typeMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const chartLabels = typeEntries.map(([t]) => t);
+  const chartValues = typeEntries.map(([, q]) => q);
+  const chartH = Math.max(120, chartLabels.length * 32 + 50);
+
+  const setupChart = useCallback(
+    (canvas) => {
+      if (!chartLabels.length) return null;
+      return new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: "Pending Qty by GRN Type",
+            data: chartValues,
+            backgroundColor: chartLabels.map((_, i) => DOWNTIME_BAR_COLORS[i % DOWNTIME_BAR_COLORS.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...DT_TOOLTIP_CFG,
+              callbacks: {
+                label(ctx) {
+                  const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
+                  return `${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })} qty`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(228,233,242,.6)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+            y: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
+          },
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartLabels.join(",")]
+  );
+
+  const rebuildToken = grnChartToken(data);
+
+  return (
+    <div className="d3-grn-view" key={uid}>
+      <div className="d3-grn-hd">
+        <div className="d3-grn-hd__title">GRN Pending Pipeline (Quick View)</div>
+        <div className="d3-grn-hd__sub">
+          grn_mas · grn_det — pending inspection (insp = 0), deleted = 0 — {rangeLine}
+        </div>
+      </div>
+
+      <div className="d3-grn-stats">
+        <div className="d3-grn-stat d3-grn-stat--blue">
+          <div className="d3-grn-stat__icon">📋</div>
+          <div className="d3-grn-stat__body">
+            <div className="d3-grn-stat__val">{loading ? "…" : totalCount.toLocaleString("en-IN")}</div>
+            <div className="d3-grn-stat__lbl">Total Records</div>
+          </div>
+        </div>
+        <div className="d3-grn-stat d3-grn-stat--amber">
+          <div className="d3-grn-stat__icon">📦</div>
+          <div className="d3-grn-stat__body">
+            <div className="d3-grn-stat__val">{loading ? "…" : totalQtyFmt}</div>
+            <div className="d3-grn-stat__lbl">Total Qty</div>
+          </div>
+        </div>
+      </div>
+
+      {!loading && chartLabels.length > 0 && (
+        <div className="d3-grn-chart-card">
+          <div className="d3-grn-chart-title">Pending Qty by GRN Type</div>
+          <div className="d3-grn-chart-wrap" style={{ height: chartH, position: "relative" }}>
+            <ChartJsCanvas setup={setupChart} height={chartH} rebuildToken={rebuildToken} />
+          </div>
+        </div>
+      )}
+
+      {!loading && !rows.length && (
+        <p className="d3-grn-empty">No pending GRN lines in this date range.</p>
+      )}
+    </div>
+  );
+}
+
+function GrnPipelineBottomTable({ data, loading, uid }) {
+  const rows = Array.isArray(data?.grn?.rows) ? data.grn.rows : [];
+  return (
+    <div className="d3-cc-bot" key={uid}>
+      <div className="d3-cc-bot__hd">GRN Pending Lines</div>
+      <div className="d3-cc-tbl-wrap" style={{ maxHeight: 300 }}>
+        <table className="d3-cc-tbl" style={{ minWidth: 640 }}>
+          <thead>
+            <tr>
+              <th>GRN No</th>
+              <th>GRN Date</th>
+              <th>Type</th>
+              <th>Material</th>
+              <th>Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="d3-cc-tbl__empty" style={{ padding: 0 }}><D3TableLoader rows={4} cols={5} /></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={5} className="d3-cc-tbl__empty">No pending GRN lines in this range.</td></tr>
+            ) : (
+              rows.map((r, i) => (
+                <tr key={`${r.grn_no}-${i}`} className="d3-cc-tbl__tr">
+                  <td className="d3-cc-tbl__id">{r.grn_no || "—"}</td>
+                  <td className="d3-cc-tbl__mono">{r.grn_date || "—"}</td>
+                  <td>
+                    <span className="d3-cc-badge" style={{ background: "#f1f5f9", color: "#475569" }}>
+                      {r.type_ || r.type || "—"}
+                    </span>
+                  </td>
+                  <td className="d3-cc-tbl__narrow" title={r.material_ || r.material || ""}>
+                    {r.material_ || r.material || "—"}
+                  </td>
+                  <td className="d3-cc-tbl__mono">{r.qty_ || r.qty || "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Inspection View (shared: injob / inter / final) ─────── */
+function InspBarTrack({ pct, targetPct, fill }) {
+  const clampedPct = Math.min(100, Math.max(0, Number(pct) || 0));
+  const targetX = Math.min(100, Math.max(0, Number(targetPct) || 0));
+  return (
+    <div className="d3-insp-bar-track">
+      <div className="d3-insp-bar-fill" style={{ width: `${clampedPct}%`, background: fill }} />
+      <div className="d3-insp-bar-target" style={{ left: `${targetX}%` }} />
+    </div>
+  );
+}
+
+function InspectionView({ type, data, loading, uid }) {
+  const pctLabel = (v) => (v == null || Number.isNaN(Number(v)) ? "\u2014" : `${Number(v).toFixed(1)}%`);
+
+  const injob = data?.injob;
+  const inter = data?.inter;
+  const fi = data?.fi;
+  const finalOrg = data?.finalOrg;
+
+  let icon, title, sub, totalRej, totalRwk, totalQty, rejPct, rwkPct, chipLabel, chipOk, fpy, footer;
+  const TARGET_REJ = 2;
+
+  if (type === "injob_inspection") {
+    icon = "\ud83d\udccb"; title = "Job Order Inspection";
+    const inspCount = Number(injob?.inspection_master_count ?? 0);
+    // sub = `InJob_Mas.inspdate \u00b7 InJob_Det (matrej + macrej \u00b7 rwqty)${inspCount > 0 ? ` \u00b7 ${inspCount} inspections` : ""}`;
+    totalRej = Number(injob?.total_rejection ?? 0);
+    totalRwk = Number(injob?.total_rework ?? 0);
+    totalQty = Number(injob?.total_qty_basis ?? 0);
+    rejPct = injob?.rejection_pct != null && injob.rejection_pct !== "" ? Number(injob.rejection_pct) : totalQty > 0 ? (totalRej / totalQty) * 100 : null;
+    rwkPct = injob?.rework_pct != null && injob.rework_pct !== "" ? Number(injob.rework_pct) : totalQty > 0 ? (totalRwk / totalQty) * 100 : null;
+    const aboveTarget = rejPct != null && rejPct > TARGET_REJ;
+    chipOk = !aboveTarget; chipLabel = loading ? "Loading\u2026" : rejPct == null ? "No % basis" : aboveTarget ? "Above target" : "On target";
+    footer = totalQty > 0 ? `Detail \u03a3${injob?.qty_basis_column ? ` (${injob.qty_basis_column})` : ""}: ${Math.round(totalQty).toLocaleString()} \u00b7 Target: ${TARGET_REJ}%` : `Target: ${TARGET_REJ}%`;
+  } else if (type === "inter_inspection") {
+    icon = "\u2699\ufe0f"; title = "Intermediate Inspection";
+    const rowCount = Number(inter?.row_count ?? 0);
+    // sub = `InterInspectionEntry \u00b7 rejqty + matrejqty \u00b7 rwqty${rowCount > 0 ? ` \u00b7 ${rowCount.toLocaleString()} rows` : ""}`;
+    totalRej = Number(inter?.total_rejection ?? 0);
+    totalRwk = Number(inter?.total_rework ?? 0);
+    totalQty = Number(inter?.total_qty_basis ?? 0);
+    rejPct = inter?.rejection_pct != null && inter.rejection_pct !== "" ? Number(inter.rejection_pct) : totalQty > 0 ? (totalRej / totalQty) * 100 : null;
+    rwkPct = inter?.rework_pct != null && inter.rework_pct !== "" ? Number(inter.rework_pct) : totalQty > 0 ? (totalRwk / totalQty) * 100 : null;
+    const elevated = rejPct != null && rejPct > 10;
+    const aboveTarget = rejPct != null && rejPct > TARGET_REJ;
+    chipOk = !elevated && !aboveTarget; chipLabel = loading ? "Loading\u2026" : elevated ? "Rej >10%" : rejPct == null ? "No % basis" : aboveTarget ? "Above target" : "On target";
+    footer = totalQty > 0 ? `\u03a3${inter?.qty_basis_column ? ` (${inter.qty_basis_column})` : ""}: ${Math.round(totalQty).toLocaleString()} \u00b7 Target: ${TARGET_REJ}%` : `Target: ${TARGET_REJ}%`;
+  } else {
+    icon = "\u2705"; title = "Final Inspection";
+    const inspCount = Number(fi?.inspection_count ?? 0);
+    // sub = `FinalInspectionEntry \u00b7 FinalInspRejectionEntryOrg \u00b7 FinalInspReworkEntryOrg${inspCount > 0 ? ` \u00b7 ${inspCount.toLocaleString()} inspections` : ""}`;
+    totalRej = Number(finalOrg?.total_rejection ?? 0);
+    totalRwk = Number(finalOrg?.total_rework ?? 0);
+    const totalInsp = Number(fi?.total_qty ?? 0);
+    const totalOk = Number(fi?.total_ok_qty ?? 0);
+    totalQty = totalInsp;
+    rejPct = totalInsp > 0 ? (totalRej / totalInsp) * 100 : null;
+    rwkPct = totalInsp > 0 ? (totalRwk / totalInsp) * 100 : null;
+    fpy = fi?.first_pass_yield != null && fi.first_pass_yield !== "" ? Number(fi.first_pass_yield) : totalInsp > 0 ? (totalOk / totalInsp) * 100 : null;
+    chipOk = fpy != null && fpy >= 98; chipLabel = loading ? "Loading\u2026" : fpy == null ? "FPY \u2014" : `FPY ${fpy.toFixed(1)}%`;
+    footer = loading && !fi ? "OK Qty / Total: \u2026" : `OK Qty: ${Math.round(totalOk).toLocaleString()} \u00b7 Total: ${Math.round(totalInsp).toLocaleString()} inspected \u00b7 Target FPY: 98%`;
+  }
+
+  const rwkColor = type === "final_inspection" ? "#16a34a" : "#ea580c";
+  const rwkFill = type === "final_inspection" ? "#22c55e" : "#f97316";
+
+  return (
+    <div className="d3-insp-view" key={uid}>
+      <div className="d3-insp-hd">
+        <div className="d3-insp-hd__left">
+          <div className="d3-insp-hd__icon">{icon}</div>
+          <div>
+            <div className="d3-insp-hd__title">{title}</div>
+            <div className="d3-insp-hd__sub">{sub}</div>
+          </div>
+        </div>
+        <span className={`d3-insp-chip ${chipOk ? "d3-insp-chip--ok" : "d3-insp-chip--warn"}`}>{chipLabel}</span>
+      </div>
+
+      <div className="d3-insp-body">
+        <div className="d3-insp-col">
+          <div className="d3-insp-metric-lbl">Rejection</div>
+          <div className="d3-insp-metric-pcs" style={{ color: "#ef4444" }}>
+            {loading ? "\u2026" : Math.round(totalRej).toLocaleString()} <span>pcs</span>
+          </div>
+          <div className="d3-insp-bar-row">
+            <InspBarTrack pct={rejPct ?? 0} targetPct={2} fill="#ef4444" />
+            <span className="d3-insp-bar-pct" style={{ color: "#ef4444" }}>{pctLabel(rejPct)}</span>
+          </div>
+        </div>
+        <div className="d3-insp-vdiv" />
+        <div className="d3-insp-col">
+          <div className="d3-insp-metric-lbl">Rework</div>
+          <div className="d3-insp-metric-pcs" style={{ color: rwkColor }}>
+            {loading ? "\u2026" : Math.round(totalRwk).toLocaleString()} <span>pcs</span>
+          </div>
+          <div className="d3-insp-bar-row">
+            <InspBarTrack pct={rwkPct ?? 0} targetPct={type === "final_inspection" ? 2 : 1.5} fill={rwkFill} />
+            <span className="d3-insp-bar-pct" style={{ color: rwkColor }}>{pctLabel(rwkPct)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Stacked proportion bar ── */}
+      {!loading && (totalRej > 0 || totalRwk > 0) && (() => {
+        const rejV = Math.round(totalRej);
+        const rwkV = Math.round(totalRwk);
+        const total = rejV + rwkV || 1;
+        const rP = (rejV / total * 100).toFixed(1);
+        const wP = (rwkV / total * 100).toFixed(1);
+        return (
+          <div className="d3-insp-viz">
+            <div className="d3-insp-viz__label">Rejection vs Rework</div>
+            <div className="d3-insp-viz__bar">
+              {rejV > 0 && (
+                <div className="d3-insp-viz__seg d3-insp-viz__seg--rej" style={{ width: `${rP}%` }}>
+                  <span className="d3-insp-viz__seg-tip">{rP}%</span>
+                </div>
+              )}
+              {rwkV > 0 && (
+                <div className="d3-insp-viz__seg d3-insp-viz__seg--rwk" style={{ width: `${wP}%`, background: rwkFill }}>
+                  <span className="d3-insp-viz__seg-tip">{wP}%</span>
+                </div>
+              )}
+            </div>
+            <div className="d3-insp-viz__legend">
+              <span className="d3-insp-viz__dot" style={{ background: "#ef4444" }} />
+              <span className="d3-insp-viz__leg-lbl">Rejection {rejV.toLocaleString()} pcs</span>
+              <span className="d3-insp-viz__dot" style={{ background: rwkFill }} />
+              <span className="d3-insp-viz__leg-lbl">Rework {rwkV.toLocaleString()} pcs</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div className="d3-insp-footer">
+        <span className="d3-insp-footer-stat">{footer}</span>
+        <span className={`d3-insp-chip d3-insp-chip--footer ${chipOk ? "d3-insp-chip--ok" : "d3-insp-chip--warn"}`}>
+          {loading ? "\u2026" : type === "final_inspection"
+            ? (fpy == null ? "\u2014" : chipOk ? "\u2713 FPY on target" : "\u26a0 FPY below target")
+            : (chipOk ? "\u2713 On target" : "\u2717 Above target")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Charts (same as original UI) ─────────────────────────── */
 function Sparkline({ data, color }) {
   const W = 100, H = 32;
   const max = Math.max(...data), min = Math.min(...data);
@@ -756,7 +2582,11 @@ function Insights({ insights }) {
 }
 
 function CenterKpiDetail({ detail, uid, loading }) {
-  if (!detail) return <div className="d3-detail d3-detail--empty"><p className="d3-panel__hint">{loading ? "Loading…" : "Select a card"}</p></div>;
+  if (!detail) return (
+    <div className="d3-detail d3-detail--empty">
+      {loading ? <D3ChartLoader label="Loading data…" height={320} /> : <p className="d3-panel__hint">Select a card</p>}
+    </div>
+  );
   const d = detail;
   return (
     <div className="d3-detail" key={uid}>
@@ -773,14 +2603,6 @@ function CenterKpiDetail({ detail, uid, loading }) {
               <p className="d3-detail__chip-lbl">{k.label}</p>
             </div>
           ))}
-        </div>
-      )}
-      {d.chartMode === "otd" && d.lineChart && (
-        <div className="d3-charts-zone d3-charts-zone--solo">
-          <div className="d3-chart-card d3-chart-card--full">
-            <p className="d3-chart-card__lbl">{d.lineChart.label}</p>
-            <LineChart data={d.lineChart} uid={uid} />
-          </div>
         </div>
       )}
       {d.chartMode === "quality" && d.donut && (
@@ -854,6 +2676,110 @@ function BottomKpiPanel({ bottom, uid }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Skeleton shimmer placeholder ───────────────────────────── */
+function D3Skeleton({ lines = 3, width = "100%" }) {
+  return (
+    <div className="d3-skel" aria-hidden="true">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div
+          key={i}
+          className="d3-skel__line"
+          style={{ width: i === lines - 1 ? "60%" : width, animationDelay: `${i * 0.12}s` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ── Premium chart loading animation ───────────────────────── */
+function D3ChartLoader({ label = "Loading chart…", height = 340 }) {
+  return (
+    <div className="d3-chart-loader" style={{ height }} aria-label={label}>
+      {/* Animated bar chart skeleton */}
+      <div className="d3-chart-loader__bars">
+        {[0.4, 0.7, 0.55, 0.9, 0.65, 0.8, 0.5, 0.75, 0.6, 0.85].map((h, i) => (
+          <div
+            key={i}
+            className="d3-chart-loader__bar"
+            style={{ "--bar-h": h, "--bar-i": i }}
+          />
+        ))}
+      </div>
+      {/* Pulsing ring + label */}
+      <div className="d3-chart-loader__center">
+        <div className="d3-chart-loader__ring">
+          <div className="d3-chart-loader__ring-inner" />
+          <svg className="d3-chart-loader__ring-svg" viewBox="0 0 44 44">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="url(#ld-grad)" strokeWidth="3" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="ld-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0" />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity="1" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <p className="d3-chart-loader__label">{label}</p>
+      </div>
+      {/* Shimmer axis lines */}
+      <div className="d3-chart-loader__axes">
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className="d3-chart-loader__axis-line" style={{ "--ax-i": i }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Premium table loading animation ───────────────────────── */
+function D3TableLoader({ rows = 5, cols = 4 }) {
+  return (
+    <div className="d3-tbl-loader" aria-label="Loading data…">
+      {/* Header shimmer */}
+      <div className="d3-tbl-loader__header">
+        {Array.from({ length: cols }).map((_, i) => (
+          <div key={i} className="d3-tbl-loader__hcell" style={{ "--tc-i": i }} />
+        ))}
+      </div>
+      {/* Row shimmers */}
+      {Array.from({ length: rows }).map((_, ri) => (
+        <div key={ri} className="d3-tbl-loader__row" style={{ "--tr-i": ri }}>
+          {Array.from({ length: cols }).map((_, ci) => (
+            <div key={ci} className="d3-tbl-loader__cell" style={{ "--tc-i": ci, width: ci === 0 ? "35%" : "auto" }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Center panel animated wrapper (zero-latency) ──────────── */
+function CenterTransitionWrapper({ uid, loading, children }) {
+  // Show skeleton only during actual network loading (first fetch).
+  // On card-click (uid change): content renders immediately, CSS
+  // animation replays via React key — NO setTimeout delays.
+  if (loading) {
+    return (
+      <div className="d3-ct-skeleton">
+        <div className="d3-ct-skeleton__header">
+          <div className="d3-ct-skel-block d3-ct-skel-block--icon" />
+          <div className="d3-ct-skel-block d3-ct-skel-block--title" />
+        </div>
+        <div className="d3-ct-skeleton__body">
+          <div className="d3-ct-skel-block d3-ct-skel-block--display" />
+          <div className="d3-ct-skel-block d3-ct-skel-block--row" />
+          <div className="d3-ct-skel-block d3-ct-skel-block--row d3-ct-skel-block--row-sm" />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div key={uid} className="d3-ct-reveal d3-ct-reveal--in">
+      {children}
     </div>
   );
 }
@@ -987,7 +2913,6 @@ export default function Dashboard3() {
             </div>
             <div className="d3-kpi-list">
               {CURRENT_STATE_CARDS.map((kpi, i) => {
-                const view = buildStateSidebar(kpi, data, loading);
                 const active = selKpi === i && selAction === null;
                 return (
                   <div
@@ -996,7 +2921,17 @@ export default function Dashboard3() {
                     tabIndex={0}
                     className={`d3-kpi-card ${active ? "d3-kpi-card--active" : ""}`}
                     style={{ "--kc": kpi.color, "--kl": kpi.colorLight, "--ki": i }}
-                    onClick={() => handleKpiClick(i)}
+                    onClick={(e) => {
+                      const el = e.currentTarget;
+                      const rect = el.getBoundingClientRect();
+                      const size = Math.max(rect.width, rect.height) * 2;
+                      const rip = document.createElement("span");
+                      rip.className = "d3-ripple";
+                      rip.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px`;
+                      el.appendChild(rip);
+                      rip.addEventListener("animationend", () => rip.remove(), { once: true });
+                      handleKpiClick(i);
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && handleKpiClick(i)}
                   >
                     <div className="d3-kpi-card__accent" />
@@ -1017,38 +2952,108 @@ export default function Dashboard3() {
           <section className="d3-center">
             <div className="d3-center__glow" />
             <div className="d3-center__scroll">
-              {selAction && activeActionCard && selAction !== "downtime_reason" && selAction !== "quality_split" ? (
-                <CenterActionDetail
-                  action={activeActionCard}
-                  view={activeActionView}
-                  uid={`act-${centerKey}`}
-                  onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                />
-              ) : selectionId === "production_data" ? (
-                <Dashboard3ProductionDataView
-                  from={dateRange.from}
-                  to={dateRange.to}
-                  productionKpis={data.prod}
-                  shiftsPayload={data.shifts}
-                  uid={centerKey}
-                />
-              ) : selectionId === "downtime_reason" ? (
-                <DowntimeReasonView
-                  data={data}
-                  from={dateRange.from}
-                  to={dateRange.to}
-                  loading={loading}
-                  uid={centerKey}
-                />
-              ) : selectionId === "quality_split" ? (
-                <QualitySplitView
-                  data={data}
-                  loading={loading}
-                  uid={centerKey}
-                />
-              ) : (
-                <CenterKpiDetail detail={centerDetail} uid={`kpi-${centerKey}`} loading={loading} />
-              )}
+              <CenterTransitionWrapper uid={centerKey} loading={loading}>
+                {selAction && activeActionCard && selAction !== "downtime_reason" && selAction !== "quality_split" && selAction !== "top_defects" && selAction !== "customer_complaints" && selAction !== "iqc_rejections" && selAction !== "grn_pending" && selAction !== "injob_inspection" && selAction !== "inter_inspection" && selAction !== "final_inspection" && selAction !== "po_status" && selAction !== "idle_summary" ? (
+                  <CenterActionDetail
+                    action={activeActionCard}
+                    view={activeActionView}
+                    uid={`act-${centerKey}`}
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                  />
+                ) : selectionId === "production_data" ? (
+                  <Dashboard3ProductionDataView
+                    from={dateRange.from}
+                    to={dateRange.to}
+                    productionKpis={data.prod}
+                    shiftsPayload={data.shifts}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "downtime_reason" ? (
+                  <DowntimeReasonView
+                    data={data}
+                    from={dateRange.from}
+                    to={dateRange.to}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "quality_split" ? (
+                  <QualitySplitView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "top_defects" ? (
+                  <TopDefectsView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "customer_complaints" ? (
+                  <CustomerComplaintsView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "iqc_rejections" ? (
+                  <IqcRejectionView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "grn_pending" ? (
+                  <GrnPipelineView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "injob_inspection" ? (
+                  <InspectionView type="injob_inspection" data={data} loading={loading} uid={centerKey} />
+                ) : selectionId === "inter_inspection" ? (
+                  <InspectionView type="inter_inspection" data={data} loading={loading} uid={centerKey} />
+                ) : selectionId === "final_inspection" ? (
+                  <InspectionView type="final_inspection" data={data} loading={loading} uid={centerKey} />
+                ) : selectionId === "po_status" ? (
+                  <PurchaseOrderView data={data} loading={loading} uid={centerKey} />
+                ) : selectionId === "idle_summary" ? (
+                  <IdleTimeView data={data} loading={loading} uid={centerKey} />
+                ) : selectionId === "otd_trend" ? (
+                  <OtdTrendView
+                    loading={loading}
+                    uid={centerKey}
+                    from={dateRange.from}
+                    to={dateRange.to}
+                  />
+                ) : selectionId === "machine_efficiency" ? (
+                  <OperatorEfficiencyView
+                    loading={loading}
+                    uid={centerKey}
+                    from={dateRange.from}
+                    to={dateRange.to}
+                  />
+                ) : selectionId === "final_inspection_ok" ? (
+                  <FinalInspectionOkView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "production_output" ? (
+                  <ProductionOutputView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                  />
+                ) : selectionId === "oee_efficiency" ? (
+                  <OeeEfficiencyView
+                    data={data}
+                    loading={loading}
+                    uid={centerKey}
+                    from={dateRange.from}
+                    to={dateRange.to}
+                  />
+                ) : (
+                  <CenterKpiDetail detail={centerDetail} uid={`kpi-${centerKey}`} loading={loading} />
+                )}
+              </CenterTransitionWrapper>
             </div>
           </section>
 
@@ -1062,7 +3067,6 @@ export default function Dashboard3() {
             </div>
             <div className="d3-action-list">
               {ACTION_CARDS.map((a, i) => {
-                const view = buildActionSidebar(a, data, loading);
                 const active = selAction === a.id;
                 return (
                   <div
@@ -1071,20 +3075,25 @@ export default function Dashboard3() {
                     tabIndex={0}
                     className={`d3-ac-card ${active ? "d3-ac-card--active" : ""}`}
                     style={{ "--ai": i }}
-                    onClick={() => handleActionClick(a.id)}
+                    onClick={(e) => {
+                      const el = e.currentTarget;
+                      const rect = el.getBoundingClientRect();
+                      const size = Math.max(rect.width, rect.height) * 2;
+                      const x = (e.clientX - rect.left) - size / 2;
+                      const y = (e.clientY - rect.top) - size / 2;
+                      const rip = document.createElement("span");
+                      rip.className = "d3-ripple d3-ripple--amber";
+                      rip.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
+                      el.appendChild(rip);
+                      rip.addEventListener("animationend", () => rip.remove(), { once: true });
+                      handleActionClick(a.id);
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && handleActionClick(a.id)}
                   >
                     <div className="d3-ac-card__shimmer" />
                     <div className="d3-ac-icon">{a.icon}</div>
                     <div className="d3-ac-body">
-                      <div className="d3-ac-head">
-                        <span className="d3-ac-title">{a.title}</span>
-                        <span className={`d3-badge d3-badge--${view.priority}`}>
-                          {view.priority.charAt(0).toUpperCase() + view.priority.slice(1)}
-                        </span>
-                      </div>
-                      <p className="d3-ac-desc">{view.loading ? "Loading…" : view.desc}</p>
-                      <p className="d3-ac-time">🕐 {view.time}</p>
+                      <span className="d3-ac-title">{a.title}</span>
                     </div>
                     <span className="d3-ac-arrow">{active ? "▼" : "›"}</span>
                   </div>
@@ -1105,9 +3114,17 @@ export default function Dashboard3() {
           </section>
         </div>
 
-        {bottomTable && selectionId !== "production_data" && (
+        {selectionId === "customer_complaints" ? (
+          <CustomerComplaintsBottomTable data={data} loading={loading} uid={`bot-cc-${centerKey}`} />
+        ) : selectionId === "iqc_rejections" ? (
+          <IqcRejectionBottomTable data={data} loading={loading} uid={`bot-iqc-${centerKey}`} />
+        ) : selectionId === "grn_pending" ? (
+          <GrnPipelineBottomTable data={data} loading={loading} uid={`bot-grn-${centerKey}`} />
+        ) : selectionId === "po_status" ? (
+          <PurchaseOrderBottomTable data={data} loading={loading} uid={`bot-po-${centerKey}`} />
+        ) : (bottomTable && selectionId !== "production_data" && selectionId !== "otd_trend" && selectionId !== "machine_efficiency") ? (
           <BottomKpiPanel bottom={bottomTable} uid={`bot-${centerKey}`} />
-        )}
+        ) : null}
       </div>
     </div>
   );

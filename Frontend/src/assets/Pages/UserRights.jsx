@@ -154,7 +154,6 @@ export default function UserRights() {
             setSaved(true);
             clearTimeout(saveTimer.current);
             saveTimer.current = setTimeout(() => setSaved(false), 2400);
-            await loadUsers();
         } catch (e) {
             setError(e.message || "Could not save user rights.");
         } finally {

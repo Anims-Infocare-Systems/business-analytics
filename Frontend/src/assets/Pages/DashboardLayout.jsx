@@ -43,7 +43,7 @@ const MENU_ITEMS = [
     {
         key: "Dashboard",
         icon: Icons.Dashboard,
-        children: ["Dashboard1", "Dashboard2", "Plant Performance"],
+        children: ["Top Management Dashboard", "Plant Performance Dashboard"],
     },
     {
         key: "Approvals",
@@ -79,9 +79,9 @@ const MENU_ITEMS = [
 
 /* ── Topbar heading map ───────────────────────────────────── */
 const HEADING_MAP = {
-    "Dashboard1": "Top Management Dashboard",
+    "Top Management Dashboard": "Top Management Dashboard",
     "Dashboard2": "Plant Performance Dashboard",
-    "Plant Performance": "Plant Performance",
+    "Plant Performance Dashboard": "Plant Performance Dashboard",
     "E-Approval": "E-Approval Workflow",
     "T-Approval": "T-Approval Workflow",
     "Sales Analysis": "Reports — Sales Analysis",
@@ -117,9 +117,9 @@ function PageContent({ activeSubItem, activeItem }) {
 
     let node;
 
-    if (si === "Dashboard1") node = <Dashboard1 />;
+    if (si === "Top Management Dashboard") node = <Dashboard1 />;
     else if (si === "Dashboard2") node = <Dashboard2 />;
-    else if (si === "Plant Performance") node = <Dashboard3 />;
+    else if (si === "Plant Performance Dashboard") node = <Dashboard3 />;
     else if (si === "E-Approval") node = <EApproval />;
     else if (si === "T-Approval") node = <TApproval />;
     else if (si === "Sales Analysis") node = <SalesAnalysis />;
@@ -145,7 +145,7 @@ function PageContent({ activeSubItem, activeItem }) {
         </div>
     );
 
-    const isPlant = si === "Plant Performance";
+    const isPlant = si === "Plant Performance Dashboard";
 
     return (
         <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}${isPlant ? " dl-page-wrap--plant" : ""}`}>
@@ -330,7 +330,7 @@ export default function DashboardLayout() {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [openMenu, setOpenMenu] = useState("Dashboard");
     const [activeItem, setActiveItem] = useState("Dashboard");
-    const [activeSubItem, setActiveSubItem] = useState("Dashboard1");
+    const [activeSubItem, setActiveSubItem] = useState("Top Management Dashboard");
     const [mounted, setMounted] = useState(false);
 
     const sidebarRef = useRef(null);

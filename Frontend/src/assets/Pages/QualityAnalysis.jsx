@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import "./QualityAnalysis.css";
 import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
@@ -6,15 +6,55 @@ import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
 Chart.register(...registerables);
 
 // ─────────────────────────────────────────────
+//  Count-up hook for KPI numbers
+// ─────────────────────────────────────────────
+function useCountUp(target, duration = 900) {
+    const [display, setDisplay] = useState(target);
+    const prev = useRef(target);
+    useEffect(() => {
+        const raw = String(target).replace(/[^0-9.]/g, "");
+        const num = parseFloat(raw);
+        if (isNaN(num) || prev.current === target) { setDisplay(target); return; }
+        const prefix = String(target).match(/^[^0-9]*/)?.[0] || "";
+        const suffix = String(target).match(/[^0-9.]*$/)?.[0] || "";
+        const startNum = parseFloat(String(prev.current).replace(/[^0-9.]/g, "")) || 0;
+        const steps = 30;
+        const step = (num - startNum) / steps;
+        let current = startNum;
+        let i = 0;
+        const timer = setInterval(() => {
+            current += step;
+            i++;
+            const formatted = Number.isInteger(num)
+                ? Math.round(current).toLocaleString("en-IN")
+                : current.toFixed(1);
+            setDisplay(`${prefix}${formatted}${suffix}`);
+            if (i >= steps) { clearInterval(timer); setDisplay(target); prev.current = target; }
+        }, duration / steps);
+        return () => clearInterval(timer);
+    }, [target]);
+    return display;
+}
+
+// ─────────────────────────────────────────────
 //  Static Data
 // ─────────────────────────────────────────────
 const KPI_CARDS = [
-    { icon: "🔬", label: "Total Inspections", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
+    { icon: "🔬", label: "Total Inspections Qty", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
     { icon: "✅", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
     { icon: "❌", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
     { icon: "🔧", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
-    { icon: "⏳", label: "Insp. Waiting", value: "5", sub: "Pending review", trend: "Action needed", cls: "qa2-t-down" },
-    { icon: "🗑️", label: "Scrap Loss", value: "₹48.2K", sub: "71 units scrapped", trend: "↑ ₹6K vs target", cls: "qa2-t-down" },
+    { icon: "⏳", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot · Not filtered by selected date range", trend: "Action needed", cls: "qa2-t-down" },
+    { icon: "💰", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
+];
+
+const EMPTY_KPI_CARDS = [
+    { icon: "🔬", label: "Total Inspections Qty", value: "0", sub: "Selected period", trend: "0 inspection records", cls: "qa2-t-neutral" },
+    { icon: "✅", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
+    { icon: "❌", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
+    { icon: "🔧", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
+    { icon: "⏳", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
+    { icon: "💰", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
 ];
 
 const PRODUCT_QUALITY = [
@@ -36,38 +76,29 @@ const DEFECT_CAUSES = [
 ];
 
 const INSPECTION_ROWS = [
-    { id: "INS-2601-001", date: "22-Feb-2026", product: "Round Rod DIA 50MM", partNo: "RRD03-05050-00", dept: "Production", typeCls: "qa2-tag-teal", typeLabel: "Intermediate", qty: "100", defect: "—", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Dimension OK" },
-    { id: "INS-2601-002", date: "22-Feb-2026", product: 'VCI Cover 8"×8"', partNo: "PKM0012", dept: "Production", typeCls: "qa2-tag-blue", typeLabel: "Final", qty: "50", defect: "—", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Quality Approved" },
-    { id: "INS-2601-003", date: "22-Feb-2026", product: "Paint-Seal Cast", partNo: "PDC0017", dept: "Quality", typeCls: "qa2-tag-teal", typeLabel: "Job Order", qty: "75", defectCls: "qa2-tag-critical", defect: "Critical", resultCls: "qa2-tag-fail", result: "FAIL", remarks: "Surface defects found" },
-    { id: "INS-2601-004", date: "21-Feb-2026", product: "Insert CCMT 09T304", partNo: "PDCT0165", dept: "Production", typeCls: "qa2-tag-blue", typeLabel: "Incoming", qty: "200", defect: "—", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Supplier verification OK" },
-    { id: "INS-2601-005", date: "21-Feb-2026", product: "Thinner GP 015", partNo: "PDC0018", dept: "Production", typeCls: "qa2-tag-blue", typeLabel: "Final", qty: "60", defectCls: "qa2-tag-major", defect: "Major", resultCls: "qa2-tag-rework", result: "REWORK", remarks: "Viscosity issue" },
-    { id: "INS-2601-006", date: "20-Feb-2026", product: "Round Rod DIA 65MM", partNo: "RRD03-06565-00", dept: "Production", typeCls: "qa2-tag-teal", typeLabel: "Intermediate", qty: "150", defect: "—", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Hardness verified" },
-    { id: "INS-2601-007", date: "20-Feb-2026", product: "Segment Carrier RM", partNo: "RSC01-600H2-00", dept: "Assembly", typeCls: "qa2-tag-blue", typeLabel: "Final", qty: "40", defectCls: "qa2-tag-critical", defect: "Critical", resultCls: "qa2-tag-fail", result: "FAIL", remarks: "Alignment error" },
-    { id: "INS-2601-008", date: "19-Feb-2026", product: "Bottom Bearing Housing", partNo: "BEH04X100001WM0", dept: "Quality", typeCls: "qa2-tag-teal", typeLabel: "Incoming", qty: "183", defect: "—", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Dim & surface OK" },
-    { id: "INS-2601-009", date: "18-Feb-2026", product: "Round Rod DIA 70MM", partNo: "RRD03-07070-00", dept: "Production", typeCls: "qa2-tag-teal", typeLabel: "Intermediate", qty: "240", defectCls: "qa2-tag-minor", defect: "Minor", resultCls: "qa2-tag-pass", result: "PASS", remarks: "Slight dim variance — within tol." },
-    { id: "INS-2601-010", date: "17-Feb-2026", product: "Letter Pad / Record Notes", partNo: "GNC0013 / PDC0012", dept: "Stores", typeCls: "qa2-tag-teal", typeLabel: "Job Order", qty: "500", defect: "—", resultCls: "qa2-tag-pending", result: "PENDING", remarks: "Awaiting supervisor review" },
+    { partyName: "Anims Infocare Systems", typeLabel: "Intermediate", id: "INS-2601-001", date: "22-Feb-2026", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", process: "Cutting", qty: "100", okQty: "100", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "A-One Steel Forgings", typeLabel: "Final", id: "INS-2601-002", date: "22-Feb-2026", partNoDesc: "PKM0012 - VCI Cover 8\"×8\"", process: "Packaging", qty: "50", okQty: "50", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Sam", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "Dynamic Precision India", typeLabel: "Job Order", id: "INS-2601-003", date: "22-Feb-2026", partNoDesc: "PDC0017 - Paint-Seal Cast", process: "Dipping", qty: "75", okQty: "0", matRejQty: "75", macRejQty: "0", reworkQty: "0", inspBy: "Operator Sarah", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-fail", result: "FAIL" },
+    { partyName: "Micro Tools & Dies", typeLabel: "Incoming", id: "INS-2601-004", date: "21-Feb-2026", partNoDesc: "PDCT0165 - Insert CCMT 09T304", process: "Receiving", qty: "200", okQty: "200", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Alex", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "Apex Industries Ltd", typeLabel: "Final", id: "INS-2601-005", date: "21-Feb-2026", partNoDesc: "PDC0018 - Thinner GP 015", process: "Mixing", qty: "60", okQty: "0", matRejQty: "0", macRejQty: "0", reworkQty: "60", inspBy: "Operator Chris", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-rework", result: "REWORK" },
+    { partyName: "Super Forge Pvt Ltd", typeLabel: "Intermediate", id: "INS-2601-006", date: "20-Feb-2026", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", process: "Forging", qty: "150", okQty: "150", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "Zenith Components", typeLabel: "Final", id: "INS-2601-007", date: "20-Feb-2026", partNoDesc: "RSC01-600H2-00 - Segment Carrier RM", process: "Assembly", qty: "40", okQty: "0", matRejQty: "0", macRejQty: "40", reworkQty: "0", inspBy: "Operator Sarah", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-fail", result: "FAIL" },
+    { partyName: "Ultra Tech Engineering", typeLabel: "Incoming", id: "INS-2601-008", date: "19-Feb-2026", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", process: "Machining", qty: "183", okQty: "183", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Mike", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "Alpha Castings Inc", typeLabel: "Intermediate", id: "INS-2601-009", date: "18-Feb-2026", partNoDesc: "RRD03-07070-00 - Round Rod DIA 70MM", process: "Cutting", qty: "240", okQty: "240", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
+    { partyName: "Global Stationery Corp", typeLabel: "Job Order", id: "INS-2601-010", date: "17-Feb-2026", partNoDesc: "GNC0013 / PDC0012 - Letter Pad / Record Notes", process: "Printing", qty: "500", okQty: "500", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Lisa", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pending", result: "PENDING" },
 ];
 
 const REJECTION_ROWS = [
-    { id: "REJ-001", product: "Paint-Seal Cast", reason: "Surface defects", qty: "75", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejected", date: "22-Feb-26" },
-    { id: "REJ-002", product: "Thinner GP 015", reason: "Viscosity issue", qty: "60", defectCls: "qa2-tag-major", defect: "Major", dispCls: "qa2-tag-rework", disp: "Rework", date: "21-Feb-26" },
-    { id: "REJ-003", product: "Segment Carrier", reason: "Alignment error", qty: "40", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejected", date: "20-Feb-26" },
-    { id: "REJ-004", product: "Round Rod DIA 70MM", reason: "Dimension variance", qty: "30", defectCls: "qa2-tag-minor", defect: "Minor", dispCls: "qa2-tag-rework", disp: "Rework", date: "19-Feb-26" },
+    { id: "INS-2601-003", product: "PDC0017 - Paint-Seal Cast", reason: "Surface defects", qty: "75", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejection", date: "22-Feb-2026" },
+    { id: "INS-2601-005", product: "PDC0018 - Thinner GP 015", reason: "Rework Needed", qty: "60", defectCls: "qa2-tag-major", defect: "Major", dispCls: "qa2-tag-rework", disp: "Rework", date: "21-Feb-2026" },
+    { id: "INS-2601-007", product: "RSC01-600H2-00 - Segment Carrier RM", reason: "Alignment error", qty: "40", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejection", date: "20-Feb-2026" }
 ];
 
 const REWORK_QUEUE = [
-    { dotColor: "#ef4444", name: "Thinner GP 015 (RAS)", code: "REJ-002 · Viscosity issue · Quality dept", qty: "60 Nos", daysBg: "#fee2e2", daysFg: "#b91c1c", daysLbl: "+5d" },
-    { dotColor: "#f97316", name: "Round Rod DIA 70MM", code: "REJ-004 · Dimension variance · Production", qty: "30 Nos", daysBg: "#ffedd5", daysFg: "#c2410c", daysLbl: "+3d" },
-    { dotColor: "#f59e0b", name: "Letter Pad / Record Notes", code: "INS-010 · Pending supervisor approval", qty: "500 Nos", daysBg: "#fef9c3", daysFg: "#92400e", daysLbl: "Today" },
+    { dotColor: "#ef4444", name: "PDC0018 - Thinner GP 015 (RAS)", code: "INS-2601-005 · Rework Needed · Quality dept", qty: "60 Nos", daysBg: "#fee2e2", daysFg: "#b91c1c", daysLbl: "+5d" }
 ];
 
-const CALIBRATION_ROWS = [
-    { name: "Vernier Caliper #VC-01", id: "CAL-001 · Quality Lab", date: "05-Mar-2026", cls: "qa2-cal-ok", label: "+5d" },
-    { name: "Micrometer #MC-03", id: "CAL-002 · Production Floor", date: "02-Mar-2026", cls: "qa2-cal-warn", label: "+2d" },
-    { name: "Hardness Tester #HT-01", id: "CAL-003 · Quality Lab", date: "28-Feb-2026", cls: "qa2-cal-over", label: "Due Today" },
-    { name: "Height Gauge #HG-02", id: "CAL-004 · Inspection Bay", date: "15-Mar-2026", cls: "qa2-cal-ok", label: "+15d" },
-    { name: "CMM Machine #CM-01", id: "CAL-005 · Quality Lab", date: "20-Mar-2026", cls: "qa2-cal-ok", label: "+20d" },
-];
+// CALIBRATION_ROWS removed — live data from Ins_Mas only
 
 const INSIGHTS_LEFT = [
     { icon: "🔴", title: "Paint-Seal Cast — 100% Rejection (75 units)", sub: "Critical surface defects. Entire batch rejected. Supplier quality audit required immediately.", val: "100% Fail", valColor: "#ef4444" },
@@ -77,7 +108,6 @@ const INSIGHTS_LEFT = [
 
 const INSIGHTS_RIGHT = [
     { icon: "🔵", title: "Overall pass rate 87.6% — trending up +2.1%", sub: "Quality improving steadily. Round Rod and Insert lines achieving 96%+. Maintain current controls.", val: "↑ 2.1%", valColor: "#10b981" },
-    { icon: "🟣", title: "Scrap cost ₹48.2K — ₹6K above budget threshold", sub: "Surface defects and alignment errors driving scrap. Root cause corrective action (RCCA) needed.", val: "₹48.2K", valColor: "#8b5cf6" },
 ];
 
 // ─────────────────────────────────────────────
@@ -98,26 +128,74 @@ const RESULT_DONUT = {
 };
 
 const DEFECT_DONUT = {
-    labels: ["Critical", "Major", "Minor"],
-    datasets: [{ data: [56.1, 29.3, 14.6], backgroundColor: ["#ef4444", "#f97316", "#f59e0b"], borderColor: "#fff", borderWidth: 2.5 }],
+    labels: ["Material Rejection", "Machine Rejection", "Rework"],
+    datasets: [{ data: [45.5, 34.2, 20.3], backgroundColor: ["#ef4444", "#f97316", "#f59e0b"], borderColor: "#fff", borderWidth: 2.5 }],
 };
 
-const DEPT_DATA = {
-    labels: ["Production", "Quality", "Assembly", "Stores", "Incoming"],
+const PPM_DATA = {
+    labels: ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"],
     datasets: [{
-        label: "Pass Rate %",
-        data: [91.2, 85.4, 78.6, 96.0, 98.2],
-        backgroundColor: ["#2d6de8", "#f97316", "#ef4444", "#10b981", "#06b6d4"],
-        borderRadius: 6,
-    }],
+        label: "Actual PPM",
+        data: [1200, 1450, 1100, 980, 870, 760, 820, 700, 650, 590, 540, 480],
+        borderColor: "#f97316",
+        backgroundColor: "rgba(249,115,22,0.1)",
+        tension: 0.4,
+        fill: true,
+        pointRadius: 3
+    }]
 };
 
 const PARETO_DATA = {
-    labels: ["Surface Defect", "Dim. Variance", "Alignment", "Viscosity", "Hardness"],
+    labels: ["Surface defects", "Rework Needed", "Alignment error"],
     datasets: [
-        { label: "Count", data: [75, 54, 40, 30, 6], backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#94a3b8"], borderRadius: 5, yAxisID: "y" },
-        { label: "Cumulative %", data: [36.6, 62.9, 82.4, 97.1, 100], type: "line", borderColor: "#2d6de8", backgroundColor: "rgba(45,109,232,0.08)", borderWidth: 2.5, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: "#2d6de8", pointBorderColor: "#fff", pointBorderWidth: 2, yAxisID: "y2" },
+        { label: "Count", data: [75, 60, 40], backgroundColor: ["#ef4444", "#f97316", "#f59e0b"], borderRadius: 5, yAxisID: "y" },
+        { label: "Cumulative %", data: [42.9, 77.1, 100], type: "line", borderColor: "#2d6de8", backgroundColor: "rgba(45,109,232,0.08)", borderWidth: 2.5, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: "#2d6de8", pointBorderColor: "#fff", pointBorderWidth: 2, yAxisID: "y2" },
     ],
+};
+
+const getPartyName = (id, product) => {
+    if (product?.includes("Rod")) return "Super Forge Pvt Ltd";
+    if (product?.includes("Cover")) return "A-One Steel Forgings";
+    if (product?.includes("Cast")) return "Dynamic Precision India";
+    if (product?.includes("Insert")) return "Micro Tools & Dies";
+    if (product?.includes("Thinner")) return "Apex Industries Ltd";
+    if (product?.includes("Housing")) return "Ultra Tech Engineering";
+    if (product?.includes("Letter")) return "Global Stationery Corp";
+    return "Anims Infocare Systems";
+};
+
+const getProcessName = (product) => {
+    if (product?.includes("Rod")) return "Cutting";
+    if (product?.includes("Cover")) return "Packaging";
+    if (product?.includes("Cast")) return "Dipping";
+    if (product?.includes("Insert")) return "Receiving";
+    if (product?.includes("Thinner")) return "Mixing";
+    if (product?.includes("Housing")) return "Machining";
+    if (product?.includes("Letter")) return "Printing";
+    return "Forging";
+};
+
+const getInspectorName = (id) => {
+    const idx = parseInt(id?.replace(/\D/g, "")) || 0;
+    const inspectors = ["Operator John", "Operator Sam", "Operator Sarah", "Operator Alex", "Operator Chris", "Operator Mike", "Operator Lisa"];
+    return inspectors[idx % inspectors.length];
+};
+
+const getColStyle = (h) => {
+    switch (h) {
+        case "Type": return { width: "130px" };
+        case "Insp No": return { width: "100px" };
+        case "Insp Date": return { width: "100px" };
+        case "Part No – Description": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "Process": return { width: "110px" };
+        case "Insp Qty":
+        case "OK Qty":
+        case "Mat Rej Qty":
+        case "Mac Rej Qty":
+        case "Rework Qty": return { width: "80px", textAlign: "right" };
+        case "Insp By": return { width: "120px" };
+        default: return {};
+    }
 };
 
 // ─────────────────────────────────────────────
@@ -134,31 +212,109 @@ function SectionHead({ icon, title, badge, badgeCls, extra }) {
     );
 }
 
+const formatYmd = (d) => {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+};
+
 // ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
 export default function QualityAnalysis() {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
     const [dateRange, setDateRange] = useState({
-        from: new Date(2026, 0, 1),
-        to: new Date(2026, 1, 28),
+        from: startOfMonth,
+        to: endOfMonth,
     });
     const [filters, setFilters] = useState({
-        fromDate: "2026-01-01", toDate: "2026-02-28",
+        fromDate: formatYmd(startOfMonth), toDate: formatYmd(endOfMonth),
         reportType: "All Reports", department: "All Departments",
         product: "All Products", defectType: "All Defects",
     });
     const [animated, setAnimated] = useState(false);
 
+    // API state data
+    const [summaryData, setSummaryData] = useState(null);
+    const [chartsData, setChartsData] = useState(null);
+    const [prodPerfData, setProdPerfData] = useState(null);
+    const [defectCausesData, setDefectCausesData] = useState(null);
+    const [recordsData, setRecordsData] = useState(null);
+    const [calibrationData, setCalibrationData] = useState(null);
+    const [insightsData, setInsightsData] = useState(null);
+
+    // Modern Individual Panel Loading States
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [chartsLoading, setChartsLoading] = useState(false);
+    const [prodPerfLoading, setProdPerfLoading] = useState(false);
+    const [defectCausesLoading, setDefectCausesLoading] = useState(false);
+    const [recordsLoading, setRecordsLoading] = useState(false);
+    const [calibrationLoading, setCalibrationLoading] = useState(false);
+    const [insightsLoading, setInsightsLoading] = useState(false);
+
+    const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading;
+
     const trendRef = useRef(null); const trendChart = useRef(null);
     const resultRef = useRef(null); const resultChart = useRef(null);
     const defectRef = useRef(null); const defectChart = useRef(null);
-    const deptRef = useRef(null); const deptChart = useRef(null);
+    const ppmRef = useRef(null); const ppmChart = useRef(null);
     const paretoRef = useRef(null); const paretoChart = useRef(null);
+
+    const debounceRef = useRef(null);
+
+    const fetchQualityData = useCallback((from, to) => {
+        const fromStr = formatYmd(from);
+        const toStr = formatYmd(to);
+        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}`;
+
+        const fetchPanel = async (url, setData, setLoadingState) => {
+            setLoadingState(true);
+            try {
+                const res = await fetch(url, { credentials: "include" });
+                if (res.ok) {
+                    setData(await res.json());
+                    return true;
+                }
+            } catch (err) {
+                console.error(`Failed to fetch ${url}`, err);
+            } finally {
+                setLoadingState(false);
+            }
+            return false;
+        };
+
+        const loadAllSequentially = async () => {
+            await fetchPanel(buildUrl("/api/quality-analysis/summary/"), setSummaryData, setSummaryLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/charts/"), setChartsData, setChartsLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/product-performance/"), setProdPerfData, setProdPerfLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/defect-causes/"), setDefectCausesData, setDefectCausesLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading);
+        };
+
+        loadAllSequentially();
+    }, []);
 
     useEffect(() => {
         const t = setTimeout(() => setAnimated(true), 60);
         return () => clearTimeout(t);
     }, []);
+
+    // Debounced re-fetch on dateRange change (150 ms)
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            fetchQualityData(dateRange.from, dateRange.to);
+        }, 150);
+        return () => clearTimeout(debounceRef.current);
+    }, [dateRange, fetchQualityData]);
 
     useEffect(() => {
         const mk = (ref, holder, type, data, opts) => {
@@ -168,7 +324,13 @@ export default function QualityAnalysis() {
 
         const fontBase = { family: "Poppins" };
 
-        mk(trendRef, trendChart, "bar", TREND_DATA, {
+        const trendData = chartsData?.trend || TREND_DATA;
+        const resultDonut = chartsData?.result_donut || RESULT_DONUT;
+        const defectDonut = chartsData?.defect_donut || DEFECT_DONUT;
+        const ppmData = chartsData?.mac_rejection_ppm || PPM_DATA;
+        const paretoData = chartsData?.pareto || PARETO_DATA;
+
+        mk(trendRef, trendChart, "bar", trendData, {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } } },
             scales: {
@@ -182,19 +344,37 @@ export default function QualityAnalysis() {
             plugins: { legend: { position: "bottom", labels: { font: { ...fontBase, size: 10 }, padding: 10, boxWidth: 10 } } },
             cutout: "64%",
         };
-        mk(resultRef, resultChart, "doughnut", RESULT_DONUT, donut);
-        mk(defectRef, defectChart, "doughnut", DEFECT_DONUT, donut);
+        mk(resultRef, resultChart, "doughnut", resultDonut, donut);
+        mk(defectRef, defectChart, "doughnut", defectDonut, donut);
 
-        mk(deptRef, deptChart, "bar", DEPT_DATA, {
-            responsive: true, maintainAspectRatio: false, indexAxis: "y",
-            plugins: { legend: { display: false } },
+        mk(ppmRef, ppmChart, "line", ppmData, {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                title: {
+                    display: true,
+                    text: ppmData.fy ? `Internal Mac Rejection PPM — ${ppmData.fy}` : "Internal Mac Rejection PPM",
+                    font: { ...fontBase, size: 12, weight: 600 },
+                    color: "#5a6a9a",
+                    padding: { bottom: 8 }
+                }
+            },
             scales: {
-                x: { min: 60, max: 100, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 10 }, color: "#5a6a9a", callback: v => v + "%" }, border: { dash: [4, 4] } },
-                y: { grid: { display: false }, ticks: { font: { ...fontBase, size: 10 }, color: "#5a6a9a" } },
+                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: "rgba(26,84,212,0.07)" },
+                    ticks: {
+                        font: { ...fontBase, size: 9 },
+                        color: "#5a6a9a",
+                        callback: v => v.toLocaleString() + ' PPM'
+                    },
+                    border: { dash: [4, 4] }
+                },
             },
         });
 
-        mk(paretoRef, paretoChart, "bar", PARETO_DATA, {
+        mk(paretoRef, paretoChart, "bar", paretoData, {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } } },
             scales: {
@@ -205,41 +385,132 @@ export default function QualityAnalysis() {
         });
 
         return () => {
-            [trendChart, resultChart, defectChart, deptChart, paretoChart].forEach(c => c.current?.destroy());
+            [trendChart, resultChart, defectChart, ppmChart, paretoChart].forEach(c => c.current?.destroy());
         };
-    }, []);
+    }, [chartsData]);
 
-    const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
     const resetFilters = () => {
-        setDateRange({ from: new Date(2026, 0, 1), to: new Date(2026, 1, 28) });
-        setFilters({ fromDate: "2026-01-01", toDate: "2026-02-28", reportType: "All Reports", department: "All Departments", product: "All Products", defectType: "All Defects" });
+        const today = new Date();
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        setDateRange({ from: startOfMonth, to: endOfMonth });
+        setFilters({
+            fromDate: formatYmd(startOfMonth),
+            toDate: formatYmd(endOfMonth),
+            reportType: "All Reports",
+            department: "All Departments",
+            product: "All Products",
+            defectType: "All Defects"
+        });
     };
+
+    const hasNoData = !summaryLoading && (summaryData === null || summaryData.total_inspected === 0 || summaryData.total_inspected === "0" || !summaryData.total_inspected);
+
+    // ── Memoised derived data (avoids re-computation on unrelated renders) ─────
+    const activeKpiCards = useMemo(() => {
+        if (hasNoData) return EMPTY_KPI_CARDS;
+        return summaryData?.kpis ? [
+            { icon: "🔬", label: "Total Inspections Qty", ...summaryData.kpis.total_inspected_card },
+            { icon: "✅", label: "Pass Rate",             ...summaryData.kpis.pass_rate_card },
+            { icon: "❌", label: "Rejection Rate",        ...summaryData.kpis.rejection_rate_card },
+            { icon: "🔧", label: "Rework Rate",           ...summaryData.kpis.rework_rate_card },
+            { icon: "⏳", label: "Final Insp. Waiting",   ...summaryData.kpis.pending_insp_card },
+            { icon: "💰", label: "Quality Value",         ...summaryData.kpis.quality_value_card },
+        ] : KPI_CARDS;
+    }, [summaryData, hasNoData]);
+
+    const activeProductQuality  = useMemo(() => {
+        if (hasNoData) return [];
+        return prodPerfData?.products     || PRODUCT_QUALITY;
+    }, [prodPerfData, hasNoData]);
+
+    const activeDefectCauses    = useMemo(() => {
+        if (hasNoData) return [];
+        return defectCausesData?.causes   || DEFECT_CAUSES;
+    }, [defectCausesData, hasNoData]);
+
+    const activeDefectClasses   = useMemo(() => {
+        if (hasNoData) return [
+            { bg: "#fee2e2", lbl: "Critical", val: "0", pct: "0.0%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
+            { bg: "#ffedd5", lbl: "Major",    val: "0",  pct: "0.0%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
+            { bg: "#fef9c3", lbl: "Minor",    val: "0",  pct: "0.0%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
+        ];
+        return defectCausesData?.classes  || [
+            { bg: "#fee2e2", lbl: "Critical", val: "115", pct: "56.1%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
+            { bg: "#ffedd5", lbl: "Major",    val: "60",  pct: "29.3%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
+            { bg: "#fef9c3", lbl: "Minor",    val: "30",  pct: "14.6%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
+        ];
+    }, [defectCausesData, hasNoData]);
+
+    const activeInspectionRows  = useMemo(() => {
+        if (hasNoData) return [];
+        return recordsData?.inspection_records || INSPECTION_ROWS;
+    }, [recordsData, hasNoData]);
+
+    const activeRejectionRows   = useMemo(() => {
+        if (hasNoData) return [];
+        return recordsData?.rejection_rows     || REJECTION_ROWS;
+    }, [recordsData, hasNoData]);
+
+    const activeReworkQueue     = useMemo(() => {
+        if (hasNoData) return [];
+        return recordsData?.rework_queue       || REWORK_QUEUE;
+    }, [recordsData, hasNoData]);
+
+    const activeCalibrationRows = useMemo(() => {
+        if (hasNoData) return [];
+        return calibrationData?.calibrations   || [];
+    }, [calibrationData, hasNoData]);
+
+    const interInspCount = useMemo(() =>
+        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.startsWith("II")).length,
+    [activeInspectionRows]);
+    const finalInspCount = useMemo(() =>
+        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("final") || r.id?.startsWith("FI")).length,
+    [activeInspectionRows]);
+    const jobOrderCount  = useMemo(() =>
+        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("job")   || r.id?.startsWith("JI")).length,
+    [activeInspectionRows]);
+
+    // Count items that are overdue or due within 7 days
+    const calibrationAlertCount = useMemo(() =>
+        activeCalibrationRows.filter(c => c.cls === "qa2-cal-over" || c.cls === "qa2-cal-warn").length,
+    [activeCalibrationRows]);
+
+    const activeInsightsLeft  = useMemo(() => {
+        if (hasNoData) return [];
+        return insightsData?.insights_left || INSIGHTS_LEFT;
+    }, [insightsData, hasNoData]);
+
+    const activeInsightsRight = useMemo(() => {
+        if (hasNoData) return [];
+        return insightsData?.insights_right
+            ? insightsData.insights_right.filter(ins => !ins.title.toLowerCase().includes("scrap"))
+            : INSIGHTS_RIGHT;
+    }, [insightsData, hasNoData]);
+
+    const activePriorityActions = useMemo(() => {
+        if (hasNoData) return [];
+        return insightsData?.priority_actions
+            ? insightsData.priority_actions.filter(act => !act.toLowerCase().includes("scrap"))
+            : [
+                "1) Initiate supplier audit for Paint-Seal Cast (100% batch failure).",
+                "2) Calibrate Hardness Tester #HT-01 today.",
+                "3) Review assembly fixture for Segment Carrier alignment."
+              ];
+    }, [insightsData, hasNoData]);
 
     return (
         <div className={`qa2-root ${animated ? "qa2-root--visible" : ""}`}>
+            {/* ── Global YouTube-Style Loading Top Bar ── */}
+            <div className={`qa2-global-progress-bar ${isGlobalLoading ? "qa2-global-progress-bar--active" : ""}`} />
 
             {/* ── Page Hero ── */}
             <div className="qa2-page-hero">
                 <div className="qa2-hero-left">
-                    {/* <div className="qa2-hero-icon">🔬</div> */}
                     <div>
-                        {/* <h2 className="qa2-page-title">Quality Analysis Report</h2> */}
-                        {/* <p className="qa2-page-sub">Jan – Feb 2026 · All Departments</p> */}
                     </div>
                 </div>
-                {/* <div className="qa2-hero-pills">
-                    {[
-                        { val: "2,748", lbl: "Inspected", color: "#2d6de8" },
-                        { val: "87.6%", lbl: "Pass Rate", color: "#10b981" },
-                        { val: "7.5%", lbl: "Rejection", color: "#ef4444" },
-                        { val: "₹48.2K", lbl: "Scrap Loss", color: "#8b5cf6" },
-                    ].map(p => (
-                        <div className="qa2-pill" style={{ "--pc": p.color }} key={p.lbl}>
-                            <span className="qa2-pill-val">{p.val}</span>
-                            <span className="qa2-pill-lbl">{p.lbl}</span>
-                        </div>
-                    ))}
-                </div> */}
             </div>
 
             {/* ── Filters ── */}
@@ -256,93 +527,157 @@ export default function QualityAnalysis() {
                             onChange={({ from, to }) => setDateRange({ from, to })}
                         />
                     </div>
-                    {/* <div className="qa2-fg">
-                        <label className="qa2-fl">Report Type</label>
-                        <select className="qa2-fs" value={filters.reportType} onChange={e => setF("reportType", e.target.value)}>
-                            {["All Reports", "Rejection / Rework", "Final Inspection", "Intermediate Inspection", "Calibration", "Scrap Report"].map(o => <option key={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div className="qa2-fg">
-                        <label className="qa2-fl">Department</label>
-                        <select className="qa2-fs" value={filters.department} onChange={e => setF("department", e.target.value)}>
-                            {["All Departments", "Production", "Quality", "Assembly", "Stores"].map(o => <option key={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div className="qa2-fg">
-                        <label className="qa2-fl">Product</label>
-                        <select className="qa2-fs" value={filters.product} onChange={e => setF("product", e.target.value)}>
-                            {["All Products", "Round Rod DIA", "Segment Carrier", "VCI Cover", "Paint Seal Cast"].map(o => <option key={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div className="qa2-fg">
-                        <label className="qa2-fl">Defect Type</label>
-                        <select className="qa2-fs" value={filters.defectType} onChange={e => setF("defectType", e.target.value)}>
-                            {["All Defects", "Critical", "Major", "Minor"].map(o => <option key={o}>{o}</option>)}
-                        </select>
-                    </div> */}
                 </div>
             </div>
 
             {/* ── Summary Strip ── */}
-            <div className="qa2-summary-strip qa2-animate qa2-d2">
-                {[
-                    { lbl: "Period", val: "Jan–Feb 2026", cls: "" },
-                    { lbl: "Total Inspected", val: "2,748", cls: "qa2-blue" },
-                    { lbl: "Pass Rate", val: "87.6%", cls: "qa2-green" },
-                    { lbl: "Total Rejected", val: "205", cls: "qa2-red" },
-                    { lbl: "Rework", val: "134", cls: "qa2-orange" },
-                    { lbl: "Scrap", val: "71", cls: "qa2-purple" },
-                    { lbl: "Pending Insp.", val: "5", cls: "qa2-yellow" },
-                ].map((s, i) => (
-                    <div className="qa2-strip-item" key={i}>
-                        <div className="qa2-strip-lbl">{s.lbl}</div>
-                        <div className={`qa2-strip-val ${s.cls}`}>{s.val}</div>
-                    </div>
-                ))}
-            </div>
+            {summaryLoading ? (
+                <div className="qa2-summary-strip-skeleton qa2-pulse-loader">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div className="qa2-strip-item" key={i} style={{ minWidth: "90px" }}>
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-text" style={{ width: "60px", height: "8px" }} />
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-text" style={{ width: "80px", height: "16px", marginTop: "5px" }} />
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="qa2-summary-strip qa2-animate qa2-d2">
+                    {[
+                        { lbl: "Period", val: summaryData?.period || "Jan–Feb 2026", cls: "" },
+                        { lbl: "Total Inspected", val: summaryData?.total_inspected || "2,748", cls: "qa2-blue" },
+                        { lbl: "Pass Rate", val: summaryData?.pass_rate || "87.6%", cls: "qa2-green" },
+                        { lbl: "Total Rejected", val: summaryData?.total_rejected || "205", cls: "qa2-red" },
+                        { lbl: "Rework", val: summaryData?.rework || "134", cls: "qa2-orange" },
+                        { lbl: "Pending Insp.", val: summaryData?.pending_inspection || "5", cls: "qa2-yellow" },
+                    ].map((s, i) => (
+                        <div className="qa2-strip-item" key={i}>
+                            <div className="qa2-strip-lbl">{s.lbl}</div>
+                            <div className={`qa2-strip-val ${s.cls}`}>{s.val}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* ── KPI Cards ── */}
-            <div className="qa2-kpi-grid">
-                {KPI_CARDS.map((k, i) => (
-                    <div className="qa2-kpi-card qa2-animate" style={{ animationDelay: `${0.08 + i * 0.06}s` }} key={i}>
-                        <div className="qa2-kpi-top">
-                            <span className="qa2-kpi-icon">{k.icon}</span>
-                            <span className={`qa2-kpi-trend ${k.cls}`}>{k.trend}</span>
+            {summaryLoading ? (
+                <div className="qa2-kpi-grid">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div className="qa2-kpi-card qa2-pulse-loader" key={i}>
+                            <div className="qa2-kpi-top">
+                                <span className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "24px", height: "24px" }} />
+                                <span className="qa2-skeleton qa2-shimmer" style={{ width: "70px", height: "14px", borderRadius: "10px" }} />
+                            </div>
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-text" style={{ width: "65%", height: "22px", marginTop: "12px" }} />
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-text" style={{ width: "45%", height: "10px", marginTop: "8px" }} />
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-text" style={{ width: "75%", height: "8px", marginTop: "4px" }} />
                         </div>
-                        <div className="qa2-kpi-val">{k.value}</div>
-                        <div className="qa2-kpi-lbl">{k.label}</div>
-                        <div className="qa2-kpi-sub">{k.sub}</div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="qa2-kpi-grid">
+                    {activeKpiCards.map((k, i) => (
+                        <div className="qa2-kpi-card qa2-card-premium qa2-animate" style={{ animationDelay: `${0.08 + i * 0.06}s` }} key={i}>
+                            <div className="qa2-kpi-top">
+                                <span className="qa2-kpi-icon">{k.icon}</span>
+                                <span className={`qa2-kpi-trend ${k.cls}`}>{k.trend}</span>
+                            </div>
+                            <div className="qa2-kpi-val">{k.value}</div>
+                            <div className="qa2-kpi-lbl">{k.label}</div>
+                            <div className="qa2-kpi-sub">{k.sub}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* ── Charts Row 1: 3-col ── */}
             <div className="qa2-charts-3 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card">
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
                     <SectionHead icon="📈" title="Weekly Inspection Trend"
-                        badge="Jan–Feb 2026" badgeCls="qa2-badge-blue" />
-                    <div className="qa2-chart-wrap"><canvas ref={trendRef} /></div>
+                        badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue" />
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                            <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
+                                {[40, 70, 55, 85, 60, 95, 75, 90].map((h, idx) => (
+                                    <div key={idx} className="qa2-skeleton-chart-bar qa2-shimmer" style={{ height: `${h}%` }} />
+                                ))}
+                            </div>
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={trendRef} /></div>
+                    )}
                 </div>
-                <div className="qa2-card qa2-chart-card">
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
                     <SectionHead icon="📊" title="Inspection Results Split" />
-                    <div className="qa2-chart-wrap"><canvas ref={resultRef} /></div>
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={resultRef} /></div>
+                    )}
                 </div>
-                <div className="qa2-card qa2-chart-card">
-                    <SectionHead icon="⚠️" title="Defect Type Breakdown" />
-                    <div className="qa2-chart-wrap"><canvas ref={defectRef} /></div>
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                    <SectionHead icon="⚠️" title="Defect Category Breakdown" />
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
+                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={defectRef} /></div>
+                    )}
                 </div>
             </div>
 
             {/* ── Charts Row 2: 2-col ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card">
-                    <SectionHead icon="🏭" title="Department-wise Quality Rate"
-                        badge="% Pass" badgeCls="qa2-badge-teal" />
-                    <div className="qa2-chart-wrap"><canvas ref={deptRef} /></div>
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                    <SectionHead icon="📈" title="Internal Mac Rejection — PPM"
+                        badge="Monthly" badgeCls="qa2-badge-orange" />
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                            <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
+                                {[30, 45, 60, 50, 75, 80, 65, 85, 90, 70, 80, 95].map((h, idx) => (
+                                    <div key={idx} className="qa2-skeleton-chart-bar qa2-shimmer" style={{ height: `${h}%` }} />
+                                ))}
+                            </div>
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={ppmRef} /></div>
+                    )}
                 </div>
-                <div className="qa2-card qa2-chart-card">
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
                     <SectionHead icon="🔴" title="Top Defect Causes — Pareto" />
-                    <div className="qa2-chart-wrap"><canvas ref={paretoRef} /></div>
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                            <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
+                                {[80, 65, 50, 40, 15].map((h, idx) => (
+                                    <div key={idx} className="qa2-skeleton-chart-bar qa2-shimmer" style={{ height: `${h}%` }} />
+                                ))}
+                            </div>
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={paretoRef} /></div>
+                    )}
                 </div>
             </div>
 
@@ -350,240 +685,388 @@ export default function QualityAnalysis() {
             <div className="qa2-charts-2 qa2-animate qa2-d3">
 
                 {/* Product Quality */}
-                <div className="qa2-card">
+                <div className="qa2-card qa2-card-premium">
                     <SectionHead icon="📦" title="Product-wise Quality Performance"
                         extra={<span className="qa2-section-sub">Target ≥ 95%</span>} />
-                    <div className="qa2-pq-header">
-                        <span className="qa2-pqh-name">Product</span>
-                        <span className="qa2-pqh-num">Insp</span>
-                        <span className="qa2-pqh-num">Pass</span>
-                        <span className="qa2-pqh-num">Rej</span>
-                        <span className="qa2-pqh-bar">Rate</span>
-                        <span className="qa2-pqh-rate">%</span>
-                    </div>
-                    {PRODUCT_QUALITY.map((p, i) => (
-                        <div className="qa2-pq-row" key={i}>
-                            <div className="qa2-pq-name">{p.name}</div>
-                            <div className="qa2-pq-num qa2-muted">{p.insp}</div>
-                            <div className="qa2-pq-num qa2-green">{p.pass}</div>
-                            <div className="qa2-pq-num qa2-red">{p.rej}</div>
-                            <div className="qa2-pq-bar-track">
-                                <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
-                            </div>
-                            <div className="qa2-pq-rate" style={{ color: p.rateColor }}>{p.rateVal}</div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Defect Cause */}
-                <div className="qa2-card">
-                    <SectionHead icon="🔴" title="Defect Cause Analysis"
-                        badge="7.5% Rejection" badgeCls="qa2-badge-red" />
-
-                    <div className="qa2-defect-list">
-                        {DEFECT_CAUSES.map((d, i) => (
-                            <div className="qa2-defect-row" key={i}>
-                                <div className="qa2-defect-name">{d.name}</div>
-                                <div className="qa2-defect-bar-track">
-                                    <div className="qa2-defect-bar-fill" style={{ width: `${d.barW}%`, background: d.color }} />
-                                </div>
-                                <div className="qa2-defect-count">{d.count}</div>
-                                <div className="qa2-defect-pct">{d.pct}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="qa2-defect-class-wrap">
-                        <div className="qa2-defect-class-lbl">Rejection by Defect Class</div>
-                        <div className="qa2-defect-class-row">
-                            {[
-                                { bg: "#fee2e2", lbl: "Critical", val: "115", pct: "56.1%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
-                                { bg: "#ffedd5", lbl: "Major", val: "60", pct: "29.3%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
-                                { bg: "#fef9c3", lbl: "Minor", val: "30", pct: "14.6%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
-                            ].map(b => (
-                                <div className="qa2-dcb" style={{ background: b.bg }} key={b.lbl}>
-                                    <div className="qa2-dcb-lbl" style={{ color: b.lc }}>{b.lbl}</div>
-                                    <div className="qa2-dcb-val" style={{ color: b.vc }}>{b.val}</div>
-                                    <div className="qa2-dcb-pct" style={{ color: b.pc }}>{b.pct}</div>
+                    {prodPerfLoading ? (
+                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                            {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "12.5px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "13px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "20%", height: "6px", borderRadius: "3px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "13px" }} />
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    ) : (
+                        <>
+                            <div className="qa2-pq-header">
+                                <span className="qa2-pqh-name">Product</span>
+                                <span className="qa2-pqh-num">Insp</span>
+                                <span className="qa2-pqh-num">Pass</span>
+                                <span className="qa2-pqh-num">Rej</span>
+                                <span className="qa2-pqh-bar">Rate</span>
+                                <span className="qa2-pqh-rate">%</span>
+                            </div>
+                            <div className="qa2-pq-scroll-container">
+                                {activeProductQuality.length > 0 ? (
+                                    activeProductQuality.map((p, i) => (
+                                        <div className="qa2-pq-row" key={i}>
+                                            <div className="qa2-pq-name">{p.name}</div>
+                                            <div className="qa2-pq-num qa2-muted">{p.insp}</div>
+                                            <div className="qa2-pq-num qa2-green">{p.pass}</div>
+                                            <div className="qa2-pq-num qa2-red">{p.rej}</div>
+                                            <div className="qa2-pq-bar-track">
+                                                <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+                                            </div>
+                                            <div className="qa2-pq-rate" style={{ color: p.rateColor }}>{p.rateVal}</div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                        No product records found for this period
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* Defect Cause */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon="🔴" title="Defect Cause Analysis"
+                        badge={`${summaryData?.kpis?.rejection_rate_card?.value || "7.5%"} Rejection`} badgeCls="qa2-badge-red" />
+                    {defectCausesLoading ? (
+                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "14px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "25%", height: "13px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "6px", borderRadius: "3px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "13px" }} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="qa2-defect-list">
+                            {activeDefectCauses.length > 0 ? (
+                                activeDefectCauses.map((d, i) => (
+                                    <div className="qa2-defect-row" key={i}>
+                                        <div className="qa2-defect-name">{d.name}</div>
+                                        <div className="qa2-defect-bar-track">
+                                            <div className="qa2-defect-bar-fill" style={{ width: `${d.barW}%`, background: d.color }} />
+                                        </div>
+                                        <div className="qa2-defect-count">{d.count}</div>
+                                        <div className="qa2-defect-pct">{d.pct}</div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ textAlign: "center", padding: "3.5rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                    No defect causes found for this period
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* ── Full Inspection Table ── */}
-            <div className="qa2-card qa2-animate qa2-d4">
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
                 <div className="qa2-table-header">
                     <SectionHead icon="🔍" title="Inspection Records — All Transactions" />
                     <div className="qa2-tag-row">
-                        <span className="qa2-badge qa2-badge-green">✓ Pass: 19</span>
-                        <span className="qa2-badge qa2-badge-red">✗ Fail: 3</span>
-                        <span className="qa2-badge qa2-badge-orange">↺ Rework: 1</span>
-                        <span className="qa2-badge qa2-badge-yellow">⏳ Pending: 1</span>
+                        <span className="qa2-badge qa2-badge-blue">🔹 Inter Insp: {interInspCount}</span>
+                        <span className="qa2-badge qa2-badge-teal">⭐ Final Insp: {finalInspCount}</span>
+                        <span className="qa2-badge qa2-badge-purple">📋 Job Order: {jobOrderCount}</span>
                     </div>
                 </div>
-                <div className="qa2-table-scroll">
-                    <table className="qa2-table">
-                        <thead>
-                            <tr>
-                                {["Insp ID", "Date", "Product", "Part No", "Dept", "Type", "Qty", "Defect", "Result", "Remarks"].map(h => (
-                                    <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {INSPECTION_ROWS.map((r, i) => (
-                                <tr key={i} className="qa2-tr">
-                                    <td><span className="qa2-insp-id">{r.id}</span></td>
-                                    <td className="qa2-muted qa2-nowrap">{r.date}</td>
-                                    <td>{r.product}</td>
-                                    <td className="qa2-mono qa2-muted">{r.partNo}</td>
-                                    <td>{r.dept}</td>
-                                    <td><span className={`qa2-badge ${r.typeCls}`}>{r.typeLabel}</span></td>
-                                    <td className="qa2-td-r">{r.qty}</td>
-                                    <td>{r.defectCls ? <span className={`qa2-badge ${r.defectCls}`}>{r.defect}</span> : <span className="qa2-muted">{r.defect}</span>}</td>
-                                    <td><span className={`qa2-badge ${r.resultCls}`}>{r.result}</span></td>
-                                    <td className="qa2-remarks">{r.remarks}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <div className="qa2-action-bar">
-                    {/* <button className="qa2-btn qa2-btn-primary" onClick={() => alert("Exporting to Excel...")}>📥 Export Excel</button> */}
-                    {/* <button className="qa2-btn qa2-btn-primary" onClick={() => alert("Exporting to PDF...")}>📄 Export PDF</button> */}
-                    {/* <button className="qa2-btn qa2-btn-ghost" onClick={() => window.print()}>🖨️ Print</button> */}
-                    {/* <button className="qa2-btn qa2-btn-ghost" onClick={() => alert("Sending email report...")}>📧 Email Report</button> */}
-                </div>
-            </div>
-
-            {/* ── Rejection + Rework + Calibration ── */}
-            <div className="qa2-charts-3 qa2-animate qa2-d4">
-
-                {/* Rejection & Rework */}
-                <div className="qa2-card">
-                    <SectionHead icon="❌" title="Rejection & Rework Summary"
-                        badge="4 Records" badgeCls="qa2-badge-red" />
-                    <div className="qa2-table-scroll" style={{ maxHeight: "260px" }}>
+                {recordsLoading ? (
+                    <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1.5rem" }}>
+                        {[1, 2, 3, 4, 5].map(i => (
+                            <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "16px" }}>
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "30%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "8%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "30%", height: "14px" }} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="qa2-table-scroll">
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Rej ID", "Product", "Reason", "Qty", "Defect", "Disposition", "Date"].map(h => (
-                                        <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
+                                    {["Type", "Insp No", "Insp Date", "Part No – Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rework Qty", "Insp By"].map(h => (
+                                        <th key={h} className={h.includes("Qty") ? "qa2-td-r" : ""}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {REJECTION_ROWS.map((r, i) => (
-                                    <tr key={i} className="qa2-tr">
-                                        <td><span className="qa2-rej-id">{r.id}</span></td>
-                                        <td>{r.product}</td>
-                                        <td>{r.reason}</td>
-                                        <td className="qa2-td-r">{r.qty}</td>
-                                        <td><span className={`qa2-badge ${r.defectCls}`}>{r.defect}</span></td>
-                                        <td><span className={`qa2-badge ${r.dispCls}`}>{r.disp}</span></td>
-                                        <td className="qa2-muted qa2-nowrap">{r.date}</td>
+                                {activeInspectionRows.length > 0 ? (
+                                    activeInspectionRows.map((r, i) => {
+                                        const typeLabel = r.typeLabel || "Intermediate";
+                                        const typeCls = r.typeCls || "qa2-tag-teal";
+                                        const inspNo = r.id;
+                                        const inspDate = r.date;
+                                        const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
+                                        const process = r.process !== undefined ? r.process : "";
+                                        const inspQty = r.qty;
+                                        const okQty = r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : "0"));
+                                        const matRejQty = r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0");
+                                        const macRejQty = r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0");
+                                        const reworkQty = r.reworkQty || (r.result === "REWORK" ? r.qty : "0");
+                                        const inspBy = r.inspBy || getInspectorName(r.id);
+
+                                        return (
+                                            <tr key={i} className="qa2-tr">
+                                                <td style={getColStyle("Type")}><span className={`qa2-badge ${typeCls}`}>{typeLabel}</span></td>
+                                                <td style={getColStyle("Insp No")}><span className="qa2-insp-id">{inspNo}</span></td>
+                                                <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp Date")}>{inspDate}</td>
+                                                <td className="qa2-mono qa2-muted" style={getColStyle("Part No – Description")}>{partNoDesc}</td>
+                                                <td style={getColStyle("Process")}>
+                                                    {process ? (
+                                                        <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{process}</span>
+                                                    ) : "—"}
+                                                </td>
+                                                <td className="qa2-td-r" style={{ ...getColStyle("Insp Qty"), fontWeight: 600 }}>{inspQty}</td>
+                                                <td className="qa2-td-r qa2-green" style={{ ...getColStyle("OK Qty"), fontWeight: 600 }}>{okQty}</td>
+                                                <td className="qa2-td-r qa2-red" style={getColStyle("Mat Rej Qty")}>{matRejQty}</td>
+                                                <td className="qa2-td-r qa2-red" style={getColStyle("Mac Rej Qty")}>{macRejQty}</td>
+                                                <td className="qa2-td-r qa2-orange" style={getColStyle("Rework Qty")}>{reworkQty}</td>
+                                                <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp By")}>{inspBy}</td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="11" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                            No inspection records found for this period
+                                        </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                     </div>
-                </div>
+                )}
+            </div>
 
-                {/* Rework Queue + Scrap */}
-                <div className="qa2-card">
-                    <SectionHead icon="⏳" title="Pending Rework Queue"
-                        badge="3 Open" badgeCls="qa2-badge-orange" />
-                    <div>
-                        {REWORK_QUEUE.map((rw, i) => (
-                            <div className="qa2-rw-row" key={i}>
-                                <span className="qa2-rw-dot" style={{ background: rw.dotColor }} />
-                                <div className="qa2-rw-info">
-                                    <div className="qa2-rw-name">{rw.name}</div>
-                                    <div className="qa2-rw-code">{rw.code}</div>
-                                </div>
-                                <span className="qa2-rw-qty">{rw.qty}</span>
-                                <span className="qa2-rw-days" style={{ background: rw.daysBg, color: rw.daysFg }}>{rw.daysLbl}</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="qa2-scrap-section">
-                        <div className="qa2-scrap-lbl">Scrap Summary</div>
-                        <div className="qa2-scrap-grid">
-                            {[
-                                { lbl: "Total Scrap", val: "71", color: "#8b5cf6" },
-                                { lbl: "Scrap Value", val: "₹48.2K", color: "#ef4444" },
-                                { lbl: "Scrap Rate", val: "2.6%", color: "#f97316" },
-                                { lbl: "vs Target", val: "↑0.6%", color: "#ef4444" },
-                            ].map(s => (
-                                <div className="qa2-scrap-box" key={s.lbl}>
-                                    <div className="qa2-scrap-box-lbl">{s.lbl}</div>
-                                    <div className="qa2-scrap-box-val" style={{ color: s.color }}>{s.val}</div>
+            {/* ── Rejection + Calibration (Pending Rework Queue Removed) ── */}
+            <div className="qa2-charts-2 qa2-animate qa2-d4">
+
+                {/* Rejection & Rework */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon="❌" title="Rejection & Rework Summary"
+                        badge={`${activeRejectionRows.length} Records`} badgeCls="qa2-badge-red" />
+                    {recordsLoading ? (
+                        <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
+                            {[1, 2, 3, 4].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "14px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "30%", height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "12px" }} />
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    ) : (
+                        <div className="qa2-table-scroll">
+                            <table className="qa2-table">
+                                <thead>
+                                    <tr>
+                                        {["Insp No", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
+                                            <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {activeRejectionRows.length > 0 ? (
+                                        activeRejectionRows.map((r, i) => (
+                                            <tr key={i} className="qa2-tr">
+                                                <td><span className="qa2-rej-id">{r.id}</span></td>
+                                                <td>{r.product}</td>
+                                                <td>{r.reason}</td>
+                                                <td className="qa2-td-r">{r.qty}</td>
+                                                <td><span className={`qa2-badge ${r.dispCls}`}>{r.disp}</span></td>
+                                                <td className="qa2-muted qa2-nowrap">{r.date}</td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="6" style={{ textAlign: "center", padding: "2.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                                No rejection or rework records found
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
 
                 {/* Calibration */}
-                <div className="qa2-card">
+                <div className="qa2-card qa2-card-premium">
                     <SectionHead icon="🧰" title="Calibration Status"
-                        badge="2 Due Soon" badgeCls="qa2-badge-orange" />
-                    <div>
-                        {CALIBRATION_ROWS.map((c, i) => (
-                            <div className="qa2-cal-row" key={i}>
-                                <div className="qa2-cal-info">
-                                    <div className="qa2-cal-name">{c.name}</div>
-                                    <div className="qa2-cal-id">{c.id}</div>
+                        badge={calibrationAlertCount > 0 ? `${calibrationAlertCount} Alert${calibrationAlertCount > 1 ? "s" : ""}` : activeCalibrationRows.length > 0 ? `${activeCalibrationRows.length} Items` : "No Due"}
+                        badgeCls={calibrationAlertCount > 0 ? "qa2-badge-orange" : "qa2-badge-green"} />
+                    {calibrationLoading ? (
+                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "13px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "25%", height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
                                 </div>
-                                <div className="qa2-cal-date">{c.date}</div>
-                                <div className={`qa2-cal-days ${c.cls}`}>{c.label}</div>
+                            ))}
+                        </div>
+                    ) : activeCalibrationRows.length === 0 ? (
+                        <div style={{ padding: "2rem", textAlign: "center", color: "var(--qa2-text-muted, #94a3b8)", fontSize: "0.88rem" }}>
+                            <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🔧</div>
+                            <div>No instruments due for calibration in the selected period.</div>
+                        </div>
+                    ) : (
+                        <div className="qa2-cal-scroll-wrap">
+                            <div className="qa2-cal-scroll">
+                                {activeCalibrationRows.map((c, i) => (
+                                    <div className="qa2-cal-row" key={i}>
+                                        <div className="qa2-cal-info">
+                                            <div className="qa2-cal-name">{c.name}</div>
+                                            <div className="qa2-cal-id">
+                                                {c.id}
+                                                {c.last_calib && c.last_calib !== "—" && (
+                                                    <span style={{ marginLeft: "6px", color: "#cbd5e1" }}>·</span>
+                                                )}
+                                                {c.last_calib && c.last_calib !== "—" && (
+                                                    <span style={{ color: "#b0bcc8", marginLeft: "4px" }}>Last: {c.last_calib}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className={`qa2-cal-date ${c.cls === "qa2-cal-over" ? "qa2-cal-date--over" : ""}`}>{c.date}</div>
+                                        <div className={`qa2-cal-days ${c.cls}`}>{c.label}</div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* ── Management Insights ── */}
-            <div className="qa2-card qa2-animate qa2-d4">
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
                 <SectionHead icon="💡" title="Management Quality Insights"
-                    badge="5 Action Points" badgeCls="qa2-badge-red" />
-                <div className="qa2-insights-grid">
-                    <div className="qa2-insights-col qa2-insights-left">
-                        {INSIGHTS_LEFT.map((ins, i) => (
-                            <div className="qa2-insight-row" key={i}>
-                                <span className="qa2-insight-icon">{ins.icon}</span>
-                                <div className="qa2-insight-body">
-                                    <div className="qa2-insight-title">{ins.title}</div>
-                                    <div className="qa2-insight-sub">{ins.sub}</div>
+                    badge={`${activePriorityActions.length} Action Points`} badgeCls="qa2-badge-red" />
+                {insightsLoading ? (
+                    <div className="qa2-insights-grid qa2-pulse-loader" style={{ padding: "1.5rem" }}>
+                        <div className="qa2-insights-col">
+                            {[1, 2, 3].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "16px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "20px", height: "20px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "13px" }} />
                                 </div>
-                                <div className="qa2-insight-val" style={{ color: ins.valColor }}>{ins.val}</div>
+                            ))}
+                        </div>
+                        <div className="qa2-insights-col">
+                            <div className="qa2-skeleton-row" style={{ marginBottom: "16px" }}>
+                                <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "20px", height: "20px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "13px" }} />
                             </div>
-                        ))}
-                    </div>
-                    <div className="qa2-insights-col">
-                        {INSIGHTS_RIGHT.map((ins, i) => (
-                            <div className="qa2-insight-row" key={i}>
-                                <span className="qa2-insight-icon">{ins.icon}</span>
-                                <div className="qa2-insight-body">
-                                    <div className="qa2-insight-title">{ins.title}</div>
-                                    <div className="qa2-insight-sub">{ins.sub}</div>
-                                </div>
-                                <div className="qa2-insight-val" style={{ color: ins.valColor }}>{ins.val}</div>
-                            </div>
-                        ))}
-                        <div className="qa2-priority-box">
-                            <div className="qa2-priority-title">📌 Priority Action for Management</div>
-                            <p className="qa2-priority-body">
-                                1) Initiate supplier audit for <strong>Paint-Seal Cast</strong> (100% batch failure).{" "}
-                                2) Calibrate <strong>Hardness Tester #HT-01</strong> today.{" "}
-                                3) Review assembly fixture for <strong>Segment Carrier</strong> alignment.{" "}
-                                4) RCCA for scrap cost overrun.
-                            </p>
+                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "100%", height: "70px", borderRadius: "10px" }} />
                         </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="qa2-insights-grid">
+                        {/* ── Left column: Alerts & Warnings ── */}
+                        <div className="qa2-insights-col qa2-insights-left">
+                            {activeInsightsLeft.length === 0 ? (
+                                <div style={{ padding: "2rem 1.25rem", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                                    <div style={{ fontSize: "1.8rem", marginBottom: "0.5rem" }}>✅</div>
+                                    No critical alerts for this period
+                                </div>
+                            ) : activeInsightsLeft.map((ins, i) => (
+                                <div className="qa2-insight-row" key={i}
+                                    style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
+                                    <span className="qa2-insight-icon">{ins.icon}</span>
+                                    <div className="qa2-insight-body">
+                                        <div className="qa2-insight-title">{ins.title}</div>
+                                        <div className="qa2-insight-sub">{ins.sub}</div>
+                                    </div>
+                                    <div className="qa2-insight-val" style={{
+                                        color: ins.valColor,
+                                        background: `${ins.valColor}18`,
+                                        padding: "0.18rem 0.52rem",
+                                        borderRadius: "6px",
+                                        fontSize: "0.68rem",
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap"
+                                    }}>{ins.val}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* ── Right column: Positive Insights + Priority Actions ── */}
+                        <div className="qa2-insights-col">
+                            {activeInsightsRight.length === 0 ? (
+                                <div style={{ padding: "2rem 1.25rem", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                                    No summary data available
+                                </div>
+                            ) : activeInsightsRight.map((ins, i) => (
+                                <div className="qa2-insight-row" key={i}
+                                    style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
+                                    <span className="qa2-insight-icon">{ins.icon}</span>
+                                    <div className="qa2-insight-body">
+                                        <div className="qa2-insight-title">{ins.title}</div>
+                                        <div className="qa2-insight-sub">{ins.sub}</div>
+                                    </div>
+                                    <div className="qa2-insight-val" style={{
+                                        color: ins.valColor,
+                                        background: `${ins.valColor}18`,
+                                        padding: "0.18rem 0.52rem",
+                                        borderRadius: "6px",
+                                        fontSize: "0.68rem",
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap"
+                                    }}>{ins.val}</div>
+                                </div>
+                            ))}
+
+                            {activePriorityActions.length > 0 && (
+                                <div className="qa2-priority-box">
+                                    <div className="qa2-priority-title">📌 Priority Actions for Management</div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginTop: "10px" }}>
+                                        {activePriorityActions.map((action, idx) => {
+                                            const cleanAction = action.replace(/^\d+[\)\.]\s*/, "");
+                                            return (
+                                                <div key={idx} style={{ display: "flex", gap: "7px", fontSize: "0.8rem", color: "#374151", lineHeight: "1.5" }}>
+                                                    <span style={{
+                                                        color: "#fff",
+                                                        background: "#ef4444",
+                                                        fontWeight: "700",
+                                                        fontSize: "0.62rem",
+                                                        borderRadius: "4px",
+                                                        padding: "0.1rem 0.32rem",
+                                                        flexShrink: 0,
+                                                        marginTop: "2px",
+                                                        lineHeight: "1.6"
+                                                    }}>{idx + 1}</span>
+                                                    <span>
+                                                        {cleanAction.split(/(Paint-Seal Cast|Hardness Tester #HT-01|Segment Carrier)/g).map((part, pIdx) => {
+                                                            if (["Paint-Seal Cast", "Hardness Tester #HT-01", "Segment Carrier"].includes(part)) {
+                                                                return <strong key={pIdx} style={{ color: "#1f2937" }}>{part}</strong>;
+                                                            }
+                                                            return part;
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
         </div>

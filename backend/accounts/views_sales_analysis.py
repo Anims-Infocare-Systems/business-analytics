@@ -398,12 +398,9 @@ def sales_analysis_summary_strip(request):
         )
 
         mas_row = cursor.fetchone()
-
-        grand_total = float(mas_row[0] or 0)
-
-        total_invoices = int(mas_row[1] or 0)
-
-        customers = int(mas_row[2] or 0)
+        grand_total = float(mas_row[0] or 0) if mas_row else 0.0
+        total_invoices = int(mas_row[1] or 0) if mas_row else 0
+        customers = int(mas_row[2] or 0) if mas_row else 0
 
 
 
@@ -425,7 +422,8 @@ def sales_analysis_summary_strip(request):
 
         )
 
-        total_qty_sold = float(cursor.fetchone()[0] or 0)
+        qty_row = cursor.fetchone()
+        total_qty_sold = float(qty_row[0] or 0) if qty_row else 0.0
 
 
 
@@ -455,7 +453,8 @@ def sales_analysis_summary_strip(request):
 
         )
 
-        repeat_buyers = int(cursor.fetchone()[0] or 0)
+        rb_row = cursor.fetchone()
+        repeat_buyers = int(rb_row[0] or 0) if rb_row else 0
 
 
 
@@ -772,7 +771,8 @@ def sales_analysis_revenue_charts(request):
                 """,
                 (start_date, end_date),
             )
-            total_qty = float(cursor.fetchone()[0] or 0)
+            tqty_row = cursor.fetchone()
+            total_qty = float(tqty_row[0] or 0) if tqty_row else 0.0
 
             cursor.execute(
                 f"""
@@ -1014,7 +1014,8 @@ def sales_analysis_month_summary(request):
             """,
             (start_date, end_date),
         )
-        credit_note_count = int(cursor.fetchone()[0] or 0)
+        cn_row = cursor.fetchone()
+        credit_note_count = int(cn_row[0] or 0) if cn_row else 0
         existing_cn = sum(
             v for k, v in btype_counts.items()
             if k != "Credit Note" and "credit" in k.lower() and "note" in k.lower()
@@ -1115,7 +1116,7 @@ def sales_analysis_invoice_details(request):
         "AND ISNULL(BM.btype, '') <> 'Sales Return' "
         "AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?"
     )
-    params = [start_date, end_date]
+    params: list = [start_date, end_date]
     if btype_filter and btype_filter.lower() not in ("all", ""):
         base_where += " AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?"
         params.append(btype_filter)

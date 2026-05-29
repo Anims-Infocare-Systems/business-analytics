@@ -22,9 +22,8 @@
 @keyframes qa2-fadeUp {
     from {
         opacity: 0;
-        transform: translateY(14px);
+        transform: translateY(10px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -373,16 +372,25 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.6rem;
-    background: linear-gradient(90deg, rgba(45, 109, 232, 0.07), rgba(26, 84, 212, 0.04));
-    border: 1.5px solid rgba(45, 109, 232, 0.14);
+    gap: 0;
+    background: linear-gradient(90deg, rgba(45,109,232,0.09), rgba(26,84,212,0.05));
+    border: 1.5px solid rgba(45, 109, 232, 0.16);
     border-radius: 12px;
-    padding: 0.95rem 1.4rem;
+    padding: 0;
     margin-bottom: 1.3rem;
+    overflow: hidden;
 }
 
 .qa2-strip-item {
     text-align: center;
+    flex: 1;
+    padding: 0.85rem 0.6rem;
+    border-right: 1px solid rgba(45, 109, 232, 0.1);
+    min-width: 80px;
+}
+
+.qa2-strip-item:last-child {
+    border-right: none;
 }
 
 .qa2-strip-lbl {
@@ -556,7 +564,7 @@
     margin-bottom: 1.3rem;
 }
 
-.qa2-chart-card {}
+/* .qa2-chart-card {} */
 
 .qa2-chart-wrap {
     position: relative;
@@ -601,8 +609,13 @@
 }
 
 .qa2-table-scroll::-webkit-scrollbar-thumb {
-    background: #d0daf5;
+    background: rgba(26, 84, 212, 0.15);
     border-radius: 99px;
+    transition: background 0.2s;
+}
+
+.qa2-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(26, 84, 212, 0.3);
 }
 
 .qa2-table {
@@ -732,6 +745,30 @@
 .qa2-pqh-rate {
     min-width: 44px;
     text-align: right;
+}
+
+.qa2-pq-scroll-container {
+    max-height: 270px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Custom scrollbar for product list */
+.qa2-pq-scroll-container::-webkit-scrollbar {
+    width: 5px;
+}
+
+.qa2-pq-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-pq-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(26, 84, 212, 0.12);
+    border-radius: 99px;
+}
+
+.qa2-pq-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(26, 84, 212, 0.25);
 }
 
 .qa2-pq-row {
@@ -994,13 +1031,58 @@
 }
 
 /* ── Calibration ──────────────────────────────────────────── */
+.qa2-cal-scroll {
+    max-height: 272px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    /* slim custom scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 132, 255, 0.35) transparent;
+}
+
+.qa2-cal-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+
+.qa2-cal-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-cal-scroll::-webkit-scrollbar-thumb {
+    background: rgba(99, 132, 255, 0.35);
+    border-radius: 99px;
+}
+
+.qa2-cal-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 132, 255, 0.6);
+}
+
+/* fade-out shadow at bottom to hint at more content */
+.qa2-cal-scroll-wrap {
+    position: relative;
+}
+
+.qa2-cal-scroll-wrap::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.92));
+    pointer-events: none;
+    border-radius: 0 0 12px 12px;
+}
+
 .qa2-cal-row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.62rem 1.25rem;
     border-bottom: 1px solid rgba(26, 84, 212, 0.06);
-    transition: background 0.12s;
+    border-left: 3px solid transparent;
+    transition: background 0.12s, border-left-color 0.12s;
 }
 
 .qa2-cal-row:last-child {
@@ -1009,6 +1091,15 @@
 
 .qa2-cal-row:hover {
     background: #f8faff;
+}
+
+/* Accent left border for overdue rows */
+.qa2-cal-row:has(.qa2-cal-over) {
+    border-left-color: #fca5a5;
+}
+
+.qa2-cal-row:has(.qa2-cal-warn) {
+    border-left-color: #fde68a;
 }
 
 .qa2-cal-info {
@@ -1030,9 +1121,17 @@
 
 .qa2-cal-date {
     font-size: 0.68rem;
+    font-weight: 500;
     color: #5a6a9a;
     min-width: 78px;
     text-align: right;
+    transition: color 0.15s;
+}
+
+/* Overdue date shown in red */
+.qa2-cal-date--over {
+    color: #dc2626;
+    font-weight: 700;
 }
 
 .qa2-cal-days {
@@ -1064,7 +1163,7 @@
     grid-template-columns: 1fr 1fr;
 }
 
-.qa2-insights-col {}
+/* .qa2-insights-col {} */
 
 .qa2-insights-left {
     border-right: 1px solid rgba(26, 84, 212, 0.08);
@@ -1212,4 +1311,154 @@
     .qa2-filter-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* ═══════════════════════════════════════════════
+   PREMIUM LAZY LOADING & SKELETON SYSTEMS
+   ═══════════════════════════════════════════════ */
+
+/* Global Top Progress Bar (YouTube Style) */
+.qa2-global-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2d6de8 0%, #06b6d4 50%, #10b981 100%);
+    z-index: 999999;
+    box-shadow: 0 1px 8px rgba(45, 109, 232, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, width 0.4s ease;
+    width: 0;
+}
+
+.qa2-global-progress-bar--active {
+    opacity: 1;
+    animation: qa2-progress-slide 2.2s infinite ease-in-out;
+}
+
+@keyframes qa2-progress-slide {
+    0% {
+        width: 0%;
+        left: 0;
+    }
+
+    50% {
+        width: 70%;
+        left: 15%;
+    }
+
+    100% {
+        width: 100%;
+        left: 0;
+    }
+}
+
+/* Shimmer Animation for Skeletons */
+.qa2-shimmer {
+    background: linear-gradient(90deg,
+            rgba(241, 245, 249, 0.8) 25%,
+            rgba(226, 232, 240, 0.9) 50%,
+            rgba(241, 245, 249, 0.8) 75%);
+    background-size: 200% 100%;
+    animation: qa2-shimmer-run 1.4s infinite linear;
+}
+
+@keyframes qa2-shimmer-run {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Base Skeleton Utility */
+.qa2-skeleton {
+    display: inline-block;
+    height: 100%;
+    width: 100%;
+    border-radius: 6px;
+    background-color: #f1f5f9;
+}
+
+.qa2-skeleton-circle {
+    border-radius: 50%;
+}
+
+.qa2-skeleton-text {
+    height: 12px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    background-color: #e2e8f0;
+}
+
+.qa2-skeleton-text:last-child {
+    margin-bottom: 0;
+}
+
+/* Premium Card hover glow effect */
+.qa2-card-premium {
+    position: relative;
+    transition: transform 0.2s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.2s cubic-bezier(0.2,0.8,0.2,1), border-color 0.2s ease;
+    border: 1px solid rgba(26, 84, 212, 0.06);
+}
+
+.qa2-card-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(26,84,212,0.11), 0 0 0 1px rgba(45,109,232,0.14);
+    border-color: rgba(45,109,232,0.18);
+}
+
+/* Skeletons specifically for Summary Strip */
+.qa2-summary-strip-skeleton {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    background: linear-gradient(90deg, rgba(248, 250, 252, 0.6) 0%, rgba(241, 245, 249, 0.4) 100%);
+    border: 1.5px dashed rgba(45, 109, 232, 0.15);
+    border-radius: 12px;
+    padding: 1rem 1.4rem;
+    margin-bottom: 1.4rem;
+}
+
+/* Pulse animation for secondary loading elements */
+.qa2-pulse-loader {
+    animation: qa2-pulse-soft 2s infinite ease-in-out;
+}
+
+@keyframes qa2-pulse-soft {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+.qa2-skeleton-chart {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+.qa2-skeleton-chart-bar {
+    height: var(--bar-h, 60%);
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.qa2-skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
 }

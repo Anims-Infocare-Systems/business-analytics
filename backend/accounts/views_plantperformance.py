@@ -4,9 +4,6 @@
 # Implementation is delegated to views_dashboard2.py (same ERP SQL, no duplication).
 #
 # Frontend: Dashboard3.jsx + Dashboard3ProductionDataView.jsx (+ card-specific views)
-
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 from django.db import close_old_connections
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -148,20 +145,14 @@ def plant_performance_bundle(request):
     errors_out = {}
 
     django_request = getattr(request, "_request", request)
-    workers = min(8, len(_BUNDLE_VIEWS))
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(_bundle_fetch_one, key, view_fn, django_request): key
-            for key, view_fn in _BUNDLE_VIEWS
-        }
-        for fut in as_completed(futures):
-            key, body, err = fut.result()
-            if err:
-                errors_out[key] = err
-                data_out[key] = None
-            else:
-                data_out[key] = body
+    for key, view_fn in _BUNDLE_VIEWS:
+        key, body, err = _bundle_fetch_one(key, view_fn, django_request)
+        if err:
+            errors_out[key] = err
+            data_out[key] = None
+        else:
+            data_out[key] = body
 
     return Response({
         "from": from_param,

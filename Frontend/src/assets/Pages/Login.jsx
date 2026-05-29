@@ -1,9 +1,26 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { resolveApiBase } from "../../apiBase";
 import "./Login.css";
 
 const API = resolveApiBase();
+const RIGHTS_CACHE_KEY = "ba_user_rights";
+
+function writeRightsCache(companyCode, username, rights, isSuperAdmin) {
+    try {
+        localStorage.setItem(RIGHTS_CACHE_KEY, JSON.stringify({
+            companyCode,
+            username,
+            rights,
+            isSuperAdmin,
+            ts: Date.now(),
+        }));
+    } catch {
+        /* ignore */
+    }
+}
 
 const IconOrg = () => (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -43,6 +60,77 @@ const IconArrow = () => (
             strokeLinecap="round" strokeLinejoin="round" />
     </svg>
 );
+
+const IconToastAccess = () => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+            d="M10 1.667 3.333 4.167v5c0 3.5 2.917 6.775 6.667 7.5 3.75-.725 6.667-4 6.667-7.5v-5L10 1.667Z"
+            stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"
+        />
+        <path d="M7.5 10 9.167 11.667 12.5 8.333" stroke="currentColor" strokeWidth="1.35"
+            strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+);
+
+const IconToastError = () => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.35" />
+        <path d="M10 6.25v4.5M10 13.75h.008" stroke="currentColor" strokeWidth="1.6"
+            strokeLinecap="round" />
+    </svg>
+);
+
+function LoginToastContent({ variant, title, message }) {
+    return (
+        <div className={`lp-toast lp-toast--${variant}`}>
+            <span className="lp-toast__accent" aria-hidden="true" />
+            <span className={`lp-toast__icon-wrap lp-toast__icon-wrap--${variant}`}>
+                {variant === "access" ? <IconToastAccess /> : <IconToastError />}
+            </span>
+            <div className="lp-toast__content">
+                <p className="lp-toast__title">{title}</p>
+                <p className="lp-toast__message">{message}</p>
+            </div>
+        </div>
+    );
+}
+
+const LOGIN_TOAST_OPTS = {
+    position: "top-right",
+    autoClose: 6500,
+    hideProgressBar: false,
+    closeOnClick: true,
+    pauseOnHover: true,
+    draggable: true,
+    icon: false,
+    className: "lp-toast-item",
+    bodyClassName: "lp-toast-body",
+    progressClassName: "lp-toast-progress",
+};
+
+function showLoginToast(variant, title, message) {
+    toast(
+        <LoginToastContent variant={variant} title={title} message={message} />,
+        {
+            ...LOGIN_TOAST_OPTS,
+            toastId: `login-${variant}-${title}`,
+            className: `lp-toast-item lp-toast-item--${variant}`,
+            closeButton: ({ closeToast }) => (
+                <button
+                    type="button"
+                    className="lp-toast__close"
+                    onClick={closeToast}
+                    aria-label="Dismiss notification"
+                >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <path d="M3.5 3.5 10.5 10.5M10.5 3.5 3.5 10.5" stroke="currentColor"
+                            strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                </button>
+            ),
+        },
+    );
+}
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -135,20 +223,64 @@ export default function LoginPage() {
             const data = await res.json();
 
             if (res.ok) {
-                localStorage.setItem("user", JSON.stringify(data));
-                navigate("/AnimsBusinessAnalytics");
+                if (data.hasAccess === false) {
+                    showLoginToast(
+                        "access",
+                        "Access denied",
+                        "Sorry, you don't have access to Business Analytics. Please contact your administrator to request permissions.",
+                    );
+                    return;
+                }
+
+                localStorage.setItem("user", JSON.stringify({
+                    message: data.message,
+                    company: data.company,
+                    company_code: data.company_code,
+                    username: data.username,
+                }));
+                writeRightsCache(
+                    data.company_code,
+                    data.username,
+                    data.rights || {},
+                    !!data.isSuperAdmin,
+                );
+                navigate("/AnimsBusinessAnalytics", { replace: true });
             } else {
-                setLoginError(data.error || "Login failed. Please try again.");
+                showLoginToast(
+                    "error",
+                    "Login failed",
+                    data.error || "Invalid username or password. Please try again.",
+                );
             }
         } catch (err) {
             console.error("Login error:", err);
-            setLoginError("Server error. Please check Django is running.");
+            showLoginToast(
+                "error",
+                "Connection error",
+                "Unable to reach the server. Please check your connection and try again.",
+            );
         } finally {
             setLoginBusy(false);
         }
     };
 
     return (
+        <>
+        <ToastContainer
+            className="lp-toast-container"
+            toastClassName="lp-toast-item"
+            bodyClassName="lp-toast-body"
+            progressClassName="lp-toast-progress"
+            position="top-right"
+            autoClose={6500}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            pauseOnHover
+            draggable
+            limit={2}
+            icon={false}
+        />
         <div className="lp">
             <div className="lp__blob lp__blob--tr" />
             <div className="lp__blob lp__blob--bl" />
@@ -339,5 +471,6 @@ export default function LoginPage() {
                 <img src="/Images/logo.png" alt="Anims" className="lp__logo-img" />
             </div>
         </div>
+        </>
     );
 }

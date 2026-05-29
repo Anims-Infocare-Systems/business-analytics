@@ -76,6 +76,42 @@
     box-shadow: 0 2px 12px rgba(26, 84, 212, 0.09), 0 0 0 1px rgba(26, 84, 212, 0.06);
     overflow: hidden;
     margin-bottom: 1.4rem;
+    position: relative;
+}
+
+/* Modern Glass Loading Overlay */
+.pa2-loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(2.5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, backdrop-filter 0.22s ease;
+}
+
+.pa2-loading-overlay--active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.pa2-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(45, 109, 232, 0.15);
+    border-top-color: #2d6de8;
+    border-radius: 50%;
+    animation: pa2-spin 0.65s infinite linear;
+}
+
+@keyframes pa2-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* ── Page Hero ────────────────────────────────────────────── */
@@ -494,6 +530,10 @@
     position: relative;
     height: 195px;
     padding: 0 1rem 1rem;
+}
+
+.pa2-chart-wrap--donut {
+    height: 250px;
 }
 
 /* ── Two Column ───────────────────────────────────────────── */
@@ -1168,3 +1208,312 @@
         font-size: 0.75rem;
     }
 }
+
+/* ── Dashboard2-style PO Table ────────────────────────────── */
+.pa2-po-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    min-width: 860px;
+}
+
+.pa2-po-th {
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: #f8faff;
+    border-bottom: 1.5px solid rgba(26, 84, 212, 0.1);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.pa2-po-th--r {
+    text-align: right;
+}
+
+.pa2-po-th--wide {
+    min-width: 220px;
+}
+
+.pa2-po-tr {
+    border-bottom: 1px solid rgba(26, 84, 212, 0.06);
+    transition: background 0.12s;
+}
+
+.pa2-po-tr:hover {
+    background: #f5f8ff;
+}
+
+.pa2-po-td {
+    padding: 0.52rem 0.75rem;
+    color: #1a2a5e;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.pa2-po-td--r {
+    text-align: right;
+}
+
+/* PO Number — blue clickable style */
+.pa2-po-link {
+    color: #2d6de8;
+    font-weight: 600;
+    font-size: 0.73rem;
+}
+
+/* GRN Number — blue link */
+.pa2-po-grn-link {
+    color: #2d6de8;
+    font-weight: 500;
+}
+
+/* PO Type pill */
+.pa2-po-type-badge {
+    display: inline-block;
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    background: rgba(45, 109, 232, 0.09);
+    color: #1d4ed8;
+    white-space: nowrap;
+}
+
+/* Vendor name — bold */
+.pa2-po-vendor {
+    font-weight: 700;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+}
+
+/* Material cell */
+.pa2-po-material {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #334155;
+    font-size: 0.72rem;
+}
+
+/* Material code prefix */
+.pa2-po-matcode {
+    color: #2d6de8;
+    font-weight: 600;
+    margin-right: 0.15em;
+}
+
+/* Value column */
+.pa2-po-value {
+    font-weight: 700;
+    color: #1a54d4;
+    font-size: 0.76rem;
+}
+
+/* Date cells — muted */
+.pa2-po-date {
+    color: #64748b;
+    font-size: 0.7rem;
+}
+
+/* Dash placeholder */
+.pa2-po-dash {
+    color: #cbd5e1;
+    font-size: 0.85rem;
+}
+
+/* Loading / empty states */
+.pa2-po-loading,
+.pa2-po-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+/* ═══════════════════════════════════════════════
+   PREMIUM LAZY LOADING & SKELETON SYSTEMS
+   ═══════════════════════════════════════════════ */
+
+/* Global Top Progress Bar (YouTube Style) */
+.pa2-global-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2d6de8 0%, #06b6d4 50%, #10b981 100%);
+    z-index: 999999;
+    box-shadow: 0 1px 8px rgba(45, 109, 232, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, width 0.4s ease;
+    width: 0;
+}
+
+.pa2-global-progress-bar--active {
+    opacity: 1;
+    animation: pa2-progress-slide 2.2s infinite ease-in-out;
+}
+
+@keyframes pa2-progress-slide {
+    0% {
+        width: 0%;
+        left: 0;
+    }
+    50% {
+        width: 70%;
+        left: 15%;
+    }
+    100% {
+        width: 100%;
+        left: 0;
+    }
+}
+
+/* Shimmer Animation for Skeletons */
+.pa2-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgba(241, 245, 249, 0.8) 25%,
+        rgba(226, 232, 240, 0.9) 50%,
+        rgba(241, 245, 249, 0.8) 75%
+    );
+    background-size: 200% 100%;
+    animation: pa2-shimmer-run 1.4s infinite linear;
+}
+
+@keyframes pa2-shimmer-run {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Base Skeleton Utility */
+.pa2-skeleton {
+    display: inline-block;
+    height: 100%;
+    width: 100%;
+    border-radius: 6px;
+    background-color: #f1f5f9;
+}
+
+.pa2-skeleton-circle {
+    border-radius: 50%;
+}
+
+.pa2-skeleton-text {
+    height: 12px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    background-color: #e2e8f0;
+}
+
+.pa2-skeleton-text:last-child {
+    margin-bottom: 0;
+}
+
+/* Premium Card hover glow effect */
+.pa2-card-premium {
+    position: relative;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease;
+    border: 1px solid rgba(26, 84, 212, 0.06);
+}
+
+.pa2-card-premium:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(26, 84, 212, 0.12), 0 0 0 1px rgba(45, 109, 232, 0.12);
+    border-color: rgba(45, 109, 232, 0.2);
+}
+
+/* Skeletons specifically for Summary Strip */
+.pa2-summary-strip-skeleton {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    background: linear-gradient(90deg, rgba(248, 250, 252, 0.6) 0%, rgba(241, 245, 249, 0.4) 100%);
+    border: 1.5px dashed rgba(45, 109, 232, 0.15);
+    border-radius: 12px;
+    padding: 1rem 1.4rem;
+    margin-bottom: 1.4rem;
+}
+
+/* Staggered Animations */
+.pa2-fade-in {
+    animation: pa2-fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pa2-fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pa2-stagger-1 { animation-delay: 0.04s; }
+.pa2-stagger-2 { animation-delay: 0.08s; }
+.pa2-stagger-3 { animation-delay: 0.12s; }
+.pa2-stagger-4 { animation-delay: 0.16s; }
+.pa2-stagger-5 { animation-delay: 0.20s; }
+
+/* Pulse animation for secondary loading elements */
+.pa2-pulse-loader {
+    animation: pa2-pulse-soft 2s infinite ease-in-out;
+}
+
+@keyframes pa2-pulse-soft {
+    0%, 100% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Glassmorphism overrides for filter bar active state */
+.pa2-filter-card--loading {
+    border: 1.5px solid rgba(45, 109, 232, 0.22);
+    box-shadow: 0 0 15px rgba(45, 109, 232, 0.06);
+}
+
+.pa2-skeleton-chart {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+.pa2-skeleton-chart-bar {
+    height: var(--bar-h, 60%);
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.pa2-skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}

@@ -4,114 +4,19 @@
  * Prefix: er-
  */
 import { useState, useEffect, useMemo } from "react";
+import { resolveApiBase } from "../../apiBase";
 import "./EfficiencyReport.css";
 import EfficiencyReportDatePicker from "./EfficiencyReportDatePicker";
 
-/* ═══════════════════════════════════════════════════════
-   RAW DATA
-═══════════════════════════════════════════════════════ */
-const RAW = [
-    ["4384-Mathizhagan.K", "PRODUCTION", "VMC 24", 88.24, 100, 100, 1, 0, 1],
-    ["NARENDRAN.S", "", "TC-59", 90.91, 100, 100, 0.5, 0, 2],
-    ["Sadap Chandan S", "", "TC-14", 100, 100, 100, 0, 0, 3],
-    ["AAKASH.L", "", "TC-02", 85.71, 100, 100, 0.5, 0, 4],
-    ["BISWAMOHAN NAIK", "", "TC 42", 100, 100, 100, 0, 0, 5],
-    ["Ramakrushna", "", "SPM-01", 92.86, 100, 100, 0.5, 0, 6],
-    ["Santhana lakshmi", "", "SPM -04", 96.23, 99.79, 100, 0.25, 0, 7],
-    ["DEEPU MADHAVAN", "", "TC-25", 99.21, 99.21, 100, 0, 0, 8],
-    ["Selvaganesh.E", "", "spm -04", 99.21, 99.21, 100, 0, 0, 9],
-    ["Ajil.S", "", "SPM -04", 99.21, 99.21, 100, 0, 0, 10],
-    ["5002-Anjan Naik", "PRODUCTION", "TC-24-S2", 86.02, 98.77, 100, 1, 7, 11],
-    ["3038-Karthi.S", "PRODUCTION", "TC-28", 46.44, 98.68, 100, 4.5, 3, 12],
-    ["Sesuraj.R", "", "VMC 19", 87.06, 98.67, 100, 1, 0, 13],
-    ["KUMARESAN.R", "", "TC 49", 95.38, 98.67, 100, 0.17, 0, 14],
-    ["3048-Gopikrishnan.R", "PRODUCTION", "TC-13", 86.93, 98.52, 100, 1.5, 155, 15],
-    ["Akash.A", "", "SPM-02", 77.32, 98.41, 100, 1.5, 0, 16],
-    ["Mari.M", "", "VMC 24", 94.64, 98.15, 100, 0.25, 0, 17],
-    ["Damodharan.N", "", "TC-27", 98.04, 98.04, 100, 0, 0, 18],
-    ["Sesuraj.R", "", "TC 49", 98.04, 98.04, 100, 0, 0, 19],
-    ["DEEPU MADHAVAN", "", "VMC-07", 86.27, 97.78, 100, 1, 0, 20],
-    ["Althaf", "", "TC 45", 48.68, 97.36, 100, 3.5, 5, 21],
-    ["Mayakrishnan.M", "", "BROACHING-3", 48.61, 97.22, 100, 0.5, 0, 22],
-    ["Vigneshwaran.S", "", "TC-28", 55.43, 97, 100, 3, 3, 23],
-    ["Akash.A", "", "TC-59", 94.63, 96.98, 100, 0.13, 0, 24],
-    ["DEEPU MADHAVAN", "", "TC 49", 96.83, 96.83, 100, 0, 0, 25],
-    ["3053-Ganesan.S", "PRODUCTION", "TC 43 L", 77.38, 96.53, 100, 1.08, 0, 26],
-    ["Madheswaran.M", "", "TC 50", 79.41, 96.43, 100, 1.5, 0, 27],
-    ["Lochan Naik", "", "VMC 21", 41.27, 96.3, 100, 2, 0, 28],
-    ["3268-Krishnamoorthi.U", "PRODUCTION", "TC-15", 41.27, 96.3, 100, 5, 1, 29],
-    ["Gopikrishnan.R", "", "TC 41 R", 82.54, 96.3, 100, 0.5, 2, 30],
-    ["Anandhu Prakash C V", "", "TC-59", 84.43, 96.07, 100, 0.75, 0.5, 31],
-    ["SIVAPRASANTH.K", "", "VMC 24", 87.52, 96.06, 100, 1.75, 0, 32],
-    ["Guruprasanth.M", "", "TC-06", 89.17, 96.03, 100, 0.25, 47, 33],
-    ["3255-Kalaiselvan.R", "PRODUCTION", "VMC-10", 80.44, 95.77, 100, 1, 1.75, 34],
-    ["5046-Ramchandra Soran", "PRODUCTION", "BROACHING-1", 87.51, 95.52, 100, 0.33, 0, 35],
-    ["Krishnamoorthi.U", "", "TC 41 R", 85.94, 95.49, 100, 0.5, 1, 36],
-    ["Sadap Chandan S", "", "SPM -04", 89.87, 95.49, 100, 0.5, 0, 37],
-    ["Kanniraja.M", "", "TC-10", 88.57, 95.38, 100, 0.25, 0, 38],
-    ["4077-Alexpandiyan", "PRODUCTION", "SPM-03", 78.43, 95.24, 100, 1.5, 0, 39],
-    ["KRUSHA MANIKA BABU", "", "TC-07", 78.24, 95, 100, 1.5, 2, 40],
-    ["RAHUMAN", "", "TC-06", 75.83, 94.79, 100, 1, 3, 41],
-    ["4402-Ebichristopher.J", "PRODUCTION", "TC-33", 91.96, 94.75, 100, 0.25, 0, 42],
-    ["3258-Mari.M", "PRODUCTION", "TC-24 -S1", 85.52, 94.52, 100, 0.67, 0.67, 43],
-    ["3258-Mari.M", "PRODUCTION", "TC-24-S2", 80.95, 94.44, 100, 1, 3, 44],
-    ["1012-Ajith.B", "PRODUCTION", "TC-15", 72.16, 94.36, 100, 2, 1, 45],
-    ["Santhana lakshmi", "", "TC 50", 93.95, 93.95, 100, 0, 0, 46],
-    ["Rajkumar. S", "", "tc-59", 80.9, 93.9, 100, 1.08, 0, 47],
-    ["3254-Mowlikannan.S", "PRODUCTION", "VTL-03", 83.81, 93.87, 100, 0.75, 0, 48],
-    ["Nagamani", "", "TC-59", 81.1, 93.78, 100, 0.89, 0.44, 49],
-    ["Ganesh.M", "", "VMC-03", 87.94, 93.44, 100, 0.5, 0, 50],
-    ["5337-RANJAYKUMAR", "PRODUCTION", "BROACHING-1", 93.24, 93.24, 100, 0, 0, 51],
-    ["GOBANDHAN MUNDEN", "", "TC 43 R", 86.51, 93.16, 100, 0.5, 4, 52],
-    ["3048-Gopikrishnan.R", "PRODUCTION", "TC-37", 85.87, 92.91, 100, 0.31, 0, 53],
-    ["Akhil.S", "", "VMC 24", 76.47, 92.86, 100, 1.5, 0, 54],
-    ["NARENDRAN.S", "", "TC-11", 76.47, 92.86, 100, 1.5, 3, 55],
-    ["3016-Mayakrishnan.M", "PRODUCTION", "SPM-01", 85.79, 92.86, 100, 0.5, 0, 56],
-    ["GOWTHAM.M.C", "", "TC 49", 92.54, 92.54, 100, 0, 0, 57],
-    ["AAKASH.L", "", "TC-59", 85.12, 92.54, 100, 0.38, 0, 58],
-    ["3255-Kalaiselvan.R", "PRODUCTION", "TC-10", 80.44, 92.44, 100, 0.88, 0, 59],
-    ["3255-Kalaiselvan.R", "PRODUCTION", "TC-04", 80.44, 92.44, 100, 0.88, 0, 60],
-    ["Sadap Chandan S", "", "TC 49", 92.1, 92.1, 100, 0, 0, 61],
-    ["1008-Arun kumar.T", "PRODUCTION", "TC-23", 78.43, 92.07, 100, 1.25, 0, 62],
-    ["Ajil.S", "", "VMC-13", 91.67, 91.67, 100, 0, 0, 63],
-    ["Karthi.S", "", "TC-59", 78.15, 91.36, 100, 0.85, 0.17, 64],
-    ["5337-RANJAYKUMAR", "PRODUCTION", "BROACHING-2", 85.87, 91.17, 100, 0.38, 0, 65],
-    ["5185-MOHAN KEWAT", "PRODUCTION", "BROACHING-1", 80.14, 90.93, 100, 0.5, 0, 66],
-    ["Ajil.S", "", "VMC 19", 58.82, 90.91, 100, 3, 0, 67],
-    ["4165-Prakash", "PRODUCTION", "VMC-10", 74.89, 90.52, 100, 1.25, 3.25, 68],
-    ["Ramamoorthi.T", "", "TC-30", 63.33, 90.48, 100, 1.5, 0, 69],
-    ["Anjan Naik", "", "tc-24 -s1", 74.51, 90.48, 100, 1.5, 0, 70],
-    ["Kumbhakarna Dhungia", "", "SPM-03", 74.51, 90.48, 100, 1.5, 0, 71],
-    ["Nararyanan.T", "", "TC-57", 90.28, 90.28, 100, 0, 0, 72],
-    ["Ramamoorthi.T", "", "TC 49", 77.38, 90.28, 100, 1, 0, 73],
-    ["Anjan Naik", "", "TC-22", 76.83, 90.18, 100, 0.91, 0, 74],
-    ["3202-Manoj Kumar.B", "PRODUCTION", "TC-24 -S1", 73.99, 89.84, 100, 1.5, 3, 75],
-    ["DEEPU MADHAVAN", "", "VMC-15", 78.82, 89.33, 100, 1, 0, 76],
-    ["Pradeep", "", "TC-37", 80.21, 89.11, 100, 0.75, 0, 77],
-    ["3058-Ganesh.M", "PRODUCTION", "TC-24 -S1", 78.43, 88.89, 100, 1, 0, 78],
-    ["DEEPU MADHAVAN", "", "tc-20", 78.43, 88.89, 100, 1, 0, 79],
-    ["3011-Suresh.T", "PRODUCTION", "SPM-03", 78.43, 88.89, 100, 1, 0, 80],
-    ["3202-Manoj Kumar.B", "PRODUCTION", "TC-24-S2", 73.99, 88.77, 100, 1.42, 3.67, 81],
-    ["NARENDRAN.S", "", "TC-28", 44.61, 88.69, 100, 3.01, 18.5, 82],
-    ["ARUN MUNDA", "", "BROACHING-2", 58.62, 88.58, 100, 2.13, 0, 83],
-    ["Vigneshwaran.S", "", "TC-37", 75.83, 88.47, 100, 1, 2, 84],
-    ["Anjan Naik", "", "VMC-11", 85.49, 88.41, 100, 0.25, 0, 85],
-    ["Kalaiselvan.R", "", "TC-04", 75.2, 88.33, 100, 1.46, 0, 86],
-    ["5002-Anjan Naik", "PRODUCTION", "TC-21", 77.01, 88.18, 100, 0.75, 0, 87],
-    ["Anjan Naik", "", "TC-20", 75.91, 88.06, 100, 0.79, 0.03, 88],
-    ["4147-Rajkumar. S", "PRODUCTION", "TC-01", 75.36, 87.92, 100, 1, 7, 89],
-    ["Nagamani", "", "TC-60", 69.09, 87.87, 100, 1.86, 1, 90],
-    ["Ajil.S", "", "TC 49", 81.43, 87.69, 100, 0.5, 0, 91],
-    ["Nararyanan.T", "", "TC-24-S2", 72.16, 87.62, 100, 1.5, 4, 92],
-    ["Kalaiselvan.R", "", "TC-10", 74.71, 87.56, 100, 1.49, 0.13, 93],
-    ["3067-Aravinth.G", "PRODUCTION", "VTL-03", 70, 87.5, 100, 1, 0, 94],
-    ["Prabhakaran.M", "", "TC-10", 70, 87.5, 100, 1, 0, 95],
-    ["Ajil.S", "", "tc 52", 72.06, 87.5, 100, 1.5, 0, 96],
-    ["4165-Prakash", "PRODUCTION", "TC-04", 72.39, 87.39, 100, 1.19, 0, 97],
-    ["3050-Madheswaran.M", "PRODUCTION", "TC-15", 74.88, 87.36, 100, 1, 0, 98],
-    ["Ganesh.M", "", "VMC -23", 77.06, 87.33, 100, 1, 0, 99],
-    ["Damodharan.N", "", "TC 50", 87.14, 87.14, 100, 0, 0, 100],
-];
+const API_BASE = resolveApiBase();
+
+function toIsoDate(d) {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
 
 /* ═══════════════════════════════════════════════════════
    COLUMN DEFINITIONS
@@ -208,6 +113,30 @@ export default function EfficiencyReport() {
     const [sortCol, setSortCol] = useState(8);
     const [sortDir, setSortDir] = useState(1);
     const [page, setPage] = useState(1);
+    const [tableData, setTableData] = useState([]);
+
+    /* ── Load operator / machine table from API ── */
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const params = new URLSearchParams({
+            from: toIsoDate(dateRange.from),
+            to: toIsoDate(dateRange.to),
+            cnc: chkCNC ? "1" : "0",
+            conv: chkConv ? "1" : "0",
+            tab,
+        });
+        fetch(`${API_BASE}/efficiency-report/?${params}`, { credentials: "include" })
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data?.error || "efficiency-report failed");
+                return data;
+            })
+            .then(data => {
+                setTableData(Array.isArray(data?.rows) ? data.rows : []);
+                setPage(1);
+            })
+            .catch(() => setTableData([]));
+    }, [dateRange.from, dateRange.to, chkCNC, chkConv, tab]);
 
     /* ── Live clock ── */
     const [time, setTime] = useState(new Date());
@@ -222,9 +151,9 @@ export default function EfficiencyReport() {
 
     /* ── Filtered + sorted data ── */
     const filtered = useMemo(() => {
-        let d = RAW.filter(r => {
-            if (opFilter && !r[0].toLowerCase().includes(opFilter.toLowerCase())) return false;
-            if (macFilter && !r[2].toLowerCase().includes(macFilter.toLowerCase())) return false;
+        let d = tableData.filter(r => {
+            if (opFilter && !(r[0] || "").toLowerCase().includes(opFilter.toLowerCase())) return false;
+            if (macFilter && !(r[2] || "").toLowerCase().includes(macFilter.toLowerCase())) return false;
             if (deptName && !(r[1] || "").toLowerCase().includes(deptName.toLowerCase())) return false;
             if (search) {
                 const hay = (r[0] + r[1] + r[2]).toLowerCase();
@@ -247,7 +176,7 @@ export default function EfficiencyReport() {
         });
 
         return d;
-    }, [opFilter, macFilter, deptName, search, reportType, sortCol, sortDir]);
+    }, [tableData, opFilter, macFilter, deptName, search, reportType, sortCol, sortDir]);
 
     /* ── KPIs ── */
     const kpi = useMemo(() => {
