@@ -176,8 +176,25 @@ const PV_MONTH_DATA = {
 /* ═══════════════════════════════════════════════
 MAIN COMPONENT
 ═══════════════════════════════════════════════ */
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return defaults;
+    const p = JSON.parse(raw);
+    if (p.from) p.from = new Date(p.from);
+    if (p.to) p.to = new Date(p.to);
+    return { ...defaults, ...p };
+  } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function ProductionAnalysis() {
-  const [dateRange, setDateRange] = useState({ from: new Date(2026, 1, 1), to: new Date(2026, 1, 28) });
+  const _dflt = { from: new Date(2026, 1, 1), to: new Date(2026, 1, 28) };
+  const _saved = readFilterSession("ba_filter_production", _dflt);
+  const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
   const [filterMachine, setFilterMachine] = useState("");
   const [filterShift, setFilterShift] = useState("");
   const [filterProcess, setFilterProcess] = useState("");
@@ -221,6 +238,11 @@ export default function ProductionAnalysis() {
     const t = setTimeout(() => setMounted(true), 60);
     return () => clearTimeout(t);
   }, []);
+
+  // ✅ Persist date range to sessionStorage on every change
+  useEffect(() => {
+    writeFilterSession("ba_filter_production", { from: dateRange.from, to: dateRange.to });
+  }, [dateRange.from, dateRange.to]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;

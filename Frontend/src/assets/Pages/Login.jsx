@@ -135,13 +135,13 @@ function showLoginToast(variant, title, message) {
 export default function LoginPage() {
     const navigate = useNavigate();
 
-    const [userId,       setUserId]       = useState("");
-    const [companyName,  setCompanyName]  = useState("");
+    const [userId, setUserId] = useState("");
+    const [companyName, setCompanyName] = useState("");
     const [companyState, setCompanyState] = useState("idle"); // idle | loading | found | error | network
-    const [username,     setUsername]     = useState("");
-    const [password,     setPassword]     = useState("");
-    const [loginError,   setLoginError]   = useState("");
-    const [loginBusy,    setLoginBusy]    = useState(false);
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [loginError, setLoginError] = useState("");
+    const [loginBusy, setLoginBusy] = useState(false);
 
     // ── Auto-fetch company name (debounced 500ms) ────────────
     useEffect(() => {
@@ -180,19 +180,19 @@ export default function LoginPage() {
 
     // ── Placeholder text based on state ─────────────────────
     const companyPlaceholder = {
-        idle:    "Auto-fetched from User ID",
+        idle: "Auto-fetched from User ID",
         loading: "Looking up company…",
-        found:   "",
-        error:   "⚠ Company not found — check your ID",
+        found: "",
+        error: "⚠ Company not found — check your ID",
         network: "⚠ Cannot reach server — is Django running?",
     }[companyState];
 
     // ── Input class based on state ───────────────────────────
     const companyClass = [
         "lp__inp lp__inp--ro",
-        companyState === "found"               ? "lp__inp--ok"  : "",
-        companyState === "error"               ? "lp__inp--err" : "",
-        companyState === "network"             ? "lp__inp--err" : "",
+        companyState === "found" ? "lp__inp--ok" : "",
+        companyState === "error" ? "lp__inp--err" : "",
+        companyState === "network" ? "lp__inp--err" : "",
     ].join(" ").trim();
 
     // ── Login submit ─────────────────────────────────────────
@@ -200,22 +200,22 @@ export default function LoginPage() {
         e.preventDefault();
         setLoginError("");
 
-        if (!userId.trim())    return setLoginError("Please enter your organization ID.");
-        if (!username.trim())  return setLoginError("Please enter your username.");
-        if (!password)         return setLoginError("Please enter your password.");
-        if (companyState === "error")   return setLoginError("Invalid company code.");
+        if (!userId.trim()) return setLoginError("Please enter your organization ID.");
+        if (!username.trim()) return setLoginError("Please enter your username.");
+        if (!password) return setLoginError("Please enter your password.");
+        if (companyState === "error") return setLoginError("Invalid company code.");
         if (companyState === "network") return setLoginError("Cannot reach server. Is Django running?");
 
         setLoginBusy(true);
 
         try {
             const res = await fetch(`${API}/login/`, {
-                method:      "POST",
+                method: "POST",
                 credentials: "include",       // ✅ session cookie saved by browser
-                headers:     { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     company_code: userId.trim(),
-                    username:     username.trim(),
+                    username: username.trim(),
                     password,
                 }),
             });
@@ -237,6 +237,7 @@ export default function LoginPage() {
                     company: data.company,
                     company_code: data.company_code,
                     username: data.username,
+                    designation: data.designation,
                 }));
                 writeRightsCache(
                     data.company_code,
@@ -266,211 +267,221 @@ export default function LoginPage() {
 
     return (
         <>
-        <ToastContainer
-            className="lp-toast-container"
-            toastClassName="lp-toast-item"
-            bodyClassName="lp-toast-body"
-            progressClassName="lp-toast-progress"
-            position="top-right"
-            autoClose={6500}
-            hideProgressBar={false}
-            newestOnTop
-            closeOnClick
-            pauseOnHover
-            draggable
-            limit={2}
-            icon={false}
-        />
-        <div className="lp">
-            <div className="lp__blob lp__blob--tr" />
-            <div className="lp__blob lp__blob--bl" />
-            <div className="lp__blob lp__blob--tl" />
+            <ToastContainer
+                className="lp-toast-container"
+                toastClassName="lp-toast-item"
+                bodyClassName="lp-toast-body"
+                progressClassName="lp-toast-progress"
+                position="top-right"
+                autoClose={6500}
+                hideProgressBar={false}
+                newestOnTop
+                closeOnClick
+                pauseOnHover
+                draggable
+                limit={2}
+                icon={false}
+            />
+            <div className="lp">
+                <div className="lp__blob lp__blob--tr" />
+                <div className="lp__blob lp__blob--bl" />
+                <div className="lp__blob lp__blob--tl" />
 
-            {/* ═══ LEFT PANEL ════════════════════════════════════ */}
-            <div className="lp__left">
-                <div className="lp__brand anim-fade-up" style={{ animationDelay: "0.1s" }}>
-                    <div className="lp__brand-row">
-                        <span className="lp__brand-anims">Anims</span>
-                        <span className="lp__brand-erp">&nbsp;ERP</span>
-                    </div>
-                    <div className="lp__brand-rule" />
-                    <p className="lp__brand-mfg">Manufacturing</p>
-                </div>
-
-                <h2 className="lp__tagline anim-fade-up" style={{ animationDelay: "0.2s" }}>
-                    Business Analytics Platform
-                </h2>
-
-                <div className="lp__illus anim-fade-in" style={{ animationDelay: "0.4s" }}>
-                    <img
-                        src="/Images/LOGIN FINAL imag eand curve.png"
-                        alt="Business analytics dashboard illustration"
-                        className="lp__illus-img float-slow"
-                    />
-                </div>
-
-                <p className="lp__desc anim-fade-up" style={{ animationDelay: "0.3s" }}>
-                    Login to access real-time dashboards, track key performance metrics,
-                    and turn your raw business data into actionable insights, all from a
-                    single platform.
-                </p>
-            </div>
-
-            {/* ═══ RIGHT PANEL ═══════════════════════════════════ */}
-            <div className="lp__right">
-                <div className="lp__card">
-                    <div className="lp__card-head anim-fade-up" style={{ animationDelay: "0.1s" }}>
-                        <h1 className="lp__title">Welcome back</h1>
-                        <p className="lp__subtitle">
-                            Please enter your details to Login to your account.
-                        </p>
+                {/* ═══ LEFT PANEL ════════════════════════════════════ */}
+                <div className="lp__left">
+                    <div className="lp__brand anim-fade-up" style={{ animationDelay: "0.1s" }}>
+                        <div className="lp__brand-row">
+                            <span className="lp__brand-anims">Anims</span>
+                            <span className="lp__brand-erp">&nbsp;ERP</span>
+                        </div>
+                        <div className="lp__brand-rule" />
+                        <p className="lp__brand-mfg">Manufacturing</p>
                     </div>
 
-                    <form className="lp__form" onSubmit={handleLogin} noValidate>
+                    <h2 className="lp__tagline anim-fade-up" style={{ animationDelay: "0.2s" }}>
+                        Business Analytics Platform
+                    </h2>
 
-                        {/* ── Organization / Company Code ── */}
-                        <div className="lp__field anim-fade-up" style={{ animationDelay: "0.2s" }}>
-                            <label className="lp__label" htmlFor="f-uid">User ID</label>
-                            <div className="lp__wrap">
-                                <span className="lp__ico"><IconOrg /></span>
-                                <input
-                                    id="f-uid"
-                                    type="text"
-                                    className="lp__inp"
-                                    placeholder="Enter your organization ID"
-                                    value={userId}
-                                    onChange={(e) => {
-                                        setUserId(e.target.value);
-                                        setLoginError("");
-                                    }}
-                                    autoComplete="off"
-                                />
+                    <div className="lp__illus anim-fade-in" style={{ animationDelay: "0.4s" }}>
+                        <img
+                            src="/Images/LOGIN FINAL imag eand curve.png"
+                            alt="Business analytics dashboard illustration"
+                            className="lp__illus-img float-slow"
+                        />
+                    </div>
+
+                    <p className="lp__desc anim-fade-up" style={{ animationDelay: "0.3s" }}>
+                        Login to access real-time dashboards, track key performance metrics,
+                        and turn your raw business data into actionable insights, all from a
+                        single platform.
+                    </p>
+                </div>
+
+                {/* ═══ RIGHT PANEL ═══════════════════════════════════ */}
+                <div className="lp__right">
+                    <div className="lp__card">
+                        <div className="lp__card-head anim-fade-up" style={{ animationDelay: "0.1s" }}>
+                            <div className="lp__logo anim-fade-in" style={{ animationDelay: "0.05s" }}>
+                                <img src="/Images/logo.png" alt="Anims" className="lp__logo-img" />
                             </div>
+                            <h1 className="lp__title">Welcome back</h1>
+                            <p className="lp__subtitle">
+                                Please enter your details to Login to your account.
+                            </p>
                         </div>
 
-                        {/* ── Customer Name (auto-fetched) ── */}
-                        <div className="lp__field anim-fade-up" style={{ animationDelay: "0.25s" }}>
-                            <label className="lp__label" htmlFor="f-cust">
-                                Customer Name
-                                {/* ✅ Loading spinner inline */}
-                                {companyState === "loading" && (
-                                    <span style={{
-                                        marginLeft: 8, fontSize: 11,
-                                        color: "#3b82f6", fontWeight: 500,
-                                    }}>
-                                        fetching…
-                                    </span>
-                                )}
-                                {/* ✅ Green tick when found */}
-                                {companyState === "found" && (
-                                    <span style={{
-                                        marginLeft: 8, fontSize: 11,
-                                        color: "#10b981", fontWeight: 600,
-                                    }}>
-                                        ✓ verified
-                                    </span>
-                                )}
-                            </label>
-                            <div className="lp__wrap lp__wrap--bare">
-                                <input
-                                    id="f-cust"
-                                    type="text"
-                                    className={companyClass}
-                                    placeholder={companyPlaceholder}
-                                    value={companyName}
-                                    readOnly
-                                    tabIndex={-1}
-                                />
+                        <form className="lp__form" onSubmit={handleLogin} noValidate>
+
+                            {/* ── Organization / Company Code ── */}
+                            <div className="lp__field anim-fade-up" style={{ animationDelay: "0.2s" }}>
+                                <label className="lp__label" htmlFor="f-uid">User ID</label>
+                                <div className="lp__wrap">
+                                    <span className="lp__ico"><IconOrg /></span>
+                                    <input
+                                        id="f-uid"
+                                        type="text"
+                                        className="lp__inp"
+                                        placeholder="Enter your organization ID"
+                                        value={userId}
+                                        onChange={(e) => {
+                                            setUserId(e.target.value);
+                                            setLoginError("");
+                                        }}
+                                        autoComplete="off"
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* ── Username ── */}
-                        <div className="lp__field anim-fade-up" style={{ animationDelay: "0.3s" }}>
-                            <label className="lp__label" htmlFor="f-user">Username</label>
-                            <div className="lp__wrap">
-                                <span className="lp__ico"><IconUser /></span>
-                                <input
-                                    id="f-user"
-                                    type="text"
-                                    className="lp__inp"
-                                    placeholder="Enter your username"
-                                    value={username}
-                                    onChange={(e) => {
-                                        setUsername(e.target.value);
-                                        setLoginError("");
-                                    }}
-                                    autoComplete="username"
-                                />
+                            {/* ── Customer Name (auto-fetched) ── */}
+                            <div className="lp__field anim-fade-up" style={{ animationDelay: "0.25s" }}>
+                                <label className="lp__label" htmlFor="f-cust">
+                                    Customer Name
+                                    {/* ✅ Loading spinner inline */}
+                                    {companyState === "loading" && (
+                                        <span style={{
+                                            marginLeft: 8, fontSize: 11,
+                                            color: "#3b82f6", fontWeight: 500,
+                                        }}>
+                                            fetching…
+                                        </span>
+                                    )}
+                                    {/* ✅ Green tick when found */}
+                                    {companyState === "found" && (
+                                        <span style={{
+                                            marginLeft: 8, fontSize: 11,
+                                            color: "#10b981", fontWeight: 600,
+                                        }}>
+                                            ✓ verified
+                                        </span>
+                                    )}
+                                </label>
+                                <div className="lp__wrap lp__wrap--bare">
+                                    <input
+                                        id="f-cust"
+                                        type="text"
+                                        className={companyClass}
+                                        placeholder={companyPlaceholder}
+                                        value={companyName}
+                                        readOnly
+                                        tabIndex={-1}
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* ── Password ── */}
-                        <div className="lp__field anim-fade-up" style={{ animationDelay: "0.35s" }}>
-                            <label className="lp__label" htmlFor="f-pass">Password</label>
-                            <div className="lp__wrap">
-                                <span className="lp__ico"><IconLock /></span>
-                                <input
-                                    id="f-pass"
-                                    type="password"
-                                    className="lp__inp"
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => {
-                                        setPassword(e.target.value);
-                                        setLoginError("");
-                                    }}
-                                    autoComplete="current-password"
-                                />
+                            {/* ── Username ── */}
+                            <div className="lp__field anim-fade-up" style={{ animationDelay: "0.3s" }}>
+                                <label className="lp__label" htmlFor="f-user">Username</label>
+                                <div className="lp__wrap">
+                                    <span className="lp__ico"><IconUser /></span>
+                                    <input
+                                        id="f-user"
+                                        type="text"
+                                        className="lp__inp"
+                                        placeholder="Enter your username"
+                                        value={username}
+                                        onChange={(e) => {
+                                            setUsername(e.target.value);
+                                            setLoginError("");
+                                        }}
+                                        autoComplete="username"
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* ✅ Login error message — replaces alert() */}
-                        {loginError && (
-                            <div style={{
-                                background: "#fef2f2",
-                                border: "1px solid #fecaca",
-                                borderRadius: 8,
-                                padding: "10px 14px",
-                                fontSize: 13,
-                                color: "#dc2626",
-                                fontWeight: 500,
-                                marginBottom: 4,
-                            }}>
-                                ⚠ {loginError}
+                            {/* ── Password ── */}
+                            <div className="lp__field anim-fade-up" style={{ animationDelay: "0.35s" }}>
+                                <label className="lp__label" htmlFor="f-pass">Password</label>
+                                <div className="lp__wrap">
+                                    <span className="lp__ico"><IconLock /></span>
+                                    <input
+                                        id="f-pass"
+                                        type="password"
+                                        className="lp__inp"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            setLoginError("");
+                                        }}
+                                        autoComplete="current-password"
+                                    />
+                                </div>
+                                <div className="lp__forgot-row">
+                                    <a
+                                        href="#"
+                                        className="lp__forgot-link"
+                                        onClick={e => { e.preventDefault(); navigate("/forgot-password"); }}
+                                    >Forgot Password?</a>
+                                </div>
                             </div>
-                        )}
 
-                        <div className="anim-fade-up" style={{ animationDelay: "0.45s" }}>
-                            <button
-                                type="submit"
-                                className="lp__btn"
-                                disabled={loginBusy || companyState === "loading"}
-                                style={{ opacity: loginBusy ? 0.7 : 1 }}
-                            >
-                                <span>{loginBusy ? "Logging in…" : "Login"}</span>
-                                <IconArrow />
-                            </button>
+                            {/* ✅ Login error message — replaces alert() */}
+                            {loginError && (
+                                <div style={{
+                                    background: "#fef2f2",
+                                    border: "1px solid #fecaca",
+                                    borderRadius: 8,
+                                    padding: "10px 14px",
+                                    fontSize: 13,
+                                    color: "#dc2626",
+                                    fontWeight: 500,
+                                    marginBottom: 4,
+                                }}>
+                                    ⚠ {loginError}
+                                </div>
+                            )}
+
+                            <div className="anim-fade-up" style={{ animationDelay: "0.45s" }}>
+                                <button
+                                    type="submit"
+                                    className="lp__btn"
+                                    disabled={loginBusy || companyState === "loading"}
+                                    style={{ opacity: loginBusy ? 0.7 : 1 }}
+                                >
+                                    <span>{loginBusy ? "Logging in…" : "Login"}</span>
+                                    <IconArrow />
+                                </button>
+                                <div className="lp__signup-prompt">
+                                    Don't have an account yet? <a href="#" className="lp__signup-link" onClick={(e) => { e.preventDefault(); navigate("/signup"); }}>Sign up</a>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div className="lp__footer anim-fade-up" style={{ animationDelay: "0.55s" }}>
+                            <p className="lp__copy">© {new Date().getFullYear()}&nbsp;&nbsp;Anims Infocare Systems</p>
+                            <nav className="lp__links">
+                                <a className="lp__link" href="https://animse.com/#/anims/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                                <span className="lp__dot">·</span>
+                                <a className="lp__link" href="https://animse.com/#/Anims/Terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                                <span className="lp__dot">·</span>
+                                <a className="lp__link" href="https://animse.com/#/Contact" target="_blank" rel="noopener noreferrer">Contact Support</a>
+                            </nav>
                         </div>
-                    </form>
-
-                    <div className="lp__footer anim-fade-up" style={{ animationDelay: "0.55s" }}>
-                        <p className="lp__copy">© 2026&nbsp;&nbsp;Anims Infocare Systems</p>
-                        <nav className="lp__links">
-                            <a className="lp__link" href="#">Privacy Policy</a>
-                            <span className="lp__dot">·</span>
-                            <a className="lp__link" href="#">Terms of Service</a>
-                            <span className="lp__dot">·</span>
-                            <a className="lp__link" href="#">Contact Support</a>
-                        </nav>
                     </div>
                 </div>
-            </div>
 
-            {/* ── Anims logo — fixed top-right corner ── */}
-            <div className="lp__logo anim-fade-in" style={{ animationDelay: "0.6s" }}>
-                <img src="/Images/logo.png" alt="Anims" className="lp__logo-img" />
+
             </div>
-        </div>
         </>
     );
 }

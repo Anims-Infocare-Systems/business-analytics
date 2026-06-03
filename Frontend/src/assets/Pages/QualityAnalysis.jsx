@@ -223,15 +223,29 @@ const formatYmd = (d) => {
 // ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return defaults;
+        const p = JSON.parse(raw);
+        if (p.from) p.from = new Date(p.from);
+        if (p.to) p.to = new Date(p.to);
+        return { ...defaults, ...p };
+    } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function QualityAnalysis() {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    const [dateRange, setDateRange] = useState({
-        from: startOfMonth,
-        to: endOfMonth,
-    });
+    const _dflt = { from: startOfMonth, to: endOfMonth };
+    const _saved = readFilterSession("ba_filter_quality", _dflt);
+    const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [filters, setFilters] = useState({
         fromDate: formatYmd(startOfMonth), toDate: formatYmd(endOfMonth),
         reportType: "All Reports", department: "All Departments",
@@ -305,6 +319,11 @@ export default function QualityAnalysis() {
         const t = setTimeout(() => setAnimated(true), 60);
         return () => clearTimeout(t);
     }, []);
+
+    // ✅ Persist date range to sessionStorage on every change
+    useEffect(() => {
+        writeFilterSession("ba_filter_quality", { from: dateRange.from, to: dateRange.to });
+    }, [dateRange.from, dateRange.to]);
 
     // Debounced re-fetch on dateRange change (150 ms)
     useEffect(() => {

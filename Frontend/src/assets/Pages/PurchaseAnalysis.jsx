@@ -140,6 +140,21 @@ function SectionHeader({ icon, title, badge, badgeCls }) {
 // ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return defaults;
+        const p = JSON.parse(raw);
+        if (p.from) p.from = new Date(p.from);
+        if (p.to) p.to = new Date(p.to);
+        return { ...defaults, ...p };
+    } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function PurchaseAnalysis() {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -152,10 +167,9 @@ export default function PurchaseAnalysis() {
         return `${y}-${m}-${day}`;
     };
 
-    const [dateRange, setDateRange] = useState({
-        from: startOfMonth,
-        to: endOfMonth,
-    });
+    const _dflt = { from: startOfMonth, to: endOfMonth };
+    const _saved = readFilterSession("ba_filter_purchase", _dflt);
+    const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [filters, setFilters] = useState({
         fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
         poType: "All Types", supplier: "All Suppliers",
@@ -189,6 +203,11 @@ export default function PurchaseAnalysis() {
         const t = setTimeout(() => setAnimated(true), 80);
         return () => clearTimeout(t);
     }, []);
+
+    // ✅ Persist date range to sessionStorage on every change
+    useEffect(() => {
+        writeFilterSession("ba_filter_purchase", { from: dateRange.from, to: dateRange.to });
+    }, [dateRange.from, dateRange.to]);
 
     // ── Fetch live PO types from POMas ──────────────────────
     useEffect(() => {

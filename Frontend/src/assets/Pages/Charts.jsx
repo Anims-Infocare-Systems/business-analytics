@@ -782,16 +782,39 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
   );
 }
 
+
+// ── sessionStorage filter helpers ──
+function readChartSession(key, defaults) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return defaults;
+    const p = JSON.parse(raw);
+    if (p.from) p.from = new Date(p.from);
+    if (p.to) p.to = new Date(p.to);
+    return { ...defaults, ...p };
+  } catch { return defaults; }
+}
+function writeChartSession(key, data) {
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 // ─── Main ─────────────────────────────────────────────────────
 export default function Charts() {
   const [filters, setFilters] = useState({ category: "all", type: "all" });
-  const [dateRange, setDateRange] = useState({ from: null, to: null });
+  const _savedCh = readChartSession("ba_filter_charts", { from: null, to: null });
+  const [dateRange, setDateRange] = useState({ from: _savedCh.from, to: _savedCh.to });
   const [preview, setPreview] = useState(null);
   const visible = CHART_DEFS.filter(d => (filters.category === "all" || d.category === filters.category) && (filters.type === "all" || d.type === filters.type));
   const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val }));
   const reset = () => { setFilters({ category: "all", type: "all" }); setDateRange({ from: null, to: null }); };
   const isFiltered = filters.category !== "all" || filters.type !== "all" || !!dateRange.from;
   const handlePreview = (def, operator = null) => setPreview({ def, dateRange, operator });
+
+  // ✅ Persist date range to sessionStorage on every change
+  useEffect(() => {
+    writeChartSession("ba_filter_charts", { from: dateRange.from, to: dateRange.to });
+  }, [dateRange.from, dateRange.to]);
+
   return (
     <div className="ch-root">
       <div className="ch-filter-bar">

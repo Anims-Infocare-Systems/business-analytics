@@ -1,0 +1,1928 @@
+/* ============================================================
+   Settings.css  ─  prefix: st-
+   Premium settings panel styled with deep gradients, glassmorphism,
+   and fluid layouts. Fits Anims dashboard theme.
+   ============================================================ */
+
+.st-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(12, 16, 26, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 0;
+}
+
+/* Animations */
+.st-overlay--fade-in {
+    animation: st-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-overlay--fade-out {
+    animation: st-fade-out 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-container--slide-up {
+    animation: st-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-container--slide-down {
+    animation: st-slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes st-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes st-fade-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes st-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes st-slide-down {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+}
+
+@keyframes st-glow-pulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.25;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.45;
+    }
+
+    100% {
+        transform: scale(0.95);
+        opacity: 0.25;
+    }
+}
+
+/* Modal Box Container */
+.st-container {
+    width: 100vw;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.98);
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    display: flex;
+    overflow: hidden;
+    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Dark Mode Adaptive styling if parent requires ── */
+.dl-root.dark-theme .st-container {
+    background: rgba(15, 23, 42, 0.98);
+    border: none;
+    color: #f1f5f9;
+}
+
+/* Left Sidebar styling */
+.st-sidebar {
+    width: 250px;
+    border-right: 1px solid rgba(226, 232, 240, 0.8);
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%);
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.st-sidebar__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 4px;
+    margin-bottom: 8px;
+}
+
+.st-sidebar__back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.st-sidebar__back-btn:hover {
+    background: #f8fafc;
+    color: #2d6de8;
+    border-color: #cbd5e1;
+    transform: translateX(-2px);
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.08);
+}
+
+.st-sidebar__title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+/* Dark Mode back button overrides */
+.dl-root.dark-theme .st-sidebar__back-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    box-shadow: none;
+}
+
+.dl-root.dark-theme .st-sidebar__back-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dl-root.dark-theme .st-sidebar__title {
+    color: #f1f5f9;
+}
+
+.st-sidebar__back-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #2d6de8;
+}
+
+.st-sidebar__back-label {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.st-sidebar__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.st-sidebar__nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 10px;
+    width: 100%;
+    text-align: left;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 550;
+    transition: 
+        background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+
+.st-sidebar__nav-item:hover:not(.st-sidebar__nav-item--active) {
+    background: rgba(45, 109, 232, 0.08);
+    color: #2d6de8;
+    transform: translateX(4px);
+}
+
+.st-sidebar__nav-icon {
+    display: flex;
+    align-items: center;
+    color: #64748b;
+    transition: color 0.2s, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.st-sidebar__nav-item:hover:not(.st-sidebar__nav-item--active) .st-sidebar__nav-icon {
+    color: #2d6de8;
+    transform: scale(1.1);
+}
+
+.st-sidebar__nav-item--active {
+    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.25);
+}
+
+.st-sidebar__nav-item--active .st-sidebar__nav-icon {
+    color: #ffffff !important;
+}
+
+/* Dark Mode settings nav item overrides */
+.dl-root.dark-theme .st-sidebar__nav-item {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-sidebar__nav-item:hover:not(.st-sidebar__nav-item--active) {
+    background: rgba(45, 109, 232, 0.15);
+    color: #60a5fa;
+}
+
+.dl-root.dark-theme .st-sidebar__nav-item:hover:not(.st-sidebar__nav-item--active) .st-sidebar__nav-icon {
+    color: #60a5fa;
+}
+
+/* Right Content Area */
+.st-content {
+    flex: 1;
+    padding: 36px 40px;
+    overflow-y: auto;
+    background: #ffffff;
+}
+
+/* Tab animations */
+.anim-fade-in-quick {
+    animation: st-fade-in 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.st-section {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.st-section__title {
+    font-size: 22px;
+    font-weight: 750;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+}
+
+.st-section__desc {
+    font-size: 14px;
+    color: #64748b;
+    margin-bottom: 24px;
+}
+
+/* Profile Card component */
+.st-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: linear-gradient(135deg, rgba(45, 109, 232, 0.05) 0%, rgba(20, 72, 184, 0.05) 100%);
+    border: 1px solid rgba(45, 109, 232, 0.1);
+    padding: 20px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+}
+
+.st-profile-card__avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 16px rgba(45, 109, 232, 0.2);
+}
+
+.st-profile-card__info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.st-profile-card__name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.st-profile-card__role {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2d6de8;
+}
+
+.st-profile-card__meta {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Profile fields grid */
+.st-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.st-detail-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 12px 16px;
+    border-radius: 10px;
+}
+
+.st-detail-field__label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.st-detail-field__value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.st-detail-field__value--active {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #10b981;
+}
+
+.st-status-dot {
+    width: 7px;
+    height: 7px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px #10b981;
+}
+
+.st-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 24px 0;
+    width: 100%;
+}
+
+.st-subheading {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+}
+
+/* Change Password Form styling */
+.st-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.st-form__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.st-form__row:first-of-type {
+    grid-template-columns: 1fr;
+}
+
+.st-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.st-form__label {
+    font-size: 13px;
+    font-weight: 550;
+    color: #475569;
+}
+
+.st-form__input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.st-form__input-icon {
+    position: absolute;
+    left: 14px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    transition: color 0.2s;
+}
+
+.st-form__input {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 11px 14px 11px 40px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background: #ffffff;
+    color: #0f172a;
+    width: 100%;
+}
+
+.st-form__input:focus {
+    border-color: #2d6de8;
+    box-shadow: 0 0 0 4px rgba(45, 109, 232, 0.12);
+}
+
+.st-form__input-wrapper:focus-within .st-form__input-icon {
+    color: #2d6de8;
+}
+
+/* Dark Mode input overrides */
+.dl-root.dark-theme .st-form__input {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-form__input:focus {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: #2d6de8;
+    box-shadow: 0 0 0 4px rgba(45, 109, 232, 0.2);
+}
+
+.dl-root.dark-theme .st-form__input-icon {
+    color: #475569;
+}
+
+.dl-root.dark-theme .st-form__input-wrapper:focus-within .st-form__input-icon {
+    color: #2d6de8;
+}
+
+.st-form__btn {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.2);
+    transition: all 0.2s;
+    margin-top: 8px;
+}
+
+.st-form__btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(45, 109, 232, 0.3);
+}
+
+.st-form__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.st-form__btn-icon {
+    display: flex;
+    align-items: center;
+}
+
+.st-form__msg {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.st-form__msg--error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+}
+
+.st-form__msg--success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #16a34a;
+}
+
+
+/* ── Billing Styles ── */
+.st-billing-banner {
+    position: relative;
+    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
+    border-radius: 14px;
+    padding: 24px;
+    color: #ffffff;
+    margin-bottom: 28px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(20, 72, 184, 0.2);
+}
+
+.st-billing-banner__glow {
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 250px;
+    height: 250px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    filter: blur(40px);
+}
+
+.st-billing-banner__content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.st-billing-banner__left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.st-billing-banner__badge {
+    background: rgba(255, 255, 255, 0.25);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 40px;
+    align-self: flex-start;
+}
+
+.st-billing-banner__plan {
+    font-size: 20px;
+    font-weight: 750;
+    margin: 4px 0;
+}
+
+.st-billing-banner__expiry {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.st-billing-banner__right {
+    text-align: right;
+}
+
+.st-billing-banner__upgrade-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    padding: 10px 20px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.st-billing-banner__upgrade-btn:hover {
+    background: #ffffff;
+    color: #1448b8;
+    border-color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255, 255, 255, 0.25);
+}
+
+.st-billing-banner__upgrade-btn:active {
+    transform: translateY(-1px);
+}
+
+.st-billing-banner__upgrade-btn svg {
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.st-billing-banner__upgrade-btn:hover svg {
+    transform: translateX(3px);
+}
+
+
+/* Quotas grids */
+.st-quotas {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.st-quota-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.st-quota-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.st-quota-card__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.st-quota-card__value {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.st-quota-card__bar-bg {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.st-quota-card__bar-fill {
+    height: 100%;
+    background: #2d6de8;
+    border-radius: 4px;
+}
+
+.st-quota-card__bar-fill--warning {
+    background: #f59e0b;
+}
+
+/* Invoices table */
+.st-invoices-wrapper {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.st-invoices-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+
+.st-invoices-table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.st-invoices-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+}
+
+.st-invoices-table tr:last-child td {
+    border-bottom: none;
+}
+
+.st-invoice-badge {
+    padding: 3px 8px;
+    border-radius: 30px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.st-invoice-badge--paid {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.st-invoice-dl {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.st-invoice-dl:hover {
+    background: #f1f5f9;
+    color: #2d6de8;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+
+/* ── About Tab Styles ── */
+/* ── About Tab Styles ── */
+.st-about-tab {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.st-about-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 32px;
+    align-items: start;
+    margin-top: 8px;
+    margin-bottom: auto;
+}
+
+@media (max-width: 768px) {
+    .st-about-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+}
+
+.st-about-main {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.st-about-block {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.st-about-subheading {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.st-about-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #475569;
+    margin: 0;
+}
+
+/* Staggered entrance animation */
+.anim-slide-up-staggered {
+    opacity: 0;
+    animation: st-slide-up-staggered 0.08s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes st-slide-up-staggered {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Copy email card decoration */
+.st-email-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.st-email-card:hover {
+    border-color: rgba(45, 109, 232, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(45, 109, 232, 0.05);
+}
+
+.st-email-card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(45, 109, 232, 0.08);
+    color: #2d6de8;
+    transition: all 0.2s;
+}
+
+.st-email-card:hover .st-email-card__icon {
+    background: #2d6de8;
+    color: #ffffff;
+    transform: scale(1.05);
+}
+
+.st-email-card__content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.st-email-card__label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.st-email-card__value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.st-email-card__copy-badge {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.st-email-card:hover .st-email-card__copy-badge {
+    background: #2d6de8;
+    color: #ffffff;
+}
+
+.st-email-card--copied {
+    border-color: #10b981 !important;
+    background: rgba(16, 185, 129, 0.02);
+}
+
+.st-email-card--copied .st-email-card__icon {
+    background: #10b981 !important;
+    color: #ffffff !important;
+}
+
+.st-email-card--copied .st-email-card__copy-badge {
+    background: #10b981 !important;
+    color: #ffffff !important;
+}
+
+/* System Stats Widget on right */
+.st-about-sidebar {
+    width: 100%;
+}
+
+.st-stats-widget {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.st-stats-widget__logo-container {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.st-stats-widget__glow {
+    position: absolute;
+    width: 70px;
+    height: 70px;
+    background: rgba(45, 109, 232, 0.3);
+    filter: blur(20px);
+    border-radius: 50%;
+    animation: st-glow-pulse 4s infinite ease-in-out;
+}
+
+.st-stats-widget__logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(0 4px 12px rgba(45, 109, 232, 0.15));
+}
+
+.st-stats-widget__title {
+    font-weight: 750;
+    letter-spacing: -0.01em;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #475569;
+}
+
+.st-stats-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.st-stats-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #f1f5f9;
+    width: 100%;
+}
+
+.st-stats-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.st-stats-row span {
+    color: #64748b;
+}
+
+.st-stats-row strong {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* About Footer styling */
+.st-about-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 20px;
+    margin-top: 36px;
+    width: 100%;
+}
+
+.st-about-footer__left {
+    display: flex;
+    gap: 16px;
+}
+
+.st-about-footer__left a {
+    color: #64748b;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 550;
+    transition: color 0.2s;
+}
+
+.st-about-footer__left a:hover {
+    color: #2d6de8;
+}
+
+.st-about-footer__copy {
+    font-size: 12px;
+    color: #94a3b8;
+    margin: 0;
+}
+
+/* Dark mode compatibility updates */
+.dl-root.dark-theme .st-about-subheading {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-about-text {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-email-card,
+.dl-root.dark-theme .st-stats-widget {
+    background: rgba(30, 41, 59, 0.4);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-email-card:hover {
+    border-color: rgba(45, 109, 232, 0.4);
+}
+
+.dl-root.dark-theme .st-email-card__value {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-email-card__copy-badge {
+    background: rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-email-card:hover .st-email-card__copy-badge {
+    background: #2d6de8;
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-stats-row {
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+.dl-root.dark-theme .st-stats-row strong {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-about-footer {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-about-footer__left a:hover {
+    color: #ffffff;
+}
+
+/* ── Toast Notification ── */
+.st-toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #ffffff;
+    padding: 12px 20px;
+    border-radius: 40px;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow:
+        0 12px 32px rgba(15, 23, 42, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    z-index: 100000;
+    pointer-events: none;
+    animation: st-toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-toast__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #10b981;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+@keyframes st-toast-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+
+/* ── Upgrade Modal Premium CSS ── */
+.st-upgrade-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100010;
+    animation: st-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.st-upgrade-container {
+    background: #ffffff;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 860px;
+    padding: 32px;
+    box-shadow: 
+        0 24px 60px rgba(15, 23, 42, 0.15),
+        0 0 0 1px rgba(15, 23, 42, 0.05);
+    position: relative;
+    animation: st-slide-up-staggered 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-upgrade-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+}
+
+.st-upgrade-title-area {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.st-upgrade-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+
+.st-upgrade-desc {
+    font-size: 14px;
+    color: #64748b;
+}
+
+.st-upgrade-close {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.st-upgrade-close:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    transform: scale(1.05);
+}
+
+.st-upgrade-plans {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+    .st-upgrade-plans {
+        grid-template-columns: 1fr;
+        max-height: 400px;
+        overflow-y: auto;
+        padding-right: 8px;
+    }
+}
+
+.st-upgrade-card {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.st-upgrade-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+    border-color: #cbd5e1;
+}
+
+.st-upgrade-card--active {
+    border-color: #2d6de8;
+    background: rgba(45, 109, 232, 0.02);
+}
+
+.st-upgrade-card--active:hover {
+    border-color: #2d6de8;
+}
+
+.st-upgrade-card__badge {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: #2d6de8;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+}
+
+.st-upgrade-card__title {
+    font-size: 18px;
+    font-weight: 750;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.st-upgrade-card__price-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 18px;
+}
+
+.st-upgrade-card__price {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+
+.st-upgrade-card__period {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.st-upgrade-card__features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.st-upgrade-card__feature {
+    font-size: 13px;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.st-upgrade-card__feature-icon {
+    color: #2d6de8;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.st-upgrade-card__btn {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.st-upgrade-card__btn:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+
+.st-upgrade-card--active .st-upgrade-card__btn {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+    cursor: default;
+}
+
+.st-upgrade-card--promo {
+    border-color: rgba(45, 109, 232, 0.3);
+    box-shadow: 0 8px 24px rgba(45, 109, 232, 0.04);
+}
+
+.st-upgrade-card--promo .st-upgrade-card__btn {
+    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.2);
+}
+
+.st-upgrade-card--promo .st-upgrade-card__btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(45, 109, 232, 0.3);
+    color: #ffffff;
+    background: linear-gradient(135deg, #3b7af0 0%, #1952cd 100%);
+}
+
+.st-upgrade-card__btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.st-upgrade-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 16px;
+}
+
+.st-upgrade-footer__security {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.st-upgrade-msg {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 16px;
+}
+
+.st-upgrade-msg--error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+}
+
+.st-upgrade-msg--success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #16a34a;
+}
+
+
+/* Dark theme support for upgrade modal */
+.dl-root.dark-theme .st-upgrade-container {
+    background: #1e293b;
+    box-shadow: 
+        0 24px 60px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-upgrade-title {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-upgrade-desc {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-upgrade-close {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-upgrade-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-card {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-upgrade-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dl-root.dark-theme .st-upgrade-card--active {
+    border-color: #2d6de8;
+    background: rgba(45, 109, 232, 0.05);
+}
+
+.dl-root.dark-theme .st-upgrade-card__title {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-upgrade-card__price {
+    color: #f1f5f9;
+}
+
+.dl-root.dark-theme .st-upgrade-card__period {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-upgrade-card__feature {
+    color: #cbd5e1;
+}
+
+.dl-root.dark-theme .st-upgrade-card__btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+}
+
+.dl-root.dark-theme .st-upgrade-card__btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-card--active .st-upgrade-card__btn {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.05);
+    color: #475569;
+}
+
+.dl-root.dark-theme .st-upgrade-footer {
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #475569;
+}
+
+/* ── Choose a Plan Modal redesign (Image 2) ── */
+.st-upgrade-container--new {
+    max-width: 1020px;
+    width: 95%;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 40px 32px 32px;
+    position: relative;
+    box-shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
+    display: flex;
+    flex-direction: column;
+    color: #1e293b;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.st-upgrade-close-btn {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.st-upgrade-close-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    transform: rotate(90deg);
+}
+
+.st-upgrade-header-centered {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 32px;
+}
+
+.st-upgrade-main-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.03em;
+    margin: 0;
+}
+
+.st-upgrade-main-subtitle {
+    font-size: 15px;
+    color: #64748b;
+    margin: 0;
+    font-weight: 450;
+}
+
+.st-upgrade-pill-badge {
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 99px;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.st-upgrade-plans-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 24px;
+    align-items: stretch;
+}
+
+@media (max-width: 900px) {
+    .st-upgrade-plans-grid {
+        grid-template-columns: 1fr;
+        max-height: 480px;
+        overflow-y: auto;
+        padding-right: 8px;
+    }
+}
+
+.st-upgrade-plan-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+.st-upgrade-plan-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 35px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1;
+}
+
+.st-upgrade-plan-card--active {
+    border-color: #2563eb !important;
+    background: rgba(37, 99, 235, 0.01);
+}
+
+.st-upgrade-plan-card__icon-wrap {
+    color: #2563eb;
+    margin-bottom: 16px;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__icon-wrap {
+    color: #ffffff;
+}
+
+.st-upgrade-plan-card__title {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 0 0 4px 0;
+    color: #0f172a;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__title {
+    color: #ffffff;
+}
+
+.st-upgrade-plan-card__desc {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 0 20px 0;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__desc {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.st-upgrade-plan-card__price-area {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.st-upgrade-plan-card__price {
+    font-size: 38px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__price {
+    color: #ffffff;
+}
+
+.st-upgrade-plan-card__period {
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__period {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.st-upgrade-plan-card__billing-cycle {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 2px;
+    margin-bottom: 24px;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__billing-cycle {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.st-upgrade-plan-card__btn {
+    width: 100%;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    text-decoration: none;
+}
+
+.st-upgrade-plan-card__btn--free-outline {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #3b82f6;
+}
+
+.st-upgrade-plan-card__btn--free-outline:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #3b82f6;
+}
+
+.st-upgrade-plan-card__btn--white {
+    background: #ffffff;
+    border: none;
+    color: #1e40af;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.st-upgrade-plan-card__btn--white:hover:not(:disabled) {
+    background: #f8fafc;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(255, 255, 255, 0.2);
+}
+
+.st-upgrade-plan-card__btn--blue {
+    background: #2563eb;
+    border: none;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.st-upgrade-plan-card__btn--blue:hover:not(:disabled) {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
+}
+
+.st-upgrade-plan-card__btn:disabled {
+    background: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #94a3b8 !important;
+    cursor: default !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__btn:disabled {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.st-upgrade-plan-card__features-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 12px;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__features-header {
+    color: #ffffff;
+}
+
+.st-upgrade-plan-card__features-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+}
+
+.st-upgrade-plan-card__features-list li {
+    font-size: 13px;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+.st-upgrade-plan-card--featured .st-upgrade-plan-card__features-list li {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.st-feature-check {
+    color: #2563eb;
+    display: flex;
+    align-items: center;
+}
+
+.st-upgrade-plan-card--featured .st-feature-check {
+    color: #93c5fd;
+}
+
+/* Featured Pro plan card styling */
+.st-upgrade-plan-card--pro {
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    border: none;
+    color: #ffffff;
+    box-shadow: 0 15px 35px rgba(37, 99, 235, 0.25);
+}
+
+.st-upgrade-plan-card--pro:hover {
+    box-shadow: 0 25px 45px rgba(37, 99, 235, 0.35);
+}
+
+/* Dual badge top right */
+.st-upgrade-plan-card__promo-badge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 99px;
+    overflow: hidden;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.st-upgrade-plan-card__promo-label {
+    background: #172554;
+    color: #ffffff;
+    padding: 3px 8px;
+}
+
+.st-upgrade-plan-card__promo-save {
+    background: #fef08a;
+    color: #713f12;
+    padding: 3px 8px;
+}
+
+/* Footer disclaimer and metadata */
+.st-upgrade-disclaimer {
+    text-align: center;
+    font-size: 12px;
+    color: #2563eb;
+    margin-top: 16px;
+    margin-bottom: 24px;
+    font-weight: 600;
+}
+
+.st-upgrade-modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.st-upgrade-footer-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.st-upgrade-footer-links a {
+    color: #94a3b8;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.st-upgrade-footer-links a:hover {
+    color: #2563eb;
+}
+
+.st-footer-bullet {
+    color: #cbd5e1;
+}
+
+/* Dark Mode support for new elements */
+.dl-root.dark-theme .st-upgrade-container--new {
+    background: #1e293b;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-upgrade-main-title {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-main-subtitle {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card:not(.st-upgrade-plan-card--pro) {
+    background: rgba(30, 41, 59, 0.4);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card:not(.st-upgrade-plan-card--pro):hover {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__title:not(.st-upgrade-plan-card--pro) {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__price:not(.st-upgrade-plan-card--pro) {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__features-list li:not(.st-upgrade-plan-card--pro) {
+    color: #cbd5e1;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__features-header:not(.st-upgrade-plan-card--pro) {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__btn--free-outline {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #60a5fa;
+}
+
+.dl-root.dark-theme .st-upgrade-plan-card__btn--free-outline:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: #60a5fa;
+}
+
+.dl-root.dark-theme .st-upgrade-modal-footer {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+

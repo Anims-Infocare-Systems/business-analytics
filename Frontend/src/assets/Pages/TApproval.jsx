@@ -513,14 +513,30 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
     );
 }
 
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return defaults;
+        const parsed = JSON.parse(raw);
+        if (parsed.from) parsed.from = new Date(parsed.from);
+        if (parsed.to) parsed.to = new Date(parsed.to);
+        return { ...defaults, ...parsed };
+    } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function TApproval() {
-    const [search, setSearch] = useState("");
+    const today = new Date();
+    const _saved = readFilterSession("ba_filter_tapproval", { from: today, to: today, search: "" });
+    const [search, setSearch] = useState(_saved.search || "");
     const [cards, setCards] = useState([]);
     const [stats, setStats] = useState(DEFAULT_STATS);
     const [selected, setSelected] = useState(null);
     const [approved, setApproved] = useState([]);
-    const today = new Date();
-    const [dateRange, setDateRange] = useState({ from: today, to: today });
+    const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [collapsedGroups, setCollapsedGroups] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -528,6 +544,11 @@ export default function TApproval() {
     const [toasts, setToasts] = useState([]);
     // Detail cache — key: list card id (docKind:docNo); cleared on date change / approve / modify
     const detailCache = useRef({});
+
+    // ✅ Persist filters to sessionStorage on every change
+    useEffect(() => {
+        writeFilterSession("ba_filter_tapproval", { from: dateRange.from, to: dateRange.to, search });
+    }, [dateRange.from, dateRange.to, search]);
 
     const addToast = useCallback((msg, type = "success-approve") => {
         const id = Date.now();

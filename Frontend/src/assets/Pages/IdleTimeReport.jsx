@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { resolveApiBase } from "../../apiBase";
 import ChartDatePicker from "./ChartDatePicker";
@@ -281,12 +281,26 @@ function Card({ title, badge, badgeColor, badgeBg, accentColor, children }) {
 /* ════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════ */
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return defaults;
+    const p = JSON.parse(raw);
+    if (p.from) p.from = new Date(p.from);
+    if (p.to) p.to = new Date(p.to);
+    return { ...defaults, ...p };
+  } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function IdleTimeReport() {
 
-  const [dateRange, setDateRange] = useState({
-    from: new Date(2026, 2, 1),
-    to: new Date(2026, 2, 27),
-  });
+  const _dflt = { from: new Date(2026, 2, 1), to: new Date(2026, 2, 27) };
+  const _saved = readFilterSession("ba_filter_idletime", _dflt);
+  const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
   const [filters, setFilters] = useState({
     machine:"All Machines", shift:"All Shifts",
     reason:"All Reasons",
@@ -318,6 +332,11 @@ export default function IdleTimeReport() {
     pctChart:   useRef(null),
   };
   const charts = useRef({});
+
+  // ✅ Persist date range to sessionStorage on every change
+  useEffect(() => {
+    writeFilterSession("ba_filter_idletime", { from: dateRange.from, to: dateRange.to });
+  }, [dateRange.from, dateRange.to]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;

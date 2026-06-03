@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     # Health & Authentication
     health_check, login_view, get_company,
+    forgot_password_verify, forgot_password_reset,
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise, mac_rejection_ppm, otd_report,
     # Purchase
@@ -29,6 +30,7 @@ from .views_tapproval import (
 )
 from .views_userrights import (
     user_rights_list, user_rights_me, user_rights_update, user_rights_bulk_save,
+    user_rights_add_user, user_rights_delete,
 )
 from .views_sales_analysis import (
     sales_analysis_summary_strip, sales_analysis_weekly_trend, sales_analysis_revenue_charts, sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
@@ -44,12 +46,20 @@ from .views_purchaseanalysis import (
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
 )
+from .views_signup import signup_view
+from .views_settings import settings_profile, settings_change_password, settings_upgrade_plan
 
 urlpatterns = [
     # ── Health & Authentication ────────────────────────────────────────
     path('health/', health_check, name='health_check'),
     path('login/', login_view, name='login'),
     path('company/<str:code>/', get_company, name='get_company'),
+    path('signup/', signup_view, name='signup'),
+    path('forgot-password/verify/', forgot_password_verify, name='forgot_password_verify'),
+    path('forgot-password/reset/', forgot_password_reset, name='forgot_password_reset'),
+    path('settings/profile/', settings_profile, name='settings_profile'),
+    path('settings/change-password/', settings_change_password, name='settings_change_password'),
+    path('settings/upgrade-plan/', settings_upgrade_plan, name='settings_upgrade_plan'),
 
     # ── Charts (Sabarish - Monthwise) ─────────────────────────────────
     path('po-vs-sales/', po_vs_sales, name='po_vs_sales'),
@@ -182,4 +192,6 @@ urlpatterns = [
     path('user-rights/me/', user_rights_me, name='user_rights_me'),
     path('user-rights/update/', user_rights_update, name='user_rights_update'),
     path('user-rights/bulk-save/', user_rights_bulk_save, name='user_rights_bulk_save'),
+    path('user-rights/add-user/', user_rights_add_user, name='user_rights_add_user'),
+    path('user-rights/delete/<int:user_id>/', user_rights_delete, name='user_rights_delete'),
 ]

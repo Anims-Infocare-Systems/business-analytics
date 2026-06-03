@@ -1,6 +1,7 @@
 from django.db import models
 
 class Tenant(models.Model):
+    objects = models.Manager()
     id = models.AutoField(primary_key=True)
     company_code = models.CharField(max_length=50)
     company_name = models.CharField(max_length=100)
@@ -25,6 +26,7 @@ class Tenant(models.Model):
 
 class UserRight(models.Model):
     """Form-wise access rights per ERP user (cloud DB table: usersrights)."""
+    objects = models.Manager()
     id = models.AutoField(primary_key=True)
     company_code = models.CharField(max_length=50, db_index=True)
     user_id = models.IntegerField(db_index=True)

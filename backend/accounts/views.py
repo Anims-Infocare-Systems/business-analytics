@@ -1,5 +1,6 @@
 from collections import defaultdict
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from datetime import datetime, date
 from .models import Tenant
@@ -110,6 +111,7 @@ def health_check(request):
 # ─────────────────────────────────────────────────────────────
 @api_view(['POST'])
 def login_view(request):
+    from django.db import connection
     company_code = (request.data.get("company_code") or "").strip()
     username     = (request.data.get("username")     or "").strip()
     password     =  request.data.get("password", "")
@@ -117,27 +119,71 @@ def login_view(request):
         return Response({"error": "company_code, username and password are required."}, status=400)
     try:
         tenant = Tenant.objects.get(company_code__iexact=company_code, status=True)
-    except Tenant.DoesNotExist:
+    except Tenant.DoesNotExist:  # type: ignore
         return Response({"error": "Invalid company code."}, status=400)
     try:
-        conn   = get_connection(tenant.erp_server, tenant.erp_database, tenant.erp_user, tenant.erp_password, tenant.erp_port)
-        cursor = conn.cursor()
-        cursor.execute("SELECT UserName FROM Users WHERE UserName = ? AND Password = ?", (username, encrypt_password(password)))
-        user = cursor.fetchone()
-        cursor.close(); conn.close()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, tenant_id, company_code, username, designation, issuperadmin FROM tenants_users WHERE company_code = %s AND username = %s AND password = %s AND deleted = 0",
+                [company_code, username, encrypt_password(password)]
+            )
+            user_row = cursor.fetchone()
     except Exception as e:
-        return Response({"error": f"Database connection error: {str(e)}"}, status=500)
-    if not user:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+    if not user_row:
         return Response({"error": "Invalid username or password."}, status=401)
+
+    designation = str(user_row[4] or "").strip()
+    is_super_admin = (designation.lower() == "admin" or bool(user_row[5]))
+
+    rights = {
+        "Dashboard": False,
+        "Approvals": False,
+        "Reports": False,
+        "MIS": False,
+        "Charts": False,
+        "Utility": False,
+    }
+
+    if is_super_admin:
+        for k in rights:
+            rights[k] = True
+    else:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT form_name, access FROM tenants_usersrights WHERE company_code = %s AND username = %s",
+                    [company_code, username]
+                )
+                for r_row in cursor.fetchall():
+                    f_name, acc = r_row[0], bool(r_row[1])
+                    if f_name in rights:
+                        rights[f_name] = acc
+        except Exception:
+            pass
+
+    has_access = is_super_admin or any(rights.values())
+
     request.session["tenant"] = {
+        "tenant_id": tenant.id,
         "erp_server": tenant.erp_server, "erp_database": tenant.erp_database,
         "erp_user":   tenant.erp_user,   "erp_password": tenant.erp_password,
         "erp_port":   tenant.erp_port,   "company_code": tenant.company_code,
         "company_name": tenant.company_name,
+        "username": username,
     }
     request.session.modified = True
     request.session.save()
-    return Response({"message": "Login successful", "company": tenant.company_name, "company_code": tenant.company_code, "username": username})
+    return Response({
+        "message": "Login successful",
+        "company": tenant.company_name,
+        "company_code": tenant.company_code,
+        "username": username,
+        "designation": designation,
+        "isSuperAdmin": is_super_admin,
+        "rights": rights,
+        "hasAccess": has_access
+    })
 
 # ─────────────────────────────────────────────────────────────
 #  COMPANY NAME LOOKUP
@@ -148,8 +194,19 @@ def get_company(request, code):
     if not code: return Response({"error": "Company code is required."}, status=400)
     try:
         tenant = Tenant.objects.get(company_code__iexact=code, status=True)
-        return Response({"company_name": tenant.company_name, "company_code": tenant.company_code})
-    except Tenant.DoesNotExist:
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(1) FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s) OR UPPER(company_name) = UPPER(%s)",
+                [tenant.company_code, tenant.company_name]
+            )
+            already_registered = cursor.fetchone()[0] > 0
+        return Response({
+            "company_name": tenant.company_name, 
+            "company_code": tenant.company_code,
+            "already_registered": already_registered
+        })
+    except Tenant.DoesNotExist:  # type: ignore
         return Response({"error": "Company not found."}, status=404)
 
 # ─────────────────────────────────────────────────────────────
@@ -350,7 +407,7 @@ def purchase_report_monthwise(request):
     gen_map = {m: 0.0 for m in month_order}
     for month_num, dtype, amount in rows:
         mk = month_key_from_db(month_num)
-        if mk not in month_order: continue
+        if mk is None or mk not in month_order: continue
         amt = float(amount or 0) / 100_000
         dtype_lower = dtype.lower().strip()
         if 'raw' in dtype_lower or dtype_lower == 'raw material':
@@ -1427,6 +1484,7 @@ def dashboard2_grn_pending_pipeline(request):
         d_desc = find_column_ci(cursor, sch_d, nm_d, ["description", "Description", "DESCRIPTION", "Descr", "descr", "PartName"])
         d_uom = find_column_ci(cursor, sch_d, nm_d, ["uom", "UOM", "Uom", "Unit"])
         d_qty = find_column_ci(cursor, sch_d, nm_d, ["qty", "Qty", "QTY", "Quantity"])
+        d_qtykgs = find_column_ci(cursor, sch_d, nm_d, ["qtykgs", "QtyKgs", "QTYKGS", "Qty_Kgs", "qty_kgs", "WeightQty"])
         d_pono = find_column_ci(cursor, sch_d, nm_d, ["pono", "PONo", "PONO", "PoNo", "PONumber"])
         if not m_grn or not m_date or not d_grn: cursor.close(); conn.close(); return Response({"error": "Required columns not found.", "from": str(start_date), "to": str(end_date), "rows": []}, status=500)
         if not d_insp: warnings.append("insp column not found on grn_det; cannot apply pending-inspection filter.")
@@ -1613,7 +1671,10 @@ def dashboard2_otd(request):
     trend_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT YEAR(j.dc_date) AS y, MONTH(j.dc_date) AS m, COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty FROM joined j GROUP BY YEAR(j.dc_date), MONTH(j.dc_date) ORDER BY YEAR(j.dc_date), MONTH(j.dc_date)"""
     try:
         cursor.execute(main_sql, union_params); row = cursor.fetchone()
-        on_time_qty = float(row[0] or 0); total_qty = float(row[1] or 0); delayed_lines = int(row[2] or 0); rating_num = float(row[3] or 0)
+        if row:
+            on_time_qty = float(row[0] or 0); total_qty = float(row[1] or 0); delayed_lines = int(row[2] or 0); rating_num = float(row[3] or 0)
+        else:
+            on_time_qty = total_qty = delayed_lines = rating_num = 0.0
         cursor.execute(trend_sql, union_params); trend_rows = cursor.fetchall()
     except Exception as e: cursor.close(); conn.close(); return Response({"error": f"Database error: {str(e)}"}, status=500)
     cursor.close(); conn.close()
@@ -1648,8 +1709,12 @@ def dashboard2_final_inspection_kpi(request):
         if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
         cursor.execute(sql, params); row = cursor.fetchone(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    total_ok_qty = float(row[0] or 0); total_rej_qty = float(row[1] or 0); total_mat_rej_qty = float(row[2] or 0)
-    total_qty = float(row[3] or 0); inspection_count = int(row[4] or 0)
+    if row:
+        total_ok_qty = float(row[0] or 0); total_rej_qty = float(row[1] or 0); total_mat_rej_qty = float(row[2] or 0)
+        total_qty = float(row[3] or 0); inspection_count = int(row[4] or 0)
+    else:
+        total_ok_qty = total_rej_qty = total_mat_rej_qty = total_qty = 0.0
+        inspection_count = 0
     first_pass_yield = round((total_ok_qty / total_qty) * 100, 2) if total_qty > 0 else 0.0
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_ok_qty": round(total_ok_qty, 2), "total_rej_qty": round(total_rej_qty, 2), "total_mat_rej_qty": round(total_mat_rej_qty, 2), "total_qty": round(total_qty, 2), "first_pass_yield": first_pass_yield, "inspection_count": inspection_count})
 
@@ -1876,3 +1941,89 @@ def dashboard2_top_defect_categories(request):
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
     result_rows = [{"partno": str(row[0] or "").strip() or "—", "total_rejection_qty": float(row[1] or 0), "rejection_pct": float(row[2] or 0)} for row in rows]
     return Response({"from": str(start_date), "to": str(end_date), "rows": result_rows, "total_rejection_qty": round(total_qty, 2)})
+
+
+# ─────────────────────────────────────────────────────────────
+#  FORGOT PASSWORD VERIFICATION & RESET
+# ─────────────────────────────────────────────────────────────
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def forgot_password_verify(request):
+    from django.db import connection
+    company_code = (request.data.get("company_code") or "").strip()
+    company_name = (request.data.get("company_name") or "").strip()
+    username     = (request.data.get("username")     or "").strip()
+
+    if not company_code or not company_name or not username:
+        return Response({"error": "Company code, company name, and username are required."}, status=400)
+
+    try:
+        # Check tenant by company code and name (case-insensitive)
+        tenant = Tenant.objects.get(
+            company_code__iexact=company_code,
+            company_name__iexact=company_name,
+            status=True
+        )
+    except Tenant.DoesNotExist:  # type: ignore
+        return Response({"error": "Invalid company code or company name."}, status=404)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(1) FROM tenants_users WHERE UPPER(company_code) = UPPER(%s) AND UPPER(username) = UPPER(%s) AND deleted = 0",
+                [tenant.company_code, username]
+            )
+            exists = cursor.fetchone()[0] > 0
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if not exists:
+        return Response({"error": "User not found under this company."}, status=404)
+
+    return Response({
+        "success": True,
+        "message": "Identity verified successfully.",
+        "company_code": tenant.company_code,
+        "username": username
+    })
+
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def forgot_password_reset(request):
+    from django.db import connection
+    company_code = (request.data.get("company_code") or "").strip()
+    username     = (request.data.get("username")     or "").strip()
+    new_password = request.data.get("new_password", "")
+
+    if not company_code or not username or not new_password:
+        return Response({"error": "Company code, username, and new password are required."}, status=400)
+
+    if len(new_password) < 6:
+        return Response({"error": "Password must be at least 6 characters."}, status=400)
+
+    try:
+        with connection.cursor() as cursor:
+            # Check if user exists
+            cursor.execute(
+                "SELECT COUNT(1) FROM tenants_users WHERE UPPER(company_code) = UPPER(%s) AND UPPER(username) = UPPER(%s) AND deleted = 0",
+                [company_code, username]
+            )
+            exists = cursor.fetchone()[0] > 0
+            if not exists:
+                return Response({"error": "User not found."}, status=404)
+
+            # Update password
+            cursor.execute(
+                "UPDATE tenants_users SET password = %s WHERE UPPER(company_code) = UPPER(%s) AND UPPER(username) = UPPER(%s) AND deleted = 0",
+                [encrypt_password(new_password), company_code, username]
+            )
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    return Response({
+        "success": True,
+        "message": "Password reset successfully."
+    })

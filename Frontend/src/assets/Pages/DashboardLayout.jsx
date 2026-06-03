@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
+
+const API = resolveApiBase();
 import Dashboard1 from "./Dashboard1";
 import Dashboard2 from "./Dashboard2";
 import Dashboard3 from "./Dashboard3";
@@ -15,6 +18,7 @@ import QualityAnalysis from "./QualityAnalysis";
 import ProductionAnalysis from "./ProductionAnalysis";
 import UserRights from "./UserRights";
 import AnimsUtility from "./AnimsUtility";
+import Settings from "./Settings";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -29,6 +33,7 @@ const Icons = {
     MIS: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="8" y1="17" x2="8" y2="12" /><line x1="12" y1="17" x2="12" y2="8" /><line x1="16" y1="17" x2="16" y2="14" /></svg>),
     Charts: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,17 8,11 13,14 21,6" /><polyline points="17,6 21,6 21,10" /></svg>),
     Logout: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16,17 21,12 16,7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>),
+    Setting: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>),
     Chevron: ({ open }) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`dl-chevron ${open ? "dl-chevron--open" : ""}`}><polyline points="6,9 12,15 18,9" /></svg>),
     ChevronRight: () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,6 15,12 9,18" /></svg>),
     Spinner: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /></svg>),
@@ -93,6 +98,7 @@ const HEADING_MAP = {
     "Charts": "Charts & Visualizations",
     "User Rights": "Utility — User Rights",
     "Anims Utility": "Utility — Anims Utility",
+    "Settings": "Settings",
 };
 
 /* ── Page content with fade+slide transition ─────────────── */
@@ -316,30 +322,95 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
 /* ══════════════════════════════════════════════════════════
    DashboardLayout — root component
    ══════════════════════════════════════════════════════════ */
+/* ── sessionStorage nav helpers ─────────────────────────── */
+const NAV_KEY = "ba_nav";
+function readNav() {
+    try {
+        const raw = sessionStorage.getItem(NAV_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+}
+function writeNav(data) {
+    try { sessionStorage.setItem(NAV_KEY, JSON.stringify(data)); } catch {}
+}
+
 export default function DashboardLayout() {
     const navigate = useNavigate();
 
     // ✅ Read logged-in company name from localStorage
     const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const isAuthenticated = !!user.username;
     const companyName = user.company || "Anims Infocare Systems";
+    const userName = user.username || "User";
+    const userInitials = (userName.slice(0, 2) || "US").toUpperCase();
+    const [userDesignation, setUserDesignation] = useState(user.designation || "Staff");
+
+    // ✅ Filter menu items based on cached user rights
+    const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
+    const userRights = rightsCache.rights || {};
+    const isSuperAdmin = !!rightsCache.isSuperAdmin;
+
+    const allowedMenuItems = MENU_ITEMS.filter(item => isSuperAdmin || userRights[item.key]);
+
+    const firstAllowed = allowedMenuItems[0];
+    const defaultItem = firstAllowed ? firstAllowed.key : "Dashboard";
+    const defaultSubItem = (firstAllowed && firstAllowed.children && firstAllowed.children.length > 0)
+        ? firstAllowed.children[0]
+        : null;
+
+    // ✅ Restore navigation from sessionStorage (survives F5 refresh)
+    const savedNav = readNav();
+    const initItem    = savedNav?.activeItem    ?? defaultItem;
+    const initSubItem = savedNav?.activeSubItem ?? defaultSubItem;
+    const initMenu    = savedNav?.openMenu      ?? defaultItem;
 
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isMobile = screenWidth < BP_MOBILE;
 
     const [expanded, setExpanded] = useState(getInitialExpanded);
     const [drawerOpen, setDrawerOpen] = useState(false);
-    const [openMenu, setOpenMenu] = useState("Dashboard");
-    const [activeItem, setActiveItem] = useState("Dashboard");
-    const [activeSubItem, setActiveSubItem] = useState("Top Management Dashboard");
+    const [openMenu, setOpenMenu] = useState(initMenu);
+    const [activeItem, setActiveItem] = useState(initItem);
+    const [activeSubItem, setActiveSubItem] = useState(initSubItem);
     const [mounted, setMounted] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(() => {
+        try { return sessionStorage.getItem("ba_settings_open") === "1"; }
+        catch { return false; }
+    });
 
     const sidebarRef = useRef(null);
     const contentRef = useRef(null);
+    const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+    const profileRef = useRef(null);
 
     /* entrance animation gate */
     useEffect(() => {
         const t = setTimeout(() => setMounted(true), 80);
         return () => clearTimeout(t);
+    }, []);
+
+    /* persist settingsOpen to sessionStorage */
+    useEffect(() => {
+        try { sessionStorage.setItem("ba_settings_open", settingsOpen ? "1" : "0"); } catch {}
+    }, [settingsOpen]);
+
+    /* fetch fresh user designation dynamically from backend to heal legacy/stale localstorage caches */
+    useEffect(() => {
+        fetch(`${API}/user-rights/me/`, { credentials: "include" })
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error("Failed to fetch profile");
+            })
+            .then(data => {
+                if (data.success && data.designation) {
+                    setUserDesignation(data.designation);
+                    // Sync designation with localStorage cache
+                    const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
+                    cachedUser.designation = data.designation;
+                    localStorage.setItem("user", JSON.stringify(cachedUser));
+                }
+            })
+            .catch(() => { /* fallback to static initialDesignation */ });
     }, []);
 
     /* responsive resize handler */
@@ -371,34 +442,72 @@ export default function DashboardLayout() {
         return () => document.removeEventListener("mousedown", handler);
     }, [expanded, isMobile]);
 
+    /* close profile dropdown when clicking outside */
+    useEffect(() => {
+        const handleOutsideClick = (e) => {
+            if (profileDropdownOpen && profileRef.current && !profileRef.current.contains(e.target)) {
+                setProfileDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleOutsideClick);
+        return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }, [profileDropdownOpen]);
+
+    // Redirect to login if not authenticated
+    useEffect(() => {
+        if (!isAuthenticated) {
+            navigate("/", { replace: true });
+        }
+    }, [isAuthenticated, navigate]);
+
     /* parent-level toggle */
     const handleToggle = (key) => {
+        if (key === "Settings") {
+            setSettingsOpen(true);
+            return;
+        }
         const item = MENU_ITEMS.find(m => m.key === key);
         if (!item || item.children.length === 0) {
             setActiveItem(key);
             setActiveSubItem(null);
             setOpenMenu(null);
+            writeNav({ activeItem: key, activeSubItem: null, openMenu: null });
             if (isMobile) setDrawerOpen(false);
         } else {
-            setOpenMenu(prev => prev === key ? null : key);
+            const nextMenu = openMenu === key ? null : key;
+            setOpenMenu(nextMenu);
             setActiveItem(key);
+            writeNav({ activeItem: key, activeSubItem, openMenu: nextMenu });
         }
     };
 
     /* sub-item click */
     const handleSubClick = (sub) => {
         const parent = MENU_ITEMS.find(m => m.children?.includes(sub));
-        if (parent) setActiveItem(parent.key);
+        const parentKey = parent ? parent.key : activeItem;
+        if (parent) setActiveItem(parentKey);
         setActiveSubItem(sub);
+        const nextMenu = expanded ? openMenu : null;
         if (!expanded) setOpenMenu(null);
         if (isMobile) setDrawerOpen(false);
+        writeNav({ activeItem: parentKey, activeSubItem: sub, openMenu: nextMenu });
     };
 
-    const handleLogout = () => navigate("/");
+    const handleLogout = () => {
+        try {
+            sessionStorage.clear();
+            localStorage.removeItem("user");
+            localStorage.removeItem("ba_user_rights");
+            localStorage.removeItem("ba_settings_profile");
+        } catch {}
+        navigate("/", { replace: true });
+    };
     const showExpanded = isMobile ? true : expanded;
     const topbarHeading = activeSubItem
         ? (HEADING_MAP[activeSubItem] || activeSubItem)
         : (HEADING_MAP[activeItem] || activeItem);
+
+    if (!isAuthenticated) return null;
 
     return (
         <div className={`dl-root ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
@@ -433,7 +542,7 @@ export default function DashboardLayout() {
 
                 {/* Nav */}
                 <nav className="dl-sidebar__nav">
-                    {MENU_ITEMS.map((item, idx) => (
+                    {allowedMenuItems.map((item, idx) => (
                         <SidebarItem
                             key={item.key}
                             item={item}
@@ -450,6 +559,22 @@ export default function DashboardLayout() {
 
                     <div className="dl-sidebar__divider" />
                     <div className="dl-sidebar__section-label">OTHER</div>
+
+                    <SidebarItem
+                        item={{
+                            key: "Settings",
+                            icon: Icons.Setting,
+                            children: []
+                        }}
+                        index={allowedMenuItems.length}
+                        isActive={activeItem === "Settings"}
+                        isOpen={false}
+                        isExpanded={showExpanded}
+                        isMobile={isMobile}
+                        onToggle={handleToggle}
+                        onSubClick={() => {}}
+                        activeSubItem={null}
+                    />
 
                     <div className="dl-sidebar__item dl-sidebar__item--logout" onClick={handleLogout}>
                         <span className="dl-sidebar__item-icon"><Icons.Logout /></span>
@@ -487,7 +612,45 @@ export default function DashboardLayout() {
                     )}
                     {/* ✅ Dynamic company name from localStorage */}
                     <h1 className="dl-header__title">{companyName}</h1>
-                    <Clock />
+                    <div className="dl-header__right">
+                        <Clock />
+                        <div
+                            ref={profileRef}
+                            className={`dl-header__profile ${profileDropdownOpen ? "dl-header__profile--active" : ""}`}
+                            onClick={() => setProfileDropdownOpen(open => !open)}
+                        >
+                            <div className="dl-header__profile-avatar">{userInitials}</div>
+                            <div className="dl-header__profile-info">
+                                <span className="dl-header__profile-name">{userName}</span>
+                                <span className="dl-header__profile-designation">{userDesignation}</span>
+                            </div>
+                            {profileDropdownOpen && (
+                                <div className="dl-profile-dropdown" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                        className="dl-profile-dropdown__item"
+                                        onClick={() => {
+                                            setSettingsOpen(true);
+                                            setProfileDropdownOpen(false);
+                                        }}
+                                    >
+                                        <span className="dl-profile-dropdown__item-icon"><Icons.Setting /></span>
+                                        <span className="dl-profile-dropdown__item-label">Settings</span>
+                                    </button>
+                                    <div className="dl-profile-dropdown__divider" />
+                                    <button
+                                        className="dl-profile-dropdown__item dl-profile-dropdown__item--logout"
+                                        onClick={() => {
+                                            handleLogout();
+                                            setProfileDropdownOpen(false);
+                                        }}
+                                    >
+                                        <span className="dl-profile-dropdown__item-icon"><Icons.Logout /></span>
+                                        <span className="dl-profile-dropdown__item-label">Logout</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </header>
 
                 {/* Topbar */}
@@ -504,6 +667,9 @@ export default function DashboardLayout() {
                     <PageContent activeSubItem={activeSubItem} activeItem={activeItem} />
                 </main>
             </div>
+
+            {/* Settings Overlay Modal */}
+            <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
 }

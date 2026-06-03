@@ -90,12 +90,26 @@ function RejPill({ v }) {
 /* ═══════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════ */
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return defaults;
+        const p = JSON.parse(raw);
+        if (p.from) p.from = new Date(p.from);
+        if (p.to) p.to = new Date(p.to);
+        return { ...defaults, ...p };
+    } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function EfficiencyReport() {
     /* ── Filter state ── */
-    const [dateRange, setDateRange] = useState({
-        from: new Date(2026, 1, 1),
-        to:   new Date(2026, 1, 27),
-    });
+    const _dflt = { from: new Date(2026, 1, 1), to: new Date(2026, 1, 27) };
+    const _saved = readFilterSession("ba_filter_efficiency", _dflt);
+    const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const fromDate = dateRange.from ? dateRange.from.toISOString().slice(0, 10) : "";
     const toDate   = dateRange.to   ? dateRange.to.toISOString().slice(0, 10)   : "";
     const [chkCNC, setChkCNC] = useState(true);
@@ -118,6 +132,8 @@ export default function EfficiencyReport() {
     /* ── Load operator / machine table from API ── */
     useEffect(() => {
         if (!dateRange.from || !dateRange.to) return;
+        // ✅ Persist date range to sessionStorage on every change
+        writeFilterSession("ba_filter_efficiency", { from: dateRange.from, to: dateRange.to });
         const params = new URLSearchParams({
             from: toIsoDate(dateRange.from),
             to: toIsoDate(dateRange.to),

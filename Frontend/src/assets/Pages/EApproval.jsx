@@ -493,17 +493,31 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
 }
 
 // ─── Main ─────────────────────────────────────────────────────
+/* ── sessionStorage filter helpers ── */
+function readFilterSession(key, defaults) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return defaults;
+        const parsed = JSON.parse(raw);
+        // Rehydrate date strings back to Date objects
+        if (parsed.from) parsed.from = new Date(parsed.from);
+        if (parsed.to) parsed.to = new Date(parsed.to);
+        return { ...defaults, ...parsed };
+    } catch { return defaults; }
+}
+function writeFilterSession(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function EApproval() {
-    const [search, setSearch] = useState("");
+    const today = new Date();
+    const _savedEap = readFilterSession("ba_filter_eapproval", { from: today, to: today, search: "" });
+    const [search, setSearch] = useState(_savedEap.search || "");
     const [cards, setCards] = useState([]);
     const [stats, setStats] = useState(DEFAULT_STATS);
     const [selected, setSelected] = useState(null);
     const [approved, setApproved] = useState([]);
-    const today = new Date();
-    const [dateRange, setDateRange] = useState({
-        from: today,
-        to: today,
-    });
+    const [dateRange, setDateRange] = useState({ from: _savedEap.from, to: _savedEap.to });
     const [collapsedGroups, setCollapsedGroups] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -513,6 +527,11 @@ export default function EApproval() {
     // Detail cache — key: pono, value: full card object from API
     // Cleared when date range changes (refreshBoard) or on approve/modify
     const detailCache = useRef({});
+
+    // ✅ Persist filters to sessionStorage on every change
+    useEffect(() => {
+        writeFilterSession("ba_filter_eapproval", { from: dateRange.from, to: dateRange.to, search });
+    }, [dateRange.from, dateRange.to, search]);
 
     const addToast = useCallback((msg, type = "success-approve") => {
         const id = Date.now();
