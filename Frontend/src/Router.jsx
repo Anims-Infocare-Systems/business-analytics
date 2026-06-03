@@ -3,6 +3,7 @@ import Login from "./assets/Pages/Login";
 import DashboardLayout from "./assets/Pages/DashboardLayout";
 import SignupPage from "./assets/Pages/Signup";
 import ForgotPasswordPage from "./assets/Pages/ForgotPassword";
+import AdminPanel from "./assets/Pages/adminpannel";
 
 export default function Router() {
     return (
@@ -11,6 +12,7 @@ export default function Router() {
             <Route path="AnimsBusinessAnalytics" element={<DashboardLayout />} />
             <Route path="signup" element={<SignupPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="adminpannel" element={<AdminPanel />} />
         </Routes>
     );
 }

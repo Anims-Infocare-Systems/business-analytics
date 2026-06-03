@@ -48,6 +48,11 @@ from .views_qualityanalysis import (
 )
 from .views_signup import signup_view
 from .views_settings import settings_profile, settings_change_password, settings_upgrade_plan
+from .views_adminpannel import (
+    admin_login, admin_logout, admin_check_session,
+    admin_list_tenants, admin_create_tenant, admin_update_tenant, admin_delete_tenant,
+    admin_list_tenant_users, admin_delete_tenant_user
+)
 
 urlpatterns = [
     # ── Health & Authentication ────────────────────────────────────────
@@ -194,4 +199,15 @@ urlpatterns = [
     path('user-rights/bulk-save/', user_rights_bulk_save, name='user_rights_bulk_save'),
     path('user-rights/add-user/', user_rights_add_user, name='user_rights_add_user'),
     path('user-rights/delete/<int:user_id>/', user_rights_delete, name='user_rights_delete'),
+
+    # ── Admin Panel ───────────────────────────────────────────────────
+    path('admin/login/', admin_login, name='admin_login'),
+    path('admin/logout/', admin_logout, name='admin_logout'),
+    path('admin/check-session/', admin_check_session, name='admin_check_session'),
+    path('admin/tenants/', admin_list_tenants, name='admin_list_tenants'),
+    path('admin/tenants/create/', admin_create_tenant, name='admin_create_tenant'),
+    path('admin/tenants/update/', admin_update_tenant, name='admin_update_tenant'),
+    path('admin/tenants/delete/<int:tenant_id>/', admin_delete_tenant, name='admin_delete_tenant'),
+    path('admin/tenants/<str:company_code>/users/', admin_list_tenant_users, name='admin_list_tenant_users'),
+    path('admin/tenants/users/<int:user_id>/', admin_delete_tenant_user, name='admin_delete_tenant_user'),
 ]

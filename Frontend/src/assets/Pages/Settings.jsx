@@ -73,7 +73,7 @@ export default function Settings({ isOpen, onClose }) {
 
     // Write tab to sessionStorage whenever it changes
     useEffect(() => {
-        try { sessionStorage.setItem("ba_settings_tab", activeTab); } catch {}
+        try { sessionStorage.setItem("ba_settings_tab", activeTab); } catch { }
     }, [activeTab]);
 
     const [isClosing, setIsClosing] = useState(false);
@@ -84,6 +84,8 @@ export default function Settings({ isOpen, onClose }) {
     const [upgradeBusy, setUpgradeBusy] = useState(false);
     const [upgradeErr, setUpgradeErr] = useState("");
     const [upgradeOk, setUpgradeOk] = useState("");
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState("");
 
     const formatBillingDate = (dateStr) => {
         if (!dateStr) return "—";
@@ -147,7 +149,7 @@ export default function Settings({ isOpen, onClose }) {
                 const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
                 const cachedCompany = parsed?.profile?.companyCode;
                 const currentCompany = currentUser.company_code || currentUser.companyCode;
-                
+
                 if (parsed?.profile?.username === currentUser.username && cachedCompany === currentCompany) {
                     return parsed;
                 }
@@ -165,7 +167,7 @@ export default function Settings({ isOpen, onClose }) {
         // Reset profile state if the cached user doesn't match the current logged-in user
         const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
         const currentCompany = currentUser.company_code || currentUser.companyCode;
-        if (profile && (profile?.profile?.username !== currentUser.username || 
+        if (profile && (profile?.profile?.username !== currentUser.username ||
             profile?.profile?.companyCode !== currentCompany)) {
             setProfile(null);
         }
@@ -308,17 +310,18 @@ export default function Settings({ isOpen, onClose }) {
                 throw new Error(data.error || `Upgrade failed with status ${res.status}`);
             }
             setUpgradeOk(data.message || `Successfully upgraded to ${plan}!`);
-            
+            setShowConfirmModal(false);
+
             // Re-fetch profile to refresh settings state dynamically
             fetch(`${API}/settings/profile/`, { credentials: "include" })
                 .then(r => r.ok && r.json())
                 .then(d => {
                     if (d) {
                         setProfile(d);
-                        try { localStorage.setItem("ba_settings_profile", JSON.stringify(d)); } catch {}
+                        try { localStorage.setItem("ba_settings_profile", JSON.stringify(d)); } catch { }
                     }
                 })
-                .catch(() => {});
+                .catch(() => { });
 
             setTimeout(() => {
                 setShowUpgradeModal(false);
@@ -713,11 +716,11 @@ export default function Settings({ isOpen, onClose }) {
                                 <div className="st-upgrade-plan-card__price-area">
                                     <span className="st-upgrade-plan-card__price">₹0</span>
                                 </div>
-                                
-                                <button 
+
+                                <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--free-outline"
                                     disabled={planName.toLowerCase() === 'free' || upgradeBusy}
-                                    onClick={() => handleUpgradeSubmit("Free")}
+                                    onClick={() => { setSelectedPlan("Free"); setShowConfirmModal(true); }}
                                 >
                                     {planName.toLowerCase() === 'free' ? 'Current Plan' : 'Use for free'}
                                 </button>
@@ -751,10 +754,10 @@ export default function Settings({ isOpen, onClose }) {
                                 </div>
                                 <div className="st-upgrade-plan-card__billing-cycle">billed annually</div>
 
-                                <button 
+                                <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--white"
                                     disabled={planName.toLowerCase() === 'pro' || upgradeBusy}
-                                    onClick={() => handleUpgradeSubmit("Pro")}
+                                    onClick={() => { setSelectedPlan("Pro"); setShowConfirmModal(true); }}
                                 >
                                     {planName.toLowerCase() === 'pro' ? 'Current Plan' : upgradeBusy ? 'Upgrading...' : 'Get Pro plan'}
                                 </button>
@@ -783,10 +786,10 @@ export default function Settings({ isOpen, onClose }) {
                                 </div>
                                 <div className="st-upgrade-plan-card__billing-cycle">billed annually</div>
 
-                                <button 
+                                <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--blue"
                                     disabled={planName.toLowerCase().includes('enterprise') || planName.toLowerCase() === 'max' || upgradeBusy}
-                                    onClick={() => handleUpgradeSubmit("Max")}
+                                    onClick={() => { setSelectedPlan("Max"); setShowConfirmModal(true); }}
                                 >
                                     {planName.toLowerCase().includes('enterprise') || planName.toLowerCase() === 'max' ? 'Current Plan' : upgradeBusy ? 'Upgrading...' : 'Get Max plan'}
                                 </button>
@@ -816,6 +819,86 @@ export default function Settings({ isOpen, onClose }) {
                                 <span className="st-footer-bullet">•</span>
                                 <a href="https://animse.com/#/Contact" target="_blank" rel="noopener noreferrer">Contact Support</a>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── CONFIRM PLAN CHANGES MODAL ── */}
+            {showConfirmModal && (
+                <div className="st-confirm-overlay" onClick={() => !upgradeBusy && setShowConfirmModal(false)}>
+                    <div className="st-confirm-container" onClick={(e) => e.stopPropagation()}>
+                        <button className="st-confirm-close-btn" onClick={() => !upgradeBusy && setShowConfirmModal(false)} aria-label="Close modal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
+
+                        <h3 className="st-confirm-title">Confirm plan changes</h3>
+
+                        <div className="st-confirm-details-box">
+                            <div className="st-confirm-plan-row">
+                                <div>
+                                    <div className="st-confirm-plan-name">{selectedPlan} Plan subscription</div>
+                                    <div className="st-confirm-plan-cycle">
+                                        {selectedPlan === "Free" ? "6 months free from registration" : "Billed annually, starting today"}
+                                    </div>
+                                </div>
+                                <div className="st-confirm-plan-price">
+                                    {selectedPlan === "Free" ? "₹0.00" : selectedPlan === "Pro" ? "₹24,888.00" : "₹1,07,988.00"}
+                                </div>
+                            </div>
+
+                            <div className="st-confirm-divider" />
+
+                            <div className="st-confirm-price-row">
+                                <span className="st-confirm-price-label">Subtotal</span>
+                                <span className="st-confirm-price-val">
+                                    {selectedPlan === "Free" ? "₹0.00" : selectedPlan === "Pro" ? "₹24,888.00" : "₹1,07,988.00"}
+                                </span>
+                            </div>
+
+                            <div className="st-confirm-price-row">
+                                <span className="st-confirm-price-label">Tax 18%</span>
+                                <span className="st-confirm-price-val">
+                                    {selectedPlan === "Free" ? "₹0.00" : selectedPlan === "Pro" ? "₹4,479.84" : "₹19,437.84"}
+                                </span>
+                            </div>
+
+                            <div className="st-confirm-divider" />
+
+                            <div className="st-confirm-price-row st-confirm-price-row--total">
+                                <span className="st-confirm-price-label">Total due</span>
+                                <span className="st-confirm-price-val">
+                                    {selectedPlan === "Free" ? "₹0.00" : selectedPlan === "Pro" ? "₹29,367.84" : "₹1,27,425.84"}
+                                </span>
+                            </div>
+                        </div>
+
+                        {upgradeErr && <div className="st-upgrade-msg st-upgrade-msg--error" style={{ marginTop: 0, marginBottom: 16 }}>{upgradeErr}</div>}
+
+                        <div className="st-confirm-actions">
+                            <button
+                                type="button"
+                                className="st-confirm-btn st-confirm-btn--cancel"
+                                disabled={upgradeBusy}
+                                onClick={() => setShowConfirmModal(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="st-confirm-btn st-confirm-btn--confirm"
+                                disabled={upgradeBusy}
+                                onClick={() => handleUpgradeSubmit(selectedPlan)}
+                            >
+                                {upgradeBusy ? (
+                                    <><span className="st-upgrade-spinner" /> Updating...</>
+                                ) : (
+                                    "Update Plan"
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

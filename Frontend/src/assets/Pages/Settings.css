@@ -1925,4 +1925,288 @@
 .dl-root.dark-theme .st-upgrade-modal-footer {
     border-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ── Confirm Plan Changes Modal CSS ── */
+.st-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100030;
+    animation: st-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.st-confirm-container {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 28px;
+    width: 90%;
+    max-width: 440px;
+    box-shadow: 
+        0 20px 50px rgba(15, 23, 42, 0.22),
+        0 0 0 1px rgba(15, 23, 42, 0.04);
+    position: relative;
+    color: #1e293b;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    animation: st-slide-up-confirm 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes st-slide-up-confirm {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.st-confirm-close-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.st-confirm-close-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    transform: scale(1.05);
+}
+
+.st-confirm-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 20px 0;
+    letter-spacing: -0.02em;
+}
+
+.st-confirm-details-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 18px;
+    background: #f8fafc;
+    margin-bottom: 24px;
+}
+
+.st-confirm-plan-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.st-confirm-plan-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.st-confirm-plan-cycle {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.st-confirm-plan-price {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.st-confirm-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 12px 0;
+}
+
+.st-confirm-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13.5px;
+    color: #64748b;
+}
+
+.st-confirm-price-row:last-of-type {
+    margin-bottom: 0;
+}
+
+.st-confirm-price-val {
+    font-weight: 500;
+    color: #0f172a;
+}
+
+.st-confirm-price-row--total {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-top: 4px;
+}
+
+.st-confirm-price-row--total .st-confirm-price-label {
+    color: #0f172a;
+}
+
+.st-confirm-price-row--total .st-confirm-price-val {
+    font-size: 18px;
+    font-weight: 800;
+    color: #2563eb;
+}
+
+.st-confirm-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.st-confirm-btn {
+    height: 40px;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.st-confirm-btn--cancel {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+.st-confirm-btn--cancel:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.st-confirm-btn--confirm {
+    background: #2563eb;
+    color: #ffffff;
+    border: none;
+    flex: 1;
+}
+
+.st-confirm-btn--confirm:hover:not(:disabled) {
+    background: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.st-confirm-btn--confirm:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.st-upgrade-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: st-spin 0.6s linear infinite;
+}
+
+@keyframes st-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Dark Theme support for Confirm Modal ── */
+.dl-root.dark-theme .st-confirm-container {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    color: #cbd5e1;
+}
+
+.dl-root.dark-theme .st-confirm-close-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-confirm-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-title {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-details-box {
+    background: rgba(15, 23, 42, 0.3);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-confirm-plan-name,
+.dl-root.dark-theme .st-confirm-plan-price,
+.dl-root.dark-theme .st-confirm-price-val {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-plan-cycle,
+.dl-root.dark-theme .st-confirm-price-label {
+    color: #94a3b8;
+}
+
+.dl-root.dark-theme .st-confirm-divider {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.dl-root.dark-theme .st-confirm-price-row--total .st-confirm-price-label {
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-price-row--total .st-confirm-price-val {
+    color: #60a5fa;
+}
+
+.dl-root.dark-theme .st-confirm-btn--cancel {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+}
+
+.dl-root.dark-theme .st-confirm-btn--cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-btn--confirm {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.dl-root.dark-theme .st-confirm-btn--confirm:hover:not(:disabled) {
+    background: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+
 

@@ -330,7 +330,7 @@ export default function LoginPage() {
                             </p>
                         </div>
 
-                        <form className="lp__form" onSubmit={handleLogin} noValidate>
+                        <form className="lp__form" onSubmit={handleLogin} noValidate autoComplete="nope">
 
                             {/* ── Organization / Company Code ── */}
                             <div className="lp__field anim-fade-up" style={{ animationDelay: "0.2s" }}>
@@ -403,7 +403,7 @@ export default function LoginPage() {
                                             setUsername(e.target.value);
                                             setLoginError("");
                                         }}
-                                        autoComplete="username"
+                                        autoComplete="nope"
                                     />
                                 </div>
                             </div>
@@ -423,7 +423,7 @@ export default function LoginPage() {
                                             setPassword(e.target.value);
                                             setLoginError("");
                                         }}
-                                        autoComplete="current-password"
+                                        autoComplete="one-time-code"
                                     />
                                 </div>
                                 <div className="lp__forgot-row">
