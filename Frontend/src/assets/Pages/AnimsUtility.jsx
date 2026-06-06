@@ -8,153 +8,19 @@
  */
 import { useState, useEffect, useRef } from "react";
 import "./AnimsUtility.css";
+import { resolveApiBase } from "../../apiBase";
 
-/* ─────────────────────────────────────────────────────────────
-   MOCK DATA  (replace with Django REST API calls in production)
-   Matches: CompanyMaster → CompanyCode, CompanyName, Status, …
-   ───────────────────────────────────────────────────────────── */
-const MOCK_CLIENTS = [
-    {
-        id: 1,
-        code: "ANIMS001",
-        name: "Anims Infocare Systems",
-        industry: "IT Services",
-        plan: "Enterprise",
-        tunnel: "connected",
-        status: "active",
-        activeUsers: 8,
-        totalUsers: 12,
-        lastLogin: new Date(Date.now() - 4 * 60 * 1000),       // 4 min ago
-        lastSync: new Date(Date.now() - 2 * 60 * 1000),
-        syncHealth: 98,
-        location: "Chennai, TN",
-        modules: ["Dashboard", "Approvals", "Charts", "Reports", "MIS"],
-        joinedDate: "Jan 2025",
-        apiCalls: 1842,
-        avatar: "AI",
-        color: "#3b82f6",
-    },
-    {
-        id: 2,
-        code: "NAHATAL",
-        name: "Nahatal Alloys Pvt Ltd",
-        industry: "Manufacturing",
-        plan: "Professional",
-        tunnel: "connected",
-        status: "active",
-        activeUsers: 3,
-        totalUsers: 6,
-        lastLogin: new Date(Date.now() - 22 * 60 * 1000),      // 22 min ago
-        lastSync: new Date(Date.now() - 8 * 60 * 1000),
-        syncHealth: 94,
-        location: "Coimbatore, TN",
-        modules: ["Dashboard", "Charts", "Reports"],
-        joinedDate: "Nov 2024",
-        apiCalls: 763,
-        avatar: "NA",
-        color: "#10b981",
-    },
-    {
-        id: 3,
-        code: "PRIMECAST",
-        name: "Primecast Foundries",
-        industry: "Foundry",
-        plan: "Professional",
-        tunnel: "connected",
-        status: "active",
-        activeUsers: 5,
-        totalUsers: 9,
-        lastLogin: new Date(Date.now() - 55 * 60 * 1000),      // 55 min ago
-        lastSync: new Date(Date.now() - 30 * 60 * 1000),
-        syncHealth: 87,
-        location: "Madurai, TN",
-        modules: ["Dashboard", "Approvals", "MIS"],
-        joinedDate: "Feb 2025",
-        apiCalls: 1124,
-        avatar: "PF",
-        color: "#f97316",
-    },
-    {
-        id: 4,
-        code: "STELLARMC",
-        name: "Stellar Machine Works",
-        industry: "Engineering",
-        plan: "Starter",
-        tunnel: "disconnected",
-        status: "inactive",
-        activeUsers: 0,
-        totalUsers: 4,
-        lastLogin: new Date(Date.now() - 3 * 60 * 60 * 1000),  // 3 h ago
-        lastSync: new Date(Date.now() - 3 * 60 * 60 * 1000),
-        syncHealth: 0,
-        location: "Trichy, TN",
-        modules: ["Dashboard", "Charts"],
-        joinedDate: "Mar 2025",
-        apiCalls: 342,
-        avatar: "SM",
-        color: "#8b5cf6",
-    },
-    {
-        id: 5,
-        code: "CROWNCAST",
-        name: "Crown Castings Ltd",
-        industry: "Casting",
-        plan: "Enterprise",
-        tunnel: "reconnecting",
-        status: "warning",
-        activeUsers: 1,
-        totalUsers: 7,
-        lastLogin: new Date(Date.now() - 90 * 60 * 1000),      // 90 min ago
-        lastSync: new Date(Date.now() - 75 * 60 * 1000),
-        syncHealth: 61,
-        location: "Salem, TN",
-        modules: ["Dashboard", "Approvals", "Charts", "Reports"],
-        joinedDate: "Dec 2024",
-        apiCalls: 589,
-        avatar: "CC",
-        color: "#ec4899",
-    },
-    {
-        id: 6,
-        code: "VGPRESS",
-        name: "VG Press Components",
-        industry: "Press Shop",
-        plan: "Starter",
-        tunnel: "disconnected",
-        status: "inactive",
-        activeUsers: 0,
-        totalUsers: 3,
-        lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2d ago
-        lastSync: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        syncHealth: 0,
-        location: "Hosur, TN",
-        modules: ["Dashboard"],
-        joinedDate: "Feb 2025",
-        apiCalls: 98,
-        avatar: "VG",
-        color: "#06b6d4",
-    },
-];
-
-/* Activity feed (recent cross-tenant events) */
-const ACTIVITY_FEED = [
-    { id: 1, type: "login",    code: "ANIMS001",  name: "Anims Infocare",    user: "Admin",    time: new Date(Date.now() - 4*60*1000),   msg: "logged in" },
-    { id: 2, type: "sync",     code: "NAHATAL",   name: "Nahatal Alloys",    user: "System",   time: new Date(Date.now() - 8*60*1000),   msg: "data synced" },
-    { id: 3, type: "login",    code: "PRIMECAST", name: "Primecast",         user: "Pratheep", time: new Date(Date.now() - 14*60*1000),  msg: "logged in" },
-    { id: 4, type: "warning",  code: "CROWNCAST", name: "Crown Castings",    user: "Tunnel",   time: new Date(Date.now() - 32*60*1000),  msg: "tunnel reconnecting" },
-    { id: 5, type: "login",    code: "ANIMS001",  name: "Anims Infocare",    user: "Sabarish", time: new Date(Date.now() - 45*60*1000),  msg: "logged in" },
-    { id: 6, type: "disconnect",code:"STELLARMC", name: "Stellar Machine",   user: "Tunnel",   time: new Date(Date.now() - 3*60*60*1000),msg: "tunnel disconnected" },
-    { id: 7, type: "sync",     code: "PRIMECAST", name: "Primecast",         user: "System",   time: new Date(Date.now() - 30*60*1000),  msg: "data synced" },
-    { id: 8, type: "login",    code: "NAHATAL",   name: "Nahatal Alloys",    user: "Pranesh",  time: new Date(Date.now() - 22*60*1000),  msg: "logged in" },
-];
+const API = resolveApiBase();
 
 /* ── Helpers ────────────────────────────────────────────────── */
-function timeAgo(date) {
-    const diff = Math.floor((Date.now() - date) / 1000);
+function timeAgo(dateInput) {
+    if (!dateInput) return "—";
+    const dateObj = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+    const diff = Math.floor((Date.now() - dateObj) / 1000);
     if (diff < 60)   return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400)return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
+    const hrs = Math.floor(diff / 3600);
+    return `${hrs} ${hrs === 1 ? "hr" : "hrs"} ago`;
 }
 
 function useTick(ms = 30000) {
@@ -276,9 +142,8 @@ function ClientDrawer({ client, onClose }) {
                 <div className="au-drawer__kpis">
                     {[
                         { label: "Active Users",  value: client.activeUsers },
-                        { label: "Total Users",   value: client.totalUsers  },
-                        { label: "API Calls",     value: client.apiCalls.toLocaleString() },
-                        { label: "Sync Health",   value: `${client.syncHealth}%` },
+                        { label: "Registered Users", value: client.totalUsers },
+                        { label: "User Limit",     value: client.maxUsers },
                     ].map(k => (
                         <div key={k.label} className="au-drawer__kpi">
                             <span className="au-drawer__kpi-val">{k.value}</span>
@@ -311,7 +176,7 @@ function ClientDrawer({ client, onClose }) {
                 <div className="au-drawer__section">
                     <h4 className="au-drawer__sec-title">Licensed Modules</h4>
                     <div className="au-drawer__modules">
-                        {["Dashboard","Approvals","Charts","Reports","MIS","Dispatch","Utility"].map(m => (
+                        {["Dashboard","Approvals","Charts","Reports","MIS","Utility"].map(m => (
                             <span
                                 key={m}
                                 className={`au-drawer__module ${client.modules.includes(m) ? "au-drawer__module--on" : "au-drawer__module--off"}`}
@@ -322,10 +187,24 @@ function ClientDrawer({ client, onClose }) {
                     </div>
                 </div>
 
-                {/* Sync health bar */}
+                {/* Active Live Users */}
                 <div className="au-drawer__section">
-                    <h4 className="au-drawer__sec-title">Data Sync Health</h4>
-                    <HealthBar pct={client.syncHealth} />
+                    <h4 className="au-drawer__sec-title">Active Live Users</h4>
+                    {client.activeLiveUsers && client.activeLiveUsers.length > 0 ? (
+                        <div className="au-drawer__active-users-list">
+                            {client.activeLiveUsers.map((u, idx) => (
+                                <div key={idx} className="au-drawer__active-user-item">
+                                    <span className="au-drawer__active-user-dot">🟢</span>
+                                    <strong className="au-drawer__active-username">{u.username}</strong>
+                                    {u.systemName && (
+                                        <span className="au-drawer__active-system"> ({u.systemName})</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <span className="au-drawer__active-users-none">No active users</span>
+                    )}
                 </div>
 
                 {/* Actions */}
@@ -370,22 +249,54 @@ function ClientDrawer({ client, onClose }) {
 export default function AnimsUtility() {
     useTick(30000); // re-render every 30s to refresh "time ago"
 
+    const [clients, setClients] = useState([]);
+    const [activityFeed, setActivityFeed] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState("");
+
     const [search,   setSearch]   = useState("");
     const [filter,   setFilter]   = useState("all");   // all | active | inactive | warning
     const [view,     setView]     = useState("grid");  // grid | table
     const [selected, setSelected] = useState(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
-    const refreshTimer = useRef(null);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        setErrorMsg("");
+        try {
+            const clientsRes = await fetch(`${API}/admin/utility/clients/`, { credentials: "include" });
+            const clientsData = await clientsRes.json();
+            
+            const activityRes = await fetch(`${API}/admin/utility/activity/`, { credentials: "include" });
+            const activityData = await activityRes.json();
+            
+            if (clientsRes.ok && activityRes.ok) {
+                setClients(clientsData.clients || []);
+                setActivityFeed(activityData.activity || []);
+                setLastRefresh(new Date());
+            } else {
+                setErrorMsg(clientsData.error || activityData.error || "Failed to load monitor data.");
+            }
+        } catch (err) {
+            setErrorMsg("Network error. Could not connect to API.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     /* ── Counts ── */
-    const total      = MOCK_CLIENTS.length;
-    const active     = MOCK_CLIENTS.filter(c => c.status === "active").length;
-    const inactive   = MOCK_CLIENTS.filter(c => c.status === "inactive").length;
-    const warning    = MOCK_CLIENTS.filter(c => c.status === "warning").length;
-    const liveUsers  = MOCK_CLIENTS.reduce((a, c) => a + c.activeUsers, 0);
+    const total      = clients.length;
+    const active     = clients.filter(c => c.status === "active").length;
+    const inactive   = clients.filter(c => c.status === "inactive").length;
+    const warning    = clients.filter(c => c.status === "warning").length;
+    const liveUsers  = clients.reduce((a, c) => a + c.activeUsers, 0);
 
     /* ── Filtered ── */
-    const visible = MOCK_CLIENTS.filter(c => {
+    const visible = clients.filter(c => {
         const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
                             c.code.toLowerCase().includes(search.toLowerCase()) ||
                             c.location.toLowerCase().includes(search.toLowerCase());
@@ -393,10 +304,9 @@ export default function AnimsUtility() {
         return matchSearch && matchFilter;
     });
 
-    /* ── Manual refresh (stub) ── */
+    /* ── Manual refresh ── */
     const handleRefresh = () => {
-        setLastRefresh(new Date());
-        clearTimeout(refreshTimer.current);
+        fetchData();
     };
 
     /* ── Filter pills ── */
@@ -406,6 +316,23 @@ export default function AnimsUtility() {
         { key: "warning",  label: "Warning",  count: warning },
         { key: "inactive", label: "Offline",  count: inactive},
     ];
+
+    if (loading) {
+        return (
+            <div className="au-root" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "300px" }}>
+                <div style={{ color: "#9ca3af" }}>Querying client stats...</div>
+            </div>
+        );
+    }
+
+    if (errorMsg) {
+        return (
+            <div className="au-root" style={{ padding: "20px" }}>
+                <div className="ap-error-alert" style={{ marginBottom: "15px" }}>{errorMsg}</div>
+                <button className="au-refresh-btn" onClick={fetchData}>Retry</button>
+            </div>
+        );
+    }
 
     return (
         <div className="au-root">
@@ -556,8 +483,8 @@ export default function AnimsUtility() {
                                             <span className="au-metric__lbl">Live Users</span>
                                         </div>
                                         <div className="au-metric">
-                                            <span className="au-metric__val">{c.apiCalls.toLocaleString()}</span>
-                                            <span className="au-metric__lbl">API Calls</span>
+                                            <span className="au-metric__val">{c.totalUsers}</span>
+                                            <span className="au-metric__lbl">Registered Users</span>
                                         </div>
                                         <div className="au-metric">
                                             <span className="au-metric__val">{timeAgo(c.lastLogin)}</span>
@@ -565,7 +492,7 @@ export default function AnimsUtility() {
                                         </div>
                                     </div>
 
-                                    <HealthBar pct={c.syncHealth} />
+                                    {/* HealthBar removed */}
 
                                     <div className="au-client-card__footer">
                                         <span className="au-client-card__joined">Joined {c.joinedDate}</span>
@@ -590,7 +517,6 @@ export default function AnimsUtility() {
                                         <th>Tunnel</th>
                                         <th>Live Users</th>
                                         <th>Last Login</th>
-                                        <th>Sync Health</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -622,7 +548,6 @@ export default function AnimsUtility() {
                                                 </span>
                                             </td>
                                             <td className="au-table__time">{timeAgo(c.lastLogin)}</td>
-                                            <td style={{ minWidth: 140 }}><HealthBar pct={c.syncHealth} /></td>
                                             <td>
                                                 <button className="au-tbl-btn" onClick={() => setSelected(c)}>
                                                     View
@@ -646,7 +571,7 @@ export default function AnimsUtility() {
                         </span>
                     </div>
                     <div className="au-activity__feed">
-                        {ACTIVITY_FEED.map((ev, i) => (
+                        {activityFeed.map((ev, i) => (
                             <div
                                 key={ev.id}
                                 className="au-act-item"

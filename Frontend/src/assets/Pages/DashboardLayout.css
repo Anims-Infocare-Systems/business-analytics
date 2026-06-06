@@ -1549,3 +1549,195 @@
         transition-duration: .01ms !important;
     }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SUBSCRIPTION EXPIRED SCREEN
+   ══════════════════════════════════════════════════════════ */
+.dl-expired-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #fef2f2 0%, #f5f7ff 50%, #eff6ff 100%);
+    padding: 24px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.dl-expired-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 24px;
+    box-shadow: 0 20px 40px -15px rgba(220, 38, 38, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+    width: 100%;
+    max-width: 480px;
+    padding: 40px 32px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    animation: dl-fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.dl-expired-logo {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.dl-expired-logo-img {
+    height: 48px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.05));
+}
+
+.dl-expired-icon-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+}
+
+.dl-expired-icon-bg {
+    background: #ffe4e6;
+    border-radius: 50%;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 16px rgba(225, 29, 72, 0.15);
+    animation: dl-expired-pulse 2s infinite ease-in-out;
+}
+
+@keyframes dl-expired-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 8px 16px rgba(225, 29, 72, 0.15);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 12px 24px rgba(225, 29, 72, 0.25);
+    }
+}
+
+.dl-expired-title {
+    color: #9f1239;
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+}
+
+.dl-expired-text {
+    color: #475569;
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+}
+
+.dl-expired-text strong {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.dl-expired-details {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+}
+
+.dl-expired-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+.dl-expired-detail-label {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.dl-expired-detail-value {
+    color: #334155;
+    font-weight: 600;
+    background: #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: monospace;
+}
+
+.dl-expired-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.dl-expired-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 12px 32px;
+    width: 100%;
+}
+
+.dl-expired-btn--upgrade {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.dl-expired-btn--upgrade:hover {
+    background: #1d4ed8;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+.dl-expired-btn--upgrade:active {
+    transform: translateY(0);
+}
+
+.dl-expired-btn--logout {
+    background: #e11d48;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25);
+}
+
+.dl-expired-btn--logout:hover {
+    background: #be123c;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(225, 29, 72, 0.35);
+}
+
+.dl-expired-btn--logout:active {
+    transform: translateY(0);
+}
+
+.dl-expired-footer {
+    color: #94a3b8;
+    font-size: 13px;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 20px;
+}
+
+.dl-expired-footer a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.dl-expired-footer a:hover {
+    text-decoration: underline;
+}

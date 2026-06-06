@@ -17,8 +17,8 @@ import PurchaseAnalysis from "./PurchaseAnalysis";
 import QualityAnalysis from "./QualityAnalysis";
 import ProductionAnalysis from "./ProductionAnalysis";
 import UserRights from "./UserRights";
-import AnimsUtility from "./AnimsUtility";
 import Settings from "./Settings";
+import Welcome from "./Welcome";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -78,7 +78,7 @@ const MENU_ITEMS = [
     {
         key: "Utility",
         icon: Icons.Utility,
-        children: ["User Rights", "Anims Utility"],
+        children: ["User Rights"],
     },
 ];
 
@@ -97,12 +97,12 @@ const HEADING_MAP = {
     "Efficiency Report": "MIS — Efficiency Report",
     "Charts": "Charts & Visualizations",
     "User Rights": "Utility — User Rights",
-    "Anims Utility": "Utility — Anims Utility",
     "Settings": "Settings",
+    "Welcome": "Workspace Overview",
 };
 
 /* ── Page content with fade+slide transition ─────────────── */
-function PageContent({ activeSubItem, activeItem }) {
+function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin }) {
     const [visible, setVisible] = useState(true);
     const [content, setContent] = useState({ activeSubItem, activeItem });
     const prevKey = useRef(`${activeItem}__${activeSubItem}`);
@@ -123,7 +123,8 @@ function PageContent({ activeSubItem, activeItem }) {
 
     let node;
 
-    if (si === "Top Management Dashboard") node = <Dashboard1 />;
+    if (ai === "Welcome") node = <Welcome userName={userName} companyName={companyName} onNavigate={onNavigate} userRights={userRights} isSuperAdmin={isSuperAdmin} />;
+    else if (si === "Top Management Dashboard") node = <Dashboard1 />;
     else if (si === "Dashboard2") node = <Dashboard2 />;
     else if (si === "Plant Performance Dashboard") node = <Dashboard3 />;
     else if (si === "E-Approval") node = <EApproval />;
@@ -136,7 +137,6 @@ function PageContent({ activeSubItem, activeItem }) {
     else if (si === "Efficiency Report") node = <EfficiencyReport />;
     else if (ai === "Charts") node = <Charts />;
     else if (si === "User Rights") node = <UserRights />;
-    else if (si === "Anims Utility") node = <AnimsUtility />;
     else node = (
         <div className="dl-content__placeholder dl-content__placeholder--labeled">
             <div className="dl-placeholder-icon">
@@ -344,6 +344,10 @@ export default function DashboardLayout() {
     const userName = user.username || "User";
     const userInitials = (userName.slice(0, 2) || "US").toUpperCase();
     const [userDesignation, setUserDesignation] = useState(user.designation || "Staff");
+    const [isExpired, setIsExpired] = useState(() => {
+        const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        return !!cachedUser.isExpired;
+    });
 
     // ✅ Filter menu items based on cached user rights
     const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
@@ -360,9 +364,9 @@ export default function DashboardLayout() {
 
     // ✅ Restore navigation from sessionStorage (survives F5 refresh)
     const savedNav = readNav();
-    const initItem    = savedNav?.activeItem    ?? defaultItem;
-    const initSubItem = savedNav?.activeSubItem ?? defaultSubItem;
-    const initMenu    = savedNav?.openMenu      ?? defaultItem;
+    const initItem    = savedNav?.activeItem    ?? "Welcome";
+    const initSubItem = savedNav?.activeSubItem ?? null;
+    const initMenu    = savedNav?.openMenu      ?? null;
 
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isMobile = screenWidth < BP_MOBILE;
@@ -402,15 +406,29 @@ export default function DashboardLayout() {
                 throw new Error("Failed to fetch profile");
             })
             .then(data => {
-                if (data.success && data.designation) {
-                    setUserDesignation(data.designation);
-                    // Sync designation with localStorage cache
+                if (data.success) {
+                    if (data.designation) {
+                        setUserDesignation(data.designation);
+                    }
+                    setIsExpired(!!data.isExpired);
+                    // Sync designation and expiry status with localStorage cache
                     const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
-                    cachedUser.designation = data.designation;
+                    if (data.designation) cachedUser.designation = data.designation;
+                    cachedUser.isExpired = !!data.isExpired;
                     localStorage.setItem("user", JSON.stringify(cachedUser));
                 }
             })
             .catch(() => { /* fallback to static initialDesignation */ });
+    }, []);
+ 
+    /* Background heartbeat to check session validity and trigger auto-logout if terminated from elsewhere */
+    useEffect(() => {
+        const checkSession = () => {
+            fetch(`${API}/user-rights/me/`, { credentials: "include" })
+                .catch(() => {});
+        };
+        const interval = setInterval(checkSession, 10000); // Check every 10 seconds
+        return () => clearInterval(interval);
     }, []);
 
     /* responsive resize handler */
@@ -501,6 +519,9 @@ export default function DashboardLayout() {
             localStorage.removeItem("ba_settings_profile");
         } catch {}
         navigate("/", { replace: true });
+
+        fetch(`${API}/logout/`, { method: "POST", credentials: "include" })
+            .catch(err => console.error("Error logging out from backend:", err));
     };
     const showExpanded = isMobile ? true : expanded;
     const topbarHeading = activeSubItem
@@ -508,6 +529,53 @@ export default function DashboardLayout() {
         : (HEADING_MAP[activeItem] || activeItem);
 
     if (!isAuthenticated) return null;
+
+    if (isExpired) {
+        return (
+            <div className="dl-expired-screen">
+                <div className="dl-expired-card">
+                    <div className="dl-expired-logo">
+                        <img src="/Images/logo.png" alt="Anims ERP Logo" className="dl-expired-logo-img" />
+                    </div>
+                    <div className="dl-expired-icon-container">
+                        <div className="dl-expired-icon-bg">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h1 className="dl-expired-title">Subscription Expired</h1>
+                    <p className="dl-expired-text">
+                        The subscription plan for <strong>{companyName}</strong> has expired. To restore access to your dashboards and reports, please renew or upgrade your plan.
+                    </p>
+                    <div className="dl-expired-details">
+                        <div className="dl-expired-detail-row">
+                            <span className="dl-expired-detail-label">Workspace Code:</span>
+                            <span className="dl-expired-detail-value">{user.company_code || "—"}</span>
+                        </div>
+                    </div>
+                    <div className="dl-expired-actions">
+                        {isSuperAdmin && (
+                            <button className="dl-expired-btn dl-expired-btn--upgrade" onClick={() => setSettingsOpen(true)}>
+                                <Icons.Setting />
+                                <span>Renewal / Upgrade Subscription</span>
+                            </button>
+                        )}
+                        <button className="dl-expired-btn dl-expired-btn--logout" onClick={handleLogout}>
+                            <Icons.Logout />
+                            <span>Logout</span>
+                        </button>
+                    </div>
+                    <div className="dl-expired-footer">
+                        <p>Need help? Contact our support team at <a href="mailto:support@animse.com">support@animse.com</a></p>
+                    </div>
+                </div>
+                {/* Settings Overlay Modal in Expired Mode */}
+                <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} isExpiredMode={true} />
+            </div>
+        );
+    }
 
     return (
         <div className={`dl-root ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
@@ -527,6 +595,20 @@ export default function DashboardLayout() {
                     isMobile && drawerOpen ? "dl-sidebar--mobile-open" : "",
                     mounted ? "dl-sidebar--mounted" : "",
                 ].join(" ")}
+                onClick={(e) => {
+                    if (isMobile) return;
+                    const target = e.target;
+                    if (target.closest('.dl-sidebar__item') ||
+                        target.closest('.dl-submenu__item') ||
+                        target.closest('.dl-sidebar__collapse-btn') ||
+                        target.closest('.dl-sidebar__logo') ||
+                        target.closest('.dl-flyout')
+                    ) {
+                        return;
+                    }
+                    setExpanded(prev => !prev);
+                    setOpenMenu(null);
+                }}
             >
                 <div className="dl-sidebar__glow-stripe" />
 
@@ -664,7 +746,15 @@ export default function DashboardLayout() {
 
                 {/* Content */}
                 <main className="dl-content" ref={contentRef}>
-                    <PageContent activeSubItem={activeSubItem} activeItem={activeItem} />
+                    <PageContent
+                        activeSubItem={activeSubItem}
+                        activeItem={activeItem}
+                        onNavigate={handleSubClick}
+                        userName={userName}
+                        companyName={companyName}
+                        userRights={userRights}
+                        isSuperAdmin={isSuperAdmin}
+                    />
                 </main>
             </div>
 

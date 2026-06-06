@@ -10,6 +10,8 @@ from rest_framework.response import Response
 
 from .views import encrypt_password
 from .views_userrights import get_session_tenant, _company_code, _session_username
+from .views_signup import send_brevo_email_async
+from django.conf import settings
 
 
 @api_view(["GET"])
@@ -326,14 +328,15 @@ def settings_upgrade_plan(request):
     try:
         with transaction.atomic():
             with connection.cursor() as cursor:
+                plan_id_val = "enterprise" if plan_name in ["Enterprise", "Max"] else ("pro" if plan_name == "Pro" else "free")
                 # 1. Update tenants_signup
                 cursor.execute(
                     """
                     UPDATE tenants_signup 
-                    SET plan_name = %s, no_of_users = %s, end_date = %s
+                    SET plan_name = %s, plan_id = %s, no_of_users = %s, end_date = %s
                     WHERE company_code = %s
                     """,
-                    [plan_db_name, no_of_users, end_date, company]
+                    [plan_db_name, plan_id_val, no_of_users, end_date, company]
                 )
                 
                  # 2. Fetch tenant_id for history log
@@ -361,6 +364,38 @@ def settings_upgrade_plan(request):
                 )
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # Fetch details to send plan upgrade confirmation email
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT company_name, business_person_name, email_id FROM tenants_signup WHERE company_code = %s",
+                [company]
+            )
+            signup_row = cursor.fetchone()
+            if signup_row:
+                company_name, person_name, email_id = signup_row
+                
+                valid_from = today.strftime("%d-%m-%Y")
+                valid_to = end_date.strftime("%d-%m-%Y")
+                sub_period = "6 Months"
+                
+                send_brevo_email_async({
+                    "template_id": getattr(settings, 'BREVO_UPGRADE_TEMPLATE_ID', 2),
+                    "person_name": person_name,
+                    "company_code": company,
+                    "company_name": company_name,
+                    "admin_username": _session_username(tenant),
+                    "plan_name": plan_db_name,
+                    "users": no_of_users,
+                    "email": email_id,
+                    "sub_period": sub_period,
+                    "valid_from": valid_from,
+                    "valid_to": valid_to,
+                })
+    except Exception as email_err:
+        import logging
+        logging.getLogger(__name__).error(f"Error triggering Brevo upgrade email: {email_err}")
 
     return Response({
         "success": True,

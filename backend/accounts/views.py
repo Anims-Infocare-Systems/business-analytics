@@ -13,6 +13,10 @@ def encrypt_password(plain_password):
     """Shift each ASCII value by +2 (existing ERP encryption)."""
     return ''.join(chr(ord(c) + 2) for c in plain_password)
 
+def decrypt_password(encrypted_password):
+    """Shift each ASCII value by -2 (existing ERP decryption)."""
+    return ''.join(chr(ord(c) - 2) for c in encrypted_password)
+
 def get_tenant_connection(request):
     """Pull tenant DB details from session and return an open connection."""
     tenant = request.session.get("tenant")
@@ -106,6 +110,47 @@ def find_column_ci(cursor, table_schema, table_name, candidates):
 def health_check(request):
     return Response({"status": "ok"})
 
+def is_plan_expired(company_code):
+    """
+    Returns True if the tenant's plan has expired or is inactive, False otherwise.
+    """
+    from django.db import connection
+    import datetime
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT active_status, end_date FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s)",
+                [company_code.strip()]
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+            active_status, end_date = row
+            
+            # If active status is False/0/None, the plan is inactive/expired
+            if not active_status:
+                return True
+            
+            if end_date:
+                # Normalize end_date to date object
+                if isinstance(end_date, datetime.datetime):
+                    end_date = end_date.date()
+                elif isinstance(end_date, datetime.date):
+                    pass
+                else:
+                    try:
+                        end_date = datetime.datetime.strptime(str(end_date).split()[0], "%Y-%m-%d").date()
+                    except ValueError:
+                        return False
+                
+                # Expired if end_date is strictly in the past
+                if end_date < datetime.date.today():
+                    return True
+            
+            return False
+    except Exception:
+        return False
+
 # ─────────────────────────────────────────────────────────────
 #  LOGIN
 # ─────────────────────────────────────────────────────────────
@@ -115,8 +160,25 @@ def login_view(request):
     company_code = (request.data.get("company_code") or "").strip()
     username     = (request.data.get("username")     or "").strip()
     password     =  request.data.get("password", "")
+    system_name  = (request.data.get("system_name")  or "").strip()
     if not company_code or not username or not password:
         return Response({"error": "company_code, username and password are required."}, status=400)
+
+    if not system_name:
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        if 'Windows' in user_agent:
+            os_name = 'Windows PC'
+        elif 'Macintosh' in user_agent:
+            os_name = 'Mac'
+        elif 'Linux' in user_agent:
+            os_name = 'Linux PC'
+        elif 'iPhone' in user_agent or 'iPad' in user_agent:
+            os_name = 'iOS Device'
+        elif 'Android' in user_agent:
+            os_name = 'Android Device'
+        else:
+            os_name = 'Browser Client'
+        system_name = os_name
     try:
         tenant = Tenant.objects.get(company_code__iexact=company_code, status=True)
     except Tenant.DoesNotExist:  # type: ignore
@@ -174,6 +236,49 @@ def login_view(request):
     }
     request.session.modified = True
     request.session.save()
+    new_session_key = request.session.session_key
+
+    # ── Enforce Single Session Per User ──
+    try:
+        from django.contrib.sessions.models import Session
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT session_key FROM tenants_userssession WHERE company_code = %s AND username = %s",
+                [company_code, username]
+            )
+            old_row = cursor.fetchone()
+            if old_row:
+                old_session_key = old_row[0]
+                if old_session_key:
+                    Session.objects.filter(session_key=old_session_key).delete()
+                cursor.execute(
+                    "UPDATE tenants_userssession SET session_key = %s, system_name = %s, created_at = GETDATE() WHERE company_code = %s AND username = %s",
+                    [new_session_key, system_name, company_code, username]
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO tenants_userssession (tenant_id, company_code, username, session_key, system_name, created_at)
+                    VALUES (%s, %s, %s, %s, %s, GETDATE())
+                    """,
+                    [tenant.id, company_code, username, new_session_key, system_name]
+                )
+
+            # Log activity to tenants_clientactivity
+            cursor.execute(
+                """
+                INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+                VALUES (%s, %s, 'login', %s, 'logged in', GETDATE())
+                """,
+                [tenant.id, company_code, username]
+            )
+    except Exception as session_err:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error handling single session logic: {session_err}")
+    
+    is_expired = is_plan_expired(company_code)
+    
     return Response({
         "message": "Login successful",
         "company": tenant.company_name,
@@ -182,8 +287,33 @@ def login_view(request):
         "designation": designation,
         "isSuperAdmin": is_super_admin,
         "rights": rights,
-        "hasAccess": has_access
+        "hasAccess": has_access,
+        "isExpired": is_expired
     })
+
+
+# ─────────────────────────────────────────────────────────────
+#  LOGOUT
+# ─────────────────────────────────────────────────────────────
+@api_view(['POST'])
+def logout_view(request):
+    from django.db import connection
+    tenant = request.session.get("tenant")
+    if tenant:
+        company_code = tenant.get("company_code")
+        username = tenant.get("username")
+        if company_code and username:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "DELETE FROM tenants_userssession WHERE company_code = %s AND username = %s",
+                        [company_code, username]
+                    )
+            except Exception:
+                pass
+    request.session.flush()
+    return Response({"message": "Logout successful"}, status=200)
+
 
 # ─────────────────────────────────────────────────────────────
 #  COMPANY NAME LOOKUP

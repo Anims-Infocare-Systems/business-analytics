@@ -185,6 +185,8 @@ def user_rights_me(request):
                         rights[f_name] = acc
         except Exception:
             pass
+    from .views import is_plan_expired
+    is_expired = is_plan_expired(company)
 
     return Response({
         "success": True,
@@ -197,6 +199,7 @@ def user_rights_me(request):
         "rights": rights,
         "rightsSchema": _rights_schema(),
         "hasAccess": is_super_admin or any(rights.values()),
+        "isExpired": is_expired,
     })
 
 

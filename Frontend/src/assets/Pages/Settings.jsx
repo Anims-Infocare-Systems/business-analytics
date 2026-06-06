@@ -64,17 +64,25 @@ const Icons = {
     )
 };
 
-export default function Settings({ isOpen, onClose }) {
+export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
     // ── Persist active tab across refresh ──
     const [activeTab, setActiveTab] = useState(() => {
+        if (isExpiredMode) return "billing";
         try { return sessionStorage.getItem("ba_settings_tab") || "account"; }
         catch { return "account"; }
     });
 
     // Write tab to sessionStorage whenever it changes
     useEffect(() => {
+        if (isExpiredMode) return;
         try { sessionStorage.setItem("ba_settings_tab", activeTab); } catch { }
-    }, [activeTab]);
+    }, [activeTab, isExpiredMode]);
+
+    useEffect(() => {
+        if (isExpiredMode) {
+            setActiveTab("billing");
+        }
+    }, [isExpiredMode]);
 
     const [isClosing, setIsClosing] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -341,43 +349,55 @@ export default function Settings({ isOpen, onClose }) {
             <div className={`st-container ${isClosing ? "st-container--slide-down" : "st-container--slide-up"}`}>
 
                 {/* ── Left Sidebar ─────────────────────────────────── */}
-                <aside className="st-sidebar">
-                    <div className="st-sidebar__header">
-                        <button className="st-sidebar__back-btn" onClick={handleClose} aria-label="Back">
-                            <Icons.Back />
-                        </button>
-                        <span className="st-sidebar__title">Settings</span>
-                    </div>
-
-                    <nav className="st-sidebar__nav">
-                        <button
-                            className={`st-sidebar__nav-item ${activeTab === "account" ? "st-sidebar__nav-item--active" : ""}`}
-                            onClick={() => setActiveTab("account")}
-                        >
-                            <span className="st-sidebar__nav-icon"><Icons.Account /></span>
-                            <span className="st-sidebar__nav-label">Account</span>
-                        </button>
-                        {isSuperadmin && (
-                            <button
-                                className={`st-sidebar__nav-item ${activeTab === "billing" ? "st-sidebar__nav-item--active" : ""}`}
-                                onClick={() => setActiveTab("billing")}
-                            >
-                                <span className="st-sidebar__nav-icon"><Icons.Billing /></span>
-                                <span className="st-sidebar__nav-label">Billing</span>
+                {!isExpiredMode && (
+                    <aside className="st-sidebar">
+                        <div className="st-sidebar__header">
+                            <button className="st-sidebar__back-btn" onClick={handleClose} aria-label="Back">
+                                <Icons.Back />
                             </button>
-                        )}
-                        <button
-                            className={`st-sidebar__nav-item ${activeTab === "about" ? "st-sidebar__nav-item--active" : ""}`}
-                            onClick={() => setActiveTab("about")}
-                        >
-                            <span className="st-sidebar__nav-icon"><Icons.About /></span>
-                            <span className="st-sidebar__nav-label">About</span>
-                        </button>
-                    </nav>
-                </aside>
+                            <span className="st-sidebar__title">Settings</span>
+                        </div>
+
+                        <nav className="st-sidebar__nav">
+                            <button
+                                className={`st-sidebar__nav-item ${activeTab === "account" ? "st-sidebar__nav-item--active" : ""}`}
+                                onClick={() => setActiveTab("account")}
+                            >
+                                <span className="st-sidebar__nav-icon"><Icons.Account /></span>
+                                <span className="st-sidebar__nav-label">Account</span>
+                            </button>
+                            {isSuperadmin && (
+                                <button
+                                    className={`st-sidebar__nav-item ${activeTab === "billing" ? "st-sidebar__nav-item--active" : ""}`}
+                                    onClick={() => setActiveTab("billing")}
+                                >
+                                    <span className="st-sidebar__nav-icon"><Icons.Billing /></span>
+                                    <span className="st-sidebar__nav-label">Billing</span>
+                                </button>
+                            )}
+                            <button
+                                className={`st-sidebar__nav-item ${activeTab === "about" ? "st-sidebar__nav-item--active" : ""}`}
+                                onClick={() => setActiveTab("about")}
+                            >
+                                <span className="st-sidebar__nav-icon"><Icons.About /></span>
+                                <span className="st-sidebar__nav-label">About</span>
+                            </button>
+                        </nav>
+                    </aside>
+                )}
 
                 {/* ── Right Content Area ───────────────────────────── */}
                 <main className="st-content">
+                    {isExpiredMode && (
+                        <div className="st-expired-mode-header" style={{ marginBottom: "24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <button className="st-sidebar__back-btn" onClick={handleClose} aria-label="Back">
+                                    <Icons.Back />
+                                </button>
+                                <span style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a" }}>Billing & Plan Upgrade</span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── TAB: ACCOUNT ── */}
                     {activeTab === "account" && (
@@ -521,21 +541,15 @@ export default function Settings({ isOpen, onClose }) {
                                     </div>
                                 </div>
                                 <div className="st-quota-card">
-                                    <div className="st-quota-card__header">
-                                        <span className="st-quota-card__label">Data Storage</span>
-                                        <span className="st-quota-card__value">{(!profile && loadingProfile) ? "…" : `${storageUsed} / ${storageLimit}`}</span>
-                                    </div>
-                                    <div className="st-quota-card__bar-bg">
-                                        <div className="st-quota-card__bar-fill" style={{ width: `${storageLimit && parseFloat(storageLimit) ? Math.min(100, (parseFloat(storageUsed) / parseFloat(storageLimit)) * 100) : 0}%` }} />
+                                    <div className="st-quota-card__header" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+                                        <span className="st-quota-card__label">Company Name</span>
+                                        <span className="st-quota-card__value" style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b" }}>{userCompany}</span>
                                     </div>
                                 </div>
                                 <div className="st-quota-card">
-                                    <div className="st-quota-card__header">
-                                        <span className="st-quota-card__label">Monthly Exports</span>
-                                        <span className="st-quota-card__value">{(!profile && loadingProfile) ? "…" : `${exportsUsed.toLocaleString()} / ${exportsLimit.toLocaleString()}`}</span>
-                                    </div>
-                                    <div className="st-quota-card__bar-bg">
-                                        <div className="st-quota-card__bar-fill st-quota-card__bar-fill--warning" style={{ width: `${exportsLimit ? Math.min(100, (exportsUsed / exportsLimit) * 100) : 0}%` }} />
+                                    <div className="st-quota-card__header" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+                                        <span className="st-quota-card__label">Company Code</span>
+                                        <span className="st-quota-card__value" style={{ fontSize: "14px", fontWeight: "700", color: "#2d6de8", fontFamily: "monospace" }}>{companyCode}</span>
                                     </div>
                                 </div>
                             </div>

@@ -2,8 +2,81 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.db import connection
+from django.conf import settings
 from .models import Tenant
 from .views import encrypt_password
+import threading
+import requests
+import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+def send_brevo_email_async(email_data):
+    """
+    Asynchronously triggers the Brevo API request to send the welcome template.
+    Runs in a daemon thread to avoid blocking the DB database insertion / response to the client.
+    """
+    def worker():
+        api_key = getattr(settings, 'BREVO_API_KEY', '')
+        if not api_key:
+            logger.warning("Brevo API Key is not configured. Email dispatch skipped.")
+            return
+
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json"
+        }
+        
+        # Base parameters
+        email_params = {
+            "person_name": email_data.get("person_name"),
+            "company_code": email_data.get("company_code"),
+            "company_name": email_data.get("company_name"),
+            "admin_username": email_data.get("admin_username"),
+            "plan_name": email_data.get("plan_name"),
+            "users": email_data.get("users"),
+            "email": email_data.get("email"),
+            "sub_period": email_data.get("sub_period"),
+            "valid_from": email_data.get("valid_from"),
+            "valid_to": email_data.get("valid_to")
+        }
+        
+        # Merge other keys from email_data into email_params
+        for k, v in email_data.items():
+            if k not in email_params and k not in ["template_id", "email", "person_name"]:
+                email_params[k] = v
+
+        payload = {
+            "templateId": email_data.get("template_id") or getattr(settings, 'BREVO_TEMPLATE_ID', 1),
+            "to": [
+                {
+                    "email": email_data.get("email"),
+                    "name": email_data.get("person_name")
+                }
+            ],
+            "bcc": [
+                {
+                    "email": getattr(settings, 'BREVO_BCC_EMAIL', 'teamweb@animse.com'),
+                    "name": "Anims Web Team"
+                }
+            ],
+            "params": email_params
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Brevo onboarding email successfully dispatched. MessageId: {response.json().get('messageId')}")
+            else:
+                logger.error(f"Brevo API failed with status {response.status_code}: {response.text}")
+        except Exception as err:
+            logger.error(f"Exception raised during Brevo email dispatch: {err}")
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
 
 @api_view(['POST'])
 @authentication_classes([])
@@ -122,6 +195,44 @@ def signup_view(request):
                     """,
                     [tenant_id, company_code, admin_username, right]
                 )
+
+        # Calculate validity dates and subscription period for the onboarding email
+        today = datetime.date.today()
+        valid_from = today.strftime("%d-%m-%Y")
+        
+        if plan_id == "free":
+            sub_period = "6 Months"
+            # Add 6 months safely
+            month = today.month - 1 + 6
+            year = today.year + month // 12
+            month = month % 12 + 1
+            day = min(today.day, [31,
+                29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+                31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+            end_date = datetime.date(year, month, day)
+        else:
+            sub_period = "1 Year"
+            # Add 1 year safely
+            try:
+                end_date = today.replace(year=today.year + 1)
+            except ValueError:
+                end_date = today.replace(year=today.year + 1, day=28)
+                
+        valid_to = end_date.strftime("%d-%m-%Y")
+
+        # Dispatch welcome email asynchronously
+        send_brevo_email_async({
+            "person_name": person_name,
+            "company_code": company_code,
+            "company_name": company_name,
+            "admin_username": admin_username,
+            "plan_name": plan_name,
+            "users": users_count,
+            "email": email,
+            "sub_period": sub_period,
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+        })
 
         return Response({
             "success": True,

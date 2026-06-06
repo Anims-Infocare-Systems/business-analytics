@@ -170,3 +170,10 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles"))
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ─── Brevo Email Integration ──────────────────────────────────
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+BREVO_TEMPLATE_ID = int(os.environ.get("BREVO_TEMPLATE_ID", 1))
+BREVO_UPGRADE_TEMPLATE_ID = int(os.environ.get("BREVO_UPGRADE_TEMPLATE_ID", 2))
+BREVO_EXPIRY_TEMPLATE_ID = int(os.environ.get("BREVO_EXPIRY_TEMPLATE_ID", 3))
+BREVO_BCC_EMAIL = os.environ.get("BREVO_BCC_EMAIL", "teamweb@animse.com")

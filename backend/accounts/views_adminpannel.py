@@ -8,7 +8,7 @@ from django.db import connection, transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .views import encrypt_password
+from .views import encrypt_password, decrypt_password
 from .models import Tenant
 
 ADMIN_USER = getattr(settings, "ADMIN_PANEL_USER", "admin")
@@ -91,7 +91,9 @@ def admin_list_tenants(request):
                     t.erp_user,
                     t.erp_password,
                     t.erp_port,
-                    t.status as tenant_status
+                    t.status as tenant_status,
+                    ts.city,
+                    ts.state
                 FROM tenants_signup ts
                 LEFT JOIN tenants t ON ts.tenant_id = t.id
                 ORDER BY ts.company_name
@@ -126,7 +128,9 @@ def admin_list_tenants(request):
                     "erp_user": r[18] or "",
                     "erp_password": r[19] or "",
                     "erp_port": r[20] or 1433,
-                    "tenant_status": bool(r[21])
+                    "tenant_status": bool(r[21]),
+                    "city": r[22] or "",
+                    "state": r[23] or ""
                 })
             return Response({"success": True, "tenants": tenants})
     except Exception as e:
@@ -153,6 +157,8 @@ def admin_create_tenant(request):
     plan_id = str(request.data.get("plan_id") or "free").strip().lower()
     plan_name = str(request.data.get("plan_name") or "Free Plan").strip()
     end_date = str(request.data.get("end_date") or "").strip()
+    city = str(request.data.get("city") or "").strip()
+    state = str(request.data.get("state") or "").strip()
 
     erp_server = str(request.data.get("erp_server") or "").strip()
     erp_database = str(request.data.get("erp_database") or "").strip()
@@ -198,7 +204,8 @@ def admin_create_tenant(request):
                         tenant_id, company_code, company_name, business_name, 
                         business_person_name, email_id, phone_number, gst_number, 
                         no_of_employees, no_of_users, plan_id, plan_name,
-                        signup_date, end_date, active_status, created_at
+                        signup_date, end_date, active_status, created_at,
+                        city, state
                     ) VALUES (
                         %s, %s, %s, %s, 
                         %s, %s, %s, %s, 
@@ -207,14 +214,16 @@ def admin_create_tenant(request):
                         CASE WHEN %s IS NOT NULL THEN %s 
                              WHEN %s = 'free' THEN DATEADD(month, 6, GETDATE()) 
                              ELSE DATEADD(year, 1, GETDATE()) END,
-                        1, GETDATE()
+                        1, GETDATE(),
+                        %s, %s
                     )
                     """,
                     [
                         tenant_id, company_code, company_name, business_name,
                         person_name, email, phone, gst or None,
                         employees, users_count, plan_id, plan_name,
-                        end_date_val, end_date_val, plan_id
+                        end_date_val, end_date_val, plan_id,
+                        city, state
                     ]
                 )
 
@@ -267,6 +276,8 @@ def admin_update_tenant(request):
     plan_id = str(request.data.get("plan_id") or "free").strip().lower()
     plan_name = str(request.data.get("plan_name") or "Free Plan").strip()
     end_date = str(request.data.get("end_date") or "").strip()
+    city = str(request.data.get("city") or "").strip()
+    state = str(request.data.get("state") or "").strip()
     active_status = 1 if bool(request.data.get("active_status", True)) else 0
 
     erp_server = str(request.data.get("erp_server") or "").strip()
@@ -297,12 +308,15 @@ def admin_update_tenant(request):
                         plan_id = %s,
                         plan_name = %s,
                         end_date = %s,
-                        active_status = %s
+                        active_status = %s,
+                        city = %s,
+                        state = %s
                     WHERE tenant_id = %s
                     """,
                     [
                         company_name, business_name, person_name, email, phone, gst or None,
                         employees, users_count, plan_id, plan_name, end_date or None, active_status,
+                        city, state,
                         tenant_id
                     ]
                 )
@@ -380,19 +394,41 @@ def admin_list_tenant_users(request, company_code):
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT id, username, designation, issuperadmin, created_at FROM tenants_users WHERE company_code = %s AND deleted = 0 ORDER BY username",
+                """
+                SELECT 
+                    u.id, 
+                    u.username, 
+                    u.designation, 
+                    u.issuperadmin, 
+                    u.created_at, 
+                    u.password,
+                    s.session_key,
+                    s.system_name
+                FROM tenants_users u
+                LEFT JOIN tenants_userssession s ON u.company_code = s.company_code AND u.username = s.username
+                WHERE u.company_code = %s AND u.deleted = 0 
+                ORDER BY u.username
+                """,
                 [company_code]
             )
             rows = cursor.fetchall()
             users = []
             for r in rows:
                 c_date = r[4].strftime("%Y-%m-%d %H:%M") if isinstance(r[4], datetime) else str(r[4] or "")
+                raw_password = r[5] or ""
+                try:
+                    decrypted_pw = decrypt_password(raw_password)
+                except Exception:
+                    decrypted_pw = raw_password
                 users.append({
                     "id": r[0],
                     "username": r[1],
                     "designation": r[2] or "User",
                     "issuperadmin": bool(r[3]),
-                    "created_at": c_date
+                    "created_at": c_date,
+                    "password": decrypted_pw,
+                    "isActive": bool(r[6]),
+                    "systemName": r[7] or ""
                 })
             return Response({"success": True, "users": users})
     except Exception as e:
