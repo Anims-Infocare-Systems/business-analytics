@@ -186,7 +186,7 @@ def login_view(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT id, tenant_id, company_code, username, designation, issuperadmin FROM tenants_users WHERE company_code = %s AND username = %s AND password = %s AND deleted = 0",
+                "SELECT id, tenant_id, company_code, username, designation, issuperadmin FROM tenants_users WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND password = %s AND deleted = 0",
                 [company_code, username, encrypt_password(password)]
             )
             user_row = cursor.fetchone()
@@ -195,17 +195,14 @@ def login_view(request):
     if not user_row:
         return Response({"error": "Invalid username or password."}, status=401)
 
+    # Use canonical username from DB (not the typed input which may differ in case)
+    username = user_row[3]
+
     designation = str(user_row[4] or "").strip()
     is_super_admin = (designation.lower() == "admin" or bool(user_row[5]))
 
-    rights = {
-        "Dashboard": False,
-        "Approvals": False,
-        "Reports": False,
-        "MIS": False,
-        "Charts": False,
-        "Utility": False,
-    }
+    from .views_userrights import FORM_RIGHTS_KEYS
+    rights = {key: False for key in FORM_RIGHTS_KEYS}
 
     if is_super_admin:
         for k in rights:
@@ -214,7 +211,7 @@ def login_view(request):
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT form_name, access FROM tenants_usersrights WHERE company_code = %s AND username = %s",
+                    "SELECT form_name, access FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
                     [company_code, username]
                 )
                 for r_row in cursor.fetchall():
@@ -249,7 +246,7 @@ def login_view(request):
             old_row = cursor.fetchone()
             if old_row:
                 old_session_key = old_row[0]
-                if old_session_key:
+                if old_session_key and old_session_key != new_session_key:
                     Session.objects.filter(session_key=old_session_key).delete()
                 cursor.execute(
                     "UPDATE tenants_userssession SET session_key = %s, system_name = %s, created_at = GETDATE() WHERE company_code = %s AND username = %s",

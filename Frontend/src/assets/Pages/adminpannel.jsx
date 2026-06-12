@@ -5,6 +5,15 @@ import AnimsUtility from "./AnimsUtility";
 
 const API = resolveApiBase();
 
+const formatDate = (val) => {
+    if (!val) return "—";
+    const parts = val.split(" ")[0].split("-");
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return val;
+};
+
 export default function AdminPanel() {
     // Authentication State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -693,7 +702,7 @@ export default function AdminPanel() {
                                                         <th className="ap-th">Organization</th>
                                                         <th className="ap-th">Contact Info</th>
                                                         <th className="ap-th">Plan</th>
-                                                        <th className="ap-th">Renewal Date</th>
+                                                        <th className="ap-th">Onboard</th>
                                                         <th className="ap-th">Active / Access</th>
                                                         <th className="ap-th">Actions</th>
                                                     </tr>
@@ -721,7 +730,7 @@ export default function AdminPanel() {
                                                                 </div>
                                                             </td>
                                                             <td className="ap-td">
-                                                                {t.end_date || "—"}
+                                                                {formatDate(t.signup_date)}
                                                             </td>
                                                             <td className="ap-td">
                                                                 <label className="ap-switch">

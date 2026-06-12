@@ -3,7 +3,7 @@ from django.conf import settings
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import hashlib
 from .views_adminpannel import check_admin_auth
 
@@ -15,6 +15,20 @@ def get_accent_color(name):
     h = hashlib.md5(name.encode('utf-8')).hexdigest()
     idx = int(h, 16) % len(COLORS)
     return COLORS[idx]
+
+def format_to_ddmmyyyy(val):
+    if not val:
+        return "—"
+    if isinstance(val, str):
+        try:
+            # Try parsing ISO/YMD format
+            dt = datetime.strptime(val.split()[0].split('T')[0], "%Y-%m-%d")
+            return dt.strftime("%d/%m/%Y")
+        except ValueError:
+            return val
+    if isinstance(val, (datetime, date)):
+        return val.strftime("%d/%m/%Y")
+    return str(val)
 
 @api_view(["GET"])
 @authentication_classes([])
@@ -42,7 +56,8 @@ def admin_utility_clients(request):
                     t.erp_server,
                     t.erp_database,
                     ts.city,
-                    ts.state
+                    ts.state,
+                    ts.end_date
                 FROM tenants_signup ts
                 LEFT JOIN tenants t ON ts.tenant_id = t.id
                 ORDER BY ts.company_name
@@ -52,10 +67,34 @@ def admin_utility_clients(request):
 
             clients = []
             for i, r in enumerate(rows):
-                tenant_id, company_code, company_name, plan_id, plan_name, active_status, signup_date, max_users, erp_server, erp_database, city, state = r
+                tenant_id, company_code, company_name, plan_id, plan_name, active_status, signup_date, max_users, erp_server, erp_database, city, state, end_date = r
                 
                 # Format dates
-                joined_str = signup_date.strftime("%b %Y") if isinstance(signup_date, datetime) else "Jan 2025"
+                joined_str = format_to_ddmmyyyy(signup_date)
+
+                # Get current plan start/end dates from tenant_planupgrade if exists
+                cursor.execute(
+                    """
+                    SELECT plan_start_date, plan_end_date 
+                    FROM tenant_planupgrade 
+                    WHERE company_code = %s AND plan_status = 'Active'
+                    """,
+                    [company_code]
+                )
+                upgrade_row = cursor.fetchone()
+                if upgrade_row:
+                    plan_start = upgrade_row[0] or signup_date
+                    plan_end = upgrade_row[1] or end_date
+                else:
+                    plan_start = signup_date
+                    plan_end = end_date
+
+                # Calculate days left to expiry
+                days_left = None
+                if plan_end:
+                    end_dt = plan_end.date() if isinstance(plan_end, datetime) else plan_end
+                    if isinstance(end_dt, date):
+                        days_left = (end_dt - date.today()).days
 
                 # 1. Active users count & live details
                 cursor.execute(
@@ -148,6 +187,9 @@ def admin_utility_clients(request):
                     "location": location,
                     "modules": modules,
                     "joinedDate": joined_str,
+                    "planStartDate": format_to_ddmmyyyy(plan_start),
+                    "planEndDate": format_to_ddmmyyyy(plan_end),
+                    "daysLeft": days_left,
                     "apiCalls": api_calls,
                     "avatar": avatar,
                     "color": color

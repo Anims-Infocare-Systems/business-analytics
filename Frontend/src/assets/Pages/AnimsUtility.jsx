@@ -17,7 +17,7 @@ function timeAgo(dateInput) {
     if (!dateInput) return "—";
     const dateObj = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
     const diff = Math.floor((Date.now() - dateObj) / 1000);
-    if (diff < 60)   return `${diff}s ago`;
+    if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     const hrs = Math.floor(diff / 3600);
     return `${hrs} ${hrs === 1 ? "hr" : "hrs"} ago`;
@@ -34,8 +34,8 @@ function useTick(ms = 30000) {
 /* ── Tunnel badge ─────────────────────────────────────────────*/
 function TunnelBadge({ status }) {
     const map = {
-        connected:    { label: "Connected",    cls: "au-tunnel--ok"   },
-        disconnected: { label: "Offline",      cls: "au-tunnel--off"  },
+        connected: { label: "Connected", cls: "au-tunnel--ok" },
+        disconnected: { label: "Offline", cls: "au-tunnel--off" },
         reconnecting: { label: "Reconnecting", cls: "au-tunnel--warn" },
     };
     const { label, cls } = map[status] || map.disconnected;
@@ -84,9 +84,9 @@ function StatCard({ icon, label, value, sub, color, delay, pulse }) {
 /* ── Activity type icon ───────────────────────────────────────*/
 function ActivityIcon({ type }) {
     const icons = {
-        login:      { icon: "→", color: "#3b82f6" },
-        sync:       { icon: "↻", color: "#10b981" },
-        warning:    { icon: "⚠", color: "#f59e0b" },
+        login: { icon: "→", color: "#3b82f6" },
+        sync: { icon: "↻", color: "#10b981" },
+        warning: { icon: "⚠", color: "#f59e0b" },
         disconnect: { icon: "✕", color: "#ef4444" },
     };
     const { icon, color } = icons[type] || icons.login;
@@ -132,7 +132,7 @@ function ClientDrawer({ client, onClose }) {
                         <TunnelBadge status={client.tunnel} />
                         <button className="au-drawer__close" onClick={onClose}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                             </svg>
                         </button>
                     </div>
@@ -141,9 +141,9 @@ function ClientDrawer({ client, onClose }) {
                 {/* KPIs */}
                 <div className="au-drawer__kpis">
                     {[
-                        { label: "Active Users",  value: client.activeUsers },
+                        { label: "Active Users", value: client.activeUsers },
                         { label: "Registered Users", value: client.totalUsers },
-                        { label: "User Limit",     value: client.maxUsers },
+                        { label: "User Limit", value: client.maxUsers },
                     ].map(k => (
                         <div key={k.label} className="au-drawer__kpi">
                             <span className="au-drawer__kpi-val">{k.value}</span>
@@ -157,12 +157,21 @@ function ClientDrawer({ client, onClose }) {
                     <h4 className="au-drawer__sec-title">Company Details</h4>
                     <div className="au-drawer__rows">
                         {[
-                            ["Plan",         client.plan],
-                            ["Location",     client.location],
-                            ["Joined",       client.joinedDate],
-                            ["Last Login",   timeAgo(client.lastLogin)],
-                            ["Last Sync",    timeAgo(client.lastSync)],
-                            ["Tunnel",       client.tunnel.charAt(0).toUpperCase() + client.tunnel.slice(1)],
+                            ["Plan", client.plan],
+                            ["Plan Start Date", client.planStartDate || "—"],
+                            ["Plan End Date", client.planEndDate || "—"],
+                            ["Days Left", client.daysLeft !== undefined && client.daysLeft !== null
+                                ? client.daysLeft < 0
+                                    ? `Expired (${Math.abs(client.daysLeft)} days ago)`
+                                    : client.daysLeft === 0
+                                        ? "Expires today"
+                                        : `${client.daysLeft} days`
+                                : "—"],
+                            // ["Location",        client.location],
+                            ["Joined", client.joinedDate],
+                            ["Last Login", timeAgo(client.lastLogin)],
+                            ["Last Sync", timeAgo(client.lastSync)],
+                            ["Tunnel", client.tunnel.charAt(0).toUpperCase() + client.tunnel.slice(1)],
                         ].map(([k, v]) => (
                             <div key={k} className="au-drawer__row">
                                 <span className="au-drawer__row-key">{k}</span>
@@ -176,7 +185,7 @@ function ClientDrawer({ client, onClose }) {
                 <div className="au-drawer__section">
                     <h4 className="au-drawer__sec-title">Licensed Modules</h4>
                     <div className="au-drawer__modules">
-                        {["Dashboard","Approvals","Charts","Reports","MIS","Utility"].map(m => (
+                        {["Dashboard", "Approvals", "Charts", "Reports", "MIS", "Utility"].map(m => (
                             <span
                                 key={m}
                                 className={`au-drawer__module ${client.modules.includes(m) ? "au-drawer__module--on" : "au-drawer__module--off"}`}
@@ -224,9 +233,9 @@ export default function AnimsUtility() {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
 
-    const [search,   setSearch]   = useState("");
-    const [filter,   setFilter]   = useState("all");   // all | active | inactive | warning
-    const [view,     setView]     = useState("grid");  // grid | table
+    const [search, setSearch] = useState("");
+    const [filter, setFilter] = useState("all");   // all | active | inactive | warning
+    const [view, setView] = useState("grid");  // grid | table
     const [selected, setSelected] = useState(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
 
@@ -240,10 +249,10 @@ export default function AnimsUtility() {
         try {
             const clientsRes = await fetch(`${API}/admin/utility/clients/`, { credentials: "include" });
             const clientsData = await clientsRes.json();
-            
+
             const activityRes = await fetch(`${API}/admin/utility/activity/`, { credentials: "include" });
             const activityData = await activityRes.json();
-            
+
             if (clientsRes.ok && activityRes.ok) {
                 setClients(clientsData.clients || []);
                 setActivityFeed(activityData.activity || []);
@@ -259,18 +268,26 @@ export default function AnimsUtility() {
     };
 
     /* ── Counts ── */
-    const total      = clients.length;
-    const active     = clients.filter(c => c.status === "active").length;
-    const inactive   = clients.filter(c => c.status === "inactive").length;
-    const warning    = clients.filter(c => c.status === "warning").length;
-    const liveUsers  = clients.reduce((a, c) => a + c.activeUsers, 0);
+    const total = clients.length;
+    const active = clients.filter(c => c.status === "active" && c.activeUsers > 0).length;
+    const inactive = clients.filter(c => c.status === "inactive" || (c.status === "active" && c.activeUsers === 0)).length;
+    const liveUsers = clients.reduce((a, c) => a + c.activeUsers, 0);
+    const registeredUsers = clients.reduce((a, c) => a + (c.totalUsers || 0), 0);
 
     /* ── Filtered ── */
     const visible = clients.filter(c => {
         const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-                            c.code.toLowerCase().includes(search.toLowerCase()) ||
-                            c.location.toLowerCase().includes(search.toLowerCase());
-        const matchFilter = filter === "all" || c.status === filter;
+            c.code.toLowerCase().includes(search.toLowerCase()) ||
+            c.location.toLowerCase().includes(search.toLowerCase());
+        
+        let matchFilter = false;
+        if (filter === "all") {
+            matchFilter = true;
+        } else if (filter === "active") {
+            matchFilter = c.status === "active" && c.activeUsers > 0;
+        } else if (filter === "inactive") {
+            matchFilter = c.status === "inactive" || (c.status === "active" && c.activeUsers === 0);
+        }
         return matchSearch && matchFilter;
     });
 
@@ -281,10 +298,9 @@ export default function AnimsUtility() {
 
     /* ── Filter pills ── */
     const FILTERS = [
-        { key: "all",      label: "All",      count: total   },
-        { key: "active",   label: "Active",   count: active  },
-        { key: "warning",  label: "Warning",  count: warning },
-        { key: "inactive", label: "Offline",  count: inactive},
+        { key: "all", label: "All", count: total },
+        { key: "active", label: "Active", count: active },
+        { key: "inactive", label: "Offline", count: inactive },
     ];
 
     if (loading) {
@@ -318,14 +334,14 @@ export default function AnimsUtility() {
                 <div className="au-header__right">
                     <span className="au-last-refresh">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
                         </svg>
                         {timeAgo(lastRefresh)}
                     </span>
                     <button className="au-refresh-btn" onClick={handleRefresh} title="Refresh">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="1,4 1,10 7,10"/>
-                            <path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
+                            <polyline points="1,4 1,10 7,10" />
+                            <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
                         </svg>
                         Refresh
                     </button>
@@ -334,11 +350,11 @@ export default function AnimsUtility() {
 
             {/* ── Stat cards ── */}
             <div className="au-stats">
-                <StatCard icon="🏢" label="Total Clients"   value={total}    color="#3b82f6" delay="0s"    />
-                <StatCard icon="🟢" label="Active Now"      value={active}   color="#10b981" delay=".07s"  pulse />
-                <StatCard icon="⚠️" label="Warning"         value={warning}  color="#f59e0b" delay=".14s"  />
-                <StatCard icon="🔴" label="Offline"         value={inactive} color="#ef4444" delay=".21s"  />
-                <StatCard icon="👤" label="Live Users"      value={liveUsers} color="#8b5cf6" delay=".28s" pulse sub="across all tenants" />
+                <StatCard icon="🏢" label="Total Clients" value={total} color="#3b82f6" delay="0s" />
+                <StatCard icon="🟢" label="Active Now" value={active} color="#10b981" delay=".07s" pulse={active > 0} />
+                <StatCard icon="👥" label="Registered Users" value={registeredUsers} color="#f59e0b" delay=".14s" />
+                <StatCard icon="🔴" label="Offline" value={inactive} color="#ef4444" delay=".21s" />
+                <StatCard icon="👤" label="Live Users" value={liveUsers} color="#8b5cf6" delay=".28s" pulse={liveUsers > 0} sub="across all tenants" />
             </div>
 
             {/* ── Toolbar ── */}
@@ -346,7 +362,7 @@ export default function AnimsUtility() {
                 {/* Search */}
                 <div className="au-search-wrap">
                     <svg className="au-search-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
                     <input
                         className="au-search"
@@ -357,7 +373,7 @@ export default function AnimsUtility() {
                     {search && (
                         <button className="au-search-clear" onClick={() => setSearch("")}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                             </svg>
                         </button>
                     )}
@@ -385,8 +401,8 @@ export default function AnimsUtility() {
                         title="Grid view"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                         </svg>
                     </button>
                     <button
@@ -395,8 +411,8 @@ export default function AnimsUtility() {
                         title="Table view"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
-                            <line x1="3" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" />
+                            <line x1="3" y1="18" x2="21" y2="18" />
                         </svg>
                     </button>
                 </div>
@@ -411,7 +427,7 @@ export default function AnimsUtility() {
                     {visible.length === 0 ? (
                         <div className="au-empty">
                             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.2">
-                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                             </svg>
                             <p>No clients match <strong>"{search}"</strong></p>
                         </div>
@@ -431,7 +447,7 @@ export default function AnimsUtility() {
                                     <div className="au-client-card__top">
                                         <div className="au-avatar" style={{ "--ac": c.color }}>
                                             {c.avatar}
-                                            <span className={`au-avatar__dot au-avatar__dot--${c.status}`} />
+                                            <span className={`au-avatar__dot au-avatar__dot--${c.status === "active" && c.activeUsers > 0 ? "active" : "inactive"}`} />
                                         </div>
                                         <div className="au-client-card__info">
                                             <span className="au-client-card__name">{c.name}</span>
@@ -501,7 +517,7 @@ export default function AnimsUtility() {
                                                 <div className="au-table__company">
                                                     <div className="au-avatar au-avatar--sm" style={{ "--ac": c.color }}>
                                                         {c.avatar}
-                                                        <span className={`au-avatar__dot au-avatar__dot--${c.status}`} />
+                                                        <span className={`au-avatar__dot au-avatar__dot--${c.status === "active" && c.activeUsers > 0 ? "active" : "inactive"}`} />
                                                     </div>
                                                     <div>
                                                         <span className="au-table__name">{c.name}</span>
@@ -559,25 +575,6 @@ export default function AnimsUtility() {
                         ))}
                     </div>
 
-                    {/* System status */}
-                    <div className="au-sys-status">
-                        <h4 className="au-sys-status__title">System Health</h4>
-                        {[
-                            { label: "Django API",        ok: true },
-                            { label: "Cloudflare Tunnel", ok: true },
-                            { label: "Cloud MSSQL DB",    ok: true },
-                            { label: "Redis Cache",       ok: true },
-                            { label: "GoDaddy Hosting",   ok: true },
-                        ].map(s => (
-                            <div key={s.label} className="au-sys-row">
-                                <span className={`au-sys-dot ${s.ok ? "au-sys-dot--ok" : "au-sys-dot--err"}`} />
-                                <span className="au-sys-label">{s.label}</span>
-                                <span className={`au-sys-status-txt ${s.ok ? "" : "au-sys-status-txt--err"}`}>
-                                    {s.ok ? "Operational" : "Down"}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             </div>
 

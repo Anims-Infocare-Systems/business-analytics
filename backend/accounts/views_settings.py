@@ -43,7 +43,7 @@ def settings_profile(request):
             # 2. Fetch signup / plan details
             cursor.execute(
                 """
-                SELECT company_name, email_id, plan_name, no_of_users, signup_date, end_date, active_status, tenant_id 
+                SELECT company_name, email_id, plan_name, no_of_users, signup_date, end_date, active_status, tenant_id, billing_cycle 
                 FROM tenants_signup WHERE company_code = %s
                 """,
                 [company]
@@ -51,7 +51,7 @@ def settings_profile(request):
             signup_row = cursor.fetchone()
             
             if signup_row:
-                company_name, email_id, plan_name, no_of_users, signup_date, end_date, active_status, tenant_id = signup_row
+                company_name, email_id, plan_name, no_of_users, signup_date, end_date, active_status, tenant_id, billing_cycle = signup_row
             else:
                 company_name = tenant.get("company_name", "Anims Infocare Systems")
                 email_id = f"{username}@animse.com"
@@ -61,6 +61,7 @@ def settings_profile(request):
                 end_date = date.today() + timedelta(days=270)
                 active_status = 1
                 tenant_id = tenant.get("tenant_id", 1)
+                billing_cycle = "yearly"
 
             # 3. Fetch active users count
             cursor.execute(
@@ -72,7 +73,7 @@ def settings_profile(request):
             # 3b. Fetch plan upgrade history
             cursor.execute(
                 """
-                SELECT plan_name, no_of_users, change_date, plan_start_date, plan_end_date, plan_status 
+                SELECT plan_name, no_of_users, change_date, plan_start_date, plan_end_date, plan_status, billing_cycle 
                 FROM tenant_planupgrade 
                 WHERE company_code = %s 
                 ORDER BY change_date ASC
@@ -110,7 +111,7 @@ def settings_profile(request):
         start_dt = date.today() - timedelta(days=90)
 
     history = []
-    for h_plan, h_users, h_date, h_start, h_end, h_status in history_rows:
+    for h_plan, h_users, h_date, h_start, h_end, h_status, h_cycle in history_rows:
         h_dt = None
         if h_date:
             if isinstance(h_date, str):
@@ -129,7 +130,8 @@ def settings_profile(request):
                 "change_date": h_dt,
                 "plan_start_date": h_start,
                 "plan_end_date": h_end,
-                "plan_status": h_status
+                "plan_status": h_status,
+                "billing_cycle": h_cycle or "yearly"
             })
 
     invoices = []
@@ -170,37 +172,49 @@ def settings_profile(request):
     while curr <= today:
         # Resolve active plan name at the time of the invoice cycle
         active_plan_name = plan_name or "Free"
+        active_users_count = no_of_users or 1
+        active_cycle = billing_cycle or "yearly"
+        
         for entry in history:
             if entry["change_date"] <= curr:
                 active_plan_name = entry["plan_name"]
+                active_users_count = entry["no_of_users"] or 1
+                active_cycle = entry["billing_cycle"] or "yearly"
 
         active_plan_lower = active_plan_name.lower()
         inv_plan_display = active_plan_name
         
-        # Resolve clean plan price
+        # Calculate active plan price dynamically in INR based on plan, active_users_count, and active_cycle
         if "free" in active_plan_lower:
-            inv_plan_price = "$0.00"
-        elif "enterprise" in active_plan_lower:
-            inv_plan_price = "$499.00"
+            rate = 0
+            price_val = 0
         elif "pro" in active_plan_lower:
-            inv_plan_price = "$249.00"
+            rate = 500
+            price_val = rate * (6 if active_cycle in ["6month", "6 months"] else 12) * active_users_count
         else:
-            inv_plan_price = "$499.00"
+            # Enterprise / Max
+            rate = 2000
+            price_val = rate * (6 if active_cycle in ["6month", "6 months"] else 12) * active_users_count
+
+        inv_plan_price = "₹" + "{:,}".format(price_val)
+        inv_desc = f"{inv_plan_display} — {curr.strftime('%B %Y')}" if "free" in active_plan_lower else f"{inv_plan_display} ({active_users_count} users) — {curr.strftime('%B %Y')}"
 
         invoices.append({
             "date": curr.strftime("%b %d, %Y"),
-            "description": f"{inv_plan_display} — {curr.strftime('%B %Y')}",
+            "description": inv_desc,
             "amount": inv_plan_price,
             "status": "Paid"
         })
-        # Safe monthly incrementing
-        if curr.month == 12:
-            curr = date(curr.year + 1, 1, curr.day)
-        else:
-            try:
-                curr = date(curr.year, curr.month + 1, curr.day)
-            except ValueError:
-                curr = date(curr.year, curr.month + 1, 28)
+        
+        # Dynamic increment based on billing cycle
+        months_to_add = 6 if (active_cycle in ["6month", "6 months"] or "free" in active_plan_lower) else 12
+        new_month = curr.month - 1 + months_to_add
+        new_year = curr.year + new_month // 12
+        new_month = new_month % 12 + 1
+        try:
+            curr = date(new_year, new_month, curr.day)
+        except ValueError:
+            curr = date(new_year, new_month, 28)
 
     invoices.reverse()  # show latest invoices first
 
@@ -215,6 +229,26 @@ def settings_profile(request):
     plan_start_str = act_start.strftime("%Y-%m-%d") if isinstance(act_start, (datetime, date)) else str(act_start)
     plan_end_str = act_end.strftime("%Y-%m-%d") if isinstance(act_end, (datetime, date)) else str(act_end)
 
+    days_left = 0
+    if act_end:
+        calc_end = act_end
+        if isinstance(calc_end, str):
+            try:
+                calc_end = datetime.strptime(calc_end.split()[0], "%Y-%m-%d").date()
+            except ValueError:
+                calc_end = None
+        elif isinstance(calc_end, datetime):
+            calc_end = calc_end.date()
+        if isinstance(calc_end, date):
+            days_left = (calc_end - date.today()).days
+
+    if isinstance(signup_date, str):
+        signup_date_str = signup_date.split()[0]
+    elif isinstance(signup_date, (datetime, date)):
+        signup_date_str = signup_date.strftime("%Y-%m-%d")
+    else:
+        signup_date_str = str(signup_date)
+
     return Response({
         "success": True,
         "profile": {
@@ -223,7 +257,8 @@ def settings_profile(request):
             "company": company_name,
             "role": role,
             "companyCode": company,
-            "status": "Active" if active_status else "Inactive"
+            "status": "Active" if active_status else "Inactive",
+            "signupDate": signup_date_str
         },
         "billing": {
             "planName": plan_display_name,
@@ -235,7 +270,8 @@ def settings_profile(request):
             "exportsUsed": exports_used,
             "exportsLimit": exports_limit,
             "planStartDate": plan_start_str,
-            "planEndDate": plan_end_str
+            "planEndDate": plan_end_str,
+            "daysLeft": max(0, days_left) if days_left is not None else 0
         },
         "invoices": invoices
     })
@@ -306,6 +342,7 @@ def settings_upgrade_plan(request):
 
     company = _company_code(tenant)
     plan_name = request.data.get("planName")
+    billing_cycle = str(request.data.get("billingCycle") or "yearly").strip().lower()
 
     if plan_name in ["Enterprise", "Max"]:
         plan_db_name = "Enterprise Analytics Pro"
@@ -316,14 +353,35 @@ def settings_upgrade_plan(request):
     else:
         return Response({"error": "Invalid plan selected."}, status=400)
 
-    no_of_users = 5
-    if plan_name == "Pro":
-        no_of_users = 10
-    elif plan_name in ["Enterprise", "Max"]:
-        no_of_users = 1000  # Representing Unlimited/Max tier
+    # Check request payload for a specified number of users
+    no_of_users = request.data.get("noOfUsers")
+    if not no_of_users:
+        no_of_users = request.data.get("no_of_users")
+
+    try:
+        no_of_users = int(no_of_users)
+    except (TypeError, ValueError):
+        no_of_users = None
+
+    if not no_of_users or no_of_users < 1:
+        # Fallback to currently registered active users for the company
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COUNT(1) FROM tenants_users WHERE company_code = %s AND deleted = 0",
+                    [company]
+                )
+                no_of_users = cursor.fetchone()[0]
+                if no_of_users < 1:
+                    no_of_users = 1
+        except Exception:
+            no_of_users = 1
 
     today = date.today()
-    end_date = today + timedelta(days=180)  # 6-month cycle
+    if plan_name == "Free" or billing_cycle in ["6month", "6 months"]:
+        end_date = today + timedelta(days=180)  # 6-month cycle
+    else:
+        end_date = today + timedelta(days=365)  # 1-year cycle
 
     try:
         with transaction.atomic():
@@ -333,10 +391,10 @@ def settings_upgrade_plan(request):
                 cursor.execute(
                     """
                     UPDATE tenants_signup 
-                    SET plan_name = %s, plan_id = %s, no_of_users = %s, end_date = %s
+                    SET plan_name = %s, plan_id = %s, no_of_users = %s, end_date = %s, active_status = 1, billing_cycle = %s
                     WHERE company_code = %s
                     """,
-                    [plan_db_name, plan_id_val, no_of_users, end_date, company]
+                    [plan_db_name, plan_id_val, no_of_users, end_date, billing_cycle, company]
                 )
                 
                  # 2. Fetch tenant_id for history log
@@ -357,10 +415,10 @@ def settings_upgrade_plan(request):
                 # 3. Log history entry in tenant_planupgrade with cycle dates and plan_status = 'Active'
                 cursor.execute(
                     """
-                    INSERT INTO tenant_planupgrade (tenant_id, company_code, plan_name, no_of_users, change_date, plan_start_date, plan_end_date, plan_status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'Active')
+                    INSERT INTO tenant_planupgrade (tenant_id, company_code, plan_name, no_of_users, change_date, plan_start_date, plan_end_date, plan_status, billing_cycle)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'Active', %s)
                     """,
-                    [tenant_id, company, plan_db_name, no_of_users, today, today, end_date]
+                    [tenant_id, company, plan_db_name, no_of_users, today, today, end_date, billing_cycle]
                 )
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -378,7 +436,7 @@ def settings_upgrade_plan(request):
                 
                 valid_from = today.strftime("%d-%m-%Y")
                 valid_to = end_date.strftime("%d-%m-%Y")
-                sub_period = "6 Months"
+                sub_period = "6 Months" if (plan_name == "Free" or billing_cycle in ["6month", "6 months"]) else "1 Year"
                 
                 send_brevo_email_async({
                     "template_id": getattr(settings, 'BREVO_UPGRADE_TEMPLATE_ID', 2),

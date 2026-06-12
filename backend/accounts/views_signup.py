@@ -98,6 +98,7 @@ def signup_view(request):
     users_count = int(request.data.get("users") or 1)
     plan_id = str(request.data.get("plan_id") or "free").strip().lower()
     plan_name = str(request.data.get("plan_name") or "Free Plan").strip()
+    billing_cycle = str(request.data.get("billing_cycle") or "yearly").strip().lower()
 
     admin_username = str(request.data.get("admin_username") or "").strip()
     admin_designation = str(request.data.get("admin_designation") or "").strip()
@@ -154,21 +155,25 @@ def signup_view(request):
                     tenant_id, company_code, company_name, business_name, 
                     business_person_name, email_id, phone_number, gst_number, 
                     no_of_employees, no_of_users, plan_id, plan_name,
-                    signup_date, end_date, active_status, created_at
+                    signup_date, end_date, active_status, created_at, billing_cycle
                 ) VALUES (
                     %s, %s, %s, %s, 
                     %s, %s, %s, %s, 
                     %s, %s, %s, %s, 
                     GETDATE(),
-                    CASE WHEN %s = 'free' THEN DATEADD(month, 6, GETDATE()) ELSE DATEADD(year, 1, GETDATE()) END,
-                    1, GETDATE()
+                    CASE 
+                        WHEN %s = 'free' THEN DATEADD(month, 6, GETDATE()) 
+                        WHEN %s = '6month' OR %s = '6 months' THEN DATEADD(month, 6, GETDATE())
+                        ELSE DATEADD(year, 1, GETDATE()) 
+                    END,
+                    1, GETDATE(), %s
                 )
                 """,
                 [
                     tenant_id, company_code, company_name, business_name,
                     person_name, email, phone, gst or None,
                     employees, users_count, plan_id, plan_name,
-                    plan_id
+                    plan_id, billing_cycle, billing_cycle, billing_cycle
                 ]
             )
 
@@ -200,7 +205,7 @@ def signup_view(request):
         today = datetime.date.today()
         valid_from = today.strftime("%d-%m-%Y")
         
-        if plan_id == "free":
+        if plan_id == "free" or billing_cycle in ["6month", "6 months"]:
             sub_period = "6 Months"
             # Add 6 months safely
             month = today.month - 1 + 6

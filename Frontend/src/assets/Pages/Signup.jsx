@@ -95,8 +95,8 @@ const BadgePlantIcon = () => (
    ================================================================ */
 const PLAN_META = {
     free: { name: "Free Plan", detail: "₹0 · up to 5 users", maxUsers: 5 },
-    pro: { name: "Pro Plan", detail: "₹24,888 / year · billed annually", maxUsers: 10 },
-    max: { name: "Max Plan", detail: "₹1,07,988 / year · billed annually", maxUsers: 999 },
+    pro: { name: "Pro Plan", detail: "₹500 / user / month · billed annually", maxUsers: 9999 },
+    max: { name: "Max Plan", detail: "₹2,000 / user / month · billed annually", maxUsers: 9999 },
 };
 
 const PLANS = [
@@ -127,46 +127,47 @@ const PLANS = [
     {
         id: "pro",
         name: "Pro",
-        tagline: "Research, code, and organize",
-        price: { yearly: "₹24,888", monthly: "₹2,499" },
-        priceUnit: "/ year",
+        tagline: "Advanced data reporting & operations analytics",
+        price: { yearly: "₹500", monthly: "₹2,499" },
+        priceUnit: "/ user / month",
         priceSub: { yearly: "billed annually", monthly: "billed monthly" },
         pricePrefix: "",
         ctaLabel: "Get Pro plan",
         ctaStyle: "solid",
         features: [
-            "Unlimited dashboards",
-            "Full MIS & efficiency reports",
-            "Up to 10 user accounts",
+            "Top Management dashboards",
+            "One MIS reports",
+            // "Up to 10 user accounts",
             "E-Approval & T-Approval workflows",
-            "Priority email support",
+            "Standard support",
             "Email Notifications",
         ],
-        featureHeader: "Everything in Free and:",
+        featureHeader: "Pro has:",
         highlight: true,
         noCommit: null,
     },
     {
         id: "max",
         name: "Max",
-        tagline: "Higher limits, priority access",
-        price: { yearly: "₹1,07,988", monthly: "₹8,999" },
-        priceUnit: "/ year",
+        tagline: "Full enterprise integrations & multi-plant operation tracking",
+        price: { yearly: "₹2,000", monthly: "₹8,999" },
+        priceUnit: "/ user / month",
         priceSub: { yearly: "billed annually", monthly: "billed monthly" },
         pricePrefix: "",
         ctaLabel: "Get Max plan",
         ctaStyle: "dark",
         features: [
-            "Unlimited users",
+            "Unlimited Dashboard",
             "Dedicated account manager",
-            "Custom integrations & API access",
-            "SLA-backed uptime guarantee",
-            "On-premise deployment option",
+            "Advanced Analytics Charts",
+            "Full MIS & Reports",
+            "E-Approval & T-Approval workflows",
+            "Priority email support",
             "Email Notifications",
         ],
         featureHeader: "Everything in Pro, plus:",
         highlight: false,
-        noCommit: "No commitment · Cancel anytime",
+        // noCommit: "No commitment · Cancel anytime",
     },
 ];
 
@@ -310,7 +311,7 @@ function PlanScreen({ onPlanSelect }) {
 /* ================================================================
    SCREEN 2 — COMPANY REGISTRATION FORM
    ================================================================ */
-function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
+function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack, onSubmit }) {
     const [currentCode, setCurrentCode] = useState("");
     const [form, setForm] = useState({
         companyName: "",
@@ -320,7 +321,7 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
         phone: "",
         gst: "",
         employees: "",
-        users: "1",
+        users: defaultUsers,
     });
     const [errors, setErrors] = useState({});
     const [formErr, setFormErr] = useState(false);
@@ -362,9 +363,9 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
     }, [currentCode]);
 
     const maxUsers = PLAN_META[selectedPlan.id].maxUsers;
-    const usersHint = maxUsers === 999
-        ? "(unlimited on Max)"
-        : `(max ${maxUsers} on ${selectedPlan.name.split(" ")[0]})`;
+    const usersHint = selectedPlan.id === "free"
+        ? `(max 5)`
+        : "";
 
     const handleField = (key, val) => {
         setForm(f => ({ ...f, [key]: val }));
@@ -388,7 +389,8 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
         if (!validatePhone(form.phone)) errs.phone = "Enter a valid phone number.";
         if (!form.employees) errs.employees = "Please select employee count.";
         const u = parseInt(form.users) || 0;
-        if (u < 1 || u > maxUsers) errs.users = "Please enter a valid user count.";
+        const limit = selectedPlan.id === "free" ? 5 : 9999;
+        if (u < 1 || u > limit) errs.users = "Please enter a valid user count.";
         return errs;
     };
 
@@ -404,10 +406,14 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
     };
 
     const planDetail = () => {
-        if (selectedPlan.id === "free") return "₹0 · single user";
-        if (selectedPlan.id === "pro")
-            return "₹24,888 / year · billed annually";
-        return "₹1,07,988 / year · billed annually";
+        if (selectedPlan.id === "free") return "₹0 · up to 5 users";
+        const userCount = parseInt(form.users) || 1;
+        const months = selectedBilling === "6month" ? 6 : 12;
+        const rate = selectedPlan.id === "pro" ? 500 : 2000;
+        const calculatedPrice = rate * months * userCount;
+        const periodText = selectedBilling === "6month" ? "6 months" : "year";
+        const billedText = selectedBilling === "6month" ? "billed every 6 months" : "billed annually";
+        return `₹${calculatedPrice.toLocaleString("en-IN")} / ${periodText} · ${billedText}`;
     };
 
     return (
@@ -535,8 +541,8 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
                                     <p className="sg-registered-banner__desc">
                                         This company code is already registered on Business Analytics. You can proceed directly to sign in with your admin credentials.
                                     </p>
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         className="sg-registered-banner__btn"
                                         onClick={() => navigate("/")}
                                     >
@@ -739,7 +745,8 @@ function FormScreen({ selectedPlan, selectedBilling, onBack, onSubmit }) {
                                         if (val === "" || val === "-") { handleField("users", val); return; }
                                         const num = parseInt(val, 10);
                                         if (!isNaN(num)) {
-                                            const clamped = Math.max(1, Math.min(num, maxUsers === 999 ? 9999 : maxUsers));
+                                            const limit = selectedPlan.id === "free" ? 5 : 9999;
+                                            const clamped = Math.max(1, Math.min(num, limit));
                                             handleField("users", String(clamped));
                                         }
                                     }} />
@@ -1100,6 +1107,136 @@ function SuccessScreen({ companyCode, adminUsername, onGoToLogin }) {
 }
 
 /* ================================================================
+   MODAL — BILLING PERIOD SELECTION
+   ================================================================ */
+function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue }) {
+    const rate = plan.id === "pro" ? 500 : 2000;
+    const price6Mo = rate * 6;
+    const priceYear = rate * 12;
+
+    const [users, setUsers] = useState("1");
+
+    const userCount = Math.max(1, parseInt(users) || 1);
+    const subtotal = (selectedCycle === "6month" ? price6Mo : priceYear) * userCount;
+    const tax = 0;
+    const total = subtotal;
+
+    return (
+        <div className="sg-modal sg-modal--open" id="modal-billing-period" role="dialog" aria-modal="true" onClick={onClose}>
+            <div className="sg-modal__box sg-billing-modal-box" onClick={e => e.stopPropagation()}>
+                <div className="sg-modal__accent" />
+                <div className="sg-modal__head">
+                    <div>
+                        <h2 className="sg-modal__title">Select Billing Period</h2>
+                        <p className="sg-modal__sub">Choose a billing cycle for your {plan.name} plan.</p>
+                    </div>
+                    <button type="button" className="sg-modal__close" onClick={onClose} aria-label="Close">✕</button>
+                </div>
+
+                <div className="sg-modal__body sg-billing-modal-body">
+                    {/* Period selection cards */}
+                    <div className="sg-billing-options">
+                        <div 
+                            className={`sg-billing-opt-card ${selectedCycle === "6month" ? "sg-billing-opt-card--active" : ""}`}
+                            onClick={() => onCycleChange("6month")}
+                        >
+                            <div className="sg-billing-opt-card__radio">
+                                <span className="sg-billing-opt-card__dot" />
+                            </div>
+                            <div className="sg-billing-opt-card__info">
+                                <span className="sg-billing-opt-card__title">6 Months</span>
+                                <span className="sg-billing-opt-card__desc">₹{rate}/user/month</span>
+                                <span className="sg-billing-opt-card__total-desc">Billed every 6 months (₹{price6Mo.toLocaleString("en-IN")}/user)</span>
+                            </div>
+                        </div>
+
+                        <div 
+                            className={`sg-billing-opt-card ${selectedCycle === "yearly" ? "sg-billing-opt-card--active" : ""}`}
+                            onClick={() => onCycleChange("yearly")}
+                        >
+                            <div className="sg-billing-opt-card__radio">
+                                <span className="sg-billing-opt-card__dot" />
+                            </div>
+                            <div className="sg-billing-opt-card__info">
+                                <span className="sg-billing-opt-card__title">Yearly (12 Months)</span>
+                                <span className="sg-billing-opt-card__desc">₹{rate}/user/month</span>
+                                <span className="sg-billing-opt-card__total-desc">Billed annually (₹{priceYear.toLocaleString("en-IN")}/user)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Number of Users input */}
+                    <div className="sg-billing-users-field">
+                        <label className="sg-billing-users-label" htmlFor="billing-users">Number of Users</label>
+                        <div className="sg-billing-users-input-wrapper">
+                            <button 
+                                type="button" 
+                                className="sg-billing-users-btn"
+                                onClick={() => setUsers(prev => String(Math.max(1, (parseInt(prev) || 1) - 1)))}
+                            >
+                                −
+                            </button>
+                            <input 
+                                id="billing-users"
+                                className="sg-billing-users-input"
+                                type="number" 
+                                min="1" 
+                                value={users}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === "") {
+                                        setUsers("");
+                                    } else {
+                                        const num = parseInt(val) || 1;
+                                        setUsers(String(Math.max(1, num)));
+                                    }
+                                }}
+                            />
+                            <button 
+                                type="button" 
+                                className="sg-billing-users-btn"
+                                onClick={() => setUsers(prev => String((parseInt(prev) || 1) + 1))}
+                            >
+                                +
+                            </button>
+                        </div>
+                        <span className="sg-billing-users-hint">Enter the number of login accounts your team needs.</span>
+                    </div>
+
+                    {/* Cost Breakdown */}
+                    <div className="sg-billing-breakdown">
+                        <h4 className="sg-breakdown-title">Pricing Breakdown</h4>
+                        <div className="sg-breakdown-row">
+                            <span>{plan.name} ({selectedCycle === "6month" ? "6 Months" : "1 Year"} × {userCount} users)</span>
+                            <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="sg-breakdown-row">
+                            <span>Tax (0%)</span>
+                            <span>₹0.00</span>
+                        </div>
+                        <div className="sg-breakdown-divider" />
+                        <div className="sg-breakdown-row sg-breakdown-row--total">
+                            <span>Total due today</span>
+                            <span>₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="sg-modal__foot">
+                    <button type="button" className="sg-btn-cancel" onClick={onClose}>Cancel</button>
+                    <button type="button" className="sg-btn-continue-billing" onClick={() => onContinue(String(userCount))}>
+                        <span>Continue</span>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 6 }}>
+                            <path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ================================================================
    ROOT — SIGNUP PAGE
    ================================================================ */
 export default function SignupPage() {
@@ -1107,7 +1244,13 @@ export default function SignupPage() {
     const [screen, setScreen] = useState("plans");
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [selectedBilling, setSelectedBilling] = useState("yearly");
+    const [selectedUsers, setSelectedUsers] = useState("1");
     const [successData, setSuccessData] = useState(null);
+
+    // Billing Period modal states
+    const [showBillingModal, setShowBillingModal] = useState(false);
+    const [billingModalPlan, setBillingModalPlan] = useState(null);
+    const [billingModalCycle, setBillingModalCycle] = useState("yearly");
 
     /* Back button: from plans → login, from form → plans */
     const handleBack = () => {
@@ -1119,9 +1262,15 @@ export default function SignupPage() {
     };
 
     const handlePlanSelect = useCallback((plan, billing) => {
-        setSelectedPlan(plan);
-        setSelectedBilling(billing);
-        setScreen("form");
+        if (plan.id === "free") {
+            setSelectedPlan(plan);
+            setSelectedBilling("yearly");
+            setScreen("form");
+        } else {
+            setBillingModalPlan(plan);
+            setBillingModalCycle("yearly");
+            setShowBillingModal(true);
+        }
     }, []);
 
     const handleFormSubmit = useCallback(async (data) => {
@@ -1137,6 +1286,7 @@ export default function SignupPage() {
             users: data.form.users,
             plan_id: selectedPlan ? selectedPlan.id : "free",
             plan_name: selectedPlan ? selectedPlan.name : "Free Plan",
+            billing_cycle: selectedBilling,
             admin_username: data.adminData.username,
             admin_designation: data.adminData.designation,
             admin_password: data.adminData.password
@@ -1157,7 +1307,7 @@ export default function SignupPage() {
 
         setSuccessData(data);
         setScreen("success");
-    }, [selectedPlan]);
+    }, [selectedPlan, selectedBilling]);
 
     return (
         <div className="sg-page">
@@ -1186,6 +1336,7 @@ export default function SignupPage() {
                 <FormScreen
                     selectedPlan={selectedPlan}
                     selectedBilling={selectedBilling}
+                    defaultUsers={selectedUsers}
                     onBack={() => setScreen("plans")}
                     onSubmit={handleFormSubmit}
                 />
@@ -1196,6 +1347,23 @@ export default function SignupPage() {
                     companyCode={successData.code}
                     adminUsername={successData.adminData.username}
                     onGoToLogin={() => navigate("/")}
+                />
+            )}
+
+            {/* Billing cycle selection modal */}
+            {showBillingModal && billingModalPlan && (
+                <BillingModal
+                    plan={billingModalPlan}
+                    selectedCycle={billingModalCycle}
+                    onCycleChange={setBillingModalCycle}
+                    onClose={() => setShowBillingModal(false)}
+                    onContinue={(usersVal) => {
+                        setSelectedPlan(billingModalPlan);
+                        setSelectedBilling(billingModalCycle);
+                        setSelectedUsers(usersVal || "1");
+                        setShowBillingModal(false);
+                        setScreen("form");
+                    }}
                 />
             )}
         </div>

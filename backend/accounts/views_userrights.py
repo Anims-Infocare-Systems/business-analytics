@@ -14,11 +14,22 @@ from .views import encrypt_password
 
 FORM_RIGHTS_KEYS = (
     "Dashboard",
+    "Top Management Dashboard",
+    "Plant Performance Dashboard",
     "Approvals",
+    "E-Approval",
+    "T-Approval",
     "Reports",
+    "Sales Analysis",
+    "Purchase Analysis",
+    "Quality Analysis",
+    "Production Analysis",
     "MIS",
+    "Idle Time Report",
+    "Efficiency Report",
     "Charts",
     "Utility",
+    "User Rights",
 )
 
 
@@ -89,7 +100,7 @@ def user_rights_list(request):
 
     rights_map = defaultdict(dict)
     for rname, fname, acc in rights_rows:
-        rights_map[rname][fname] = bool(acc)
+        rights_map[rname.lower()][fname] = bool(acc)  # normalize to lowercase for lookup
 
     users = []
     for uid, tid, ccode, uname, desg, issuper in user_rows:
@@ -102,7 +113,7 @@ def user_rights_list(request):
                 u_rights[key] = True
         else:
             for key in FORM_RIGHTS_KEYS:
-                u_rights[key] = rights_map[uname].get(key, False)
+                u_rights[key] = rights_map[uname.lower()].get(key, False)  # lowercase lookup
 
         avatar = (uname[:2] or "??").upper()
         has_access = is_super_admin or any(u_rights.values())
@@ -238,9 +249,9 @@ def user_rights_update(request):
                 desg = (desg or "").strip()
                 is_super_admin = (desg.lower() == "admin" or bool(issuper))
 
-                # 2. Update rights in DB
+                # 2. Update rights in DB — use UPPER() to wipe any case-variant duplicates
                 cursor.execute(
-                    "DELETE FROM tenants_usersrights WHERE company_code = %s AND username = %s",
+                    "DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
                     [company_code, username]
                 )
                 for key in FORM_RIGHTS_KEYS:
@@ -406,9 +417,9 @@ def user_rights_delete(request, user_id):
                 if session_user.upper() == username.upper():
                     return Response({"error": "Cannot delete your own admin account."}, status=400)
 
-                # 2. Delete user and their rights
+                # 2. Delete user and their rights (case-insensitive)
                 cursor.execute(
-                    "DELETE FROM tenants_usersrights WHERE company_code = %s AND username = %s",
+                    "DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
                     [db_company, username]
                 )
                 cursor.execute(
@@ -476,9 +487,9 @@ def user_rights_bulk_save(request):
                         errors.append({"userId": user_id, "error": "Unauthorized access."})
                         continue
 
-                    # 2. Update rights
+                    # 2. Update rights — use UPPER() to wipe any case-variant duplicates
                     cursor.execute(
-                        "DELETE FROM tenants_usersrights WHERE company_code = %s AND username = %s",
+                        "DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
                         [company_code, username]
                     )
                     for key in FORM_RIGHTS_KEYS:

@@ -374,7 +374,7 @@
     border: 2px solid #fff;
 }
 .au-avatar__dot--active   { background: #10b981; }
-.au-avatar__dot--inactive { background: #cbd5e1; }
+.au-avatar__dot--inactive { background: #ef4444; }
 .au-avatar__dot--warning  { background: #f59e0b; animation: au-blink 1.6s ease infinite; }
 
 /* ── Plan badge ─────────────────────────────────────────────── */

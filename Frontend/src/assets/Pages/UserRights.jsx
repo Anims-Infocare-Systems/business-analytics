@@ -87,6 +87,9 @@ const showToast = (variant, title, message) => {
 
 const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899", "#6366f1", "#14b8a6"];
 
+// Modules that are restricted to superadmin only — cannot be toggled for normal users
+const ADMIN_ONLY_MODULES = ["Utility"];
+
 const MODULES = [
     { key: "Dashboard", label: "Dashboard", icon: "📊", color: "#3b82f6" },
     { key: "Approvals", label: "Approvals", icon: "✅", color: "#10b981" },
@@ -95,6 +98,19 @@ const MODULES = [
     { key: "Charts", label: "Charts", icon: "📈", color: "#f97316" },
     { key: "Utility", label: "Utility", icon: "⚙️", color: "#ec4899" },
 ];
+
+const SUB_MENUS = {
+    Dashboard: ["Top Management Dashboard", "Plant Performance Dashboard", "Plant performance-1"],
+    Approvals: ["E-Approval", "T-Approval"],
+    Reports: [
+        "Sales Analysis",
+        "Purchase Analysis",
+        "Quality Analysis",
+        "Production Analysis",
+    ],
+    MIS: ["Idle Time Report", "Efficiency Report"],
+    Utility: ["User Rights"],
+};
 
 function assignColors(users) {
     return users.map((u, i) => ({
@@ -105,19 +121,28 @@ function assignColors(users) {
 
 function allRightsOn(on) {
     const rights = {};
-    MODULES.forEach(m => { rights[m.key] = on; });
+    MODULES.forEach(m => {
+        rights[m.key] = on;
+        if (SUB_MENUS[m.key]) {
+            SUB_MENUS[m.key].forEach(sub => {
+                rights[sub] = on;
+            });
+        }
+    });
     return rights;
 }
 
-function Toggle({ checked, onChange, color }) {
+function Toggle({ checked, onChange, color, disabled }) {
     return (
         <button
             type="button"
             role="switch"
             aria-checked={checked}
-            className={`ur-toggle ${checked ? "ur-toggle--on" : ""}`}
+            className={`ur-toggle ${checked ? "ur-toggle--on" : ""} ${disabled ? "ur-toggle--disabled" : ""}`}
             style={{ "--tc": color }}
-            onClick={onChange}
+            onClick={disabled ? undefined : onChange}
+            disabled={disabled}
+            aria-disabled={disabled}
         >
             <span className="ur-toggle__thumb" />
         </button>
@@ -137,6 +162,128 @@ function StatCard({ label, value, icon, color, delay }) {
     );
 }
 
+/* ═══════════════════════════════════════════════════════
+   Sub-Menu Modal — centered modal for granular access
+   ═══════════════════════════════════════════════════════ */
+function SubMenuModal({ isOpen, module, userName, currentRights, onApply, onCancel }) {
+    const [localRights, setLocalRights] = useState({});
+
+    useEffect(() => {
+        if (isOpen && module) {
+            const initial = {};
+            (SUB_MENUS[module.key] || []).forEach(sub => {
+                initial[sub] = !!currentRights[sub];
+            });
+            setLocalRights(initial);
+        }
+    }, [isOpen, module, currentRights]);
+
+    if (!isOpen || !module) return null;
+
+    const subList = SUB_MENUS[module.key] || [];
+    const allOn = subList.every(s => localRights[s]);
+    const anyOn = subList.some(s => localRights[s]);
+
+    const handleToggleAll = () => {
+        const next = !allOn;
+        const updated = {};
+        subList.forEach(s => { updated[s] = next; });
+        setLocalRights(updated);
+    };
+
+    const handleApply = () => {
+        const anyEnabled = subList.some(s => localRights[s]);
+        onApply(localRights, anyEnabled);
+    };
+
+    return createPortal(
+        <div className="ur-submodal-overlay" role="dialog" aria-modal="true" aria-label={`Configure ${module.label} sub-menu rights`}>
+            <div className="ur-submodal">
+                {/* Accent stripe */}
+                <div className="ur-submodal__accent" style={{ background: `linear-gradient(90deg, ${module.color}, ${module.color}99)` }} />
+
+                {/* Header */}
+                <div className="ur-submodal__header">
+                    <div className="ur-submodal__title-group">
+                        <span className="ur-submodal__icon" style={{ background: module.color + "22", color: module.color }}>
+                            {module.icon}
+                        </span>
+                        <div>
+                            <h3 className="ur-submodal__title">{module.label} — Sub-menu Access</h3>
+                            <p className="ur-submodal__subtitle">
+                                Configure individual sub-menu rights for <strong>{userName}</strong>
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" className="ur-submodal__close" onClick={onCancel} aria-label="Close">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Toggle All */}
+                <div className="ur-submodal__select-all">
+                    <span className="ur-submodal__select-label">
+                        {anyOn ? `${subList.filter(s => localRights[s]).length} of ${subList.length} enabled` : "None enabled"}
+                    </span>
+                    <button
+                        type="button"
+                        className={`ur-submodal__all-btn ${allOn ? "ur-submodal__all-btn--off" : "ur-submodal__all-btn--on"}`}
+                        onClick={handleToggleAll}
+                        style={{ "--mc": module.color }}
+                    >
+                        {allOn ? "Disable All" : "Enable All"}
+                    </button>
+                </div>
+
+                {/* Sub-menu list */}
+                <div className="ur-submodal__body">
+                    {subList.map((sub, idx) => (
+                        <div
+                            key={sub}
+                            className={`ur-submodal__item ${localRights[sub] ? "ur-submodal__item--on" : ""}`}
+                            style={{ animationDelay: `${idx * 0.05}s` }}
+                        >
+                            <div className="ur-submodal__item-info">
+                                <span
+                                    className="ur-submodal__item-dot"
+                                    style={{ background: localRights[sub] ? module.color : "#cbd5e1" }}
+                                />
+                                <span className="ur-submodal__item-label">{sub}</span>
+                            </div>
+                            <Toggle
+                                checked={!!localRights[sub]}
+                                onChange={() => setLocalRights(prev => ({ ...prev, [sub]: !prev[sub] }))}
+                                color={module.color}
+                            />
+                        </div>
+                    ))}
+                </div>
+
+                {/* Footer */}
+                <div className="ur-submodal__footer">
+                    <button type="button" className="ur-btn ur-btn--ghost" onClick={onCancel}>
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="ur-btn ur-btn--save"
+                        onClick={handleApply}
+                        style={{ background: `linear-gradient(135deg, ${module.color}, ${module.color}cc)` }}
+                    >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Apply Rights
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 export default function UserRights() {
     const [users, setUsers] = useState([]);
     const [maxUsers, setMaxUsers] = useState(0);
@@ -146,6 +293,9 @@ export default function UserRights() {
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState("");
     const saveTimer = useRef(null);
+
+    // Sub-menu modal state
+    const [subModal, setSubModal] = useState(null); // { userIdx, module, rights }
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -241,7 +391,8 @@ export default function UserRights() {
 
     useEffect(() => {
         const contentEl = document.querySelector(".dl-content");
-        if (showAddModal || deleteConfirm) {
+        const anyOpen = showAddModal || !!deleteConfirm || !!subModal;
+        if (anyOpen) {
             document.body.style.overflow = "hidden";
             if (contentEl) contentEl.style.overflow = "hidden";
         } else {
@@ -252,7 +403,7 @@ export default function UserRights() {
             document.body.style.overflow = "";
             if (contentEl) contentEl.style.overflow = "";
         };
-    }, [showAddModal, deleteConfirm]);
+    }, [showAddModal, deleteConfirm, subModal]);
 
     const totalUsers = users.length;
     const activeUsers = users.filter(u => MODULES.some(m => u.rights?.[m.key])).length;
@@ -262,16 +413,48 @@ export default function UserRights() {
         ? Math.round((totalGrants / (totalUsers * MODULES.length)) * 100)
         : 0;
 
+    /* ── Handle toggling parent menus ─────────────────────── */
     const handleToggle = (userIdx, modKey) => {
-        setUsers(prev => prev.map((u, i) => {
-            if (i !== userIdx) return u;
-            return {
-                ...u,
-                rights: { ...u.rights, [modKey]: !u.rights[modKey] },
-            };
-        }));
+        const hasSub = !!SUB_MENUS[modKey];
+        const user = users[userIdx];
+        const currentVal = !!user.rights[modKey];
+
+        if (hasSub) {
+            if (currentVal) {
+                // Already ON → open modal to reconfigure sub-menus
+                const module = MODULES.find(m => m.key === modKey);
+                setSubModal({ userIdx, module, rights: { ...user.rights } });
+            } else {
+                // Turning ON → open modal to pick sub-menus
+                const module = MODULES.find(m => m.key === modKey);
+                // Pre-enable all sub-menus as default
+                const preRights = { ...user.rights };
+                (SUB_MENUS[modKey] || []).forEach(sub => { preRights[sub] = true; });
+                setSubModal({ userIdx, module, rights: preRights });
+            }
+        } else {
+            // No sub-menus, just toggle directly
+            setUsers(prev => prev.map((u, i) => {
+                if (i !== userIdx) return u;
+                return { ...u, rights: { ...u.rights, [modKey]: !u.rights[modKey] } };
+            }));
+        }
     };
 
+    /* ── Apply sub-menu modal result ──────────────────────── */
+    const handleSubModalApply = (subRights, anyEnabled) => {
+        if (!subModal) return;
+        const { userIdx, module } = subModal;
+        setUsers(prev => prev.map((u, i) => {
+            if (i !== userIdx) return u;
+            const updatedRights = { ...u.rights, ...subRights };
+            updatedRights[module.key] = anyEnabled;
+            return { ...u, rights: updatedRights };
+        }));
+        setSubModal(null);
+    };
+
+    /* ── Revoke all (parent OFF, all sub-menus OFF) ───────── */
     const handleGrantAll = (userIdx) => {
         setUsers(prev => prev.map((u, i) => {
             if (i !== userIdx) return u;
@@ -301,7 +484,6 @@ export default function UserRights() {
                 throw new Error(data.error || `Failed to delete user (${res.status})`);
             }
 
-            // Remove user from local state
             setUsers(prev => prev.filter(u => u.userId !== userId));
             showToast("success", "Success", `User "${userName}" deleted successfully.`);
         } catch (err) {
@@ -360,7 +542,6 @@ export default function UserRights() {
 
     return (
         <div className="ur-root">
-
 
             <div className="ur-stats">
                 <StatCard label="Total Users" value={loading ? "…" : `${totalUsers}/${maxUsers || "—"}`} icon="👥" color="#3b82f6" delay="0s" />
@@ -474,15 +655,58 @@ export default function UserRights() {
                                                 </div>
                                             </td>
 
-                                            {MODULES.map(m => (
-                                                <td key={m.key} className="ur-td">
-                                                    <Toggle
-                                                        checked={!!user.rights[m.key]}
-                                                        onChange={() => handleToggle(user.origIdx, m.key)}
-                                                        color={m.color}
-                                                    />
-                                                </td>
-                                            ))}
+                                            {MODULES.map(m => {
+                                                const hasSub = !!SUB_MENUS[m.key];
+                                                const isOn = !!user.rights[m.key];
+                                                const isAdminOnly = ADMIN_ONLY_MODULES.includes(m.key);
+                                                const isDisabled = isAdminOnly && !user.isSuperAdmin;
+                                                const activeSubCount = hasSub
+                                                    ? (SUB_MENUS[m.key] || []).filter(s => !!user.rights[s]).length
+                                                    : 0;
+                                                return (
+                                                    <td key={m.key} className={`ur-td ${isDisabled ? "ur-td--locked" : ""}`}>
+                                                        <div className="ur-cell-wrap">
+                                                            {isDisabled ? (
+                                                                <div className="ur-locked-cell" title="Utility access is reserved for admin users only">
+                                                                    <Toggle
+                                                                        checked={false}
+                                                                        onChange={undefined}
+                                                                        color="#94a3b8"
+                                                                        disabled={true}
+                                                                    />
+                                                                    <span className="ur-locked-badge" title="Admin only">
+                                                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                                                        </svg>
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <Toggle
+                                                                        checked={isOn}
+                                                                        onChange={() => handleToggle(user.origIdx, m.key)}
+                                                                        color={m.color}
+                                                                    />
+                                                                    {hasSub && isOn && (
+                                                                        <span
+                                                                            className="ur-sub-badge"
+                                                                            style={{ background: m.color + "22", color: m.color }}
+                                                                            onClick={() => {
+                                                                                const module = MODULES.find(mod => mod.key === m.key);
+                                                                                setSubModal({ userIdx: user.origIdx, module, rights: { ...user.rights } });
+                                                                            }}
+                                                                            title={`${activeSubCount} sub-menu(s) enabled — click to configure`}
+                                                                        >
+                                                                            {activeSubCount}
+                                                                        </span>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                );
+                                            })}
 
                                             <td className="ur-td ur-td--actions">
                                                 <div className="ur-row-actions">
@@ -541,6 +765,17 @@ export default function UserRights() {
                 </div>
             </div>
 
+            {/* ── Sub-menu Modal ── */}
+            <SubMenuModal
+                isOpen={!!subModal}
+                module={subModal?.module}
+                userName={subModal ? users[subModal.userIdx]?.name : ""}
+                currentRights={subModal?.rights || {}}
+                onApply={handleSubModalApply}
+                onCancel={() => setSubModal(null)}
+            />
+
+            {/* ── Add User Modal ── */}
             {showAddModal && createPortal(
                 <div className="ur-modal" role="dialog" aria-modal="true">
                     <div className="ur-modal__box">
@@ -640,6 +875,7 @@ export default function UserRights() {
                 document.body
             )}
 
+            {/* ── Delete Confirm Modal ── */}
             {deleteConfirm && createPortal(
                 <div className="ur-modal" role="dialog" aria-modal="true">
                     <div className="ur-modal__box ur-modal__box--warning">

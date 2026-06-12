@@ -7,6 +7,7 @@ const API = resolveApiBase();
 import Dashboard1 from "./Dashboard1";
 import Dashboard2 from "./Dashboard2";
 import Dashboard3 from "./Dashboard3";
+import PlantPerformance1 from "./plantperformance1";
 import Charts from "./Charts";
 import EApproval from "./EApproval";
 import TApproval from "./TApproval";
@@ -48,7 +49,7 @@ const MENU_ITEMS = [
     {
         key: "Dashboard",
         icon: Icons.Dashboard,
-        children: ["Top Management Dashboard", "Plant Performance Dashboard"],
+        children: ["Top Management Dashboard", "Plant Performance Dashboard", "Plant performance-1"],
     },
     {
         key: "Approvals",
@@ -87,6 +88,7 @@ const HEADING_MAP = {
     "Top Management Dashboard": "Top Management Dashboard",
     "Dashboard2": "Plant Performance Dashboard",
     "Plant Performance Dashboard": "Plant Performance Dashboard",
+    "Plant performance-1": "Plant Performance-1 Dashboard",
     "E-Approval": "E-Approval Workflow",
     "T-Approval": "T-Approval Workflow",
     "Sales Analysis": "Reports — Sales Analysis",
@@ -127,6 +129,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     else if (si === "Top Management Dashboard") node = <Dashboard1 />;
     else if (si === "Dashboard2") node = <Dashboard2 />;
     else if (si === "Plant Performance Dashboard") node = <Dashboard3 />;
+    else if (si === "Plant performance-1") node = <PlantPerformance1 />;
     else if (si === "E-Approval") node = <EApproval />;
     else if (si === "T-Approval") node = <TApproval />;
     else if (si === "Sales Analysis") node = <SalesAnalysis />;
@@ -151,7 +154,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
         </div>
     );
 
-    const isPlant = si === "Plant Performance Dashboard";
+    const isPlant = si === "Plant Performance Dashboard" || si === "Plant performance-1";
 
     return (
         <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}${isPlant ? " dl-page-wrap--plant" : ""}`}>
@@ -354,7 +357,20 @@ export default function DashboardLayout() {
     const userRights = rightsCache.rights || {};
     const isSuperAdmin = !!rightsCache.isSuperAdmin;
 
-    const allowedMenuItems = MENU_ITEMS.filter(item => isSuperAdmin || userRights[item.key]);
+    const allowedMenuItems = MENU_ITEMS.map(item => {
+        const filteredChildren = item.children.filter(sub => isSuperAdmin || userRights[sub]);
+        return {
+            ...item,
+            children: filteredChildren
+        };
+    }).filter(item => {
+        const originalItem = MENU_ITEMS.find(m => m.key === item.key);
+        const hasOriginalChildren = originalItem && originalItem.children && originalItem.children.length > 0;
+        if (hasOriginalChildren) {
+            return item.children.length > 0;
+        }
+        return isSuperAdmin || userRights[item.key];
+    });
 
     const firstAllowed = allowedMenuItems[0];
     const defaultItem = firstAllowed ? firstAllowed.key : "Dashboard";
@@ -759,7 +775,7 @@ export default function DashboardLayout() {
             </div>
 
             {/* Settings Overlay Modal */}
-            <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} isExpiredMode={isExpired} />
         </div>
     );
 }
