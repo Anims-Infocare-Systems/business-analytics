@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.db import connection
 from django.conf import settings
 from .models import Tenant
-from .views import encrypt_password
+from .views import encrypt_password, update_tenant_license
 import threading
 import requests
 import datetime
@@ -200,6 +200,9 @@ def signup_view(request):
                     """,
                     [tenant_id, company_code, admin_username, right]
                 )
+
+            # Update/insert license mapping in tenants_lisencemodule
+            update_tenant_license(tenant_id, company_code, plan_id)
 
         # Calculate validity dates and subscription period for the onboarding email
         today = datetime.date.today()

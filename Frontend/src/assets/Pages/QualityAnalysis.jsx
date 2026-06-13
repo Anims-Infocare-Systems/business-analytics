@@ -2,6 +2,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import "./QualityAnalysis.css";
 import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
+import { 
+    SlidersHorizontal, 
+    ClipboardCheck, 
+    CheckCircle2, 
+    XCircle, 
+    Wrench, 
+    Hourglass, 
+    Coins, 
+    TrendingUp, 
+    BarChart2, 
+    AlertTriangle, 
+    Package, 
+    Lightbulb,
+    FileText,
+    Activity,
+    CheckCircle,
+    AlertCircle,
+    Info,
+    ArrowUpRight,
+    ArrowDownRight,
+    Pin,
+    Search,
+    X
+} from "lucide-react";
 
 Chart.register(...registerables);
 
@@ -40,21 +64,21 @@ function useCountUp(target, duration = 900) {
 //  Static Data
 // ─────────────────────────────────────────────
 const KPI_CARDS = [
-    { icon: "🔬", label: "Total Inspections Qty", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
-    { icon: "✅", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
-    { icon: "❌", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
-    { icon: "🔧", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
-    { icon: "⏳", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot · Not filtered by selected date range", trend: "Action needed", cls: "qa2-t-down" },
-    { icon: "💰", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
+    { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
+    { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
+    { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
+    { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
+    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot · Not filtered by selected date range", trend: "Action needed", cls: "qa2-t-down" },
+    { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
 ];
 
 const EMPTY_KPI_CARDS = [
-    { icon: "🔬", label: "Total Inspections Qty", value: "0", sub: "Selected period", trend: "0 inspection records", cls: "qa2-t-neutral" },
-    { icon: "✅", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
-    { icon: "❌", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
-    { icon: "🔧", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
-    { icon: "⏳", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
-    { icon: "💰", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
+    { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "0", sub: "Selected period", trend: "0 inspection records", cls: "qa2-t-neutral" },
+    { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
+    { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
+    { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
+    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
+    { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
 ];
 
 const PRODUCT_QUALITY = [
@@ -62,8 +86,8 @@ const PRODUCT_QUALITY = [
     { name: "Segment Carrier RM", insp: "410", pass: "370", rej: "40", barW: 90, barColor: "#f5a623", rateVal: "90.2%", rateColor: "#f5a623" },
     { name: "Insert CCMT 09T304", insp: "200", pass: "198", rej: "2", barW: 99, barColor: "#10b981", rateVal: "99.0%", rateColor: "#10b981" },
     { name: 'VCI Cover 8"×8" / 10"×12"', insp: "125", pass: "121", rej: "4", barW: 97, barColor: "#10b981", rateVal: "96.8%", rateColor: "#10b981" },
-    { name: "Paint-Seal Cast Dipping", insp: "75", pass: "0", rej: "75", barW: 0, barColor: "#ef4444", rateVal: "0% ⚠", rateColor: "#ef4444" },
-    { name: "Thinner GP 015 (RAS)", insp: "60", pass: "0", rej: "60", barW: 0, barColor: "#f97316", rateVal: "Rework", rateColor: "#f97316" },
+    { name: "Paint-Seal Cast Dipping", insp: "75", pass: "0", rej: "75", barW: 0, barColor: "#ef4444", rateVal: "0%", rateColor: "#ef4444", hasWarning: true },
+    { name: "Thinner GP 015 (RAS)", insp: "60", pass: "0", rej: "60", barW: 0, barColor: "#f97316", rateVal: "Rework", rateColor: "#f97316", hasWarning: true },
     { name: "Bottom Bearing Housing", insp: "183", pass: "177", rej: "6", barW: 96.7, barColor: "#10b981", rateVal: "96.7%", rateColor: "#10b981" },
 ];
 
@@ -101,14 +125,21 @@ const REWORK_QUEUE = [
 // CALIBRATION_ROWS removed — live data from Ins_Mas only
 
 const INSIGHTS_LEFT = [
-    { icon: "🔴", title: "Paint-Seal Cast — 100% Rejection (75 units)", sub: "Critical surface defects. Entire batch rejected. Supplier quality audit required immediately.", val: "100% Fail", valColor: "#ef4444" },
-    { icon: "🟠", title: "Segment Carrier pass rate at 90.2% — below 95% target", sub: "40 units failed alignment check. Review assembly fixture calibration.", val: "90.2%", valColor: "#f97316" },
-    { icon: "🟡", title: "Hardness Tester #HT-01 calibration overdue today", sub: "Calibration expired 28-Feb-2026. All hardness test results today may be non-compliant.", val: "Action Now", valColor: "#f59e0b" },
+    { iconKey: "error", title: "Paint-Seal Cast — 100% Rejection (75 units)", sub: "Critical surface defects. Entire batch rejected. Supplier quality audit required immediately.", val: "100% Fail", valColor: "#ef4444" },
+    { iconKey: "warning", title: "Segment Carrier pass rate at 90.2% — below 95% target", sub: "40 units failed alignment check. Review assembly fixture calibration.", val: "90.2%", valColor: "#f97316" },
+    { iconKey: "info", title: "Hardness Tester #HT-01 calibration overdue today", sub: "Calibration expired 28-Feb-2026. All hardness test results today may be non-compliant.", val: "Action Now", valColor: "#f59e0b" },
 ];
 
 const INSIGHTS_RIGHT = [
-    { icon: "🔵", title: "Overall pass rate 87.6% — trending up +2.1%", sub: "Quality improving steadily. Round Rod and Insert lines achieving 96%+. Maintain current controls.", val: "↑ 2.1%", valColor: "#10b981" },
+    { iconKey: "success", title: "Overall pass rate 87.6% — trending up +2.1%", sub: "Quality improving steadily. Round Rod and Insert lines achieving 96%+. Maintain current controls.", val: "↑ 2.1%", valColor: "#10b981" },
 ];
+
+const InsightIconMap = {
+    error: AlertTriangle,
+    warning: AlertCircle,
+    info: Info,
+    success: CheckCircle2
+};
 
 // ─────────────────────────────────────────────
 //  Chart Data
@@ -201,10 +232,10 @@ const getColStyle = (h) => {
 // ─────────────────────────────────────────────
 //  Sub-components
 // ─────────────────────────────────────────────
-function SectionHead({ icon, title, badge, badgeCls, extra }) {
+function SectionHead({ icon: Icon, iconColor = "#2d6de8", title, badge, badgeCls, extra }) {
     return (
-        <div className="qa2-section-head">
-            <span className="qa2-section-icon">{icon}</span>
+        <div className="qa2-section-head" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {Icon && <Icon size={18} className="qa2-section-icon" style={{ color: iconColor, strokeWidth: 2.25, display: 'flex', alignItems: 'center' }} />}
             <span className="qa2-section-title">{title}</span>
             {extra}
             {badge && <span className={`qa2-badge ${badgeCls || ""}`}>{badge}</span>}
@@ -251,6 +282,7 @@ export default function QualityAnalysis() {
         reportType: "All Reports", department: "All Departments",
         product: "All Products", defectType: "All Defects",
     });
+    const [searchQuery, setSearchQuery] = useState("");
     const [animated, setAnimated] = useState(false);
 
     // API state data
@@ -429,19 +461,22 @@ export default function QualityAnalysis() {
     const activeKpiCards = useMemo(() => {
         if (hasNoData) return EMPTY_KPI_CARDS;
         return summaryData?.kpis ? [
-            { icon: "🔬", label: "Total Inspections Qty", ...summaryData.kpis.total_inspected_card },
-            { icon: "✅", label: "Pass Rate",             ...summaryData.kpis.pass_rate_card },
-            { icon: "❌", label: "Rejection Rate",        ...summaryData.kpis.rejection_rate_card },
-            { icon: "🔧", label: "Rework Rate",           ...summaryData.kpis.rework_rate_card },
-            { icon: "⏳", label: "Final Insp. Waiting",   ...summaryData.kpis.pending_insp_card },
-            { icon: "💰", label: "Quality Value",         ...summaryData.kpis.quality_value_card },
+            { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", ...summaryData.kpis.total_inspected_card },
+            { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate",             ...summaryData.kpis.pass_rate_card },
+            { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate",        ...summaryData.kpis.rejection_rate_card },
+            { icon: Wrench, iconColor: "#f97316", label: "Rework Rate",           ...summaryData.kpis.rework_rate_card },
+            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting",   ...summaryData.kpis.pending_insp_card },
+            { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value",         ...summaryData.kpis.quality_value_card },
         ] : KPI_CARDS;
     }, [summaryData, hasNoData]);
 
     const activeProductQuality  = useMemo(() => {
         if (hasNoData) return [];
-        return prodPerfData?.products     || PRODUCT_QUALITY;
-    }, [prodPerfData, hasNoData]);
+        const raw = prodPerfData?.products || PRODUCT_QUALITY;
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(p => p.name?.toLowerCase().includes(q));
+    }, [prodPerfData, hasNoData, searchQuery]);
 
     const activeDefectCauses    = useMemo(() => {
         if (hasNoData) return [];
@@ -463,18 +498,44 @@ export default function QualityAnalysis() {
 
     const activeInspectionRows  = useMemo(() => {
         if (hasNoData) return [];
-        return recordsData?.inspection_records || INSPECTION_ROWS;
-    }, [recordsData, hasNoData]);
+        const raw = recordsData?.inspection_records || INSPECTION_ROWS;
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(r => 
+            (r.id && r.id.toLowerCase().includes(q)) ||
+            (r.partyName && r.partyName.toLowerCase().includes(q)) ||
+            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
+            (r.process && r.process.toLowerCase().includes(q)) ||
+            (r.inspBy && r.inspBy.toLowerCase().includes(q)) ||
+            (r.result && r.result.toLowerCase().includes(q)) ||
+            (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
+        );
+    }, [recordsData, hasNoData, searchQuery]);
 
     const activeRejectionRows   = useMemo(() => {
         if (hasNoData) return [];
-        return recordsData?.rejection_rows     || REJECTION_ROWS;
-    }, [recordsData, hasNoData]);
+        const raw = recordsData?.rejection_rows || REJECTION_ROWS;
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(r => 
+            (r.id && r.id.toLowerCase().includes(q)) ||
+            (r.product && r.product.toLowerCase().includes(q)) ||
+            (r.reason && r.reason.toLowerCase().includes(q)) ||
+            (r.defect && r.defect.toLowerCase().includes(q)) ||
+            (r.disp && r.disp.toLowerCase().includes(q))
+        );
+    }, [recordsData, hasNoData, searchQuery]);
 
     const activeReworkQueue     = useMemo(() => {
         if (hasNoData) return [];
-        return recordsData?.rework_queue       || REWORK_QUEUE;
-    }, [recordsData, hasNoData]);
+        const raw = recordsData?.rework_queue || REWORK_QUEUE;
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(r => 
+            (r.name && r.name.toLowerCase().includes(q)) ||
+            (r.code && r.code.toLowerCase().includes(q))
+        );
+    }, [recordsData, hasNoData, searchQuery]);
 
     const activeCalibrationRows = useMemo(() => {
         if (hasNoData) return [];
@@ -498,14 +559,23 @@ export default function QualityAnalysis() {
 
     const activeInsightsLeft  = useMemo(() => {
         if (hasNoData) return [];
-        return insightsData?.insights_left || INSIGHTS_LEFT;
+        if (insightsData?.insights_left) {
+            return insightsData.insights_left.map((ins, idx) => {
+                const keys = ["error", "warning", "info"];
+                return { ...ins, iconKey: ins.iconKey || keys[idx % keys.length] };
+            });
+        }
+        return INSIGHTS_LEFT;
     }, [insightsData, hasNoData]);
 
     const activeInsightsRight = useMemo(() => {
         if (hasNoData) return [];
-        return insightsData?.insights_right
-            ? insightsData.insights_right.filter(ins => !ins.title.toLowerCase().includes("scrap"))
-            : INSIGHTS_RIGHT;
+        if (insightsData?.insights_right) {
+            return insightsData.insights_right
+                .filter(ins => !ins.title.toLowerCase().includes("scrap"))
+                .map(ins => ({ ...ins, iconKey: ins.iconKey || "success" }));
+        }
+        return INSIGHTS_RIGHT;
     }, [insightsData, hasNoData]);
 
     const activePriorityActions = useMemo(() => {
@@ -534,17 +604,55 @@ export default function QualityAnalysis() {
 
             {/* ── Filters ── */}
             <div className="qa2-card qa2-filter-card qa2-animate qa2-d1">
-                <div className="qa2-filter-title">
-                    <span>⚙️</span> Report Filters
+                <div className="qa2-filter-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <SlidersHorizontal size={18} style={{ color: '#2d6de8', strokeWidth: 2.25 }} /> Report Filters
                 </div>
-                <div className="qa2-filter-grid">
-                    <div className="qa2-fg" style={{ gridColumn: "span 2" }}>
+                <div className="qa2-filter-grid" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'end', padding: '1rem 1.25rem' }}>
+                    <div className="qa2-fg" style={{ flex: '0 0 260px' }}>
                         <label className="qa2-fl">Date Range</label>
                         <QualityAnalysisDatePicker
                             from={dateRange.from}
                             to={dateRange.to}
                             onChange={({ from, to }) => setDateRange({ from, to })}
                         />
+                    </div>
+                    <div className="qa2-fg" style={{ flex: '0 0 260px' }}>
+                        <label className="qa2-fl">Search Records</label>
+                        <div className="qa2-search-input-wrapper" style={{ position: 'relative', width: '100%' }}>
+                            <input
+                                type="text"
+                                className="qa2-fi"
+                                style={{ width: '100%', padding: '0.65rem 2.25rem 0.65rem 2.25rem', background: '#ffffff', cursor: 'text' }}
+                                placeholder="Search by description, ID, etc..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            <Search size={14} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery("")}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '0.8rem',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#94a3b8',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: '18px',
+                                        height: '18px'
+                                    }}
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -594,24 +702,37 @@ export default function QualityAnalysis() {
                 </div>
             ) : (
                 <div className="qa2-kpi-grid">
-                    {activeKpiCards.map((k, i) => (
-                        <div className="qa2-kpi-card qa2-card-premium qa2-animate" style={{ animationDelay: `${0.08 + i * 0.06}s` }} key={i}>
-                            <div className="qa2-kpi-top">
-                                <span className="qa2-kpi-icon">{k.icon}</span>
-                                <span className={`qa2-kpi-trend ${k.cls}`}>{k.trend}</span>
+                    {activeKpiCards.map((k, i) => {
+                        const IconComponent = k.icon;
+                        const cleanTrendText = k.trend ? k.trend.replace(/^[↑↓\s]+/, "") : "";
+                        const hasUp = k.trend && k.trend.includes("↑");
+                        const hasDown = k.trend && k.trend.includes("↓");
+                        
+                        return (
+                            <div className="qa2-kpi-card qa2-card-premium qa2-animate" style={{ animationDelay: `${0.08 + i * 0.06}s` }} key={i}>
+                                <div className="qa2-kpi-top">
+                                    <span className="qa2-kpi-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                                        <IconComponent size={20} style={{ color: k.iconColor, strokeWidth: 2.25 }} />
+                                    </span>
+                                    <span className={`qa2-kpi-trend ${k.cls}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                        {hasUp && <ArrowUpRight size={12} style={{ strokeWidth: 3 }} />}
+                                        {hasDown && <ArrowDownRight size={12} style={{ strokeWidth: 3 }} />}
+                                        <span>{cleanTrendText}</span>
+                                    </span>
+                                </div>
+                                <div className="qa2-kpi-val">{k.value}</div>
+                                <div className="qa2-kpi-lbl">{k.label}</div>
+                                <div className="qa2-kpi-sub">{k.sub}</div>
                             </div>
-                            <div className="qa2-kpi-val">{k.value}</div>
-                            <div className="qa2-kpi-lbl">{k.label}</div>
-                            <div className="qa2-kpi-sub">{k.sub}</div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             {/* ── Charts Row 1: 3-col ── */}
             <div className="qa2-charts-3 qa2-animate qa2-d3">
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon="📈" title="Weekly Inspection Trend"
+                    <SectionHead icon={TrendingUp} iconColor="#3b82f6" title="Weekly Inspection Trend"
                         badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
@@ -630,7 +751,7 @@ export default function QualityAnalysis() {
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon="📊" title="Inspection Results Split" />
+                    <SectionHead icon={BarChart2} iconColor="#10b981" title="Inspection Results Split" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
@@ -644,7 +765,7 @@ export default function QualityAnalysis() {
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon="⚠️" title="Defect Category Breakdown" />
+                    <SectionHead icon={AlertTriangle} iconColor="#ef4444" title="Defect Category Breakdown" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
@@ -662,7 +783,7 @@ export default function QualityAnalysis() {
             {/* ── Charts Row 2: 2-col ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon="📈" title="Internal Mac Rejection — PPM"
+                    <SectionHead icon={TrendingUp} iconColor="#f97316" title="Internal Mac Rejection — PPM"
                         badge="Monthly" badgeCls="qa2-badge-orange" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
@@ -681,7 +802,7 @@ export default function QualityAnalysis() {
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon="🔴" title="Top Defect Causes — Pareto" />
+                    <SectionHead icon={BarChart2} iconColor="#ef4444" title="Top Defect Causes — Pareto" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
@@ -705,7 +826,7 @@ export default function QualityAnalysis() {
 
                 {/* Product Quality */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon="📦" title="Product-wise Quality Performance"
+                    <SectionHead icon={Package} iconColor="#6366f1" title="Product-wise Quality Performance"
                         extra={<span className="qa2-section-sub">Target ≥ 95%</span>} />
                     {prodPerfLoading ? (
                         <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
@@ -731,18 +852,25 @@ export default function QualityAnalysis() {
                             </div>
                             <div className="qa2-pq-scroll-container">
                                 {activeProductQuality.length > 0 ? (
-                                    activeProductQuality.map((p, i) => (
-                                        <div className="qa2-pq-row" key={i}>
-                                            <div className="qa2-pq-name">{p.name}</div>
-                                            <div className="qa2-pq-num qa2-muted">{p.insp}</div>
-                                            <div className="qa2-pq-num qa2-green">{p.pass}</div>
-                                            <div className="qa2-pq-num qa2-red">{p.rej}</div>
-                                            <div className="qa2-pq-bar-track">
-                                                <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+                                    activeProductQuality.map((p, i) => {
+                                        const displayRate = p.rateVal ? p.rateVal.replace("⚠", "").trim() : "";
+                                        const isWarning = p.hasWarning || (p.rateVal && p.rateVal.includes("⚠")) || p.rateVal === "Rework" || p.rateVal === "0%";
+                                        return (
+                                            <div className="qa2-pq-row" key={i}>
+                                                <div className="qa2-pq-name">{p.name}</div>
+                                                <div className="qa2-pq-num qa2-muted">{p.insp}</div>
+                                                <div className="qa2-pq-num qa2-green">{p.pass}</div>
+                                                <div className="qa2-pq-num qa2-red">{p.rej}</div>
+                                                <div className="qa2-pq-bar-track">
+                                                    <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+                                                </div>
+                                                <div className="qa2-pq-rate" style={{ color: p.rateColor, display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', minWidth: '65px' }}>
+                                                    <span>{displayRate}</span>
+                                                    {isWarning && <AlertTriangle size={13} style={{ color: p.rateColor }} />}
+                                                </div>
                                             </div>
-                                            <div className="qa2-pq-rate" style={{ color: p.rateColor }}>{p.rateVal}</div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 ) : (
                                     <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
                                         No product records found for this period
@@ -755,7 +883,7 @@ export default function QualityAnalysis() {
 
                 {/* Defect Cause */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon="🔴" title="Defect Cause Analysis"
+                    <SectionHead icon={AlertTriangle} iconColor="#ef4444" title="Defect Cause Analysis"
                         badge={`${summaryData?.kpis?.rejection_rate_card?.value || "7.5%"} Rejection`} badgeCls="qa2-badge-red" />
                     {defectCausesLoading ? (
                         <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
@@ -793,11 +921,17 @@ export default function QualityAnalysis() {
             {/* ── Full Inspection Table ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
                 <div className="qa2-table-header">
-                    <SectionHead icon="🔍" title="Inspection Records — All Transactions" />
+                    <SectionHead icon={FileText} iconColor="#3b82f6" title="Inspection Records — All Transactions" />
                     <div className="qa2-tag-row">
-                        <span className="qa2-badge qa2-badge-blue">🔹 Inter Insp: {interInspCount}</span>
-                        <span className="qa2-badge qa2-badge-teal">⭐ Final Insp: {finalInspCount}</span>
-                        <span className="qa2-badge qa2-badge-purple">📋 Job Order: {jobOrderCount}</span>
+                        <span className="qa2-badge qa2-badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Activity size={10} style={{ strokeWidth: 3 }} /> Inter Insp: {interInspCount}
+                        </span>
+                        <span className="qa2-badge qa2-badge-teal" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <CheckCircle size={10} style={{ strokeWidth: 3 }} /> Final Insp: {finalInspCount}
+                        </span>
+                        <span className="qa2-badge qa2-badge-purple" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
+                        </span>
                     </div>
                 </div>
                 {recordsLoading ? (
@@ -877,7 +1011,7 @@ export default function QualityAnalysis() {
 
                 {/* Rejection & Rework */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon="❌" title="Rejection & Rework Summary"
+                    <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary"
                         badge={`${activeRejectionRows.length} Records`} badgeCls="qa2-badge-red" />
                     {recordsLoading ? (
                         <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
@@ -927,7 +1061,7 @@ export default function QualityAnalysis() {
 
                 {/* Calibration */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon="🧰" title="Calibration Status"
+                    <SectionHead icon={Wrench} iconColor="#f59e0b" title="Calibration Status"
                         badge={calibrationAlertCount > 0 ? `${calibrationAlertCount} Alert${calibrationAlertCount > 1 ? "s" : ""}` : activeCalibrationRows.length > 0 ? `${activeCalibrationRows.length} Items` : "No Due"}
                         badgeCls={calibrationAlertCount > 0 ? "qa2-badge-orange" : "qa2-badge-green"} />
                     {calibrationLoading ? (
@@ -942,7 +1076,9 @@ export default function QualityAnalysis() {
                         </div>
                     ) : activeCalibrationRows.length === 0 ? (
                         <div style={{ padding: "2rem", textAlign: "center", color: "var(--qa2-text-muted, #94a3b8)", fontSize: "0.88rem" }}>
-                            <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🔧</div>
+                            <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
+                                <Wrench size={32} style={{ color: '#94a3b8', strokeWidth: 1.5 }} />
+                            </div>
                             <div>No instruments due for calibration in the selected period.</div>
                         </div>
                     ) : (
@@ -974,7 +1110,7 @@ export default function QualityAnalysis() {
 
             {/* ── Management Insights ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <SectionHead icon="💡" title="Management Quality Insights"
+                <SectionHead icon={Lightbulb} iconColor="#eab308" title="Management Quality Insights"
                     badge={`${activePriorityActions.length} Action Points`} badgeCls="qa2-badge-red" />
                 {insightsLoading ? (
                     <div className="qa2-insights-grid qa2-pulse-loader" style={{ padding: "1.5rem" }}>
@@ -1000,28 +1136,35 @@ export default function QualityAnalysis() {
                         <div className="qa2-insights-col qa2-insights-left">
                             {activeInsightsLeft.length === 0 ? (
                                 <div style={{ padding: "2rem 1.25rem", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
-                                    <div style={{ fontSize: "1.8rem", marginBottom: "0.5rem" }}>✅</div>
+                                    <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
+                                        <CheckCircle size={28} style={{ color: '#10b981', strokeWidth: 1.5 }} />
+                                    </div>
                                     No critical alerts for this period
                                 </div>
-                            ) : activeInsightsLeft.map((ins, i) => (
-                                <div className="qa2-insight-row" key={i}
-                                    style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
-                                    <span className="qa2-insight-icon">{ins.icon}</span>
-                                    <div className="qa2-insight-body">
-                                        <div className="qa2-insight-title">{ins.title}</div>
-                                        <div className="qa2-insight-sub">{ins.sub}</div>
+                            ) : activeInsightsLeft.map((ins, i) => {
+                                const IconComponent = InsightIconMap[ins.iconKey] || AlertCircle;
+                                return (
+                                    <div className="qa2-insight-row" key={i}
+                                        style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
+                                        <span className="qa2-insight-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                                            <IconComponent size={16} style={{ color: ins.valColor }} />
+                                        </span>
+                                        <div className="qa2-insight-body">
+                                            <div className="qa2-insight-title">{ins.title}</div>
+                                            <div className="qa2-insight-sub">{ins.sub}</div>
+                                        </div>
+                                        <div className="qa2-insight-val" style={{
+                                            color: ins.valColor,
+                                            background: `${ins.valColor}18`,
+                                            padding: "0.18rem 0.52rem",
+                                            borderRadius: "6px",
+                                            fontSize: "0.68rem",
+                                            fontWeight: 700,
+                                            whiteSpace: "nowrap"
+                                        }}>{ins.val}</div>
                                     </div>
-                                    <div className="qa2-insight-val" style={{
-                                        color: ins.valColor,
-                                        background: `${ins.valColor}18`,
-                                        padding: "0.18rem 0.52rem",
-                                        borderRadius: "6px",
-                                        fontSize: "0.68rem",
-                                        fontWeight: 700,
-                                        whiteSpace: "nowrap"
-                                    }}>{ins.val}</div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* ── Right column: Positive Insights + Priority Actions ── */}
@@ -1030,29 +1173,48 @@ export default function QualityAnalysis() {
                                 <div style={{ padding: "2rem 1.25rem", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
                                     No summary data available
                                 </div>
-                            ) : activeInsightsRight.map((ins, i) => (
-                                <div className="qa2-insight-row" key={i}
-                                    style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
-                                    <span className="qa2-insight-icon">{ins.icon}</span>
-                                    <div className="qa2-insight-body">
-                                        <div className="qa2-insight-title">{ins.title}</div>
-                                        <div className="qa2-insight-sub">{ins.sub}</div>
+                            ) : activeInsightsRight.map((ins, i) => {
+                                const IconComponent = InsightIconMap[ins.iconKey] || CheckCircle;
+                                const cleanVal = ins.val ? ins.val.replace(/^[↑↓\s]+/, "") : "";
+                                const hasUp = ins.val && ins.val.includes("↑");
+                                const hasDown = ins.val && ins.val.includes("↓");
+                                
+                                return (
+                                    <div className="qa2-insight-row" key={i}
+                                        style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
+                                        <span className="qa2-insight-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                                            <IconComponent size={16} style={{ color: ins.valColor }} />
+                                        </span>
+                                        <div className="qa2-insight-body">
+                                            <div className="qa2-insight-title">{ins.title}</div>
+                                            <div className="qa2-insight-sub">{ins.sub}</div>
+                                        </div>
+                                        <div className="qa2-insight-val" style={{
+                                            color: ins.valColor,
+                                            background: `${ins.valColor}18`,
+                                            padding: "0.18rem 0.52rem",
+                                            borderRadius: "6px",
+                                            fontSize: "0.68rem",
+                                            fontWeight: 700,
+                                            whiteSpace: "nowrap",
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                        }}>
+                                            {hasUp && <ArrowUpRight size={10} style={{ strokeWidth: 3 }} />}
+                                            {hasDown && <ArrowDownRight size={10} style={{ strokeWidth: 3 }} />}
+                                            <span>{cleanVal}</span>
+                                        </div>
                                     </div>
-                                    <div className="qa2-insight-val" style={{
-                                        color: ins.valColor,
-                                        background: `${ins.valColor}18`,
-                                        padding: "0.18rem 0.52rem",
-                                        borderRadius: "6px",
-                                        fontSize: "0.68rem",
-                                        fontWeight: 700,
-                                        whiteSpace: "nowrap"
-                                    }}>{ins.val}</div>
-                                </div>
-                            ))}
+                                );
+                            })}
 
                             {activePriorityActions.length > 0 && (
                                 <div className="qa2-priority-box">
-                                    <div className="qa2-priority-title">📌 Priority Actions for Management</div>
+                                    <div className="qa2-priority-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Pin size={15} style={{ transform: 'rotate(-45deg)', fill: '#fff', color: '#fff' }} />
+                                        <span>Priority Actions for Management</span>
+                                    </div>
                                     <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginTop: "10px" }}>
                                         {activePriorityActions.map((action, idx) => {
                                             const cleanAction = action.replace(/^\d+[\)\.]\s*/, "");

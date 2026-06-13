@@ -91,10 +91,10 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
     }, [activeTab, isExpiredMode]);
 
     useEffect(() => {
-        if (isExpiredMode) {
+        if (isExpiredMode && isOpen) {
             setActiveTab("billing");
         }
-    }, [isExpiredMode]);
+    }, [isExpiredMode, isOpen]);
 
     const [isClosing, setIsClosing] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -291,11 +291,12 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
     // Active tab coordination: redirect normal users away from billing
     useEffect(() => {
+        if (isExpiredMode) return;
         if (!profile && loadingProfile) return;
         if (!isSuperadmin && activeTab === "billing") {
             setActiveTab("account");
         }
-    }, [userRole, profile, loadingProfile, activeTab, isSuperadmin]);
+    }, [userRole, profile, loadingProfile, activeTab, isSuperadmin, isExpiredMode]);
 
     useEffect(() => {
         if (showConfirmModal) {
@@ -461,179 +462,179 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                         const _circ = 2 * Math.PI * 52;
                         const _fill = Math.round(_circ * Math.min(1, _daysLeft / 365));
                         return (
-                        <div className="st-section st-acct-root">
+                            <div className="st-section st-acct-root">
 
-                            {/* ── Hero Banner ── */}
-                            <div className="st-acct-hero">
-                                <div className="st-acct-hero__particles" />
-                                <div className="st-acct-hero__left">
-                                    <div className="st-acct-avatar-wrap">
-                                        <div className="st-acct-avatar-ring" />
-                                        <div className="st-acct-avatar-ring st-acct-avatar-ring--mask" />
-                                        <div className="st-acct-avatar">{username.substring(0, 2).toUpperCase()}</div>
-                                    </div>
-                                    <div className="st-acct-hero__identity">
-                                        <h2 className="st-acct-hero__name">{username}</h2>
-                                        <div className="st-acct-hero__role-row">
-                                            <span className="st-acct-hero__role-badge">{userRole}</span>
-                                            <span className={`st-acct-hero__status-chip ${accountStatus === "Active" ? "st-acct-hero__status-chip--on" : ""}`}>
-                                                <span className="st-acct-hero__status-dot" />
-                                                {accountStatus}
-                                            </span>
+                                {/* ── Hero Banner ── */}
+                                <div className="st-acct-hero">
+                                    <div className="st-acct-hero__particles" />
+                                    <div className="st-acct-hero__left">
+                                        <div className="st-acct-avatar-wrap">
+                                            <div className="st-acct-avatar-ring" />
+                                            <div className="st-acct-avatar-ring st-acct-avatar-ring--mask" />
+                                            <div className="st-acct-avatar">{username.substring(0, 2).toUpperCase()}</div>
                                         </div>
-                                        {profile?.profile?.signupDate && (
-                                            <p className="st-acct-hero__onboard">
-                                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                                                Member since {formatDateDMY(profile.profile.signupDate)}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="st-acct-hero__right">
-                                    <div className="st-acct-arc-wrap">
-                                        <svg className="st-acct-arc-svg" viewBox="0 0 120 120">
-                                            <defs>
-                                                <linearGradient id="acct-arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                                    <stop offset="0%" stopColor="#06b6d4" />
-                                                    <stop offset="100%" stopColor="#2d6de8" />
-                                                </linearGradient>
-                                            </defs>
-                                            <circle className="st-acct-arc-track" cx="60" cy="60" r="52" />
-                                            <circle
-                                                className="st-acct-arc-fill"
-                                                cx="60" cy="60" r="52"
-                                                strokeDasharray={`${_fill} ${_circ}`}
-                                                strokeDashoffset="0"
-                                            />
-                                        </svg>
-                                        <div className="st-acct-arc-inner">
-                                            <span className="st-acct-arc-count">{_daysLeft}</span>
-                                            <span className="st-acct-arc-label">days left</span>
+                                        <div className="st-acct-hero__identity">
+                                            <h2 className="st-acct-hero__name">{username}</h2>
+                                            <div className="st-acct-hero__role-row">
+                                                <span className="st-acct-hero__role-badge">{userRole}</span>
+                                                <span className={`st-acct-hero__status-chip ${accountStatus === "Active" ? "st-acct-hero__status-chip--on" : ""}`}>
+                                                    <span className="st-acct-hero__status-dot" />
+                                                    {accountStatus}
+                                                </span>
+                                            </div>
+                                            {profile?.profile?.signupDate && (
+                                                <p className="st-acct-hero__onboard">
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                                    Member since {formatDateDMY(profile.profile.signupDate)}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="st-acct-plan-meta">
-                                        <span className="st-acct-plan-chip">ACTIVE PLAN</span>
-                                        <h3 className="st-acct-plan-title">{planName}</h3>
-                                        <p className="st-acct-plan-renew">
-                                            {profile?.billing?.planEndDate
-                                                ? `Renews ${formatDateDMY(profile.billing.planEndDate)}`
-                                                : nextRenewal}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* ── Glass Info Tiles ── */}
-                            <div className="st-acct-tiles">
-                                {[
-                                    { label: "Company", value: userCompany, d: "M3 21h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11" },
-                                    { label: "Company Code", value: companyCode, mono: true, d: "M6 3h12l4 6-10 13L2 9z" },
-                                    { label: "System Role", value: userRole, d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
-                                    { label: "Onboarded", value: formatDateDMY(profile?.profile?.signupDate || ""), d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" },
-                                ].map((f, i) => (
-                                    <div key={i} className="st-acct-tile" style={{ "--td": `${i * 90}ms` }}>
-                                        <div className="st-acct-tile__glow" />
-                                        <div className="st-acct-tile__icon">
-                                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d={f.d} />
+                                    <div className="st-acct-hero__right">
+                                        <div className="st-acct-arc-wrap">
+                                            <svg className="st-acct-arc-svg" viewBox="0 0 120 120">
+                                                <defs>
+                                                    <linearGradient id="acct-arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                        <stop offset="0%" stopColor="#06b6d4" />
+                                                        <stop offset="100%" stopColor="#2d6de8" />
+                                                    </linearGradient>
+                                                </defs>
+                                                <circle className="st-acct-arc-track" cx="60" cy="60" r="52" />
+                                                <circle
+                                                    className="st-acct-arc-fill"
+                                                    cx="60" cy="60" r="52"
+                                                    strokeDasharray={`${_fill} ${_circ}`}
+                                                    strokeDashoffset="0"
+                                                />
                                             </svg>
+                                            <div className="st-acct-arc-inner">
+                                                <span className="st-acct-arc-count">{_daysLeft}</span>
+                                                <span className="st-acct-arc-label">days left</span>
+                                            </div>
                                         </div>
-                                        <div className="st-acct-tile__body">
-                                            <span className="st-acct-tile__label">{f.label}</span>
-                                            <span className={`st-acct-tile__val${f.mono ? " st-acct-tile__val--mono" : ""}`}>{f.value || "—"}</span>
+                                        <div className="st-acct-plan-meta">
+                                            <span className="st-acct-plan-chip">ACTIVE PLAN</span>
+                                            <h3 className="st-acct-plan-title">{planName}</h3>
+                                            <p className="st-acct-plan-renew">
+                                                {profile?.billing?.planEndDate
+                                                    ? `Renews ${formatDateDMY(profile.billing.planEndDate)}`
+                                                    : nextRenewal}
+                                            </p>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* ── Frosted Password Panel ── */}
-                            <div className="st-acct-pwd">
-                                <div className="st-acct-pwd__top-line" />
-                                <div className="st-acct-pwd__header">
-                                    <div className="st-acct-pwd__header-icon">
-                                        <Icons.Key />
-                                    </div>
-                                    <div>
-                                        <h3 className="st-acct-pwd__title">Change Password</h3>
-                                        <p className="st-acct-pwd__sub">Keep your account secure with a strong password</p>
                                     </div>
                                 </div>
 
-                                <form className="st-acct-pwd__form" onSubmit={handleSavePassword}>
-                                    <div className="st-acct-pwd__row st-acct-pwd__row--single">
-                                        <div className="st-acct-pwd__field">
-                                            <label className="st-acct-pwd__label">Current Password</label>
-                                            <div className="st-acct-pwd__iw">
-                                                <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
-                                                <input
-                                                    type={showCurPass ? "text" : "password"}
-                                                    className="st-acct-pwd__input"
-                                                    placeholder="Enter current password"
-                                                    value={curPass}
-                                                    onChange={(e) => setCurPass(e.target.value)}
-                                                    autoComplete="current-password"
-                                                />
-                                                <button type="button" className="st-acct-eye" onClick={() => setShowCurPass(v => !v)} aria-label="Toggle">
-                                                    <span className={`st-acct-eye__icon${showCurPass ? " st-acct-eye__icon--on" : ""}`}>
-                                                        {showCurPass ? <Icons.EyeOff /> : <Icons.Eye />}
-                                                    </span>
-                                                </button>
+                                {/* ── Glass Info Tiles ── */}
+                                <div className="st-acct-tiles">
+                                    {[
+                                        { label: "Company", value: userCompany, d: "M3 21h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11" },
+                                        { label: "Company Code", value: companyCode, mono: true, d: "M6 3h12l4 6-10 13L2 9z" },
+                                        { label: "System Role", value: userRole, d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
+                                        { label: "Onboarded", value: formatDateDMY(profile?.profile?.signupDate || ""), d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" },
+                                    ].map((f, i) => (
+                                        <div key={i} className="st-acct-tile" style={{ "--td": `${i * 90}ms` }}>
+                                            <div className="st-acct-tile__glow" />
+                                            <div className="st-acct-tile__icon">
+                                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d={f.d} />
+                                                </svg>
+                                            </div>
+                                            <div className="st-acct-tile__body">
+                                                <span className="st-acct-tile__label">{f.label}</span>
+                                                <span className={`st-acct-tile__val${f.mono ? " st-acct-tile__val--mono" : ""}`}>{f.value || "—"}</span>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="st-acct-pwd__row">
-                                        <div className="st-acct-pwd__field">
-                                            <label className="st-acct-pwd__label">New Password</label>
-                                            <div className="st-acct-pwd__iw">
-                                                <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
-                                                <input
-                                                    type={showNewPass ? "text" : "password"}
-                                                    className="st-acct-pwd__input"
-                                                    placeholder="Enter new password"
-                                                    value={newPass}
-                                                    onChange={(e) => setNewPass(e.target.value)}
-                                                    autoComplete="new-password"
-                                                />
-                                                <button type="button" className="st-acct-eye" onClick={() => setShowNewPass(v => !v)} aria-label="Toggle">
-                                                    <span className={`st-acct-eye__icon${showNewPass ? " st-acct-eye__icon--on" : ""}`}>
-                                                        {showNewPass ? <Icons.EyeOff /> : <Icons.Eye />}
-                                                    </span>
-                                                </button>
-                                            </div>
+                                    ))}
+                                </div>
+
+                                {/* ── Frosted Password Panel ── */}
+                                <div className="st-acct-pwd">
+                                    <div className="st-acct-pwd__top-line" />
+                                    <div className="st-acct-pwd__header">
+                                        <div className="st-acct-pwd__header-icon">
+                                            <Icons.Key />
                                         </div>
-                                        <div className="st-acct-pwd__field">
-                                            <label className="st-acct-pwd__label">Confirm New Password</label>
-                                            <div className="st-acct-pwd__iw">
-                                                <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
-                                                <input
-                                                    type={showConfPass ? "text" : "password"}
-                                                    className="st-acct-pwd__input"
-                                                    placeholder="Confirm new password"
-                                                    value={confPass}
-                                                    onChange={(e) => setConfPass(e.target.value)}
-                                                    autoComplete="new-password"
-                                                />
-                                                <button type="button" className="st-acct-eye" onClick={() => setShowConfPass(v => !v)} aria-label="Toggle">
-                                                    <span className={`st-acct-eye__icon${showConfPass ? " st-acct-eye__icon--on" : ""}`}>
-                                                        {showConfPass ? <Icons.EyeOff /> : <Icons.Eye />}
-                                                    </span>
-                                                </button>
-                                            </div>
+                                        <div>
+                                            <h3 className="st-acct-pwd__title">Change Password</h3>
+                                            <p className="st-acct-pwd__sub">Keep your account secure with a strong password</p>
                                         </div>
                                     </div>
 
-                                    {pwdError && <div className="st-acct-pwd__msg st-acct-pwd__msg--err">{pwdError}</div>}
-                                    {pwdSuccess && <div className="st-acct-pwd__msg st-acct-pwd__msg--ok">✓ Password updated successfully!</div>}
+                                    <form className="st-acct-pwd__form" onSubmit={handleSavePassword}>
+                                        <div className="st-acct-pwd__row st-acct-pwd__row--single">
+                                            <div className="st-acct-pwd__field">
+                                                <label className="st-acct-pwd__label">Current Password</label>
+                                                <div className="st-acct-pwd__iw">
+                                                    <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
+                                                    <input
+                                                        type={showCurPass ? "text" : "password"}
+                                                        className="st-acct-pwd__input"
+                                                        placeholder="Enter current password"
+                                                        value={curPass}
+                                                        onChange={(e) => setCurPass(e.target.value)}
+                                                        autoComplete="current-password"
+                                                    />
+                                                    <button type="button" className="st-acct-eye" onClick={() => setShowCurPass(v => !v)} aria-label="Toggle">
+                                                        <span className={`st-acct-eye__icon${showCurPass ? " st-acct-eye__icon--on" : ""}`}>
+                                                            {showCurPass ? <Icons.EyeOff /> : <Icons.Eye />}
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="st-acct-pwd__row">
+                                            <div className="st-acct-pwd__field">
+                                                <label className="st-acct-pwd__label">New Password</label>
+                                                <div className="st-acct-pwd__iw">
+                                                    <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
+                                                    <input
+                                                        type={showNewPass ? "text" : "password"}
+                                                        className="st-acct-pwd__input"
+                                                        placeholder="Enter new password"
+                                                        value={newPass}
+                                                        onChange={(e) => setNewPass(e.target.value)}
+                                                        autoComplete="new-password"
+                                                    />
+                                                    <button type="button" className="st-acct-eye" onClick={() => setShowNewPass(v => !v)} aria-label="Toggle">
+                                                        <span className={`st-acct-eye__icon${showNewPass ? " st-acct-eye__icon--on" : ""}`}>
+                                                            {showNewPass ? <Icons.EyeOff /> : <Icons.Eye />}
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="st-acct-pwd__field">
+                                                <label className="st-acct-pwd__label">Confirm New Password</label>
+                                                <div className="st-acct-pwd__iw">
+                                                    <span className="st-acct-pwd__iicon"><Icons.Lock /></span>
+                                                    <input
+                                                        type={showConfPass ? "text" : "password"}
+                                                        className="st-acct-pwd__input"
+                                                        placeholder="Confirm new password"
+                                                        value={confPass}
+                                                        onChange={(e) => setConfPass(e.target.value)}
+                                                        autoComplete="new-password"
+                                                    />
+                                                    <button type="button" className="st-acct-eye" onClick={() => setShowConfPass(v => !v)} aria-label="Toggle">
+                                                        <span className={`st-acct-eye__icon${showConfPass ? " st-acct-eye__icon--on" : ""}`}>
+                                                            {showConfPass ? <Icons.EyeOff /> : <Icons.Eye />}
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                    <button type="submit" className="st-acct-pwd__submit" disabled={pwdBusy}>
-                                        <span className="st-acct-pwd__submit-ripple" />
-                                        <span className="st-acct-pwd__submit-icon"><Icons.Key /></span>
-                                        <span>{pwdBusy ? "Saving…" : "Update Password"}</span>
-                                    </button>
-                                </form>
+                                        {pwdError && <div className="st-acct-pwd__msg st-acct-pwd__msg--err">{pwdError}</div>}
+                                        {pwdSuccess && <div className="st-acct-pwd__msg st-acct-pwd__msg--ok">✓ Password updated successfully!</div>}
+
+                                        <button type="submit" className="st-acct-pwd__submit" disabled={pwdBusy}>
+                                            <span className="st-acct-pwd__submit-ripple" />
+                                            <span className="st-acct-pwd__submit-icon"><Icons.Key /></span>
+                                            <span>{pwdBusy ? "Saving…" : "Update Password"}</span>
+                                        </button>
+                                    </form>
+                                </div>
+
                             </div>
-
-                        </div>
                         );
                     })()}
 
@@ -883,7 +884,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                     <li><span className="st-feature-check"><Icons.Check /></span> Access to dashboards</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> Basic Reports</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> 6 months free from registration</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Support for all registered users</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Upto 5 user access</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> Standard support</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> MIS Reports</li>
@@ -918,13 +919,11 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                     {isPro ? (isExpiredMode ? 'Renewal' : 'Current Plan') : (upgradeBusy ? 'Upgrading...' : 'Get Pro plan')}
                                 </button>
 
-                                <div className="st-upgrade-plan-card__features-header">Everything in Free and:</div>
+                                <div className="st-upgrade-plan-card__features-header">Pro has:</div>
                                 <ul className="st-upgrade-plan-card__features-list">
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Unlimited dashboards</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Full MIS & efficiency reports</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Support for all registered users</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Top Management dashboards</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Priority email support</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Standard support</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> Email Notifications</li>
                                 </ul>
                             </div>
@@ -954,11 +953,12 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                                 <div className="st-upgrade-plan-card__features-header">Everything in Pro, plus:</div>
                                 <ul className="st-upgrade-plan-card__features-list">
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Support for all registered users</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Dedicated account manager</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Custom integrations & API access</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> SLA-backed uptime guarantee</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> On-premise deployment option</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Unlimited Dashboard</li>
+                                    {/* <li><span className="st-feature-check"><Icons.Check /></span> Dedicated account manager</li> */}
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Advanced Analytics Charts</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Full MIS & Reports</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
+                                    <li><span className="st-feature-check"><Icons.Check /></span> Priority email support</li>
                                     <li><span className="st-feature-check"><Icons.Check /></span> Email Notifications</li>
                                 </ul>
                             </div>
@@ -1132,12 +1132,12 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                 <div>
                                     <div className="st-confirm-plan-name">
                                         {selectedPlan === "Pro" ? `Pro Plan (${enteredUsersCount} users) subscription` :
-                                         selectedPlan === "Max" ? `Max Plan (${enteredUsersCount} users) subscription` :
-                                         `${selectedPlan} Plan subscription`}
+                                            selectedPlan === "Max" ? `Max Plan (${enteredUsersCount} users) subscription` :
+                                                `${selectedPlan} Plan subscription`}
                                     </div>
                                     <div className="st-confirm-plan-cycle">
-                                        {selectedPlan === "Free" ? "6 months free from registration" : 
-                                         confirmBillingCycle === "6month" ? "Billed every 6 months, starting today" : "Billed annually, starting today"}
+                                        {selectedPlan === "Free" ? "6 months free from registration" :
+                                            confirmBillingCycle === "6month" ? "Billed every 6 months, starting today" : "Billed annually, starting today"}
                                     </div>
                                 </div>
                                 <div className="st-confirm-plan-price">

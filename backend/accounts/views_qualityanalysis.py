@@ -1438,7 +1438,7 @@ def quality_analysis_product_performance(request):
                         bar_w = 5
                         bar_color = "#f97316"
                     else:
-                        rate_val = "0% ⚠"
+                        rate_val = "0%"
                         bar_w = 0
                         bar_color = "#ef4444"
                 else:
@@ -2677,17 +2677,17 @@ def quality_analysis_insights(request):
         w_rej  = worst_data["rej"]
         w_rate = round(w_rej / w_insp * 100, 1) if w_insp > 0 else 0.0
         if w_rate >= 80:
-            icon, color = "🔴", "#ef4444"
+            icon_key, color = "error", "#ef4444"
             severity = "Critical — entire batch near-rejected"
         elif w_rate >= 50:
-            icon, color = "🟠", "#f97316"
+            icon_key, color = "warning", "#f97316"
             severity = "Major rejection issue"
         else:
-            icon, color = "🟡", "#f59e0b"
+            icon_key, color = "info", "#f59e0b"
             severity = "Below 95% pass target"
 
         insights_left.append({
-            "icon": icon,
+            "iconKey": icon_key,
             "title": f"{worst_name} — {w_rate}% Rejection ({w_rej:,} units)",
             "sub": f"{severity}. {w_rej:,} of {w_insp:,} units rejected in {period_lbl}. Immediate corrective action required.",
             "val": f"{w_rate}% Fail",
@@ -2706,7 +2706,7 @@ def quality_analysis_insights(request):
         p2_rate = round(p2_rej / p2_insp * 100, 1) if p2_insp > 0 else 0.0
         if p2_rate < 95 and p2_rej > 0:
             insights_left.append({
-                "icon": "🟠",
+                "iconKey": "warning",
                 "title": f"{p2_name} pass rate at {100 - p2_rate:.1f}% — below 95% target",
                 "sub": f"{p2_rej:,} units rejected in {period_lbl}. Review process parameters and incoming material quality.",
                 "val": f"{100 - p2_rate:.1f}%",
@@ -2720,7 +2720,7 @@ def quality_analysis_insights(request):
     # C) Overdue calibrations
     if overdue_count > 0:
         insights_left.append({
-            "icon": "🟡",
+            "iconKey": "info",
             "title": f"{overdue_count} instrument{'s' if overdue_count > 1 else ''} overdue for calibration",
             "sub": f"Measurement results from {overdue_count} uncalibrated instrument{'s' if overdue_count > 1 else ''} may be non-compliant. Calibrate immediately.",
             "val": "Action Now",
@@ -2739,7 +2739,7 @@ def quality_analysis_insights(request):
         )
         rw_note = f" — highest in {rw_products[0][0]}" if rw_products else ""
         insights_left.append({
-            "icon": "🟡",
+            "iconKey": "info",
             "title": f"High rework rate {rw_rate_pct}%{rw_note}",
             "sub": f"{total_rework:,} units sent for rework in {period_lbl}. Review process controls to reduce rework costs.",
             "val": f"{rw_rate_pct}%",
@@ -2756,11 +2756,11 @@ def quality_analysis_insights(request):
     # E) Overall pass rate
     if total_inspected > 0:
         if pass_rate_pct >= 95:
-            icon, color, trend = "🟢", "#10b981", "Excellent"
+            icon_key, color, trend = "success", "#10b981", "Excellent"
         elif pass_rate_pct >= 90:
-            icon, color, trend = "🔵", "#3b82f6", "Good"
+            icon_key, color, trend = "info", "#3b82f6", "Good"
         else:
-            icon, color, trend = "🟠", "#f97316", "Needs improvement"
+            icon_key, color, trend = "warning", "#f97316", "Needs improvement"
 
         best_products = sorted(
             [(k, v) for k, v in product_map.items() if v["insp"] > 0 and v["rej"] == 0],
@@ -2772,7 +2772,7 @@ def quality_analysis_insights(request):
             best_note = f" {' & '.join(top3)} achieving 100% pass." if top3 else ""
 
         insights_right.append({
-            "icon": icon,
+            "iconKey": icon_key,
             "title": f"Overall pass rate {pass_rate_pct}% — {trend}",
             "sub": f"{total_inspected - total_rejected - total_rework:,} of {total_inspected:,} units passed in {period_lbl}.{best_note}",
             "val": f"{pass_rate_pct}%",
@@ -2785,7 +2785,7 @@ def quality_analysis_insights(request):
         total_cause_qty = sum(cause_map.values())
         top_pct = round(top_qty / total_cause_qty * 100, 1) if total_cause_qty > 0 else 0
         insights_right.append({
-            "icon": "🔴",
+            "iconKey": "error",
             "title": f"Top defect cause: {top_cause} ({top_qty:,} units, {top_pct}%)",
             "sub": f"Root cause analysis and corrective action needed. {len(cause_map)} distinct defect causes identified in {period_lbl}.",
             "val": f"{top_pct}%",
@@ -2801,7 +2801,7 @@ def quality_analysis_insights(request):
     if zero_rej:
         names = ", ".join([p[0][:25] for p in zero_rej[:3]])
         insights_right.append({
-            "icon": "✅",
+            "iconKey": "success",
             "title": f"{len(zero_rej)} product{'s' if len(zero_rej) > 1 else ''} with zero defects",
             "sub": f"{names}{'...' if len(zero_rej) > 3 else ''} achieved 100% pass rate in {period_lbl}. Maintain current controls.",
             "val": "100% Pass",
@@ -2811,14 +2811,14 @@ def quality_analysis_insights(request):
     # H) No data fallback
     if not db_ok or total_inspected == 0:
         insights_left = [{
-            "icon": "ℹ️",
+            "iconKey": "info",
             "title": "No inspection transactions found",
             "sub": f"No records available for {period_lbl}. Try a different date range.",
             "val": "—",
             "valColor": "#94a3b8"
         }]
         insights_right = [{
-            "icon": "📋",
+            "iconKey": "info",
             "title": "Select a period with inspection data",
             "sub": "Insights will auto-generate once data is available for the selected period.",
             "val": "—",

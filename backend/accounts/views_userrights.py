@@ -33,11 +33,16 @@ FORM_RIGHTS_KEYS = (
 )
 
 
-def get_session_tenant(request):
+def get_session_tenant(request, allow_expired=False):
     """Validate that a valid tenant session exists and return the tenant dictionary."""
     tenant = request.session.get("tenant")
     if not tenant:
         raise ValueError("Session expired. Please login again.")
+    if not allow_expired:
+        from .views import is_plan_expired
+        company_code = tenant.get("company_code")
+        if company_code and is_plan_expired(company_code):
+            raise ValueError("Subscription expired. Please renew or upgrade your plan.")
     return tenant
 
 
@@ -150,7 +155,7 @@ def user_rights_list(request):
 @permission_classes([AllowAny])
 def user_rights_me(request):
     try:
-        tenant = get_session_tenant(request)
+        tenant = get_session_tenant(request, allow_expired=True)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
@@ -196,8 +201,9 @@ def user_rights_me(request):
                         rights[f_name] = acc
         except Exception:
             pass
-    from .views import is_plan_expired
+    from .views import is_plan_expired, get_tenant_license
     is_expired = is_plan_expired(company)
+    license_info = get_tenant_license(company)
 
     return Response({
         "success": True,
@@ -211,6 +217,7 @@ def user_rights_me(request):
         "rightsSchema": _rights_schema(),
         "hasAccess": is_super_admin or any(rights.values()),
         "isExpired": is_expired,
+        "license": license_info,
     })
 
 

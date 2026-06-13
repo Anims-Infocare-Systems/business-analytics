@@ -158,6 +158,7 @@ function ClientDrawer({ client, onClose }) {
                     <div className="au-drawer__rows">
                         {[
                             ["Plan", client.plan],
+                            ["Billing Cycle", client.billingCycle ? (client.billingCycle.charAt(0).toUpperCase() + client.billingCycle.slice(1)) : "—"],
                             ["Plan Start Date", client.planStartDate || "—"],
                             ["Plan End Date", client.planEndDate || "—"],
                             ["Days Left", client.daysLeft !== undefined && client.daysLeft !== null

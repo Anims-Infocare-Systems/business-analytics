@@ -8,7 +8,7 @@ from django.db import connection, transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .views import encrypt_password, decrypt_password
+from .views import encrypt_password, decrypt_password, update_tenant_license
 from .models import Tenant
 
 ADMIN_USER = getattr(settings, "ADMIN_PANEL_USER", "admin")
@@ -250,6 +250,9 @@ def admin_create_tenant(request):
                         [tenant_id, company_code, admin_username, right]
                     )
 
+                # 5. Update/insert license mapping in tenants_lisencemodule
+                update_tenant_license(tenant_id, company_code, plan_id)
+
         return Response({"success": True, "message": "Tenant created successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -340,6 +343,9 @@ def admin_update_tenant(request):
                         active_status, tenant_id
                     ]
                 )
+
+                # 3. Update/insert license mapping in tenants_lisencemodule
+                update_tenant_license(tenant_id, company_code, plan_id)
 
         return Response({"success": True, "message": "Tenant details updated successfully."})
     except Exception as e:

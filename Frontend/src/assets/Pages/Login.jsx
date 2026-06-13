@@ -255,6 +255,16 @@ export default function LoginPage() {
                     username: data.username,
                     designation: data.designation,
                     isExpired: !!data.isExpired,
+                    plan_id: data.license?.plan_id || "free",
+                    license: data.license || {
+                        dashboard: true,
+                        approvals: true,
+                        reports: true,
+                        mis: true,
+                        charts: true,
+                        utility: true,
+                        plan_id: "free"
+                    }
                 }));
                 writeRightsCache(
                     data.company_code,

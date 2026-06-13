@@ -721,12 +721,9 @@
     padding: 16px 18px;
     scrollbar-width: thin;
     scrollbar-color: rgba(37, 99, 235, .16) transparent;
-    display: flex;
-    flex-direction: column;
 }
 
 .pp1-detail--empty {
-    flex: 1;
     min-height: 120px;
     display: flex;
     align-items: center;
@@ -1022,6 +1019,7 @@
 .pp1-action-detail {
     display: flex;
     flex-direction: column;
+    gap: 18px;
     animation: pp1-detail-in .3s cubic-bezier(.34, 1.2, .64, 1) both;
 }
 
@@ -1189,18 +1187,12 @@
     opacity: 0;
     transform: translateY(12px) scale(.985);
     transition: none;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
 }
 
 .pp1-ct-reveal--in {
     opacity: 1;
     transform: translateY(0) scale(1);
     transition: opacity .22s cubic-bezier(.22, 1, .36, 1), transform .22s cubic-bezier(.22, 1, .36, 1);
-    display: flex;
-    flex-direction: column;
-    flex: 1;
 }
 
 /* center skeleton */
@@ -4335,56 +4327,58 @@
     }
 }
 
-/* ── Customer PO Compare Filters ─────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   CUSTOMER PO COMPARE CAROUSEL & FILTERS
+   ───────────────────────────────────────────────────────────── */
 .pp1-filters-bar {
     display: flex;
-    flex-direction: row;
+    flex-wrap: wrap;
     align-items: flex-end;
-    gap: 10px;
-    background: rgba(255, 255, 255, 0.45);
-    border-radius: 12px;
-    border: 1px solid rgba(226, 232, 240, 0.9);
+    gap: 8px;
+    background: rgba(37, 99, 235, 0.03);
+    border: 1px solid rgba(37, 99, 235, 0.08);
+    border-radius: var(--pp1-radius-md);
     padding: 10px 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.01);
-    flex-wrap: nowrap;
-    width: 100%;
-    box-sizing: border-box;
+    margin-bottom: 6px;
 }
 
 .pp1-filter-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     flex: 1;
-    min-width: 0;
+    min-width: 110px;
+}
+
+.pp1-filter-group--date-range {
+    min-width: 160px;
+    position: relative;
 }
 
 .pp1-filter-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--pp1-text-3);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    white-space: nowrap;
+    letter-spacing: 0.5px;
 }
 
 .pp1-filter-input {
-    padding: 4px 8px;
-    border-radius: 6px;
-    border: 1px solid rgba(203, 213, 225, 0.7);
-    font-size: 11px;
-    font-family: inherit;
-    color: var(--pp1-text-1);
-    background: #fff;
-    transition: border-color 0.2s, box-shadow 0.2s;
     height: 28px;
-    box-sizing: border-box;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 6px;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--pp1-text-1);
+    background: #ffffff;
+    outline: none;
+    transition: all 0.15s ease;
+    width: 100%;
 }
 
 .pp1-filter-input:focus {
-    outline: none;
-    border-color: var(--pp1-blue);
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    border-color: var(--pp1-blue-mid);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .pp1-filter-input--date-range-trigger {
@@ -4392,54 +4386,39 @@
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    background: #fff;
-    user-select: none;
-}
-
-.pp1-filter-input--date-range-trigger span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    background: #ffffff;
 }
 
 .pp1-filter-icon {
     color: var(--pp1-text-3);
-    opacity: 0.7;
-    flex-shrink: 0;
-    margin-left: 6px;
-}
-
-.pp1-filter-group--date-range {
-    position: relative;
 }
 
 .pp1-date-popup {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 4px);
     left: 0;
-    z-index: 50;
+    z-index: 100;
     background: #ffffff;
-    border: 1px solid rgba(37, 99, 235, 0.15);
-    border-radius: 10px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: var(--pp1-radius-md);
+    box-shadow: var(--pp1-sh-lg);
     padding: 12px;
-    width: 280px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    animation: pp1-detail-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    gap: 8px;
+    width: 200px;
 }
 
 .pp1-date-popup-inputs {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .pp1-date-popup-field {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .pp1-date-popup-field label {
@@ -4447,198 +4426,177 @@
     font-weight: 700;
     color: var(--pp1-text-3);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
 }
 
 .pp1-date-popup-field input {
-    padding: 4px 6px;
-    border-radius: 6px;
-    border: 1px solid rgba(203, 213, 225, 0.8);
+    height: 26px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 4px;
+    padding: 0 6px;
     font-size: 11px;
-    height: 28px;
-    box-sizing: border-box;
-}
-
-.pp1-date-popup-field input:focus {
     outline: none;
-    border-color: var(--pp1-blue);
 }
 
 .pp1-date-popup-footer {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    border-top: 1px solid #f1f5f9;
-    padding-top: 8px;
-    margin-top: 2px;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 4px;
 }
 
 .pp1-date-popup-footer button {
-    background: transparent;
-    border: none;
-    color: var(--pp1-text-3);
-    font-size: 10.5px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 4px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: all 0.2s;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    background: #ffffff;
+    transition: all 0.15s ease;
 }
 
 .pp1-date-popup-footer button:hover {
-    background: #f1f5f9;
-    color: var(--pp1-text-1);
+    background: rgba(226, 232, 240, 0.4);
 }
 
 .pp1-date-popup-footer .pp1-btn-apply {
     background: var(--pp1-blue);
-    color: #fff;
-    border: none;
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 4px 12px;
-    border-radius: 4px;
-    cursor: pointer;
+    color: #ffffff;
+    border-color: var(--pp1-blue);
 }
 
 .pp1-date-popup-footer .pp1-btn-apply:hover {
     background: var(--pp1-blue-dark);
-    color: #fff;
-}
-
-.pp1-filter-btn {
-    padding: 4px 12px;
-    font-size: 10.5px;
-    font-weight: 700;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    box-sizing: border-box;
 }
 
 .pp1-filter-btn--reset {
-    background: transparent;
-    color: var(--pp1-text-3);
-    border: 1px solid rgba(203, 213, 225, 0.8);
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid rgba(239, 68, 68, 0.12);
+    background: #fef2f2;
+    color: #ef4444;
+    transition: all 0.15s ease;
 }
 
 .pp1-filter-btn--reset:hover {
-    background: rgba(226, 232, 240, 0.4);
-    color: var(--pp1-text-2);
+    background: #fee2e2;
+    transform: translateY(-1px);
 }
 
-/* ── Customer PO Compare Chart Carousel ──────────────────── */
 .pp1-chart-carousel {
-  margin-top: 4px;
-  background: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 10px;
-  padding: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+    background: var(--pp1-surface-2);
+    border: 1px solid var(--pp1-border-strong);
+    border-radius: var(--pp1-radius-md);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+    box-shadow: var(--pp1-sh-sm);
 }
 
 .pp1-carousel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  padding-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
 }
 
 .pp1-carousel-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 
 .pp1-carousel-title {
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--pp1-text-1);
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--pp1-text-1);
 }
 
 .pp1-carousel-subtitle {
-  font-size: 9.5px;
-  color: var(--pp1-text-3);
-  font-weight: 500;
+    font-size: 10.5px;
+    color: var(--pp1-text-3);
+    font-weight: 500;
 }
 
 .pp1-carousel-nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .pp1-carousel-btn {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  color: var(--pp1-text-2);
-  border-radius: 6px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  padding: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    background: var(--pp1-surface);
+    color: var(--pp1-text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    line-height: 1;
 }
 
 .pp1-carousel-btn:hover {
-  background: #f8fafc;
-  color: var(--pp1-blue);
-  border-color: rgba(37, 99, 235, 0.2);
+    background: var(--pp1-blue);
+    color: #ffffff;
+    border-color: var(--pp1-blue);
+    transform: scale(1.08);
 }
 
 .pp1-carousel-dots {
-  display: flex;
-  gap: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .pp1-carousel-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(203, 213, 225, 0.8);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.pp1-carousel-dot:hover {
-  background: rgba(148, 163, 184, 0.8);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.2);
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
 .pp1-carousel-dot.active {
-  background: var(--pp1-blue);
-  transform: scale(1.15);
+    width: 14px;
+    border-radius: 4px;
+    background: var(--pp1-blue);
 }
 
 .pp1-carousel-content {
-  height: 190px;
-  position: relative;
-}
-
-.pp1-carousel-empty {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: var(--pp1-text-3);
-  font-weight: 500;
-  background: rgba(248, 250, 252, 0.6);
-  border-radius: 6px;
-  border: 1px dashed rgba(226, 232, 240, 0.8);
+    position: relative;
+    height: 195px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .pp1-carousel-chart-wrap {
-  height: 100%;
-  position: relative;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.pp1-carousel-empty {
+    font-size: 11.5px;
+    color: var(--pp1-text-3);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }

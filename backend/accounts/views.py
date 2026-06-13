@@ -22,6 +22,12 @@ def get_tenant_connection(request):
     tenant = request.session.get("tenant")
     if not tenant:
         raise ValueError("Session expired. Please login again.")
+    
+    # Check if plan is expired
+    company_code = tenant.get("company_code")
+    if company_code and is_plan_expired(company_code):
+        raise ValueError("Subscription expired. Please renew or upgrade your plan.")
+
     conn = get_connection(
         tenant["erp_server"], tenant["erp_database"], tenant["erp_user"],
         tenant["erp_password"], tenant["erp_port"],
@@ -131,25 +137,147 @@ def is_plan_expired(company_code):
             if not active_status:
                 return True
             
-            if end_date:
-                # Normalize end_date to date object
-                if isinstance(end_date, datetime.datetime):
-                    end_date = end_date.date()
-                elif isinstance(end_date, datetime.date):
+            # Check if there is an active plan upgrade
+            cursor.execute(
+                """
+                SELECT plan_end_date 
+                FROM tenant_planupgrade 
+                WHERE UPPER(company_code) = UPPER(%s) AND plan_status = 'Active'
+                """,
+                [company_code.strip()]
+            )
+            upgrade_row = cursor.fetchone()
+            if upgrade_row:
+                plan_end = upgrade_row[0] or end_date
+            else:
+                plan_end = end_date
+            
+            if plan_end:
+                # Normalize plan_end to date object
+                if isinstance(plan_end, datetime.datetime):
+                    plan_end = plan_end.date()
+                elif isinstance(plan_end, datetime.date):
                     pass
                 else:
                     try:
-                        end_date = datetime.datetime.strptime(str(end_date).split()[0], "%Y-%m-%d").date()
+                        plan_end = datetime.datetime.strptime(str(plan_end).split()[0], "%Y-%m-%d").date()
                     except ValueError:
                         return False
                 
-                # Expired if end_date is strictly in the past
-                if end_date < datetime.date.today():
+                # Expired if plan_end is strictly in the past
+                if plan_end < datetime.date.today():
                     return True
             
             return False
     except Exception:
         return False
+
+def get_tenant_license(company_code):
+    from django.db import connection
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT dashboard, approvals, reports, mis, charts, utility, plan_id FROM tenants_lisencemodule WHERE UPPER(company_code) = UPPER(%s)",
+                [company_code.strip()]
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "dashboard": bool(row[0]),
+                    "approvals": bool(row[1]),
+                    "reports": bool(row[2]),
+                    "mis": bool(row[3]),
+                    "charts": bool(row[4]),
+                    "utility": bool(row[5]),
+                    "plan_id": str(row[6]).strip().lower()
+                }
+    except Exception:
+        pass
+    
+    # If not found in tenants_lisencemodule, fallback based on tenants_signup table
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT plan_id FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s)",
+                [company_code.strip()]
+            )
+            row = cursor.fetchone()
+            if row:
+                plan_id = str(row[0]).strip().lower()
+                if plan_id == "pro":
+                    return {
+                        "dashboard": True,
+                        "approvals": True,
+                        "reports": False,
+                        "mis": False,
+                        "charts": False,
+                        "utility": True,
+                        "plan_id": "pro"
+                    }
+    except Exception:
+        pass
+
+    # Default fallback (Max/Free have access to all)
+    return {
+        "dashboard": True,
+        "approvals": True,
+        "reports": True,
+        "mis": True,
+        "charts": True,
+        "utility": True,
+        "plan_id": "free"
+    }
+
+def update_tenant_license(tenant_id, company_code, plan_id):
+    from django.db import connection
+    plan_id = plan_id.lower().strip()
+    
+    # Define module flags based on plan
+    if plan_id == "pro":
+        dashboard = 1
+        approvals = 1
+        reports = 0
+        mis = 0
+        charts = 0
+        utility = 1
+    else:
+        # free, enterprise/max, etc.
+        dashboard = 1
+        approvals = 1
+        reports = 1
+        mis = 1
+        charts = 1
+        utility = 1
+        
+    try:
+        with connection.cursor() as cursor:
+            # Check if row already exists
+            cursor.execute(
+                "SELECT COUNT(1) FROM tenants_lisencemodule WHERE UPPER(company_code) = UPPER(%s)",
+                [company_code]
+            )
+            exists = cursor.fetchone()[0] > 0
+            
+            if exists:
+                cursor.execute(
+                    """
+                    UPDATE tenants_lisencemodule 
+                    SET plan_id = %s, dashboard = %s, approvals = %s, reports = %s, mis = %s, charts = %s, utility = %s, updated_at = GETDATE()
+                    WHERE UPPER(company_code) = UPPER(%s)
+                    """,
+                    [plan_id, dashboard, approvals, reports, mis, charts, utility, company_code]
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO tenants_lisencemodule (tenant_id, company_code, plan_id, dashboard, approvals, reports, mis, charts, utility, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, GETDATE(), GETDATE())
+                    """,
+                    [tenant_id, company_code, plan_id, dashboard, approvals, reports, mis, charts, utility]
+                )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error updating tenant license: {e}")
 
 # ─────────────────────────────────────────────────────────────
 #  LOGIN
@@ -275,6 +403,7 @@ def login_view(request):
         logger.error(f"Error handling single session logic: {session_err}")
     
     is_expired = is_plan_expired(company_code)
+    license_info = get_tenant_license(company_code)
     
     return Response({
         "message": "Login successful",
@@ -285,7 +414,8 @@ def login_view(request):
         "isSuperAdmin": is_super_admin,
         "rights": rights,
         "hasAccess": has_access,
-        "isExpired": is_expired
+        "isExpired": is_expired,
+        "license": license_info
     })
 
 

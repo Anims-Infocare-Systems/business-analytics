@@ -136,7 +136,7 @@ const PLANS = [
         ctaStyle: "solid",
         features: [
             "Top Management dashboards",
-            "One MIS reports",
+            // "One MIS reports",
             // "Up to 10 user accounts",
             "E-Approval & T-Approval workflows",
             "Standard support",
@@ -1136,7 +1136,7 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                 <div className="sg-modal__body sg-billing-modal-body">
                     {/* Period selection cards */}
                     <div className="sg-billing-options">
-                        <div 
+                        <div
                             className={`sg-billing-opt-card ${selectedCycle === "6month" ? "sg-billing-opt-card--active" : ""}`}
                             onClick={() => onCycleChange("6month")}
                         >
@@ -1150,7 +1150,7 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                             </div>
                         </div>
 
-                        <div 
+                        <div
                             className={`sg-billing-opt-card ${selectedCycle === "yearly" ? "sg-billing-opt-card--active" : ""}`}
                             onClick={() => onCycleChange("yearly")}
                         >
@@ -1169,18 +1169,18 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                     <div className="sg-billing-users-field">
                         <label className="sg-billing-users-label" htmlFor="billing-users">Number of Users</label>
                         <div className="sg-billing-users-input-wrapper">
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="sg-billing-users-btn"
                                 onClick={() => setUsers(prev => String(Math.max(1, (parseInt(prev) || 1) - 1)))}
                             >
                                 −
                             </button>
-                            <input 
+                            <input
                                 id="billing-users"
                                 className="sg-billing-users-input"
-                                type="number" 
-                                min="1" 
+                                type="number"
+                                min="1"
                                 value={users}
                                 onChange={e => {
                                     const val = e.target.value;
@@ -1192,8 +1192,8 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                                     }
                                 }}
                             />
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="sg-billing-users-btn"
                                 onClick={() => setUsers(prev => String((parseInt(prev) || 1) + 1))}
                             >

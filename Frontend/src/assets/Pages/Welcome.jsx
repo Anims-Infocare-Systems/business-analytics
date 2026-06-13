@@ -68,6 +68,11 @@ export default function Welcome({ userName, companyName, onNavigate, userRights 
   ];
 
   const hasAccess = (target) => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const planId = (user.plan_id || "free").toLowerCase().trim();
+    if (planId === "pro") {
+      if (target === "Sales Analysis") return false;
+    }
     if (isSuperAdmin) return true;
     if (target === "Top Management Dashboard") return !!userRights?.["Dashboard"];
     if (target === "E-Approval") return !!userRights?.["Approvals"];

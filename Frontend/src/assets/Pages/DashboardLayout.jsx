@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
@@ -150,7 +150,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
                 </svg>
             </div>
             <p className="dl-placeholder-title">{si || ai}</p>
-            <p className="dl-placeholder-sub">This page is under construction</p>
+            {/* <p className="dl-placeholder-sub">This page is under construction</p> */}
         </div>
     );
 
@@ -334,7 +334,7 @@ function readNav() {
     } catch { return null; }
 }
 function writeNav(data) {
-    try { sessionStorage.setItem(NAV_KEY, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(NAV_KEY, JSON.stringify(data)); } catch { }
 }
 
 export default function DashboardLayout() {
@@ -351,19 +351,32 @@ export default function DashboardLayout() {
         const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
         return !!cachedUser.isExpired;
     });
+    const [planId, setPlanId] = useState(() => (user.plan_id || "free").toLowerCase().trim());
 
-    // ✅ Filter menu items based on cached user rights
+    // ✅ Filter menu items based on cached user rights & plan restrictions
     const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
     const userRights = rightsCache.rights || {};
     const isSuperAdmin = !!rightsCache.isSuperAdmin;
 
     const allowedMenuItems = MENU_ITEMS.map(item => {
-        const filteredChildren = item.children.filter(sub => isSuperAdmin || userRights[sub]);
+        let filteredChildren = item.children.filter(sub => isSuperAdmin || userRights[sub]);
+        if (planId === "pro") {
+            if (item.key === "Dashboard") {
+                filteredChildren = filteredChildren.filter(sub => sub === "Top Management Dashboard");
+            } else if (item.key === "Utility") {
+                filteredChildren = filteredChildren.filter(sub => sub === "User Rights");
+            } else if (item.key !== "Approvals") {
+                filteredChildren = [];
+            }
+        }
         return {
             ...item,
             children: filteredChildren
         };
     }).filter(item => {
+        if (planId === "pro" && !["Dashboard", "Approvals", "Utility"].includes(item.key)) {
+            return false;
+        }
         const originalItem = MENU_ITEMS.find(m => m.key === item.key);
         const hasOriginalChildren = originalItem && originalItem.children && originalItem.children.length > 0;
         if (hasOriginalChildren) {
@@ -380,9 +393,25 @@ export default function DashboardLayout() {
 
     // ✅ Restore navigation from sessionStorage (survives F5 refresh)
     const savedNav = readNav();
-    const initItem    = savedNav?.activeItem    ?? "Welcome";
-    const initSubItem = savedNav?.activeSubItem ?? null;
-    const initMenu    = savedNav?.openMenu      ?? null;
+    let initItem = savedNav?.activeItem ?? "Welcome";
+    let initSubItem = savedNav?.activeSubItem ?? null;
+    let initMenu = savedNav?.openMenu ?? null;
+
+    // Validate navigation against plan limits
+    if (initItem !== "Welcome" && initItem !== "Settings") {
+        const matchingItem = allowedMenuItems.find(m => m.key === initItem);
+        if (!matchingItem) {
+            initItem = "Welcome";
+            initSubItem = null;
+            initMenu = null;
+        } else if (initSubItem) {
+            if (!matchingItem.children.includes(initSubItem)) {
+                initItem = "Welcome";
+                initSubItem = null;
+                initMenu = null;
+            }
+        }
+    }
 
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isMobile = screenWidth < BP_MOBILE;
@@ -411,11 +440,11 @@ export default function DashboardLayout() {
 
     /* persist settingsOpen to sessionStorage */
     useEffect(() => {
-        try { sessionStorage.setItem("ba_settings_open", settingsOpen ? "1" : "0"); } catch {}
+        try { sessionStorage.setItem("ba_settings_open", settingsOpen ? "1" : "0"); } catch { }
     }, [settingsOpen]);
 
-    /* fetch fresh user designation dynamically from backend to heal legacy/stale localstorage caches */
-    useEffect(() => {
+    /* fetch fresh user designation and plan limits dynamically from backend to heal legacy/stale localstorage caches */
+    const refreshProfile = useCallback(() => {
         fetch(`${API}/user-rights/me/`, { credentials: "include" })
             .then(res => {
                 if (res.ok) return res.json();
@@ -427,21 +456,55 @@ export default function DashboardLayout() {
                         setUserDesignation(data.designation);
                     }
                     setIsExpired(!!data.isExpired);
+                    const newPlan = (data.license?.plan_id || "free").toLowerCase().trim();
+                    setPlanId(newPlan);
                     // Sync designation and expiry status with localStorage cache
                     const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
                     if (data.designation) cachedUser.designation = data.designation;
                     cachedUser.isExpired = !!data.isExpired;
+                    cachedUser.plan_id = newPlan;
+                    cachedUser.license = data.license || {
+                        dashboard: true,
+                        approvals: true,
+                        reports: true,
+                        mis: true,
+                        charts: true,
+                        utility: true,
+                        plan_id: "free"
+                    };
                     localStorage.setItem("user", JSON.stringify(cachedUser));
                 }
             })
             .catch(() => { /* fallback to static initialDesignation */ });
     }, []);
- 
+
+    useEffect(() => {
+        refreshProfile();
+    }, [refreshProfile]);
+
+    // Safety guard to auto-navigate away if the current active tab gets restricted (e.g. on plan downgrade)
+    useEffect(() => {
+        if (activeItem !== "Welcome" && activeItem !== "Settings") {
+            const matchingItem = allowedMenuItems.find(m => m.key === activeItem);
+            if (!matchingItem) {
+                setActiveItem("Welcome");
+                setActiveSubItem(null);
+                setOpenMenu(null);
+            } else if (activeSubItem) {
+                if (!matchingItem.children.includes(activeSubItem)) {
+                    setActiveItem("Welcome");
+                    setActiveSubItem(null);
+                    setOpenMenu(null);
+                }
+            }
+        }
+    }, [planId, allowedMenuItems, activeItem, activeSubItem]);
+
     /* Background heartbeat to check session validity and trigger auto-logout if terminated from elsewhere */
     useEffect(() => {
         const checkSession = () => {
             fetch(`${API}/user-rights/me/`, { credentials: "include" })
-                .catch(() => {});
+                .catch(() => { });
         };
         const interval = setInterval(checkSession, 10000); // Check every 10 seconds
         return () => clearInterval(interval);
@@ -533,7 +596,7 @@ export default function DashboardLayout() {
             localStorage.removeItem("user");
             localStorage.removeItem("ba_user_rights");
             localStorage.removeItem("ba_settings_profile");
-        } catch {}
+        } catch { }
         navigate("/", { replace: true });
 
         fetch(`${API}/logout/`, { method: "POST", credentials: "include" })
@@ -548,7 +611,7 @@ export default function DashboardLayout() {
 
     if (isExpired) {
         return (
-            <div className="dl-expired-screen">
+            <div className="dl-root dark-theme dl-expired-screen">
                 <div className="dl-expired-card">
                     <div className="dl-expired-logo">
                         <img src="/Images/logo.png" alt="Anims ERP Logo" className="dl-expired-logo-img" />
@@ -588,13 +651,13 @@ export default function DashboardLayout() {
                     </div>
                 </div>
                 {/* Settings Overlay Modal in Expired Mode */}
-                <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} isExpiredMode={true} />
+                <Settings isOpen={settingsOpen} onClose={() => { setSettingsOpen(false); refreshProfile(); }} isExpiredMode={true} />
             </div>
         );
     }
 
     return (
-        <div className={`dl-root ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
+        <div className={`dl-root dark-theme ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
 
             {/* Mobile overlay */}
             {isMobile && drawerOpen && (
@@ -670,7 +733,7 @@ export default function DashboardLayout() {
                         isExpanded={showExpanded}
                         isMobile={isMobile}
                         onToggle={handleToggle}
-                        onSubClick={() => {}}
+                        onSubClick={() => { }}
                         activeSubItem={null}
                     />
 
@@ -775,7 +838,7 @@ export default function DashboardLayout() {
             </div>
 
             {/* Settings Overlay Modal */}
-            <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} isExpiredMode={isExpired} />
+            <Settings isOpen={settingsOpen} onClose={() => { setSettingsOpen(false); refreshProfile(); }} isExpiredMode={isExpired} />
         </div>
     );
 }

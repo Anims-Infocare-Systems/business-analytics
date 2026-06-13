@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import "./QualityAnalysisDatePicker.css";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 
 const PAD  = n => String(n).padStart(2, "0");
 const FMT  = d => d ? `${PAD(d.getDate())}-${PAD(d.getMonth() + 1)}-${d.getFullYear()}` : "";
@@ -127,12 +128,9 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
     return (
         <div className="qadp-wrap" ref={wrapRef}>
             <button ref={triggerRef} className={`qadp-trigger ${open?"qadp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
-                <svg className="qadp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
+                <Calendar className="qadp-trigger__icon" size={15} />
                 <span className="qadp-trigger__label">{label}</span>
-                <svg className={`qadp-trigger__caret ${open?"qadp-trigger__caret--up":""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+                <ChevronDown className={`qadp-trigger__caret ${open?"qadp-trigger__caret--up":""}`} size={12} strokeWidth={2.5} />
             </button>
 
             {open && (
@@ -146,27 +144,27 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
                         <div className="qadp-calendars">
                             <div className="qadp-month-col">
                                 <div className="qadp-month-nav">
-                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg></button>
+                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><ChevronLeft size={14} strokeWidth={2.5} /></button>
                                     <span className="qadp-month-label">{MONTHS[leftMonth.getMonth()]} {leftMonth.getFullYear()}</span>
-                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,18 15,12 9,6"/></svg></button>
+                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><ChevronRight size={14} strokeWidth={2.5} /></button>
                                 </div>
                                 <MonthGrid year={leftMonth.getFullYear()} month={leftMonth.getMonth()} from={selecting||from} to={!selecting?to:null} hovered={hovered} onDayClick={handleDayClick} onDayHover={setHovered}/>
                             </div>
                             <div className="qadp-divider"/>
                             <div className="qadp-month-col">
                                 <div className="qadp-month-nav">
-                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg></button>
+                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><ChevronLeft size={14} strokeWidth={2.5} /></button>
                                     <span className="qadp-month-label">{MONTHS[rightMonth.getMonth()]} {rightMonth.getFullYear()}</span>
-                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,18 15,12 9,6"/></svg></button>
+                                    <button className="qadp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><ChevronRight size={14} strokeWidth={2.5} /></button>
                                 </div>
                                 <MonthGrid year={rightMonth.getFullYear()} month={rightMonth.getMonth()} from={selecting||from} to={!selecting?to:null} hovered={hovered} onDayClick={handleDayClick} onDayHover={setHovered}/>
                             </div>
                         </div>
                         <div className="qadp-footer">
                             <div className="qadp-footer__range">
-                                <span className="qadp-footer__field"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>{from?FMT(from):"From date"}</span>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13,6 19,12 13,18"/></svg>
-                                <span className="qadp-footer__field"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>{to?FMT(to):"To date"}</span>
+                                <span className="qadp-footer__field"><Calendar size={12} />{from?FMT(from):"From date"}</span>
+                                <ArrowRight size={14} />
+                                <span className="qadp-footer__field"><Calendar size={12} />{to?FMT(to):"To date"}</span>
                             </div>
                             <div className="qadp-footer__btns">
                                 <button className="qadp-footer-btn qadp-footer-btn--sec" onClick={()=>{onChange({from:null,to:null});setSelecting(null);setActivePreset(null);}} type="button">Clear</button>

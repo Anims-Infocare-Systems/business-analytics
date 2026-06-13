@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .views import encrypt_password
+from .views import encrypt_password, update_tenant_license
 from .views_userrights import get_session_tenant, _company_code, _session_username
 from .views_signup import send_brevo_email_async
 from django.conf import settings
@@ -19,7 +19,7 @@ from django.conf import settings
 @permission_classes([AllowAny])
 def settings_profile(request):
     try:
-        tenant = get_session_tenant(request)
+        tenant = get_session_tenant(request, allow_expired=True)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
@@ -282,7 +282,7 @@ def settings_profile(request):
 @permission_classes([AllowAny])
 def settings_change_password(request):
     try:
-        tenant = get_session_tenant(request)
+        tenant = get_session_tenant(request, allow_expired=True)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
@@ -336,7 +336,7 @@ def settings_change_password(request):
 @permission_classes([AllowAny])
 def settings_upgrade_plan(request):
     try:
-        tenant = get_session_tenant(request)
+        tenant = get_session_tenant(request, allow_expired=True)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
@@ -420,6 +420,9 @@ def settings_upgrade_plan(request):
                     """,
                     [tenant_id, company, plan_db_name, no_of_users, today, today, end_date, billing_cycle]
                 )
+
+                # 4. Update/insert license mapping in tenants_lisencemodule
+                update_tenant_license(tenant_id, company, plan_id_val)
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 

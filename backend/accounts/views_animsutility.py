@@ -57,7 +57,8 @@ def admin_utility_clients(request):
                     t.erp_database,
                     ts.city,
                     ts.state,
-                    ts.end_date
+                    ts.end_date,
+                    ts.billing_cycle
                 FROM tenants_signup ts
                 LEFT JOIN tenants t ON ts.tenant_id = t.id
                 ORDER BY ts.company_name
@@ -67,7 +68,7 @@ def admin_utility_clients(request):
 
             clients = []
             for i, r in enumerate(rows):
-                tenant_id, company_code, company_name, plan_id, plan_name, active_status, signup_date, max_users, erp_server, erp_database, city, state, end_date = r
+                tenant_id, company_code, company_name, plan_id, plan_name, active_status, signup_date, max_users, erp_server, erp_database, city, state, end_date, billing_cycle = r
                 
                 # Format dates
                 joined_str = format_to_ddmmyyyy(signup_date)
@@ -139,14 +140,16 @@ def admin_utility_clients(request):
                     # Default mock date based on tenant ID
                     last_login_str = (datetime.now() - timedelta(hours=i*2 + 1)).isoformat()
 
-                # 4. Licensed modules
-                cursor.execute(
-                    "SELECT DISTINCT form_name FROM tenants_usersrights WHERE company_code = %s AND access = 1",
-                    [company_code]
-                )
-                modules = [row[0] for row in cursor.fetchall()]
-                if not modules:
-                    modules = ["Dashboard", "Reports", "MIS"]
+                # 4. Licensed modules from tenants_lisencemodule
+                from .views import get_tenant_license
+                lic = get_tenant_license(company_code)
+                modules = []
+                if lic.get("dashboard"): modules.append("Dashboard")
+                if lic.get("approvals"): modules.append("Approvals")
+                if lic.get("charts"):    modules.append("Charts")
+                if lic.get("reports"):   modules.append("Reports")
+                if lic.get("mis"):       modules.append("MIS")
+                if lic.get("utility"):   modules.append("Utility")
 
                 # 5. Accent color and initials
                 color = get_accent_color(company_name)
@@ -175,6 +178,7 @@ def admin_utility_clients(request):
                     "name": company_name,
                     "industry": industry,
                     "plan": plan_name or "Free Plan",
+                    "billingCycle": billing_cycle or "yearly",
                     "tunnel": tunnel,
                     "status": "active" if is_active else "inactive",
                     "activeUsers": active_users,
