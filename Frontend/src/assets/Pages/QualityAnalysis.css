@@ -564,6 +564,13 @@
     margin-bottom: 1.3rem;
 }
 
+.qa2-charts-3-equal {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.3rem;
+}
+
 /* .qa2-chart-card {} */
 
 .qa2-chart-wrap {
@@ -1250,6 +1257,10 @@
     .qa2-charts-3>.qa2-card:first-child {
         grid-column: span 2;
     }
+
+    .qa2-charts-3-equal {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 @media (max-width: 1050px) {
@@ -1262,6 +1273,10 @@
     }
 
     .qa2-charts-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .qa2-charts-3-equal {
         grid-template-columns: 1fr;
     }
 

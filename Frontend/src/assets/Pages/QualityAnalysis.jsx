@@ -24,7 +24,8 @@ import {
     ArrowDownRight,
     Pin,
     Search,
-    X
+    X,
+    Users
 } from "lucide-react";
 
 Chart.register(...registerables);
@@ -251,6 +252,21 @@ const formatYmd = (d) => {
     return `${y}-${m}-${day}`;
 };
 
+const formatDisplayDate = (dStr) => {
+    if (!dStr) return "—";
+    if (dStr.includes("-")) {
+        const parts = dStr.split("-");
+        if (parts.length === 3 && parts[0].length === 4) { // YYYY-MM-DD
+            const y = parts[0];
+            const m = parseInt(parts[1], 10);
+            const d = parts[2];
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            return `${d}-${months[m - 1]}-${y}`;
+        }
+    }
+    return dStr;
+};
+
 // ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
@@ -293,6 +309,7 @@ export default function QualityAnalysis() {
     const [recordsData, setRecordsData] = useState(null);
     const [calibrationData, setCalibrationData] = useState(null);
     const [insightsData, setInsightsData] = useState(null);
+    const [customerComplaintsData, setCustomerComplaintsData] = useState(null);
 
     // Modern Individual Panel Loading States
     const [summaryLoading, setSummaryLoading] = useState(false);
@@ -302,8 +319,9 @@ export default function QualityAnalysis() {
     const [recordsLoading, setRecordsLoading] = useState(false);
     const [calibrationLoading, setCalibrationLoading] = useState(false);
     const [insightsLoading, setInsightsLoading] = useState(false);
+    const [customerComplaintsLoading, setCustomerComplaintsLoading] = useState(false);
 
-    const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading;
+    const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading || customerComplaintsLoading;
 
     const trendRef = useRef(null); const trendChart = useRef(null);
     const resultRef = useRef(null); const resultChart = useRef(null);
@@ -342,6 +360,7 @@ export default function QualityAnalysis() {
             await fetchPanel(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading);
             await fetchPanel(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading);
             await fetchPanel(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading);
+            await fetchPanel(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading);
         };
 
         loadAllSequentially();
@@ -541,6 +560,159 @@ export default function QualityAnalysis() {
         if (hasNoData) return [];
         return calibrationData?.calibrations   || [];
     }, [calibrationData, hasNoData]);
+
+    const activeVendorRejection = useMemo(() => {
+        const vendorMap = {};
+        
+        // Aggregate from activeInspectionRows (which are dynamically search-filtered and date-range filtered)
+        activeInspectionRows.forEach(r => {
+            const vendor = r.partyName || "Unknown Vendor";
+            if (!vendorMap[vendor]) {
+                vendorMap[vendor] = { name: vendor, insp: 0, pass: 0, rej: 0 };
+            }
+            const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
+            const okQty = parseFloat(String(r.okQty).replace(/[^0-9.]/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty).replace(/[^0-9.]/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty).replace(/[^0-9.]/g, "")) || 0;
+            
+            vendorMap[vendor].insp += qty;
+            vendorMap[vendor].pass += okQty;
+            vendorMap[vendor].rej += (matRej + macRej);
+        });
+
+        let list = Object.values(vendorMap);
+
+        // Fallback mockup data when empty/offline
+        if (list.length === 0 || hasNoData) {
+            const mock = [
+                { name: "Super Forge Pvt Ltd", insp: 150, pass: 147, rej: 3 },
+                { name: "A-One Steel Forgings", insp: 50, pass: 45, rej: 5 },
+                { name: "Dynamic Precision India", insp: 75, pass: 68, rej: 7 },
+                { name: "Micro Tools & Dies", insp: 200, pass: 198, rej: 2 },
+                { name: "Apex Industries Ltd", insp: 60, pass: 58, rej: 2 }
+            ];
+            list = searchQuery ? mock.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) : mock;
+        }
+
+        const totalRejectionsAllVendors = list.reduce((sum, v) => sum + v.rej, 0);
+
+        return list.map(v => {
+            const total = v.insp;
+            const rej = v.rej;
+            const rateVal = total > 0 ? (rej / total) * 100 : 0;
+            const shareVal = totalRejectionsAllVendors > 0 ? (rej / totalRejectionsAllVendors) * 100 : 0;
+            
+            let color = "#10b981";
+            if (rateVal >= 8.0) color = "#ef4444";
+            else if (rateVal >= 4.0) color = "#f97316";
+
+            return {
+                name: v.name,
+                insp: total,
+                rej: rej,
+                rate: `${rateVal.toFixed(1)}%`,
+                share: `${shareVal.toFixed(1)}%`,
+                shareVal: shareVal,
+                color: color
+            };
+        }).sort((a, b) => b.rej - a.rej);
+    }, [activeInspectionRows, hasNoData, searchQuery]);
+
+    const activeProcessRejection = useMemo(() => {
+        const processMap = {};
+        
+        // Aggregate from activeInspectionRows (which are dynamically search-filtered and date-range filtered)
+        activeInspectionRows.forEach(r => {
+            const process = r.process || "Unknown Process";
+            if (!processMap[process]) {
+                processMap[process] = { name: process, insp: 0, pass: 0, rej: 0 };
+            }
+            const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
+            const okQty = parseFloat(String(r.okQty).replace(/[^0-9.]/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty).replace(/[^0-9.]/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty).replace(/[^0-9.]/g, "")) || 0;
+            
+            processMap[process].insp += qty;
+            processMap[process].pass += okQty;
+            processMap[process].rej += (matRej + macRej);
+        });
+
+        let list = Object.values(processMap);
+
+        // Fallback mockup data when empty/offline
+        if (list.length === 0 || hasNoData) {
+            const mock = [
+                { name: "Machining", insp: 800, pass: 782, rej: 18 },
+                { name: "Assembly", insp: 620, pass: 605, rej: 15 },
+                { name: "Cutting", insp: 550, pass: 542, rej: 8 },
+                { name: "Dipping", insp: 400, pass: 388, rej: 12 },
+                { name: "Forging", insp: 300, pass: 295, rej: 5 },
+                { name: "Packaging", insp: 250, pass: 249, rej: 1 }
+            ];
+            list = searchQuery ? mock.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) : mock;
+        }
+
+        const totalRejectionsAllProcesses = list.reduce((sum, v) => sum + v.rej, 0);
+
+        return list.map(v => {
+            const total = v.insp;
+            const rej = v.rej;
+            const rateVal = total > 0 ? (rej / total) * 100 : 0;
+            const shareVal = totalRejectionsAllProcesses > 0 ? (rej / totalRejectionsAllProcesses) * 100 : 0;
+            
+            let color = "#10b981";
+            if (rateVal >= 5.0) color = "#ef4444";
+            else if (rateVal >= 2.5) color = "#f97316";
+
+            return {
+                name: v.name,
+                insp: total,
+                rej: rej,
+                rate: `${rateVal.toFixed(1)}%`,
+                share: `${shareVal.toFixed(1)}%`,
+                shareVal: shareVal,
+                color: color
+            };
+        }).sort((a, b) => b.rej - a.rej);
+    }, [activeInspectionRows, hasNoData, searchQuery]);
+
+    const activeCustomerComplaints = useMemo(() => {
+        if (hasNoData) return [];
+        const raw = customerComplaintsData?.complaints || [];
+        
+        // Fallback mock data when empty/offline
+        if (raw.length === 0) {
+            const mock = [
+                { complaint_id: "CC-2601-001", customer_name: "TVS Motor Company", product: "RRD03-05050-00 - Round Rod DIA 50MM", complaint_description: "Surface scratches on the outer diameter.", action_taken: "Polished and sorted the batch.", complaint_date: "22-Feb-2026", corrective_action: "Enhanced buffering speed in grinding stage.", permanent_action: "Installed automated visual inspection camera.", status: "RESOLVED" },
+                { complaint_id: "CC-2601-002", customer_name: "Sundram Fasteners", product: "PKM0012 - VCI Cover 8\"×8\"", complaint_description: "VCI bags having tear at the corner.", action_taken: "Replaced the damaged covers.", complaint_date: "18-Feb-2026", corrective_action: "Adjusted folding machine guide rails.", permanent_action: "Reinforced corner thickness specifications.", status: "IN PROGRESS" },
+                { complaint_id: "CC-2601-003", customer_name: "Lucas TVS Ltd", product: "PDC0017 - Paint-Seal Cast Dipping", complaint_description: "Paint peel-off from corners.", action_taken: "Stripped paint and re-dipped casting.", complaint_date: "15-Feb-2026", corrective_action: "Increased oven curing time by 5 minutes.", permanent_action: "Added hourly viscosity checks for dipping paint.", status: "RESOLVED" }
+            ];
+            const filteredMock = searchQuery ? mock.filter(c => 
+                (c.complaint_id && c.complaint_id.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.customer_name && c.customer_name.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.product && c.product.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.complaint_description && c.complaint_description.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.action_taken && c.action_taken.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.corrective_action && c.corrective_action.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.permanent_action && c.permanent_action.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
+                (c.status && c.status.toLowerCase().includes(searchQuery.toLowerCase().trim()))
+            ) : mock;
+            return filteredMock;
+        }
+        
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(c => 
+            (c.complaint_id && c.complaint_id.toLowerCase().includes(q)) ||
+            (c.customer_name && c.customer_name.toLowerCase().includes(q)) ||
+            (c.product && c.product.toLowerCase().includes(q)) ||
+            (c.complaint_description && c.complaint_description.toLowerCase().includes(q)) ||
+            (c.action_taken && c.action_taken.toLowerCase().includes(q)) ||
+            (c.corrective_action && c.corrective_action.toLowerCase().includes(q)) ||
+            (c.permanent_action && c.permanent_action.toLowerCase().includes(q)) ||
+            (c.status && c.status.toLowerCase().includes(q))
+        );
+    }, [customerComplaintsData, hasNoData, searchQuery]);
 
     const interInspCount = useMemo(() =>
         activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.startsWith("II")).length,
@@ -844,11 +1016,11 @@ export default function QualityAnalysis() {
                         <>
                             <div className="qa2-pq-header">
                                 <span className="qa2-pqh-name">Product</span>
-                                <span className="qa2-pqh-num">Insp</span>
-                                <span className="qa2-pqh-num">Pass</span>
-                                <span className="qa2-pqh-num">Rej</span>
-                                <span className="qa2-pqh-bar">Rate</span>
-                                <span className="qa2-pqh-rate">%</span>
+                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Insp</span>
+                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Pass</span>
+                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Rej</span>
+                                <span className="qa2-pqh-bar" style={{ width: '72px', textAlign: 'right' }}>Rate</span>
+                                <span className="qa2-pqh-rate" style={{ minWidth: '65px', textAlign: 'right' }}>%</span>
                             </div>
                             <div className="qa2-pq-scroll-container">
                                 {activeProductQuality.length > 0 ? (
@@ -913,6 +1085,128 @@ export default function QualityAnalysis() {
                                     No defect causes found for this period
                                 </div>
                             )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Vendor Rejection + Operation Rejection + Calibration (3-Col Grid) ── */}
+            <div className="qa2-charts-3-equal qa2-animate qa2-d4">
+
+                {/* Vendor Rejection Analysis */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Users} iconColor="#2d6de8" title="Vendor Rejection Analysis"
+                        extra={<span className="qa2-section-sub">Vendor share of total rejections</span>} />
+                    <div className="qa2-pq-header">
+                        <span className="qa2-pqh-name">Vendor Name</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '65px', textAlign: 'right' }}>Inspected</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '55px', textAlign: 'right' }}>Rej Qty</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '65px', textAlign: 'right' }}>Rej Rate</span>
+                        <span className="qa2-pqh-bar" style={{ width: '90px', textAlign: 'right' }}>Contribution</span>
+                    </div>
+                    <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
+                        {activeVendorRejection.length > 0 ? (
+                            activeVendorRejection.map((v, i) => (
+                                <div className="qa2-pq-row" key={i}>
+                                    <div className="qa2-pq-name" title={v.name} style={{ fontWeight: 600 }}>{v.name}</div>
+                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '65px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{v.insp.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '55px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{v.rej.toLocaleString()}</div>
+                                    <div className="qa2-pq-num" style={{ minWidth: '65px', textAlign: 'right', fontWeight: 700, color: v.color, fontVariantNumeric: 'tabular-nums' }}>{v.rate}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '90px', flexShrink: 0, justifyContent: 'flex-end' }}>
+                                        <div className="qa2-pq-bar-track" style={{ flex: 1, background: '#f1f5f9', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div className="qa2-pq-bar-fill" style={{ width: `${v.shareVal}%`, background: '#3b82f6', height: '100%', borderRadius: '3px' }} />
+                                        </div>
+                                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#475569', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{v.share}</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No vendor records found for this period
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Operation (Process-wise) Rejection Analysis */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Activity} iconColor="#0f766e" title="Operation Rejection Analysis"
+                        extra={<span className="qa2-section-sub">Process share of total rejections</span>} />
+                    <div className="qa2-pq-header">
+                        <span className="qa2-pqh-name">Process / Operation</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '65px', textAlign: 'right' }}>Inspected</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '55px', textAlign: 'right' }}>Rej Qty</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '65px', textAlign: 'right' }}>Rej Rate</span>
+                        <span className="qa2-pqh-bar" style={{ width: '90px', textAlign: 'right' }}>Contribution</span>
+                    </div>
+                    <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
+                        {activeProcessRejection.length > 0 ? (
+                            activeProcessRejection.map((p, i) => (
+                                <div className="qa2-pq-row" key={i}>
+                                    <div className="qa2-pq-name" title={p.name} style={{ fontWeight: 600 }}>{p.name}</div>
+                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '65px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.insp.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '55px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{p.rej.toLocaleString()}</div>
+                                    <div className="qa2-pq-num" style={{ minWidth: '65px', textAlign: 'right', fontWeight: 700, color: p.color, fontVariantNumeric: 'tabular-nums' }}>{p.rate}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '90px', flexShrink: 0, justifyContent: 'flex-end' }}>
+                                        <div className="qa2-pq-bar-track" style={{ flex: 1, background: '#f1f5f9', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div className="qa2-pq-bar-fill" style={{ width: `${p.shareVal}%`, background: '#0f766e', height: '100%', borderRadius: '3px' }} />
+                                        </div>
+                                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#475569', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.share}</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No process records found for this period
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Calibration */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Wrench} iconColor="#f59e0b" title="Calibration Status"
+                        badge={calibrationAlertCount > 0 ? `${calibrationAlertCount} Alert${calibrationAlertCount > 1 ? "s" : ""}` : activeCalibrationRows.length > 0 ? `${activeCalibrationRows.length} Items` : "No Due"}
+                        badgeCls={calibrationAlertCount > 0 ? "qa2-badge-orange" : "qa2-badge-green"} />
+                    {calibrationLoading ? (
+                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "13px" }}>
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "25%", height: "12px" }} />
+                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : activeCalibrationRows.length === 0 ? (
+                        <div style={{ padding: "2rem", textAlign: "center", color: "var(--qa2-text-muted, #94a3b8)", fontSize: "0.88rem" }}>
+                            <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
+                                <Wrench size={32} style={{ color: '#94a3b8', strokeWidth: 1.5 }} />
+                            </div>
+                            <div>No instruments due for calibration in the selected period.</div>
+                        </div>
+                    ) : (
+                        <div className="qa2-cal-scroll-wrap">
+                            <div className="qa2-cal-scroll">
+                                {activeCalibrationRows.map((c, i) => (
+                                    <div className="qa2-cal-row" key={i}>
+                                        <div className="qa2-cal-info">
+                                            <div className="qa2-cal-name">{c.name}</div>
+                                            <div className="qa2-cal-id">
+                                                {c.id}
+                                                {c.last_calib && c.last_calib !== "—" && (
+                                                    <span style={{ marginLeft: "6px", color: "#cbd5e1" }}>·</span>
+                                                )}
+                                                {c.last_calib && c.last_calib !== "—" && (
+                                                    <span style={{ color: "#b0bcc8", marginLeft: "4px" }}>Last: {c.last_calib}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className={`qa2-cal-date ${c.cls === "qa2-cal-over" ? "qa2-cal-date--over" : ""}`}>{c.date}</div>
+                                        <div className={`qa2-cal-days ${c.cls}`}>{c.label}</div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1006,107 +1300,120 @@ export default function QualityAnalysis() {
                 )}
             </div>
 
-            {/* ── Rejection + Calibration (Pending Rework Queue Removed) ── */}
-            <div className="qa2-charts-2 qa2-animate qa2-d4">
-
-                {/* Rejection & Rework */}
-                <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary"
-                        badge={`${activeRejectionRows.length} Records`} badgeCls="qa2-badge-red" />
-                    {recordsLoading ? (
-                        <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
-                            {[1, 2, 3, 4].map(i => (
-                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "14px" }}>
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "30%", height: "12px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "12px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "12px" }} />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="qa2-table-scroll">
-                            <table className="qa2-table">
-                                <thead>
-                                    <tr>
-                                        {["Insp No", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
-                                            <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {activeRejectionRows.length > 0 ? (
-                                        activeRejectionRows.map((r, i) => (
-                                            <tr key={i} className="qa2-tr">
-                                                <td><span className="qa2-rej-id">{r.id}</span></td>
-                                                <td>{r.product}</td>
-                                                <td>{r.reason}</td>
-                                                <td className="qa2-td-r">{r.qty}</td>
-                                                <td><span className={`qa2-badge ${r.dispCls}`}>{r.disp}</span></td>
-                                                <td className="qa2-muted qa2-nowrap">{r.date}</td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan="6" style={{ textAlign: "center", padding: "2.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                                No rejection or rework records found
-                                            </td>
+            {/* ── Rejection & Rework Summary (Full Width) ── */}
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+                <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary"
+                    badge={`${activeRejectionRows.length} Records`} badgeCls="qa2-badge-red" />
+                {recordsLoading ? (
+                    <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
+                        {[1, 2, 3, 4].map(i => (
+                            <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "14px" }}>
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "30%", height: "12px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "12px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "12px" }} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="qa2-table-scroll">
+                        <table className="qa2-table">
+                            <thead>
+                                <tr>
+                                    {["Insp No", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
+                                        <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {activeRejectionRows.length > 0 ? (
+                                    activeRejectionRows.map((r, i) => (
+                                        <tr key={i} className="qa2-tr">
+                                            <td><span className="qa2-rej-id">{r.id}</span></td>
+                                            <td>{r.product}</td>
+                                            <td>{r.reason}</td>
+                                            <td className="qa2-td-r">{r.qty}</td>
+                                            <td><span className={`qa2-badge ${r.dispCls}`}>{r.disp}</span></td>
+                                            <td className="qa2-muted qa2-nowrap">{r.date}</td>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-
-                {/* Calibration */}
-                <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon={Wrench} iconColor="#f59e0b" title="Calibration Status"
-                        badge={calibrationAlertCount > 0 ? `${calibrationAlertCount} Alert${calibrationAlertCount > 1 ? "s" : ""}` : activeCalibrationRows.length > 0 ? `${activeCalibrationRows.length} Items` : "No Due"}
-                        badgeCls={calibrationAlertCount > 0 ? "qa2-badge-orange" : "qa2-badge-green"} />
-                    {calibrationLoading ? (
-                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
-                            {[1, 2, 3, 4, 5].map(i => (
-                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "13px" }}>
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ flex: 1, height: "12px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "25%", height: "12px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "15%", height: "12px" }} />
-                                </div>
-                            ))}
-                        </div>
-                    ) : activeCalibrationRows.length === 0 ? (
-                        <div style={{ padding: "2rem", textAlign: "center", color: "var(--qa2-text-muted, #94a3b8)", fontSize: "0.88rem" }}>
-                            <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
-                                <Wrench size={32} style={{ color: '#94a3b8', strokeWidth: 1.5 }} />
-                            </div>
-                            <div>No instruments due for calibration in the selected period.</div>
-                        </div>
-                    ) : (
-                        <div className="qa2-cal-scroll-wrap">
-                            <div className="qa2-cal-scroll">
-                                {activeCalibrationRows.map((c, i) => (
-                                    <div className="qa2-cal-row" key={i}>
-                                        <div className="qa2-cal-info">
-                                            <div className="qa2-cal-name">{c.name}</div>
-                                            <div className="qa2-cal-id">
-                                                {c.id}
-                                                {c.last_calib && c.last_calib !== "—" && (
-                                                    <span style={{ marginLeft: "6px", color: "#cbd5e1" }}>·</span>
-                                                )}
-                                                {c.last_calib && c.last_calib !== "—" && (
-                                                    <span style={{ color: "#b0bcc8", marginLeft: "4px" }}>Last: {c.last_calib}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className={`qa2-cal-date ${c.cls === "qa2-cal-over" ? "qa2-cal-date--over" : ""}`}>{c.date}</div>
-                                        <div className={`qa2-cal-days ${c.cls}`}>{c.label}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="6" style={{ textAlign: "center", padding: "2.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                            No rejection or rework records found
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
+
+            {/* ── Customer Complaints (Full Width) ── */}
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+                <SectionHead icon={AlertCircle} iconColor="#ef4444" title="Customer Complaints Log"
+                    badge={`${activeCustomerComplaints.length} Complaint${activeCustomerComplaints.length !== 1 ? "s" : ""}`} badgeCls="qa2-badge-red" />
+                {customerComplaintsLoading ? (
+                    <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1.5rem" }}>
+                        {[1, 2, 3].map(i => (
+                            <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "16px" }}>
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "20%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "25%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "14px" }} />
+                                <div className="qa2-skeleton qa2-shimmer" style={{ width: "8%", height: "14px" }} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="qa2-table-scroll">
+                        <table className="qa2-table">
+                            <thead>
+                                <tr>
+                                    {["Complaint ID", "Customer", "Product", "Complaint Description", "Action Taken", "Date", "Corrective Action", "Permanent Action", "Status"].map(h => (
+                                        <th key={h}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {activeCustomerComplaints.length > 0 ? (
+                                    activeCustomerComplaints.map((c, i) => {
+                                        const statusLower = String(c.status).toLowerCase();
+                                        let statusCls = "qa2-tag-pending";
+                                        if (statusLower.includes("resolve") || statusLower.includes("close")) {
+                                            statusCls = "qa2-tag-pass";
+                                        } else if (statusLower.includes("progress") || statusLower.includes("open")) {
+                                            statusCls = "qa2-tag-rework";
+                                        }
+                                        return (
+                                            <tr key={i} className="qa2-tr">
+                                                <td style={{ minWidth: "120px" }}><span className="qa2-rej-id" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>{c.complaint_id}</span></td>
+                                                <td style={{ minWidth: "140px", fontWeight: 600 }}>{c.customer_name}</td>
+                                                <td style={{ minWidth: "180px", maxWidth: "250px", wordBreak: "break-word", whiteSpace: "normal" }}>{c.product}</td>
+                                                <td style={{ minWidth: "220px", maxWidth: "300px", wordBreak: "break-word", whiteSpace: "normal" }} className="qa2-remarks">{c.complaint_description}</td>
+                                                <td style={{ minWidth: "200px", maxWidth: "280px", wordBreak: "break-word", whiteSpace: "normal" }}>{c.action_taken}</td>
+                                                <td className="qa2-muted qa2-nowrap">{formatDisplayDate(c.complaint_date)}</td>
+                                                <td style={{ minWidth: "200px", maxWidth: "280px", wordBreak: "break-word", whiteSpace: "normal" }}>{c.corrective_action}</td>
+                                                <td style={{ minWidth: "200px", maxWidth: "280px", wordBreak: "break-word", whiteSpace: "normal" }}>{c.permanent_action}</td>
+                                                <td><span className={`qa2-badge ${statusCls}`}>{c.status}</span></td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="9" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                            No customer complaints logged for this period
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+
 
             {/* ── Management Insights ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">

@@ -277,25 +277,18 @@ const CURRENT_STATE_CARDS = [
 ];
 
 const ACTION_CARDS = [
-  { id: "customer_po_compare", title: "Customer PO Compare", icon: Scale, color: "#2d6de8", priority: "medium" },
-  { id: "grn_report", title: "GRN Report", icon: ClipboardCheck, color: "#0ea5e9", priority: "medium" },
-  { id: "sales_analysis", title: "Sales Analysis", icon: TrendingUp, color: "#10b981", priority: "medium" },
-  { id: "daily_production", title: "Daily Production", icon: Factory, color: "#8b5cf6", priority: "medium" },
-  { id: "ideal_hours_report", title: "Ideal Hours Report", icon: Timer, color: "#ef4444", priority: "medium" },
-  { id: "dispatch_report", title: "Dispatch Report", icon: Truck, color: "#f43f5e", priority: "high" },
-  { id: "rejection_rework", title: "Rejection & Rework", icon: AlertTriangle, color: "#f59e0b", priority: "high" },
-  { id: "customer_complaints", title: "Customer Complaint", icon: Megaphone, color: "#dc2626", priority: "high" },
-  { id: "store_stock", title: "Store Stock", icon: Package, color: "#ea580c", priority: "medium" },
-  { id: "order_register", title: "Order Register", icon: ClipboardList, color: "#2d6de8", priority: "medium" },
-  { id: "vendor_rating", title: "Vendor Rating", icon: Star, color: "#0ea5e9", priority: "medium" },
-  { id: "supplier_rating", title: "Supplier Rating", icon: Award, color: "#10b981", priority: "medium" },
-  { id: "daily_production_plan", title: "Daily Production Plan", icon: ListTodo, color: "#8b5cf6", priority: "medium" },
-  { id: "fg_reports", title: "FG Reports", icon: PackageCheck, color: "#ef4444", priority: "medium" },
-  { id: "idle_time_entry", title: "Idle Time Entry", icon: Clock, color: "#f43f5e", priority: "medium" },
-  { id: "operator_efficiency", title: "Operator Efficiency", icon: UserCheck, color: "#f59e0b", priority: "medium" },
-  { id: "quality_reports", title: "Quality Reports", icon: CheckCircle2, color: "#dc2626", priority: "medium" },
-  { id: "purchase_report", title: "Purchase Report", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
-  { id: "supplier_age_days_report", title: "Supplier Age Days Report", icon: Calendar, color: "#2d6de8", priority: "medium" },
+  { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Analysis", icon: Scale, color: "#2d6de8", priority: "medium" },
+  { id: "purchase_report_dashboard", title: "Purchase Report Dashboard", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
+  { id: "sales_analysis_report_dashboard", title: "Sales Analysis Report Dashboard", icon: TrendingUp, color: "#10b981", priority: "medium" },
+  { id: "production_analysis_report_dashboard", title: "Production Analysis Report Dashboard", icon: Factory, color: "#8b5cf6", priority: "medium" },
+  { id: "idle_hours_report_dashboard", title: "Idle Hours Report Dashboard", icon: Timer, color: "#ef4444", priority: "medium" },
+  { id: "idle_hours_non_accepted_reason_production_loss_report", title: "Idle Hours – Non Accepted Reason Production Loss Report", icon: AlertTriangle, color: "#f43f5e", priority: "high" },
+  { id: "oee_report_dashboard", title: "OEE Report Dashboard", icon: Target, color: "#2d6de8", priority: "medium" },
+  { id: "oee_comparison_report_dashboard", title: "OEE Comparison Report Dashboard", icon: TrendingUp, color: "#0ea5e9", priority: "medium" },
+  { id: "efficiency_eff_report_dashboard", title: "Efficiency (EFF) Report Dashboard", icon: UserCheck, color: "#10b981", priority: "medium" },
+  { id: "rejection_rework_report_dashboard", title: "Rejection & Rework Report Dashboard", icon: AlertTriangle, color: "#f59e0b", priority: "high" },
+  { id: "customer_complaint_report_dashboard", title: "Customer Complaint Report Dashboard", icon: Megaphone, color: "#dc2626", priority: "high" },
+  { id: "machine_capacity_report_dashboard", title: "Machine Capacity Report Dashboard", icon: Package, color: "#ea580c", priority: "medium" }
 ];
 
 function formatLocalYmd(d) {
@@ -398,45 +391,22 @@ function actionPriority(card, data) {
 }
 
 function buildActionSidebar(card, data, loading) {
-  const injob = data.injob;
-  const inter = data.inter;
-  const fi = data.fi;
-  const qs = qualitySplit(data);
-  const top = data.topDefects?.rows?.[0];
-  const grn = data.grn?.summary;
-
   const map = {
-    customer_po_compare: { desc: "Compare actual purchase order quantities and values against customer schedules.", time: "Live ERP check" },
-    grn_report: { desc: `${grn?.total_record_count ?? 0} pending record(s) in GRN pipeline.`, time: `Qty ${fmtNum(grn?.total_qty)}` },
-    sales_analysis: { desc: "Analyze sales order dispatch records, invoice values, and customer variances.", time: "Monthly trend" },
-    daily_production: { desc: "Real-time log of machine parts produced, operating hours, and operator schedules.", time: "Daily live feed" },
-    ideal_hours_report: { desc: "Ideal machine cycle hours calculated against standard shift hours.", time: "Target 8.0h/shift" },
-    dispatch_report: { desc: "Track pending dispatches, ready-for-shipping finished goods, and carrier schedules.", time: "Pending items" },
-    rejection_rework: { desc: `OK ${qs.pctOk}% · Rej ${qs.pctRej}% · Rwk ${qs.pctRwk}% (Inspection split)`, time: "Quality split" },
-    customer_complaints: { desc: `${data.complaints?.complaints?.length ?? 0} customer complaint(s) in range.`, time: "Customer QC" },
-    store_stock: { desc: "Current raw material, child parts, and sub-assembly store stock status.", time: "Live warehouse stock" },
-    order_register: { desc: "Comprehensive register of open, closed, and pending sales/purchase orders.", time: "All open orders" },
-    vendor_rating: { desc: "Vendor quality performance rating, rejection percentages, and GRN delivery metrics.", time: "Monthly rating" },
-    supplier_rating: { desc: "Supplier delivery time performance, price variations, and compliance rating.", time: "Live audit score" },
-    daily_production_plan: { desc: "Current production schedules, route sheets, and planned output quantities.", time: "Active routes" },
-    fg_reports: { desc: "Finished goods stock status, inspection clearance records, and storage location tracking.", time: "Cleared items" },
-    idle_time_entry: { desc: `Total idle hours recorded: ${fmtHours(data.idle?.summary?.total_idle_hours)}.`, time: `Non-acc ${fmtHours(data.idle?.summary?.non_accepted_hours)}` },
-    operator_efficiency: { desc: "Operator efficiency analytics by shift and station performance.", time: "Overall avg" },
-    quality_reports: { desc: "Consolidated quality inspection logs, first-pass yield metrics, and defect trends.", time: "Live QC checks" },
-    purchase_report: { desc: "Summary of material purchases, active purchase requisitions, and vendor invoices.", time: "Range total" },
-    supplier_age_days_report: { desc: "Age-wise analysis of outstanding supplier deliveries and payment terms.", time: "Age details" },
-
-    injob_inspection: { desc: `Rej ${fmtNum(injob?.total_rejection)} · Rwk ${fmtNum(injob?.total_rework)}`, time: injob?.rejection_pct != null ? `Rej ${fmtPct(injob.rejection_pct)}` : "JO inspection" },
-    inter_inspection: { desc: `Rej ${fmtNum(inter?.total_rejection)} · Rwk ${fmtNum(inter?.total_rework)}`, time: inter?.row_count != null ? `${inter.row_count} rows` : "Inter inspection" },
-    final_inspection: { desc: `OK ${fmtNum(fi?.total_ok_qty)} · FPY ${fmtPct(fi?.first_pass_yield ?? 0)}`, time: "Final inspection" },
-    quality_split: { desc: `OK ${qs.pctOk}% · Rej ${qs.pctRej}% · Rwk ${qs.pctRwk}%`, time: "Quality split" },
-    downtime_reason: { desc: data.downtime?.reasons?.[0]?.reason ? String(data.downtime.reasons[0].reason).slice(0, 40) : "Top downtime reason", time: data.downtime?.reasons?.[0] ? fmtHours(data.downtime.reasons[0].hours) : "Idle hours" },
-    top_defects: { desc: top?.partno ? `Top: ${top.partno}` : "Top defect parts", time: top?.rejection_pct != null ? `${top.rejection_pct}%` : "Defects" },
-    iqc_rejections: { desc: `Rej qty ${fmtNum(data.iqc?.summary?.total_rejection_qty)}`, time: `${data.iqc?.summary?.total_record_count ?? 0} records` },
-    grn_pending: { desc: `${grn?.total_record_count ?? 0} pending record(s)`, time: `Qty ${fmtNum(grn?.total_qty)}` },
+    customer_po_vs_sales_analysis: { desc: "Compare actual purchase order quantities and values against customer sales dispatches and schedules.", time: "Live ERP check" },
+    purchase_report_dashboard: { desc: "Overview of raw material purchases, supplier orders, pending GRNs, and material age analysis.", time: "Real-time ledger" },
+    sales_analysis_report_dashboard: { desc: "Sales dispatch value, billing trends, target vs actual sales, and customer order performance.", time: "Monthly analytics" },
+    production_analysis_report_dashboard: { desc: "Machine parts produced, operating run times, shift output, and parts yield analysis.", time: "Shift-wise log" },
+    idle_hours_report_dashboard: { desc: "Planned and accepted idle machine hours: tool change, settings, power waiting, operator lunch.", time: "Target 8.0h/shift" },
+    idle_hours_non_accepted_reason_production_loss_report: { desc: "Analysis of non-accepted downtime (electrical/mechanical breakdowns, no operators) and production loss.", time: "Loss evaluation" },
+    oee_report_dashboard: { desc: "Overall Equipment Effectiveness based on Availability, Performance, and Quality factors.", time: "Target 85% OEE" },
+    oee_comparison_report_dashboard: { desc: "Compare availability, performance, quality, and OEE parameters across machines and shifts.", time: "Machine benchmark" },
+    efficiency_eff_report_dashboard: { desc: "Performance and operator efficiency report based on actual run cycle time vs standards.", time: "Performance grade" },
+    rejection_rework_report_dashboard: { desc: "Track rejections, rework loops, and scrap costs across production lines.", time: "Quality statistics" },
+    customer_complaint_report_dashboard: { desc: "Customer complaints log, resolution status, corrective actions, and permanent preventions.", time: "Customer QC audits" },
+    machine_capacity_report_dashboard: { desc: "Capacity utilization of machinery: available capacity vs run hours, load, and overload warnings.", time: "Capacity audit" }
   };
   const m = map[card.id] ?? { desc: "—", time: "—" };
-  return { ...m, priority: actionPriority(card, data), loading };
+  return { ...m, priority: card.priority || "medium", loading };
 }
 
 function buildCenterDetail(cardId, panel, data) {
@@ -3619,9 +3589,484 @@ function CenterTransitionWrapper({ uid, loading, children }) {
   );
 }
 
+/* ── Generic Premium Dashboard View & Bottom Table Helpers ── */
+function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose }) {
+  return (
+    <div className="pp1-action-detail pp1-ct-reveal pp1-ct-reveal--in" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-action-detail__header" style={{ "--act-color": color, padding: "10px 14px", gap: "10px" }}>
+        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon size={16} style={{ color: "#fff" }} />
+        </div>
+        <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>{title}</p>
+        </div>
+        <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
+      </div>
+
+      <div className="pp1-action-detail__body" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px" }}>
+        {/* KPI Strip */}
+        <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+          {kpis.map((k, i) => (
+            <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20` }}>
+              <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+              <p className="pp1-detail__chip-val" style={{ fontSize: "15px", fontWeight: 700, margin: "2px 0 0 0" }}>{k.value}</p>
+              <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: 0, textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Chart Card */}
+        {setupChart && (
+          <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+            <div className="pp1-dt-card__hd" style={{ marginBottom: "10px" }}>
+              <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>Trend Analysis ({rangeHint})</div>
+            </div>
+            <div className="pp1-dt-chart-wrap" style={{ height: chartHeight, position: "relative" }}>
+              <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={title} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PremiumDashboardBottomTable({ title, columns, rows }) {
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd">{title}</div>
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300 }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {columns.map((col, idx) => (
+                <th key={idx} style={{ textAlign: idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("%")) ? "right" : "left" }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={columns.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+            ) : (
+              rows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("%"));
+                    const isStatus = columns[ci].toLowerCase() === "status";
+                    if (isStatus) {
+                      const statusColors = {
+                        "Completed": { bg: "#d1fae5", c: "#065f46" },
+                        "In Progress": { bg: "#fef3c7", c: "#92400e" },
+                        "Pending": { bg: "#fee2e2", c: "#991b1b" },
+                        "Active": { bg: "#d1fae5", c: "#065f46" },
+                        "Resolved": { bg: "#d1fae5", c: "#065f46" },
+                        "Open": { bg: "#fee2e2", c: "#991b1b" },
+                        "Closed": { bg: "#f1f5f9", c: "#475569" },
+                        "Normal": { bg: "#d1fae5", c: "#065f46" },
+                        "Overload": { bg: "#fee2e2", c: "#991b1b" }
+                      };
+                      const stcfg = statusColors[cell] || { bg: "#f1f5f9", c: "#475569" };
+                      return (
+                        <td key={ci} style={{ textAlign: "center" }}>
+                          <span className="pp1-cc-badge" style={{ background: stcfg.bg, color: stcfg.c, padding: "3px 9px", borderRadius: "12px", fontSize: "9.5px", fontWeight: 700 }}>
+                            {cell}
+                          </span>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={ci} className={ci === 0 ? "pp1-cc-tbl__bold" : ci === 1 ? "pp1-cc-tbl__id" : ""} style={{ textAlign: isRightAligned ? "right" : "left", fontWeight: isRightAligned ? 600 : "normal" }}>
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Specific Dashboards View & Table components ── */
+function PurchaseReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Total Purchases", value: "₹45.6L", icon: "💰", color: "#ea580c" },
+    { label: "Active POs", value: "12", icon: "🛒", color: "#3b82f6" },
+    { label: "GRN Value", value: "₹41.8L", icon: "✅", color: "#10b981" },
+    { label: "Clearance Pend", value: "3 Items", icon: "⏳", color: "#f59e0b" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+        datasets: [{
+          label: "Purchases (₹ Lakhs)",
+          data: [5.0, 6.2, 8.5, 7.0, 9.4, 8.1],
+          backgroundColor: "#ea580c",
+          borderRadius: 4
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Purchase Report Dashboard" icon={ShoppingCart} color="#ea580c" kpis={kpis} setupChart={setupChart} rangeHint="Jan - Jun 2026" onClose={onClose} />;
+}
+
+function PurchaseReportBottomTable() {
+  const columns = ["PO Number", "Vendor Name", "Material Description", "Ordered Qty", "Value", "Status"];
+  const rows = [
+    ["PO-2026-901", "Steel Authority of India", "MS Sheet Metal 2mm", "1,500 kg", "₹4,50,000", "Completed"],
+    ["PO-2026-902", "Hindalco Industries", "Aluminum Extrusion", "800 kg", "₹3,80,000", "Completed"],
+    ["PO-2026-903", "Jindal Stainless", "SS Rods 10mm", "1,200 kg", "₹6,20,000", "In Progress"],
+    ["PO-2026-904", "Tata Steel", "HR Plate 5mm", "2,000 kg", "₹5,50,000", "Completed"],
+    ["PO-2026-905", "JSW Steel", "CR Coil 1.2mm", "1,000 kg", "₹2,80,000", "Pending"]
+  ];
+  return <PremiumDashboardBottomTable title="Purchase Orders Summary" columns={columns} rows={rows} />;
+}
+
+function SalesAnalysisReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Dispatch Value", value: "₹65.2L", icon: "🚚", color: "#10b981" },
+    { label: "Invoiced Value", value: "₹62.5L", icon: "📄", color: "#3b82f6" },
+    { label: "Outstanding", value: "₹2.7L", icon: "💰", color: "#ef4444" },
+    { label: "On-Time Dispatch", value: "94.5%", icon: "📈", color: "#8b5cf6" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+        datasets: [
+          { label: "Sales (₹ Lakhs)", data: [8.5, 9.8, 11.2, 10.5, 12.8, 11.7], borderColor: "#10b981", tension: 0.3, fill: false },
+          { label: "Target (₹ Lakhs)", data: [9.0, 9.5, 10.0, 10.5, 11.0, 11.5], borderColor: "#94a3b8", borderDash: [4, 4], fill: false }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Sales Analysis Report Dashboard" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Jan - Jun 2026" onClose={onClose} />;
+}
+
+function SalesAnalysisReportBottomTable() {
+  const columns = ["Invoice No", "Customer Name", "Part Description", "Dispatched Qty", "Value", "Status"];
+  const rows = [
+    ["INV-2026-001", "Tata Motors", "Brake Pad M1", "4,500 pcs", "₹9,00,000", "Completed"],
+    ["INV-2026-002", "Mahindra & Mahindra", "Disc Rotor X4", "3,000 pcs", "₹12,00,000", "Completed"],
+    ["INV-2026-003", "Maruti Suzuki", "Gearbox Hanger S2", "1,000 pcs", "₹4,50,000", "Completed"],
+    ["INV-2026-004", "Ashok Leyland", "Truck Axle L9", "750 pcs", "₹18,50,000", "Completed"]
+  ];
+  return <PremiumDashboardBottomTable title="Sales Invoice Register" columns={columns} rows={rows} />;
+}
+
+function ProductionAnalysisReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Total Produced", value: "24,500", icon: "⚙️", color: "#8b5cf6" },
+    { label: "Target Output", value: "26,000", icon: "🎯", color: "#3b82f6" },
+    { label: "First Pass Yield", value: "98.2%", icon: "📈", color: "#10b981" },
+    { label: "Avg Efficiency", value: "84.5%", icon: "⚡", color: "#f97316" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["A Shift", "B Shift", "C Shift"],
+        datasets: [{
+          label: "Output (pcs)",
+          data: [9200, 8500, 6800],
+          backgroundColor: ["#8b5cf6", "#3b82f6", "#f97316"],
+          borderRadius: 4
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Production Analysis Report Dashboard" icon={Factory} color="#8b5cf6" kpis={kpis} setupChart={setupChart} rangeHint="Shift-wise Breakdown" onClose={onClose} />;
+}
+
+function ProductionAnalysisReportBottomTable() {
+  const columns = ["Date", "Machine No", "Shift", "Operator", "Part Number", "OK Qty", "Rej Qty"];
+  const rows = [
+    ["15-Jun-2026", "CNC-01", "A Shift", "Balamurugan.P", "BRK-PAD-M1", "850", "12"],
+    ["15-Jun-2026", "CNC-02", "A Shift", "Gopikrishnan.R", "ROT-DSC-X4", "620", "8"],
+    ["15-Jun-2026", "VMC-01", "A Shift", "Karthi.S", "GBX-HNG-S2", "410", "5"],
+    ["15-Jun-2026", "CNC-01", "B Shift", "Balamurugan.P", "BRK-PAD-M1", "820", "15"],
+    ["15-Jun-2026", "CNC-02", "B Shift", "Gopikrishnan.R", "ROT-DSC-X4", "600", "10"]
+  ];
+  return <PremiumDashboardBottomTable title="Daily Production Log" columns={columns} rows={rows} />;
+}
+
+function IdleHoursReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Total Idle", value: "34.2 h", icon: "⏱️", color: "#ef4444" },
+    { label: "Planned Idle", value: "24.0 h", icon: "📅", color: "#3b82f6" },
+    { label: "Unplanned Idle", value: "10.2 h", icon: "⚠️", color: "#f59e0b" },
+    { label: "Accepted Rate", value: "70.2%", icon: "✅", color: "#10b981" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["Tool Change", "Setting Time", "Material Waiting", "Operator Break"],
+        datasets: [{
+          data: [13.6, 10.2, 6.8, 3.6],
+          backgroundColor: ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981"]
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Idle Hours Report Dashboard" icon={Timer} color="#ef4444" kpis={kpis} setupChart={setupChart} rangeHint="Accepted Idle Distribution" onClose={onClose} />;
+}
+
+function IdleHoursReportBottomTable() {
+  const columns = ["Date", "Machine No", "Reason", "Shift", "Duration (Hours)"];
+  const rows = [
+    ["15-Jun-2026", "CNC-01", "Tool Change", "A Shift", "1.5"],
+    ["15-Jun-2026", "CNC-02", "Setting Time", "A Shift", "2.0"],
+    ["15-Jun-2026", "VMC-01", "Material Waiting", "B Shift", "1.2"],
+    ["15-Jun-2026", "CNC-01", "Setting Time", "B Shift", "1.8"],
+    ["15-Jun-2026", "Grinding-01", "Tool Change", "C Shift", "0.8"]
+  ];
+  return <PremiumDashboardBottomTable title="Idle Time Accepted Log" columns={columns} rows={rows} />;
+}
+
+function IdleHoursNonAcceptedReasonLossReportView({ onClose }) {
+  const kpis = [
+    { label: "Non-Accepted", value: "18.5 h", icon: "🚫", color: "#f43f5e" },
+    { label: "Prod Loss Qty", value: "1,450 pcs", icon: "📉", color: "#ef4444" },
+    { label: "Est Loss Value", value: "₹2.8L", icon: "💸", color: "#ea580c" },
+    { label: "Avg Response", value: "15 mins", icon: "⚡", color: "#8b5cf6" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["No Operator", "Power Outage", "Mech Breakdown", "Elec Failure"],
+        datasets: [{
+          label: "Downtime (Hours)",
+          data: [7.2, 4.8, 3.7, 2.8],
+          backgroundColor: "#f43f5e",
+          borderRadius: 4
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Idle Hours – Non Accepted Reason Production Loss Report" icon={AlertTriangle} color="#f43f5e" kpis={kpis} setupChart={setupChart} rangeHint="Downtime Categories" onClose={onClose} />;
+}
+
+function IdleHoursNonAcceptedReasonLossReportBottomTable() {
+  const columns = ["Breakdown ID", "Machine", "Non-Accepted Reason", "Breakdown Start", "Duration (Hours)", "Loss Qty"];
+  const rows = [
+    ["BD-2026-081", "CNC-01", "No Operator", "10:15 AM", "2.5", "210"],
+    ["BD-2026-082", "CNC-02", "Power Interruption", "02:30 PM", "1.8", "150"],
+    ["BD-2026-083", "VMC-02", "Mechanical Breakdown", "11:00 AM", "3.2", "280"],
+    ["BD-2026-084", "Grinding-01", "Electrical Failure", "04:15 PM", "1.2", "95"]
+  ];
+  return <PremiumDashboardBottomTable title="Production Loss Log" columns={columns} rows={rows} />;
+}
+
+function OeeReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Overall OEE", value: "78.4%", icon: "🏆", color: "#2d6de8" },
+    { label: "Availability", value: "88.5%", icon: "⏱️", color: "#10b981" },
+    { label: "Performance", value: "92.0%", icon: "📈", color: "#3b82f6" },
+    { label: "Quality Factor", value: "96.2%", icon: "🌟", color: "#8b5cf6" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        datasets: [
+          { label: "Actual OEE (%)", data: [76.5, 78.0, 79.4, 77.8, 80.2, 78.4], borderColor: "#2d6de8", fill: false },
+          { label: "Target OEE (%)", data: [85.0, 85.0, 85.0, 85.0, 85.0, 85.0], borderColor: "#ef4444", borderDash: [5, 5], fill: false }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="OEE Report Dashboard" icon={Target} color="#2d6de8" kpis={kpis} setupChart={setupChart} rangeHint="Weekly OEE Performance" onClose={onClose} />;
+}
+
+function OeeReportBottomTable() {
+  const columns = ["Machine", "Availability %", "Performance %", "Quality %", "OEE %", "Status"];
+  const rows = [
+    ["CNC-01", "90.2%", "94.5%", "97.8%", "83.4%", "Active"],
+    ["CNC-02", "88.0%", "92.0%", "96.5%", "78.2%", "Active"],
+    ["VMC-01", "89.5%", "91.8%", "95.0%", "78.0%", "Active"],
+    ["VMC-02", "86.2%", "90.5%", "95.5%", "74.5%", "Active"],
+    ["Grinding-01", "88.8%", "91.2%", "96.0%", "77.7%", "Active"]
+  ];
+  return <PremiumDashboardBottomTable title="Machine OEE Metrics" columns={columns} rows={rows} />;
+}
+
+function OeeComparisonReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Top Machine", value: "CNC-01 (83.4%)", icon: "🥇", color: "#10b981" },
+    { label: "Lowest Machine", value: "VMC-02 (74.5%)", icon: "📉", color: "#ef4444" },
+    { label: "Avg OEE", value: "78.4%", icon: "📊", color: "#0ea5e9" },
+    { label: "Target OEE", value: "82.0%", icon: "🎯", color: "#8b5cf6" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"],
+        datasets: [
+          { label: "Availability %", data: [90.2, 88.0, 89.5, 86.2, 88.8], backgroundColor: "rgba(59, 130, 246, 0.7)" },
+          { label: "Performance %", data: [94.5, 92.0, 91.8, 90.5, 91.2], backgroundColor: "rgba(139, 92, 246, 0.7)" },
+          { label: "Quality %", data: [97.8, 96.5, 95.0, 95.5, 96.0], backgroundColor: "rgba(16, 185, 129, 0.7)" }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="OEE Comparison Report Dashboard" icon={TrendingUp} color="#0ea5e9" kpis={kpis} setupChart={setupChart} rangeHint="Machine Parameters Comparison" onClose={onClose} />;
+}
+
+function OeeComparisonReportBottomTable() {
+  return <OeeReportBottomTable />;
+}
+
+function EfficiencyEffReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Shop Efficiency", value: "86.2%", icon: "⚡", color: "#10b981" },
+    { label: "Top Operator", value: "Balamurugan (96.5%)", icon: "🥇", color: "#8b5cf6" },
+    { label: "Target", value: "85.0%", icon: "🎯", color: "#3b82f6" },
+    { label: "Variance", value: "+1.2%", icon: "📈", color: "#10b981" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        datasets: [{
+          label: "Efficiency (%)",
+          data: [84.1, 85.6, 87.2, 86.0, 88.4, 86.2],
+          borderColor: "#10b981",
+          fill: false
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Efficiency (EFF) Report Dashboard" icon={UserCheck} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Daily Efficiency Trend" onClose={onClose} />;
+}
+
+function EfficiencyEffReportBottomTable() {
+  const columns = ["Operator Name", "Part Produced", "Run Time (Hours)", "Actual Qty", "Target Qty", "Efficiency %"];
+  const rows = [
+    ["Balamurugan.P", "BRK-PAD-M1", "8.0", "850", "880", "96.5%"],
+    ["Gopikrishnan.R", "ROT-DSC-X4", "8.0", "620", "680", "91.2%"],
+    ["Karthi.S", "GBX-HNG-S2", "8.0", "410", "480", "85.4%"],
+    ["Sabarish.V", "ENG-MNT-H1", "8.0", "520", "650", "80.0%"]
+  ];
+  return <PremiumDashboardBottomTable title="Operator Efficiency Ranking" columns={columns} rows={rows} />;
+}
+
+function RejectionReworkReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Total Rejection", value: "520 pcs", icon: "❌", color: "#ef4444" },
+    { label: "Total Rework", value: "310 pcs", icon: "🔄", color: "#f59e0b" },
+    { label: "Rejection Rate", value: "2.1%", icon: "📉", color: "#f43f5e" },
+    { label: "Rework Rate", value: "1.2%", icon: "📈", color: "#f59e0b" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["Material Rejection", "Machine Rejection"],
+        datasets: [{
+          data: [312, 208],
+          backgroundColor: ["#f43f5e", "#ef4444"]
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }, []);
+  return <PremiumDashboardView title="Rejection & Rework Report Dashboard" icon={AlertTriangle} color="#f59e0b" kpis={kpis} setupChart={setupChart} rangeHint="Rejection Sources" onClose={onClose} />;
+}
+
+function RejectionReworkReportBottomTable() {
+  const columns = ["Part Number", "Description", "Inspected Qty", "Rejection Qty", "Rework Qty", "Defect Rate %"];
+  const rows = [
+    ["BRK-PAD-M1", "Brake Pad M1", "12,500", "180", "120", "1.4%"],
+    ["ROT-DSC-X4", "Disc Rotor X4", "8,200", "160", "90", "2.0%"],
+    ["GBX-HNG-S2", "Gearbox Hanger S2", "3,500", "110", "70", "3.1%"],
+    ["ENG-MNT-H1", "Engine Mount H1", "2,300", "70", "30", "3.0%"]
+  ];
+  return <PremiumDashboardBottomTable title="Defect Distribution by Part" columns={columns} rows={rows} />;
+}
+
+function CustomerComplaintReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Active Complaints", value: "2", icon: "⚠️", color: "#ef4444" },
+    { label: "Resolved", value: "12", icon: "✅", color: "#10b981" },
+    { label: "Avg Resolution", value: "4.5d", icon: "⏱️", color: "#3b82f6" },
+    { label: "Satisfaction", value: "96%", icon: "😊", color: "#8b5cf6" }
+  ];
+  return <PremiumDashboardView title="Customer Complaint Report Dashboard" icon={Megaphone} color="#dc2626" kpis={kpis} setupChart={null} rangeHint="Active Range" onClose={onClose} />;
+}
+
+function CustomerComplaintReportBottomTable() {
+  const columns = ["Complaint ID", "Customer", "Product", "Complaint Description", "Action Taken", "Date", "Corrective Action", "Permanent Action", "Status"];
+  const rows = [
+    ["CC-2026-001", "Tata Motors", "Brake Pads", "Surface scratches", "Polished surfaces", "02-Jun-2026", "Enhanced visual inspection", "Automated QC cameras", "Closed"],
+    ["CC-2026-002", "Mahindra & Mahindra", "Disc Rotors", "Thickness variation", "Recalibrated grinder", "05-Jun-2026", "Adjusted grinding head", "CNC alignment checks", "Open"],
+    ["CC-2026-003", "Maruti Suzuki", "Gearbox Hanger", "Mounting hole offset", "Re-aligned fixture", "10-Jun-2026", "Added check pin to fixture", "Poka-yoke pin design", "Closed"]
+  ];
+  return <PremiumDashboardBottomTable title="Customer Complaints Registry" columns={columns} rows={rows} />;
+}
+
+function MachineCapacityReportDashboardView({ onClose }) {
+  const kpis = [
+    { label: "Available Hours", value: "2,400 h", icon: "📅", color: "#ea580c" },
+    { label: "Utilized Hours", value: "1,850 h", icon: "⚙️", color: "#3b82f6" },
+    { label: "Capacity Load", value: "77.1%", icon: "📊", color: "#10b981" },
+    { label: "Overload Alerts", value: "0", icon: "🚨", color: "#10b981" }
+  ];
+  const setupChart = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"],
+        datasets: [
+          { label: "Run Hours", data: [380, 350, 360, 310, 280], backgroundColor: "#3b82f6" },
+          { label: "Available Hours", data: [480, 480, 480, 480, 480], backgroundColor: "#e2e8f0" }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { x: { stacked: true }, y: { stacked: false } }
+      }
+    });
+  }, []);
+  return <PremiumDashboardView title="Machine Capacity Report Dashboard" icon={Package} color="#ea580c" kpis={kpis} setupChart={setupChart} rangeHint="Machinery Capacity Load" onClose={onClose} />;
+}
+
+function MachineCapacityReportBottomTable() {
+  const columns = ["Machine Name", "Available Hours", "Setup Hours", "Run Hours", "Idle Hours", "Load %", "Status"];
+  const rows = [
+    ["CNC-01", "480", "40", "380", "60", "87.5%", "Normal"],
+    ["CNC-02", "480", "45", "350", "85", "82.3%", "Normal"],
+    ["VMC-01", "480", "30", "360", "90", "81.2%", "Normal"],
+    ["VMC-02", "480", "35", "310", "135", "71.9%", "Normal"],
+    ["Grinding-01", "480", "20", "280", "180", "62.5%", "Normal"]
+  ];
+  return <PremiumDashboardBottomTable title="Machine Load and Availability Details" columns={columns} rows={rows} />;
+}
+
 export default function PlantPerformance1() {
   const [selKpi, setSelKpi] = useState(0);
-  const [selAction, setSelAction] = useState("customer_po_compare");
+  const [selAction, setSelAction] = useState("customer_po_vs_sales_analysis");
   const [centerKey, setCenterKey] = useState(0);
   const [activePeriod, setActivePeriod] = useState("month");
   const [dateRange, setDateRange] = useState({ from: null, to: null });
@@ -3793,14 +4238,7 @@ export default function PlantPerformance1() {
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
               <CenterTransitionWrapper uid={centerKey} loading={loading}>
-                {selAction && activeActionCard && selAction !== "customer_po_compare" && selAction !== "downtime_reason" && selAction !== "quality_split" && selAction !== "top_defects" && selAction !== "customer_complaints" && selAction !== "customer_complaint" && selAction !== "iqc_rejections" && selAction !== "grn_pending" && selAction !== "grn_report" && selAction !== "injob_inspection" && selAction !== "inter_inspection" && selAction !== "final_inspection" && selAction !== "po_status" && selAction !== "idle_summary" && selAction !== "idle_time_entry" && selAction !== "rejection_rework" && selAction !== "operator_efficiency" ? (
-                  <CenterActionDetail
-                    action={activeActionCard}
-                    view={activeActionView}
-                    uid={`act-${centerKey}`}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                  />
-                ) : selectionId === "customer_po_compare" ? (
+                {selectionId === "customer_po_vs_sales_analysis" ? (
                   <CustomerPoCompareView
                     data={data}
                     loading={loading}
@@ -3809,98 +4247,54 @@ export default function PlantPerformance1() {
                     onFilterChange={setPoFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "production_data" ? (
-                  <PlantPerformance1ProductionDataView
-                    from={dateRange.from}
-                    to={dateRange.to}
-                    productionKpis={data.prod}
-                    shiftsPayload={data.shifts}
-                    uid={centerKey}
+                ) : selectionId === "purchase_report_dashboard" ? (
+                  <PurchaseReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "downtime_reason" ? (
-                  <DowntimeReasonView
-                    data={data}
-                    from={dateRange.from}
-                    to={dateRange.to}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "sales_analysis_report_dashboard" ? (
+                  <SalesAnalysisReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : (selectionId === "quality_split" || selectionId === "rejection_rework") ? (
-                  <QualitySplitView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "production_analysis_report_dashboard" ? (
+                  <ProductionAnalysisReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "top_defects" ? (
-                  <TopDefectsView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "idle_hours_report_dashboard" ? (
+                  <IdleHoursReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : (selectionId === "customer_complaints" || selectionId === "customer_complaint") ? (
-                  <CustomerComplaintsView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+                  <IdleHoursNonAcceptedReasonLossReportView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "iqc_rejections" ? (
-                  <IqcRejectionView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "oee_report_dashboard" ? (
+                  <OeeReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : (selectionId === "grn_pending" || selectionId === "grn_report") ? (
-                  <GrnPipelineView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "oee_comparison_report_dashboard" ? (
+                  <OeeComparisonReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "injob_inspection" ? (
-                  <InspectionView type="injob_inspection" data={data} loading={loading} uid={centerKey} />
-                ) : selectionId === "inter_inspection" ? (
-                  <InspectionView type="inter_inspection" data={data} loading={loading} uid={centerKey} />
-                ) : selectionId === "final_inspection" ? (
-                  <InspectionView type="final_inspection" data={data} loading={loading} uid={centerKey} />
-                ) : selectionId === "po_status" ? (
-                  <PurchaseOrderView data={data} loading={loading} uid={centerKey} />
-                ) : (selectionId === "idle_summary" || selectionId === "idle_time_entry") ? (
-                  <IdleTimeView data={data} loading={loading} uid={centerKey} />
-                ) : selectionId === "otd_trend" ? (
-                  <OtdTrendView
-                    loading={loading}
-                    uid={centerKey}
-                    from={dateRange.from}
-                    to={dateRange.to}
+                ) : selectionId === "efficiency_eff_report_dashboard" ? (
+                  <EfficiencyEffReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : (selectionId === "machine_efficiency" || selectionId === "operator_efficiency") ? (
-                  <OperatorEfficiencyView
-                    loading={loading}
-                    uid={centerKey}
-                    from={dateRange.from}
-                    to={dateRange.to}
+                ) : selectionId === "rejection_rework_report_dashboard" ? (
+                  <RejectionReworkReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "final_inspection_ok" ? (
-                  <FinalInspectionOkView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
+                ) : selectionId === "customer_complaint_report_dashboard" ? (
+                  <CustomerComplaintReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "production_output" ? (
-                  <ProductionOutputView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
-                  />
-                ) : selectionId === "oee_efficiency" ? (
-                  <OeeEfficiencyView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
-                    from={dateRange.from}
-                    to={dateRange.to}
+                ) : selectionId === "machine_capacity_report_dashboard" ? (
+                  <MachineCapacityReportDashboardView
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : (
-                  <CenterKpiDetail detail={centerDetail} uid={`kpi-${centerKey}`} loading={loading} />
+                  <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
+                    Select a dashboard from the list to view report details.
+                  </div>
                 )}
               </CenterTransitionWrapper>
             </div>
@@ -3934,18 +4328,30 @@ export default function PlantPerformance1() {
           </section>
         </div>
 
-        {selectionId === "customer_po_compare" ? (
+        {selectionId === "customer_po_vs_sales_analysis" ? (
           <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} />
-        ) : selectionId === "customer_complaints" || selectionId === "customer_complaint" ? (
-          <CustomerComplaintsBottomTable data={data} loading={loading} uid={`bot-cc-${centerKey}`} />
-        ) : selectionId === "iqc_rejections" ? (
-          <IqcRejectionBottomTable data={data} loading={loading} uid={`bot-iqc-${centerKey}`} />
-        ) : selectionId === "grn_pending" || selectionId === "grn_report" ? (
-          <GrnPipelineBottomTable data={data} loading={loading} uid={`bot-grn-${centerKey}`} />
-        ) : selectionId === "po_status" ? (
-          <PurchaseOrderBottomTable data={data} loading={loading} uid={`bot-po-${centerKey}`} />
-        ) : (bottomTable && selectionId !== "production_data" && selectionId !== "otd_trend" && selectionId !== "machine_efficiency" && selectionId !== "operator_efficiency") ? (
-          <BottomKpiPanel bottom={bottomTable} uid={`bot-${centerKey}`} />
+        ) : selectionId === "purchase_report_dashboard" ? (
+          <PurchaseReportBottomTable />
+        ) : selectionId === "sales_analysis_report_dashboard" ? (
+          <SalesAnalysisReportBottomTable />
+        ) : selectionId === "production_analysis_report_dashboard" ? (
+          <ProductionAnalysisReportBottomTable />
+        ) : selectionId === "idle_hours_report_dashboard" ? (
+          <IdleHoursReportBottomTable />
+        ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+          <IdleHoursNonAcceptedReasonLossReportBottomTable />
+        ) : selectionId === "oee_report_dashboard" ? (
+          <OeeReportBottomTable />
+        ) : selectionId === "oee_comparison_report_dashboard" ? (
+          <OeeComparisonReportBottomTable />
+        ) : selectionId === "efficiency_eff_report_dashboard" ? (
+          <EfficiencyEffReportBottomTable />
+        ) : selectionId === "rejection_rework_report_dashboard" ? (
+          <RejectionReworkReportBottomTable />
+        ) : selectionId === "customer_complaint_report_dashboard" ? (
+          <CustomerComplaintReportBottomTable />
+        ) : selectionId === "machine_capacity_report_dashboard" ? (
+          <MachineCapacityReportBottomTable />
         ) : null}
       </div>
     </div>

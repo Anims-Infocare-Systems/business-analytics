@@ -1905,7 +1905,7 @@ def quality_analysis_records(request):
                     m.inspdate AS InspDate,
                     d.partno AS PartNo,
                     d.description AS Description,
-                    '' AS ProcessName,
+                    ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(d.jobqty, 0) AS INT) AS InspQty,
                     CAST(ISNULL(d.okqty, 0) AS INT) AS OKQty,
                     CAST(ISNULL(d.matrej, 0) AS INT) AS MatRejQty,
@@ -1914,6 +1914,7 @@ def quality_analysis_records(request):
                     m.inspby AS InspBy
                 FROM InJob_Mas m
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
+                LEFT JOIN ProcessDet pd ON d.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
 
@@ -1926,7 +1927,7 @@ def quality_analysis_records(request):
                     inter_inspdate AS InspDate,
                     partno AS PartNo,
                     description AS Description,
-                    '' AS ProcessName,
+                    ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(inspqty, 0) AS INT) AS InspQty,
                     CAST(ISNULL(okqty, 0) AS INT) AS OKQty,
                     CAST(ISNULL(matrejqty, 0) AS INT) AS MatRejQty,
@@ -1934,6 +1935,7 @@ def quality_analysis_records(request):
                     CAST(ISNULL(rwqty, 0) AS INT) AS ReworkQty,
                     inspby AS InspBy
                 FROM InterInspectionEntry i
+                LEFT JOIN ProcessDet pd ON i.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(i.deleted, 0) = 0
                   AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
 
@@ -1946,7 +1948,7 @@ def quality_analysis_records(request):
                     f.finspdate AS InspDate,
                     f.partno AS PartNo,
                     f.description AS Description,
-                    '' AS ProcessName,
+                    ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(f.totqty, 0) AS INT) AS InspQty,
                     CAST(ISNULL(f.okqty, 0) AS INT) AS OKQty,
                     CAST(ISNULL(f.matrejqty, 0) AS INT) AS MatRejQty,
@@ -1954,6 +1956,7 @@ def quality_analysis_records(request):
                     {rework_subquery} AS ReworkQty,
                     f.inspby AS InspBy
                 FROM FinalInspectionEntry f
+                LEFT JOIN ProcessDet pd ON f.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(f.deleted, 0) = 0
                   AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
             ) AS Combined
@@ -2014,7 +2017,7 @@ def quality_analysis_records(request):
                     "partNo": part_no or "—",
                     "product": desc_val or "—",
                     "partNoDesc": f"{part_no} - {desc_val}" if (part_no and desc_val) else (part_no or desc_val or "—"),
-                    "process": "", # Process alone leave empty
+                    "process": process_val or "",
                     "qty": str(insp_qty),
                     "okQty": str(ok_qty),
                     "matRejQty": str(mat_rej_qty),
