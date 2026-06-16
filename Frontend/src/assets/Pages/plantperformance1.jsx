@@ -277,18 +277,19 @@ const CURRENT_STATE_CARDS = [
 ];
 
 const ACTION_CARDS = [
-  { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Analysis", icon: Scale, color: "#2d6de8", priority: "medium" },
-  { id: "purchase_report_dashboard", title: "Purchase Report Dashboard", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
-  { id: "sales_analysis_report_dashboard", title: "Sales Analysis Report Dashboard", icon: TrendingUp, color: "#10b981", priority: "medium" },
-  { id: "production_analysis_report_dashboard", title: "Production Analysis Report Dashboard", icon: Factory, color: "#8b5cf6", priority: "medium" },
-  { id: "idle_hours_report_dashboard", title: "Idle Hours Report Dashboard", icon: Timer, color: "#ef4444", priority: "medium" },
-  { id: "idle_hours_non_accepted_reason_production_loss_report", title: "Idle Hours – Non Accepted Reason Production Loss Report", icon: AlertTriangle, color: "#f43f5e", priority: "high" },
-  { id: "oee_report_dashboard", title: "OEE Report Dashboard", icon: Target, color: "#2d6de8", priority: "medium" },
-  { id: "oee_comparison_report_dashboard", title: "OEE Comparison Report Dashboard", icon: TrendingUp, color: "#0ea5e9", priority: "medium" },
-  { id: "efficiency_eff_report_dashboard", title: "Efficiency (EFF) Report Dashboard", icon: UserCheck, color: "#10b981", priority: "medium" },
-  { id: "rejection_rework_report_dashboard", title: "Rejection & Rework Report Dashboard", icon: AlertTriangle, color: "#f59e0b", priority: "high" },
-  { id: "customer_complaint_report_dashboard", title: "Customer Complaint Report Dashboard", icon: Megaphone, color: "#dc2626", priority: "high" },
-  { id: "machine_capacity_report_dashboard", title: "Machine Capacity Report Dashboard", icon: Package, color: "#ea580c", priority: "medium" }
+  { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Value Analysis", icon: Scale, color: "#2d6de8", priority: "medium", trend: { value: "+5.8% Up", type: "up" } },
+  { id: "purchase_report_dashboard", title: "Purchase Report", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
+  { id: "sales_analysis_report_dashboard", title: "Sales Analysis Report", icon: TrendingUp, color: "#10b981", priority: "medium" },
+  { id: "production_analysis_report_dashboard", title: "Production Analysis Report", icon: Factory, color: "#8b5cf6", priority: "medium" },
+  { id: "idle_hours_report_dashboard", title: "Idle Hours Report", icon: Timer, color: "#ef4444", priority: "medium", trend: { value: "-3.2% Down", type: "down" } },
+  { id: "idle_hours_non_accepted_reason_production_loss_report", title: "Idle Hours – Non Accepted Reason Production Loss Report", icon: AlertTriangle, color: "#f43f5e", priority: "high", trend: { value: "-12.5% Down", type: "down" } },
+  { id: "oee_report_dashboard", title: "OEE Report", icon: Target, color: "#2d6de8", priority: "medium", trend: { value: "+2.4% Up", type: "up" } },
+  { id: "oee_comparison_report_dashboard", title: "OEE Comparison Report", icon: TrendingUp, color: "#0ea5e9", priority: "medium", trend: { value: "+0.5% Up", type: "up" } },
+  { id: "efficiency_eff_report_dashboard", title: "Efficiency (EFF) Report", icon: UserCheck, color: "#10b981", priority: "medium" },
+  { id: "rejection_report_dashboard", title: "Rejection Report", icon: AlertTriangle, color: "#f59e0b", priority: "high", trend: { value: "-8.4% Down", type: "down" } },
+  { id: "rework_report_dashboard", title: "Rework Report", icon: PackageCheck, color: "#a855f7", priority: "high", trend: { value: "0.0% Avg", type: "average" } },
+  { id: "customer_complaint_report_dashboard", title: "Customer Complaint Report", icon: Megaphone, color: "#dc2626", priority: "high" },
+  { id: "machine_capacity_report_dashboard", title: "Machine Capacity Report", icon: Package, color: "#ea580c", priority: "medium" }
 ];
 
 function formatLocalYmd(d) {
@@ -401,7 +402,8 @@ function buildActionSidebar(card, data, loading) {
     oee_report_dashboard: { desc: "Overall Equipment Effectiveness based on Availability, Performance, and Quality factors.", time: "Target 85% OEE" },
     oee_comparison_report_dashboard: { desc: "Compare availability, performance, quality, and OEE parameters across machines and shifts.", time: "Machine benchmark" },
     efficiency_eff_report_dashboard: { desc: "Performance and operator efficiency report based on actual run cycle time vs standards.", time: "Performance grade" },
-    rejection_rework_report_dashboard: { desc: "Track rejections, rework loops, and scrap costs across production lines.", time: "Quality statistics" },
+    rejection_report_dashboard: { desc: "Track rejections, scrap counts, and defect distribution across production lines.", time: "Quality statistics" },
+    rework_report_dashboard: { desc: "Track rework cycles, recovery loops, and part repair metrics across production lines.", time: "Quality statistics" },
     customer_complaint_report_dashboard: { desc: "Customer complaints log, resolution status, corrective actions, and permanent preventions.", time: "Customer QC audits" },
     machine_capacity_report_dashboard: { desc: "Capacity utilization of machinery: available capacity vs run hours, load, and overload warnings.", time: "Capacity audit" }
   };
@@ -3577,7 +3579,7 @@ function CenterTransitionWrapper({ uid, loading, children }) {
 }
 
 /* ── Generic Premium Dashboard View & Bottom Table Helpers ── */
-function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, children }) {
+function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, children }) {
   return (
     <div className="pp1-action-detail pp1-ct-reveal pp1-ct-reveal--in" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-action-detail__header" style={{ "--act-color": color, padding: "10px 14px", gap: "10px" }}>
@@ -3593,17 +3595,21 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
       <div className="pp1-action-detail__body" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px" }}>
         {children}
         {/* KPI Strip */}
-        <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
-          {kpis.map((k, i) => (
-            <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div>
-                <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
-                <p className="pp1-detail__chip-val" style={{ fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
+        {kpis && kpis.length > 0 && (
+          <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+            {kpis.map((k, i) => (
+              <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div>
+                  <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+                  <p className="pp1-detail__chip-val" style={{ fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
+                </div>
+                <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
               </div>
-              <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {chartControls}
 
         {/* Chart Card */}
         {setupChart && (
@@ -3612,7 +3618,7 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
               <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>{rangeHint.includes("-") && !rangeHint.includes("Breakdown") ? `Trend Analysis (${rangeHint})` : rangeHint}</div>
             </div>
             <div className="pp1-dt-chart-wrap" style={{ height: chartHeight, position: "relative" }}>
-              <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={title} />
+              <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken || title} />
             </div>
           </div>
         )}
@@ -3630,7 +3636,16 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
               {columns.map((col, idx) => (
-                <th key={idx} style={{ textAlign: idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("%")) ? "right" : "left" }}>
+                <th
+                  key={idx}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: "#f2f6fe",
+                    zIndex: 10,
+                    textAlign: idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("hour") || col.toLowerCase().includes("rate") || col.toLowerCase().includes("ratio") || col.toLowerCase().includes("%") || col.toLowerCase().includes("day") || col.toLowerCase().includes("month") || col.toLowerCase().includes("loss")) ? "right" : "left"
+                  }}
+                >
                   {col}
                 </th>
               ))}
@@ -3643,7 +3658,7 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
               rows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
-                    const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("%"));
+                    const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("hour") || columns[ci].toLowerCase().includes("rate") || columns[ci].toLowerCase().includes("ratio") || columns[ci].toLowerCase().includes("%") || columns[ci].toLowerCase().includes("day") || columns[ci].toLowerCase().includes("month") || columns[ci].toLowerCase().includes("loss"));
                     const isStatus = columns[ci].toLowerCase() === "status";
                     if (isStatus) {
                       const statusColors = {
@@ -3880,11 +3895,11 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
   return (
     <div className="pp1-action-detail" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-action-detail__header" style={{ "--act-color": "#ea580c", padding: "10px 14px", gap: "10px" }}>
-        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "#ea580c" }}>
+        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <ShoppingCart size={16} style={{ color: "#fff" }} />
         </div>
         <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>Purchase Report Dashboard</p>
+          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>Purchase Report</p>
         </div>
         <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
       </div>
@@ -4358,7 +4373,7 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) 
   }, [chartMonths, datasets]);
 
   return (
-    <PremiumDashboardView title="Sales Analysis Report Dashboard" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Turnover Report" onClose={onClose}>
+    <PremiumDashboardView title="Sales Analysis Report" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Turnover Report" onClose={onClose} rebuildToken={JSON.stringify(datasets)}>
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
         <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
@@ -4471,7 +4486,7 @@ function SalesAnalysisReportBottomTable({ filters }) {
       if (filters.customer === "Tata Motors") match = "Customer A";
       if (filters.customer === "Mahindra & Mahindra") match = "Customer B";
       if (filters.customer === "Maruti Suzuki" || filters.customer === "Ashok Leyland") match = "Customer C";
-      
+
       list = list.filter(r => r[0] === match);
     }
     return list;
@@ -4611,245 +4626,5317 @@ function SalesAnalysisReportBottomTable({ filters }) {
   );
 }
 
-function ProductionAnalysisReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Total Produced", value: "24,500", icon: "⚙️", color: "#8b5cf6" },
-    { label: "Target Output", value: "26,000", icon: "🎯", color: "#3b82f6" },
-    { label: "First Pass Yield", value: "98.2%", icon: "📈", color: "#10b981" },
-    { label: "Avg Efficiency", value: "84.5%", icon: "⚡", color: "#f97316" }
-  ];
+function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+  const [xAxisGroup, setXAxisGroup] = React.useState("Block");
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      team: "",
+      machine: "",
+      operator: "",
+      customer: "",
+    });
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters.fromDate && filters.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const mockProdLogs = React.useMemo(() => [
+    { date: "2026-06-15", machine: "CNC-01", shift: "A Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 850, rej: 12, team: "Team A", customer: "Tata Motors", value: 170000, profit: 42000 },
+    { date: "2026-06-15", machine: "CNC-02", shift: "A Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 620, rej: 8, team: "Team A", customer: "Mahindra & Mahindra", value: 248000, profit: 62000 },
+    { date: "2026-06-15", machine: "VMC-01", shift: "A Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 410, rej: 5, team: "Team B", customer: "Maruti Suzuki", value: 184500, profit: 36900 },
+    { date: "2026-06-15", machine: "CNC-01", shift: "B Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 820, rej: 15, team: "Team A", customer: "Tata Motors", value: 164000, profit: 41000 },
+    { date: "2026-06-15", machine: "CNC-02", shift: "B Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 600, rej: 10, team: "Team A", customer: "Mahindra & Mahindra", value: 240000, profit: 60000 },
+    { date: "2026-06-15", machine: "VMC-02", shift: "B Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 390, rej: 6, team: "Team B", customer: "Maruti Suzuki", value: 175500, profit: 35100 },
+    { date: "2026-06-15", machine: "Grinding-01", shift: "C Shift", operator: "Senthil.K", part: "TRK-AXL-L9", qty: 150, rej: 3, team: "Team C", customer: "Ashok Leyland", value: 375000, profit: 93750 }
+  ], []);
+
+  const filteredLogs = React.useMemo(() => {
+    let list = mockProdLogs;
+    if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters.team) list = list.filter(r => r.team === filters.team);
+    if (filters.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters.operator) list = list.filter(r => r.operator === filters.operator);
+    if (filters.customer) list = list.filter(r => r.customer === filters.customer);
+    return list;
+  }, [filters, mockProdLogs]);
+
+  // Dynamically calculate KPIs
+  const kpis = React.useMemo(() => {
+    let totalVal = 0;
+    let totalProfitVal = 0;
+
+    const machineVals = {};
+    const machProf = {};
+    const machValsForRatio = {};
+
+    filteredLogs.forEach(r => {
+      totalVal += r.value;
+      totalProfitVal += r.profit;
+      machineVals[r.machine] = (machineVals[r.machine] || 0) + r.value;
+      machProf[r.machine] = (machProf[r.machine] || 0) + r.profit;
+      machValsForRatio[r.machine] = (machValsForRatio[r.machine] || 0) + r.value;
+    });
+
+    // Best Machine
+    let bestMach = "—";
+    let maxMachVal = 0;
+    Object.keys(machineVals).forEach(m => {
+      if (machineVals[m] > maxMachVal) {
+        maxMachVal = machineVals[m];
+        bestMach = m;
+      }
+    });
+
+    // Highest Profitability (highest profitability ratio machine & ratio)
+    let bestMachProf = "—";
+    let maxProfRatio = 0;
+    Object.keys(machProf).forEach(m => {
+      const ratio = machValsForRatio[m] > 0 ? (machProf[m] / machValsForRatio[m]) * 100 : 0;
+      if (ratio > maxProfRatio) {
+        maxProfRatio = ratio;
+        bestMachProf = `${m} (${ratio.toFixed(1)}%)`;
+      }
+    });
+
+    const avgProfitRatio = totalVal > 0 ? (totalProfitVal / totalVal) * 100 : 0;
+
+    return [
+      { label: "Total Production Value", value: `₹${(totalVal / 100000).toFixed(2)}L`, icon: "💰", color: "#8b5cf6" },
+      { label: "Best Machine", value: bestMach, icon: "⚙️", color: "#3b82f6" },
+      { label: "Highest Profit", value: `₹${(totalProfitVal / 100000).toFixed(2)}L`, icon: "📈", color: "#10b981" },
+      { label: "Average Profit Ratio", value: `${avgProfitRatio.toFixed(1)}%`, icon: "⚡", color: "#f97316" },
+      { label: "Highest Profitability", value: bestMachProf, icon: "🏆", color: "#ec4899" }
+    ];
+  }, [filteredLogs]);
+
+  // Aggregate combination chart data dynamically based on selection and filters
+  const chartData = React.useMemo(() => {
+    const rawData = [
+      { block: "Team A", type: "CNC", machine: "CNC1", operator: "Kumar", customer: "Customer A", rate: 180, value: 210 },
+      { block: "Team A", type: "CNC", machine: "CNC2", operator: "Ravi", customer: "Customer B", rate: 130, value: 150 },
+      { block: "Team B", type: "CNC", machine: "VMC1", operator: "Mani", customer: "Customer C", rate: 140, value: 90 },
+      { block: "Team C", type: "Conv Cutting", machine: "Cutting", operator: "Moorthy", customer: "Customer D", rate: 70, value: 50 },
+      { block: "Team D", type: "Conv", machine: "Drilling", operator: "Sankar", customer: "Customer A", rate: 20, value: 60 }
+    ];
+
+    let list = rawData;
+
+    // Apply interactive dashboard filters mapped to the sample dataset
+    if (filters.team) {
+      list = list.filter(r => r.block === filters.team);
+    }
+    if (filters.machine) {
+      const machMap = {
+        "CNC-01": "CNC1",
+        "CNC-02": "CNC2",
+        "VMC-01": "VMC1",
+        "VMC-02": "VMC1",
+        "Grinding-01": "Cutting"
+      };
+      const targetMach = machMap[filters.machine];
+      if (targetMach) list = list.filter(r => r.machine === targetMach);
+    }
+    if (filters.operator) {
+      const opMap = {
+        "Balamurugan.P": "Kumar",
+        "Gopikrishnan.R": "Ravi",
+        "Karthi.S": "Mani",
+        "Senthil.K": "Moorthy"
+      };
+      const targetOp = opMap[filters.operator];
+      if (targetOp) list = list.filter(r => r.operator === targetOp);
+    }
+    if (filters.customer) {
+      const custMap = {
+        "Tata Motors": "Customer A",
+        "Mahindra & Mahindra": "Customer B",
+        "Maruti Suzuki": "Customer C",
+        "Ashok Leyland": "Customer D"
+      };
+      const targetCust = custMap[filters.customer];
+      if (targetCust) list = list.filter(r => r.customer === targetCust);
+    }
+
+    const groupField = xAxisGroup.toLowerCase() === "block" ? "block" : xAxisGroup.toLowerCase();
+    const aggregated = {};
+    list.forEach(r => {
+      const key = r[groupField];
+      if (!aggregated[key]) {
+        aggregated[key] = { rateSum: 0, valSum: 0 };
+      }
+      aggregated[key].rateSum += r.rate;
+      aggregated[key].valSum += r.value;
+    });
+
+    const labels = Object.keys(aggregated);
+    const rates = labels.map(l => aggregated[l].rateSum);
+    const values = labels.map(l => aggregated[l].valSum);
+
+    return { labels, rates, values };
+  }, [filters, xAxisGroup]);
+
   const setupChart = React.useCallback((canvas) => {
-    return new Chart(canvas, {
+    const ctx = canvas.getContext("2d");
+    return new Chart(ctx, {
       type: "bar",
       data: {
-        labels: ["A Shift", "B Shift", "C Shift"],
-        datasets: [{
-          label: "Output (pcs)",
-          data: [9200, 8500, 6800],
-          backgroundColor: ["#8b5cf6", "#3b82f6", "#f97316"],
-          borderRadius: 4
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
-  }, []);
-  return <PremiumDashboardView title="Production Analysis Report Dashboard" icon={Factory} color="#8b5cf6" kpis={kpis} setupChart={setupChart} rangeHint="Shift-wise Breakdown" onClose={onClose} />;
-}
-
-function ProductionAnalysisReportBottomTable() {
-  const columns = ["Date", "Machine No", "Shift", "Operator", "Part Number", "OK Qty", "Rej Qty"];
-  const rows = [
-    ["15-Jun-2026", "CNC-01", "A Shift", "Balamurugan.P", "BRK-PAD-M1", "850", "12"],
-    ["15-Jun-2026", "CNC-02", "A Shift", "Gopikrishnan.R", "ROT-DSC-X4", "620", "8"],
-    ["15-Jun-2026", "VMC-01", "A Shift", "Karthi.S", "GBX-HNG-S2", "410", "5"],
-    ["15-Jun-2026", "CNC-01", "B Shift", "Balamurugan.P", "BRK-PAD-M1", "820", "15"],
-    ["15-Jun-2026", "CNC-02", "B Shift", "Gopikrishnan.R", "ROT-DSC-X4", "600", "10"]
-  ];
-  return <PremiumDashboardBottomTable title="Daily Production Log" columns={columns} rows={rows} />;
-}
-
-function IdleHoursReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Total Idle", value: "34.2 h", icon: "⏱️", color: "#ef4444" },
-    { label: "Planned Idle", value: "24.0 h", icon: "📅", color: "#3b82f6" },
-    { label: "Unplanned Idle", value: "10.2 h", icon: "⚠️", color: "#f59e0b" },
-    { label: "Accepted Rate", value: "70.2%", icon: "✅", color: "#10b981" }
-  ];
-  const setupChart = React.useCallback((canvas) => {
-    return new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels: ["Tool Change", "Setting Time", "Material Waiting", "Operator Break"],
-        datasets: [{
-          data: [13.6, 10.2, 6.8, 3.6],
-          backgroundColor: ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981"]
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
-  }, []);
-  return <PremiumDashboardView title="Idle Hours Report Dashboard" icon={Timer} color="#ef4444" kpis={kpis} setupChart={setupChart} rangeHint="Accepted Idle Distribution" onClose={onClose} />;
-}
-
-function IdleHoursReportBottomTable() {
-  const columns = ["Date", "Machine No", "Reason", "Shift", "Duration (Hours)"];
-  const rows = [
-    ["15-Jun-2026", "CNC-01", "Tool Change", "A Shift", "1.5"],
-    ["15-Jun-2026", "CNC-02", "Setting Time", "A Shift", "2.0"],
-    ["15-Jun-2026", "VMC-01", "Material Waiting", "B Shift", "1.2"],
-    ["15-Jun-2026", "CNC-01", "Setting Time", "B Shift", "1.8"],
-    ["15-Jun-2026", "Grinding-01", "Tool Change", "C Shift", "0.8"]
-  ];
-  return <PremiumDashboardBottomTable title="Idle Time Accepted Log" columns={columns} rows={rows} />;
-}
-
-function IdleHoursNonAcceptedReasonLossReportView({ onClose }) {
-  const kpis = [
-    { label: "Non-Accepted", value: "18.5 h", icon: "🚫", color: "#f43f5e" },
-    { label: "Prod Loss Qty", value: "1,450 pcs", icon: "📉", color: "#ef4444" },
-    { label: "Est Loss Value", value: "₹2.8L", icon: "💸", color: "#ea580c" },
-    { label: "Avg Response", value: "15 mins", icon: "⚡", color: "#8b5cf6" }
-  ];
-  const setupChart = React.useCallback((canvas) => {
-    return new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels: ["No Operator", "Power Outage", "Mech Breakdown", "Elec Failure"],
-        datasets: [{
-          label: "Downtime (Hours)",
-          data: [7.2, 4.8, 3.7, 2.8],
-          backgroundColor: "#f43f5e",
-          borderRadius: 4
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
-  }, []);
-  return <PremiumDashboardView title="Idle Hours – Non Accepted Reason Production Loss Report" icon={AlertTriangle} color="#f43f5e" kpis={kpis} setupChart={setupChart} rangeHint="Downtime Categories" onClose={onClose} />;
-}
-
-function IdleHoursNonAcceptedReasonLossReportBottomTable() {
-  const columns = ["Breakdown ID", "Machine", "Non-Accepted Reason", "Breakdown Start", "Duration (Hours)", "Loss Qty"];
-  const rows = [
-    ["BD-2026-081", "CNC-01", "No Operator", "10:15 AM", "2.5", "210"],
-    ["BD-2026-082", "CNC-02", "Power Interruption", "02:30 PM", "1.8", "150"],
-    ["BD-2026-083", "VMC-02", "Mechanical Breakdown", "11:00 AM", "3.2", "280"],
-    ["BD-2026-084", "Grinding-01", "Electrical Failure", "04:15 PM", "1.2", "95"]
-  ];
-  return <PremiumDashboardBottomTable title="Production Loss Log" columns={columns} rows={rows} />;
-}
-
-function OeeReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Overall OEE", value: "78.4%", icon: "🏆", color: "#2d6de8" },
-    { label: "Availability", value: "88.5%", icon: "⏱️", color: "#10b981" },
-    { label: "Performance", value: "92.0%", icon: "📈", color: "#3b82f6" },
-    { label: "Quality Factor", value: "96.2%", icon: "🌟", color: "#8b5cf6" }
-  ];
-  const setupChart = React.useCallback((canvas) => {
-    return new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        labels: chartData.labels,
         datasets: [
-          { label: "Actual OEE (%)", data: [76.5, 78.0, 79.4, 77.8, 80.2, 78.4], borderColor: "#2d6de8", fill: false },
-          { label: "Target OEE (%)", data: [85.0, 85.0, 85.0, 85.0, 85.0, 85.0], borderColor: "#ef4444", borderDash: [5, 5], fill: false }
+          {
+            type: "bar",
+            label: "Rate Per Hour",
+            data: chartData.rates,
+            yAxisID: "yRate",
+            backgroundColor: "rgba(139, 92, 246, 0.75)",
+            borderColor: "#8b5cf6",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "line",
+            label: "Production Value",
+            data: chartData.values,
+            yAxisID: "yValue",
+            borderColor: "#10b981",
+            backgroundColor: "#10b981",
+            borderWidth: 3,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }
         ]
       },
-      options: { responsive: true, maintainAspectRatio: false }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 10,
+                weight: 600
+              },
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            backgroundColor: "rgba(15, 23, 42, 0.9)",
+            titleFont: { family: "'Inter', sans-serif", size: 11, weight: "bold" },
+            bodyFont: { family: "'Inter', sans-serif", size: 11 },
+            padding: 8,
+            cornerRadius: 6,
+            callbacks: {
+              label: (context) => {
+                const label = context.dataset.label || "";
+                const val = context.raw;
+                return ` ${label}: ₹${val.toLocaleString()}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { family: "'Inter', sans-serif", size: 10, weight: 600 },
+              color: "#64748b"
+            }
+          },
+          yRate: {
+            type: "linear",
+            position: "left",
+            title: {
+              display: true,
+              text: "Rate Per Hour (₹)",
+              color: "#8b5cf6",
+              font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
+            },
+            ticks: {
+              font: { family: "'Inter', sans-serif", size: 10 },
+              color: "#64748b",
+              callback: (v) => `₹${v.toLocaleString()}`
+            },
+            grid: { color: "rgba(0, 0, 0, 0.05)" }
+          },
+          yValue: {
+            type: "linear",
+            position: "right",
+            title: {
+              display: true,
+              text: "Production Value (₹)",
+              color: "#10b981",
+              font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
+            },
+            ticks: {
+              font: { family: "'Inter', sans-serif", size: 10 },
+              color: "#64748b",
+              callback: (v) => `₹${v.toLocaleString()}`
+            },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
     });
+  }, [chartData]);
+
+  const teams = ["Team A", "Team B", "Team C"];
+  const machines = ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"];
+  const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K"];
+  const customers = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"];
+
+  return (
+    <PremiumDashboardView
+      title="Production Analysis Report"
+      icon={Factory}
+      color="#8b5cf6"
+      kpis={kpis}
+      setupChart={setupChart}
+      rangeHint="Production Value Product Rate vs Rate Per Hour"
+      onClose={onClose}
+      rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`}
+      chartControls={
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", padding: "8px 12px", background: "rgba(139, 92, 246, 0.05)", borderRadius: "8px", border: "1px dashed rgba(139, 92, 246, 0.2)", margin: "0px 0 0px 0" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)", textTransform: "uppercase" }}>Chart X-Axis:</span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {["Block", "Machine", "Operator", "Customer"].map(g => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setXAxisGroup(g)}
+                style={{
+                  padding: "3px 10px",
+                  borderRadius: "15px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: xAxisGroup === g ? "1px solid var(--pp1-blue)" : "1px solid rgba(0,0,0,0.1)",
+                  background: xAxisGroup === g ? "var(--pp1-blue)" : "#fff",
+                  color: xAxisGroup === g ? "#fff" : "var(--pp1-text-3)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters.fromDate}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters.toDate}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button type="button" className="pp1-btn-apply" onClick={() => setDateOpen(false)}>Done</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Team Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Team</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.team}
+            onChange={e => handleInputChange("team", e.target.value)}
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Machine Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.machine}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Operator Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Operator</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.operator}
+            onChange={e => handleInputChange("operator", e.target.value)}
+          >
+            <option value="">All Operators</option>
+            {operators.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        {/* Customer Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Customer</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.customer}
+            onChange={e => handleInputChange("customer", e.target.value)}
+          >
+            <option value="">All Customers</option>
+            {customers.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+function ProductionAnalysisReportBottomTable({ filters }) {
+  const [activeTab, setActiveTab] = React.useState("rateVsHour"); // "rateVsHour" | "dailyLog"
+
+  // Tab 1 columns & rows (Sample Data)
+  const columnsRateVsHour = ["Block", "Type", "Machine", "Operator", "Customer", "Rate Per Hour", "Production Value", "Profit %"];
+
+  const rowsRateVsHour = React.useMemo(() => {
+    let list = [
+      { block: "Team A", type: "CNC", machine: "CNC1", operator: "Kumar", customer: "Customer A", rate: 180, value: 210, profitPct: 1.17, filterDate: "2026-06-15" },
+      { block: "Team A", type: "CNC", machine: "CNC2", operator: "Ravi", customer: "Customer B", rate: 130, value: 150, profitPct: 1.15, filterDate: "2026-06-15" },
+      { block: "Team B", type: "CNC", machine: "VMC1", operator: "Mani", customer: "Customer C", rate: 140, value: 90, profitPct: 0.64, filterDate: "2026-06-15" },
+      { block: "Team C", type: "Conv Cutting", machine: "Cutting", operator: "Moorthy", customer: "Customer D", rate: 70, value: 50, profitPct: 0.71, filterDate: "2026-06-15" },
+      { block: "Team D", type: "Conv", machine: "Drilling", operator: "Sankar", customer: "Customer A", rate: 20, value: 60, profitPct: 3.00, filterDate: "2026-06-15" }
+    ];
+
+    // Apply filters from parent filters state (mapped to sample dataset)
+    if (filters?.team) {
+      list = list.filter(r => r.block === filters.team);
+    }
+    if (filters?.machine) {
+      const machMap = {
+        "CNC-01": "CNC1",
+        "CNC-02": "CNC2",
+        "VMC-01": "VMC1",
+        "VMC-02": "VMC1",
+        "Grinding-01": "Cutting"
+      };
+      const targetMach = machMap[filters.machine];
+      if (targetMach) list = list.filter(r => r.machine === targetMach);
+    }
+    if (filters?.operator) {
+      const opMap = {
+        "Balamurugan.P": "Kumar",
+        "Gopikrishnan.R": "Ravi",
+        "Karthi.S": "Mani",
+        "Senthil.K": "Moorthy"
+      };
+      const targetOp = opMap[filters.operator];
+      if (targetOp) list = list.filter(r => r.operator === targetOp);
+    }
+    if (filters?.customer) {
+      const custMap = {
+        "Tata Motors": "Customer A",
+        "Mahindra & Mahindra": "Customer B",
+        "Maruti Suzuki": "Customer C",
+        "Ashok Leyland": "Customer D"
+      };
+      const targetCust = custMap[filters.customer];
+      if (targetCust) list = list.filter(r => r.customer === targetCust);
+    }
+
+    return list.map(r => [
+      r.block,
+      r.type,
+      r.machine,
+      r.operator,
+      r.customer,
+      `₹${fmtNum(r.rate)}`,
+      `₹${fmtNum(r.value)}`,
+      `${r.profitPct.toFixed(2)}%`
+    ]);
+  }, [filters]);
+
+  // Tab 2 columns & rows (Daily Production Log)
+  const columnsDailyLog = ["Date", "Team", "Machine", "Operator", "Customer", "Production Qty", "Production Value", "Rate Per Hour", "Profit Ratio"];
+
+  const rowsDailyLog = React.useMemo(() => {
+    let list = [
+      { date: "15-Jun-2026", team: "Team A", machine: "CNC-01", operator: "Balamurugan.P", customer: "Tata Motors", qty: 850, value: 170000, ratePerHour: 21250, profitRatio: "24.7%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team A", machine: "CNC-02", operator: "Gopikrishnan.R", customer: "Mahindra & Mahindra", qty: 620, value: 248000, ratePerHour: 31000, profitRatio: "25.0%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team B", machine: "VMC-01", operator: "Karthi.S", customer: "Maruti Suzuki", qty: 410, value: 184500, ratePerHour: 23063, profitRatio: "20.0%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team A", machine: "CNC-01", operator: "Balamurugan.P", customer: "Tata Motors", qty: 820, value: 164000, ratePerHour: 20500, profitRatio: "25.0%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team A", machine: "CNC-02", operator: "Gopikrishnan.R", customer: "Mahindra & Mahindra", qty: 600, value: 240000, ratePerHour: 30000, profitRatio: "25.0%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team B", machine: "VMC-02", operator: "Karthi.S", customer: "Maruti Suzuki", qty: 390, value: 175500, ratePerHour: 21938, profitRatio: "20.0%", filterDate: "2026-06-15" },
+      { date: "15-Jun-2026", team: "Team C", machine: "Grinding-01", operator: "Senthil.K", customer: "Ashok Leyland", qty: 150, value: 375000, ratePerHour: 46875, profitRatio: "25.0%", filterDate: "2026-06-15" }
+    ];
+
+    if (filters?.fromDate) list = list.filter(r => r.filterDate >= filters.fromDate);
+    if (filters?.toDate) list = list.filter(r => r.filterDate <= filters.toDate);
+    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
+    if (filters?.customer) list = list.filter(r => r.customer === filters.customer);
+
+    return list.map(r => [
+      r.date,
+      r.team,
+      r.machine,
+      r.operator,
+      r.customer,
+      fmtNum(r.qty),
+      `₹${fmtNum(r.value)}`,
+      `₹${fmtNum(r.ratePerHour)}`,
+      r.profitRatio
+    ]);
+  }, [filters]);
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          <button
+            type="button"
+            style={{
+              background: "none",
+              border: "none",
+              borderBottom: activeTab === "rateVsHour" ? "2.5px solid var(--pp1-blue)" : "none",
+              color: activeTab === "rateVsHour" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+              fontWeight: 700,
+              fontSize: "12px",
+              paddingBottom: "6px",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+            onClick={() => setActiveTab("rateVsHour")}
+          >
+            Production Value Product Rate vs Rate Per Hour
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "none",
+              border: "none",
+              borderBottom: activeTab === "dailyLog" ? "2.5px solid var(--pp1-blue)" : "none",
+              color: activeTab === "dailyLog" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+              fontWeight: 700,
+              fontSize: "12px",
+              paddingBottom: "6px",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+            onClick={() => setActiveTab("dailyLog")}
+          >
+            Daily Production Log
+          </button>
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        {activeTab === "rateVsHour" ? (
+          <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+            <thead>
+              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+                {columnsRateVsHour.map((col, idx) => (
+                  <th key={idx} style={{ textAlign: idx > 4 ? "right" : "left" }}>{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowsRateVsHour.length === 0 ? (
+                <tr><td colSpan={columnsRateVsHour.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                rowsRateVsHour.map((row, ri) => (
+                  <tr key={ri} className="pp1-cc-tbl__tr">
+                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[1]}</td>
+                    <td className="pp1-cc-tbl__id">{row[2]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[3]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[4]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[5]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[6]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>{row[7]}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+            <thead>
+              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+                {columnsDailyLog.map((col, idx) => (
+                  <th key={idx} style={{ textAlign: idx > 4 ? "right" : "left" }}>{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowsDailyLog.length === 0 ? (
+                <tr><td colSpan={columnsDailyLog.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                rowsDailyLog.map((row, ri) => (
+                  <tr key={ri} className="pp1-cc-tbl__tr">
+                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[1]}</td>
+                    <td className="pp1-cc-tbl__id">{row[2]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[3]}</td>
+                    <td style={{ fontWeight: 600 }}>{row[4]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[5]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[6]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[7]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>{row[8]}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const MOCK_IDLE_LOGS = [
+  { date: "2026-06-15", machine: "CNC1", machineType: "CNC", team: "Team A", reason: "No Load", shift: "A Shift", duration: 250, perMonth: 20.83, ratePerHour: 600 },
+  { date: "2026-06-15", machine: "VMC7", machineType: "VMC", team: "Team B", reason: "Under Maintenance", shift: "A Shift", duration: 480, perMonth: 40.00, ratePerHour: 750 },
+  { date: "2026-06-14", machine: "CNC2", machineType: "CNC", team: "Team A", reason: "No Operator", shift: "B Shift", duration: 950, perMonth: 79.17, ratePerHour: 540 },
+  { date: "2026-06-13", machine: "HMC9", machineType: "HMC", team: "Team D", reason: "No Load", shift: "B Shift", duration: 270, perMonth: 22.50, ratePerHour: 980 },
+  { date: "2026-06-12", machine: "VTL3", machineType: "VTL", team: "Team C", reason: "Break Down", shift: "C Shift", duration: 320, perMonth: 26.67, ratePerHour: 320 },
+  { date: "2026-06-11", machine: "CNC1", machineType: "CNC", team: "Team A", reason: "No Operator", shift: "A Shift", duration: 150, perMonth: 20.83, ratePerHour: 600 },
+  { date: "2026-06-10", machine: "VMC7", machineType: "VMC", team: "Team B", reason: "Break Down", shift: "C Shift", duration: 180, perMonth: 40.00, ratePerHour: 750 },
+  { date: "2026-06-09", machine: "HMC9", machineType: "HMC", team: "Team D", reason: "Under Maintenance", shift: "B Shift", duration: 310, perMonth: 22.50, ratePerHour: 980 }
+];
+
+const MOCK_NON_ACCEPTED_LOSS_LOGS = [
+  // 1. No Load (Rate 600, Machine CNC-01, Team Team A)
+  { date: "2026-06-15", breakdownId: "BD-2026-101", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "08:00 AM", duration: 40.0, ratePerHour: 600, lossQty: 300, isAccepted: true },
+  { date: "2026-06-14", breakdownId: "BD-2026-102", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "09:30 AM", duration: 50.0, ratePerHour: 600, lossQty: 350, isAccepted: true },
+  { date: "2026-06-13", breakdownId: "BD-2026-103", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "10:00 AM", duration: 30.0, ratePerHour: 600, lossQty: 200, isAccepted: true },
+  { date: "2026-06-12", breakdownId: "BD-2026-104", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "11:30 AM", duration: 45.0, ratePerHour: 600, lossQty: 320, isAccepted: false },
+  { date: "2026-06-11", breakdownId: "BD-2026-105", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "01:00 PM", duration: 50.0, ratePerHour: 600, lossQty: 380, isAccepted: false },
+  { date: "2026-06-10", breakdownId: "BD-2026-106", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "02:30 PM", duration: 35.0, ratePerHour: 600, lossQty: 250, isAccepted: false },
+
+  // 2. Under Maintenance (Rate 750, Machine VMC-01, Team Team B)
+  { date: "2026-06-09", breakdownId: "BD-2026-107", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "08:30 AM", duration: 80.0, ratePerHour: 750, lossQty: 480, isAccepted: true },
+  { date: "2026-06-08", breakdownId: "BD-2026-108", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "09:45 AM", duration: 90.0, ratePerHour: 750, lossQty: 540, isAccepted: true },
+  { date: "2026-06-07", breakdownId: "BD-2026-109", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "11:00 AM", duration: 60.0, ratePerHour: 750, lossQty: 360, isAccepted: true },
+  { date: "2026-06-06", breakdownId: "BD-2026-110", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "01:15 PM", duration: 100.0, ratePerHour: 750, lossQty: 600, isAccepted: false },
+  { date: "2026-06-05", breakdownId: "BD-2026-111", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "03:00 PM", duration: 90.0, ratePerHour: 750, lossQty: 540, isAccepted: false },
+  { date: "2026-06-04", breakdownId: "BD-2026-112", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "04:30 PM", duration: 60.0, ratePerHour: 750, lossQty: 360, isAccepted: false },
+
+  // 3. No Operator (Rate 540, Machine CNC-02, Team Team A)
+  { date: "2026-06-03", breakdownId: "BD-2026-113", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "08:15 AM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: true },
+  { date: "2026-06-02", breakdownId: "BD-2026-114", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "09:30 AM", duration: 120.0, ratePerHour: 540, lossQty: 600, isAccepted: true },
+  { date: "2026-06-01", breakdownId: "BD-2026-115", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "10:45 AM", duration: 80.0, ratePerHour: 540, lossQty: 400, isAccepted: true },
+  { date: "2026-06-15", breakdownId: "BD-2026-116", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "01:00 PM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: true },
+  { date: "2026-06-14", breakdownId: "BD-2026-117", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "02:15 PM", duration: 150.0, ratePerHour: 540, lossQty: 750, isAccepted: false },
+  { date: "2026-06-13", breakdownId: "BD-2026-118", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "03:45 PM", duration: 180.0, ratePerHour: 540, lossQty: 900, isAccepted: false },
+  { date: "2026-06-12", breakdownId: "BD-2026-119", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "05:00 PM", duration: 120.0, ratePerHour: 540, lossQty: 600, isAccepted: false },
+  { date: "2026-06-11", breakdownId: "BD-2026-120", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "08:00 AM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: false },
+
+  // 4. No Load (Rate 980, Machine VMC-02, Team Team D)
+  { date: "2026-06-10", breakdownId: "BD-2026-121", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "09:00 AM", duration: 70.0, ratePerHour: 980, lossQty: 350, isAccepted: true },
+  { date: "2026-06-09", breakdownId: "BD-2026-122", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "10:30 AM", duration: 80.0, ratePerHour: 980, lossQty: 400, isAccepted: true },
+  { date: "2026-06-08", breakdownId: "BD-2026-123", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "12:00 PM", duration: 60.0, ratePerHour: 980, lossQty: 300, isAccepted: true },
+  { date: "2026-06-07", breakdownId: "BD-2026-124", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "02:00 PM", duration: 40.0, ratePerHour: 980, lossQty: 200, isAccepted: false },
+  { date: "2026-06-06", breakdownId: "BD-2026-125", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "03:30 PM", duration: 20.0, ratePerHour: 980, lossQty: 100, isAccepted: false },
+
+  // 5. Break Down (Rate 320, Machine Grinding-01, Team Team C)
+  { date: "2026-06-05", breakdownId: "BD-2026-126", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "08:30 AM", duration: 60.0, ratePerHour: 320, lossQty: 180, isAccepted: true },
+  { date: "2026-06-04", breakdownId: "BD-2026-127", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "10:00 AM", duration: 70.0, ratePerHour: 320, lossQty: 210, isAccepted: true },
+  { date: "2026-06-03", breakdownId: "BD-2026-128", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "11:30 AM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: true },
+  { date: "2026-06-02", breakdownId: "BD-2026-129", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "01:00 PM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: false },
+  { date: "2026-06-01", breakdownId: "BD-2026-130", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "02:30 PM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: false },
+  { date: "2026-06-15", breakdownId: "BD-2026-131", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "04:00 PM", duration: 40.0, ratePerHour: 320, lossQty: 120, isAccepted: false }
+];
+
+const formatLossValue = (val) => {
+  if (val >= 100000) {
+    return `₹${(val / 100000).toFixed(2)} L`;
+  }
+  return `₹${val.toLocaleString()}`;
+};
+
+function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+  const activeChart = activeTab === "chart2" ? 1 : 0;
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
-  return <PremiumDashboardView title="OEE Report Dashboard" icon={Target} color="#2d6de8" kpis={kpis} setupChart={setupChart} rangeHint="Weekly OEE Performance" onClose={onClose} />;
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      machine: "",
+      team: "",
+      idleReason: "",
+    });
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters.fromDate && filters.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const filteredLogs = React.useMemo(() => {
+    let list = MOCK_IDLE_LOGS;
+    if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters.team) list = list.filter(r => r.team === filters.team);
+    if (filters.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters.idleReason) list = list.filter(r => r.reason === filters.idleReason);
+    return list;
+  }, [filters]);
+
+  const kpis = React.useMemo(() => {
+    const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
+    const totalLossValue = filteredLogs.reduce((sum, r) => sum + (r.duration * r.ratePerHour), 0);
+
+    const machineLoss = {};
+    filteredLogs.forEach(r => {
+      machineLoss[r.machine] = (machineLoss[r.machine] || 0) + (r.duration * r.ratePerHour);
+    });
+    let maxMach = "—";
+    let maxMachLoss = -1;
+    Object.keys(machineLoss).forEach(m => {
+      if (machineLoss[m] > maxMachLoss) {
+        maxMachLoss = machineLoss[m];
+        maxMach = m;
+      }
+    });
+    const highestLossMachine = maxMachLoss > 0 ? `${maxMach}\n₹${(maxMachLoss / 100000).toFixed(3)} L` : "—";
+
+    const reasonLoss = {};
+    filteredLogs.forEach(r => {
+      reasonLoss[r.reason] = (reasonLoss[r.reason] || 0) + (r.duration * r.ratePerHour);
+    });
+    let maxReason = "—";
+    let maxReasonLoss = -1;
+    Object.keys(reasonLoss).forEach(re => {
+      if (reasonLoss[re] > maxReasonLoss) {
+        maxReasonLoss = reasonLoss[re];
+        maxReason = re;
+      }
+    });
+    const highestLossReason = maxReasonLoss > 0 ? `${maxReason}\n₹${(maxReasonLoss / 100000).toFixed(3)} L` : "—";
+
+    let monthStr = "2026-06"; // default to June 2026
+    if (filters.fromDate) {
+      monthStr = filters.fromDate.substring(0, 7);
+    }
+    let listMonthly = MOCK_IDLE_LOGS.filter(r => r.date.startsWith(monthStr));
+    if (filters.team) listMonthly = listMonthly.filter(r => r.team === filters.team);
+    if (filters.machine) listMonthly = listMonthly.filter(r => r.machine === filters.machine);
+    if (filters.idleReason) listMonthly = listMonthly.filter(r => r.reason === filters.idleReason);
+    const monthlySum = listMonthly.reduce((s, r) => s + (r.duration / 12), 0);
+
+    return [
+      { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: "⏱️", color: "#ef4444" },
+      { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: "💸", color: "#ea580c" },
+      { label: "Highest Loss Machine", value: highestLossMachine, icon: "⚙️", color: "#3b82f6" },
+      { label: "Highest Loss Reason", value: highestLossReason, icon: "⚠️", color: "#f59e0b" },
+      { label: "Total Monthly Idle Hours", value: `${monthlySum.toFixed(2)} h`, icon: "📅", color: "#10b981" }
+    ];
+  }, [filteredLogs, filters.fromDate, filters.team, filters.machine, filters.idleReason]);
+
+  const chart1Data = React.useMemo(() => {
+    const categories = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+    const aggregated = {};
+    categories.forEach(cat => {
+      aggregated[cat] = { idealHours: 0, perMonth: 0, loss: 0 };
+    });
+
+    filteredLogs.forEach(r => {
+      if (aggregated[r.reason]) {
+        aggregated[r.reason].idealHours += r.duration;
+        aggregated[r.reason].perMonth += (r.duration / 12);
+        aggregated[r.reason].loss += ((r.duration * r.ratePerHour) / 100000);
+      }
+    });
+
+    const labels = categories.filter(cat => aggregated[cat].idealHours > 0 || aggregated[cat].perMonth > 0 || aggregated[cat].loss > 0);
+    const idealHours = labels.map(l => aggregated[l].idealHours);
+    const perMonth = labels.map(l => Number(aggregated[l].perMonth.toFixed(2)));
+    const loss = labels.map(l => Number(aggregated[l].loss.toFixed(3)));
+
+    return { labels, idealHours, perMonth, loss };
+  }, [filteredLogs]);
+
+  const chart2Data = React.useMemo(() => {
+    const machinesList = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
+    const aggregated = {};
+    machinesList.forEach(m => {
+      aggregated[m] = { perMonth: 0, loss: 0 };
+    });
+
+    filteredLogs.forEach(r => {
+      if (aggregated[r.machine]) {
+        aggregated[r.machine].perMonth += (r.duration / 12);
+        aggregated[r.machine].loss += ((r.duration * r.ratePerHour) / 100000);
+      }
+    });
+
+    const labels = machinesList.filter(m => aggregated[m].perMonth > 0 || aggregated[m].loss > 0);
+    const perMonth = labels.map(l => Number(aggregated[l].perMonth.toFixed(2)));
+    const loss = labels.map(l => Number(aggregated[l].loss.toFixed(3)));
+
+    return { labels, perMonth, loss };
+  }, [filteredLogs]);
+
+  const setupChart1 = React.useCallback((canvas) => {
+    const ctx = canvas.getContext("2d");
+    return new Chart(ctx, {
+      data: {
+        labels: chart1Data.labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Ideal Hours",
+            data: chart1Data.idealHours,
+            yAxisID: "yIdle",
+            backgroundColor: "rgba(59, 130, 246, 0.75)",
+            borderColor: "#3b82f6",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "bar",
+            label: "Per Month Idle Hours",
+            data: chart1Data.perMonth,
+            yAxisID: "yIdle",
+            backgroundColor: "rgba(139, 92, 246, 0.75)",
+            borderColor: "#8b5cf6",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "line",
+            label: "Production Loss (Lakhs)",
+            data: chart1Data.loss,
+            yAxisID: "yLoss",
+            borderColor: "#ef4444",
+            backgroundColor: "#ef4444",
+            borderWidth: 2.5,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          yIdle: {
+            type: "linear",
+            position: "left",
+            title: { display: true, text: "Idle Hours", color: "#3b82f6", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 } },
+            grid: { color: "rgba(0,0,0,0.05)" }
+          },
+          yLoss: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "Loss Value (Lakhs)", color: "#ef4444", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}L` },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }, [chart1Data]);
+
+  const setupChart2 = React.useCallback((canvas) => {
+    const ctx = canvas.getContext("2d");
+    return new Chart(ctx, {
+      data: {
+        labels: chart2Data.labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Per Month Idle Hours",
+            data: chart2Data.perMonth,
+            yAxisID: "yIdle",
+            backgroundColor: "rgba(16, 185, 129, 0.75)",
+            borderColor: "#10b981",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "line",
+            label: "Production Loss (Lakhs)",
+            data: chart2Data.loss,
+            yAxisID: "yLoss",
+            borderColor: "#f59e0b",
+            backgroundColor: "#f59e0b",
+            borderWidth: 2.5,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          yIdle: {
+            type: "linear",
+            position: "left",
+            title: { display: true, text: "Per Month Idle Hours", color: "#10b981", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 } },
+            grid: { color: "rgba(0,0,0,0.05)" }
+          },
+          yLoss: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "Loss Value (Lakhs)", color: "#f59e0b", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}L` },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }, [chart2Data]);
+
+  const teams = ["Team A", "Team B", "Team C", "Team D"];
+  const machines = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
+  const idleReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeChart === 0 ? "Idle Hours vs Production Loss Value" : "Machine Wise Idle Loss"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={() => onActiveTabChange(activeTab === "chart1" ? "chart2" : "chart1")}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeChart + 1} / 2
+          </span>
+          <button
+            type="button"
+            onClick={() => onActiveTabChange(activeTab === "chart1" ? "chart2" : "chart1")}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeChart === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`c1-${JSON.stringify(chart1Data)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`c2-${JSON.stringify(chart2Data)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <PremiumDashboardView
+      title="Idle Hours Report"
+      icon={Timer}
+      color="#ef4444"
+      kpis={kpis}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint=""
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button type="button" className="pp1-btn-apply" onClick={() => setDateOpen(false)}>Done</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Machine Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Team Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Team</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.team || ""}
+            onChange={e => handleInputChange("team", e.target.value)}
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Idle Reason Dropdown */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Idle Reason</label>
+          <select
+            className="pp1-filter-input"
+            value={filters.idleReason || ""}
+            onChange={e => handleInputChange("idleReason", e.target.value)}
+          >
+            <option value="">All Reasons</option>
+            {idleReasons.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
 }
 
-function OeeReportBottomTable() {
-  const columns = ["Machine", "Availability %", "Performance %", "Quality %", "OEE %", "Status"];
-  const rows = [
-    ["CNC-01", "90.2%", "94.5%", "97.8%", "83.4%", "Active"],
-    ["CNC-02", "88.0%", "92.0%", "96.5%", "78.2%", "Active"],
-    ["VMC-01", "89.5%", "91.8%", "95.0%", "78.0%", "Active"],
-    ["VMC-02", "86.2%", "90.5%", "95.5%", "74.5%", "Active"],
-    ["Grinding-01", "88.8%", "91.2%", "96.0%", "77.7%", "Active"]
-  ];
-  return <PremiumDashboardBottomTable title="Machine OEE Metrics" columns={columns} rows={rows} />;
+function IdleHoursReportBottomTable({ filters, activeTab, setActiveTab }) {
+
+  const filteredLogs = React.useMemo(() => {
+    let list = MOCK_IDLE_LOGS;
+    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters?.idleReason) list = list.filter(r => r.reason === filters.idleReason);
+    return list;
+  }, [filters]);
+
+  // Tab 1 Data
+  const columns1 = ["Team", "Machine", "Idle Reason", "Ideal Hours", "Per Month", "Rate Per Hour", "Production Loss (Lakhs)"];
+  const rows1 = React.useMemo(() => {
+    return filteredLogs.map(r => [
+      r.team,
+      r.machine,
+      r.reason,
+      `${r.duration} h`,
+      `${(r.duration / 12).toFixed(2)} h`,
+      `₹${r.ratePerHour.toLocaleString()}`,
+      `₹${((r.duration * r.ratePerHour) / 100000).toFixed(3)} L`
+    ]);
+  }, [filteredLogs]);
+
+  // Tab 2 Data
+  const columns2 = ["Machine", "Per Month Idle Hours", "Production Loss Value (Lakhs)"];
+  const rows2 = React.useMemo(() => {
+    const grps = {};
+    filteredLogs.forEach(r => {
+      if (!grps[r.machine]) grps[r.machine] = { hours: 0, loss: 0 };
+      grps[r.machine].hours += (r.duration / 12);
+      grps[r.machine].loss += ((r.duration * r.ratePerHour) / 100000);
+    });
+    return Object.keys(grps).map(m => [
+      m,
+      `${grps[m].hours.toFixed(2)} h`,
+      `₹${grps[m].loss.toFixed(3)} L`
+    ]);
+  }, [filteredLogs]);
+
+  // Tab 3 Data
+  const columns3 = ["Team", "Machine", "Machine Type", "Idle Reason", "Idle Hours", "Per Day", "Per Month", "Rate Per Hour", "Production Loss"];
+  const rows3 = React.useMemo(() => {
+    const getPerDay = (machine, date) => {
+      const sum = MOCK_IDLE_LOGS
+        .filter(x => x.machine === machine && x.date === date)
+        .reduce((s, x) => s + x.duration, 0);
+      return `${sum.toFixed(1)} h`;
+    };
+
+    const getPerMonth = (machine, date) => {
+      const monthStr = date.substring(0, 7);
+      const sum = MOCK_IDLE_LOGS
+        .filter(x => x.machine === machine && x.date.startsWith(monthStr))
+        .reduce((s, x) => s + x.duration, 0);
+      return `${sum.toFixed(1)} h`;
+    };
+
+    return filteredLogs.map(r => [
+      r.team,
+      r.machine,
+      r.machineType,
+      r.reason,
+      `${r.duration.toFixed(1)} h`,
+      getPerDay(r.machine, r.date),
+      getPerMonth(r.machine, r.date),
+      `₹${r.ratePerHour.toLocaleString()}`,
+      `₹${(r.duration * r.ratePerHour).toLocaleString()}`
+    ]);
+  }, [filteredLogs]);
+
+  const activeColumns = activeTab === "chart1" ? columns1 : activeTab === "chart2" ? columns2 : columns3;
+  const activeRows = activeTab === "chart1" ? rows1 : activeTab === "chart2" ? rows2 : rows3;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "chart1", label: "Idle Hours vs Production Loss Value" },
+            { id: "chart2", label: "Machine Wise Idle Loss" },
+            { id: "log", label: "Idle Time Accepted Log" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: activeTab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: activeTab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => (
+                <th
+                  key={idx}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: "#f2f6fe",
+                    zIndex: 10,
+                    textAlign: idx > 2 && (
+                      col.toLowerCase().includes("qty") ||
+                      col.toLowerCase().includes("value") ||
+                      col.toLowerCase().includes("hours") ||
+                      col.toLowerCase().includes("hour") ||
+                      col.toLowerCase().includes("rate") ||
+                      col.toLowerCase().includes("ratio") ||
+                      col.toLowerCase().includes("%") ||
+                      col.toLowerCase().includes("day") ||
+                      col.toLowerCase().includes("month") ||
+                      col.toLowerCase().includes("loss")
+                    ) ? "right" : "left"
+                  }}
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
+                  No data available.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > 2 && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ci === 2 ? "pp1-cc-tbl__id" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci < 3 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
-function OeeComparisonReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Top Machine", value: "CNC-01 (83.4%)", icon: "🥇", color: "#10b981" },
-    { label: "Lowest Machine", value: "VMC-02 (74.5%)", icon: "📉", color: "#ef4444" },
-    { label: "Avg OEE", value: "78.4%", icon: "📊", color: "#0ea5e9" },
-    { label: "Target OEE", value: "82.0%", icon: "🎯", color: "#8b5cf6" }
-  ];
+function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      machine: "",
+      team: "",
+      reason: "",
+    });
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters?.fromDate && filters?.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters?.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters?.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const filteredLogs = React.useMemo(() => {
+    let list = MOCK_NON_ACCEPTED_LOSS_LOGS;
+    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.reason) list = list.filter(r => r.reason === filters.reason);
+    return list;
+  }, [filters]);
+
+  const kpis = React.useMemo(() => {
+    const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
+    const acceptedHours = filteredLogs.filter(r => r.isAccepted).reduce((sum, r) => sum + r.duration, 0);
+    const nonAcceptedHours = filteredLogs.filter(r => !r.isAccepted).reduce((sum, r) => sum + r.duration, 0);
+    const totalLossValue = filteredLogs.reduce((sum, r) => sum + (r.duration * r.ratePerHour), 0);
+
+    const reasonLoss = {};
+    filteredLogs.forEach(r => {
+      reasonLoss[r.reason] = (reasonLoss[r.reason] || 0) + (r.duration * r.ratePerHour);
+    });
+    let maxReason = "—";
+    let maxReasonLoss = -1;
+    Object.keys(reasonLoss).forEach(re => {
+      if (reasonLoss[re] > maxReasonLoss) {
+        maxReasonLoss = reasonLoss[re];
+        maxReason = re;
+      }
+    });
+    const highestLossReason = maxReasonLoss > 0
+      ? `${maxReason}\n${formatLossValue(maxReasonLoss)}`
+      : "—";
+
+    return [
+      { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: "⏱️", color: "#3b82f6" },
+      { label: "Accepted Hours", value: `${acceptedHours.toFixed(1)} h`, icon: "✅", color: "#10b981" },
+      { label: "Non Accepted Hours", value: `${nonAcceptedHours.toFixed(1)} h`, icon: "🚫", color: "#ef4444" },
+      { label: "Total Loss Value", value: formatLossValue(totalLossValue), icon: "💸", color: "#ea580c" },
+      { label: "Highest Loss Reason", value: highestLossReason, icon: "⚠️", color: "#f59e0b" }
+    ];
+  }, [filteredLogs]);
+
+  const chartData = React.useMemo(() => {
+    const reasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+    const aggregated = {};
+    reasons.forEach(r => {
+      aggregated[r] = {
+        accHrs: 0,
+        accLoss: 0,
+        nonAccHrs: 0,
+        nonAccLoss: 0,
+        totalLoss: 0
+      };
+    });
+
+    filteredLogs.forEach(r => {
+      if (aggregated[r.reason]) {
+        if (r.isAccepted) {
+          aggregated[r.reason].accHrs += r.duration;
+          aggregated[r.reason].accLoss += (r.duration * r.ratePerHour);
+        } else {
+          aggregated[r.reason].nonAccHrs += r.duration;
+          aggregated[r.reason].nonAccLoss += (r.duration * r.ratePerHour);
+        }
+        aggregated[r.reason].totalLoss = aggregated[r.reason].accLoss + aggregated[r.reason].nonAccLoss;
+      }
+    });
+
+    return {
+      labels: reasons,
+      acceptedLoss: reasons.map(r => Number((aggregated[r].accLoss / 100000).toFixed(3))),
+      nonAcceptedLoss: reasons.map(r => Number((aggregated[r].nonAccLoss / 100000).toFixed(3))),
+      totalLoss: reasons.map(r => Number((aggregated[r].totalLoss / 100000).toFixed(3))),
+      acceptedHrs: reasons.map(r => Number(aggregated[r].accHrs.toFixed(1))),
+      nonAcceptedHrs: reasons.map(r => Number(aggregated[r].nonAccHrs.toFixed(1)))
+    };
+  }, [filteredLogs]);
+
   const setupChart = React.useCallback((canvas) => {
+    const ctx = canvas.getContext("2d");
+    return new Chart(ctx, {
+      data: {
+        labels: chartData.labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Accepted Production Loss Value",
+            data: chartData.acceptedLoss,
+            yAxisID: "yLoss",
+            backgroundColor: "rgba(16, 185, 129, 0.75)",
+            borderColor: "#10b981",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "bar",
+            label: "Non Accepted Production Loss Value",
+            data: chartData.nonAcceptedLoss,
+            yAxisID: "yLoss",
+            backgroundColor: "rgba(244, 63, 94, 0.75)",
+            borderColor: "#ef4444",
+            borderWidth: 1.5,
+            borderRadius: 4
+          },
+          {
+            type: "line",
+            label: "Total Production Loss Value",
+            data: chartData.totalLoss,
+            yAxisID: "yLoss",
+            borderColor: "#f59e0b",
+            backgroundColor: "#f59e0b",
+            borderWidth: 2.5,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4
+          },
+          {
+            type: "line",
+            label: "Accepted Reason Hours",
+            data: chartData.acceptedHrs,
+            yAxisID: "yHours",
+            borderColor: "#3b82f6",
+            backgroundColor: "#3b82f6",
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4
+          },
+          {
+            type: "line",
+            label: "Non Accepted Reason Hours",
+            data: chartData.nonAcceptedHrs,
+            yAxisID: "yHours",
+            borderColor: "#8b5cf6",
+            backgroundColor: "#8b5cf6",
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.25,
+            fill: false,
+            pointRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              font: { size: 9, family: "'Inter', sans-serif" },
+              usePointStyle: true,
+              boxWidth: 8
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          yLoss: {
+            type: "linear",
+            position: "left",
+            title: { display: true, text: "Loss Value (Lakhs)", color: "#ef4444", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 }, callback: (v) => `₹${v}L` },
+            grid: { color: "rgba(0,0,0,0.05)" }
+          },
+          yHours: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "Hours", color: "#3b82f6", font: { size: 10, weight: 700 } },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}h` },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }, [chartData]);
+
+  const machines = ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"];
+  const teams = ["Team A", "Team B", "Team C", "Team D"];
+  const nonAcceptedReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+
+  return (
+    <PremiumDashboardView
+      title="Idle Hours – Non Accepted Reason Production Loss Report"
+      icon={AlertTriangle}
+      color="#f43f5e"
+      kpis={kpis}
+      setupChart={setupChart}
+      rebuildToken={JSON.stringify(chartData)}
+      rangeHint="Accepted vs Non Accepted Production Loss"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters?.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters?.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="pp1-date-popup-btn-apply"
+                  onClick={() => setDateOpen(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Machine Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Team Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Team</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.team || ""}
+            onChange={e => handleInputChange("team", e.target.value)}
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Reason Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Reason</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.reason || ""}
+            onChange={e => handleInputChange("reason", e.target.value)}
+          >
+            <option value="">All Reasons</option>
+            {nonAcceptedReasons.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+function IdleHoursNonAcceptedReasonLossReportBottomTable({ filters }) {
+  const [activeTab, setActiveTab] = React.useState("chart_table");
+
+  const filteredLogs = React.useMemo(() => {
+    let list = MOCK_NON_ACCEPTED_LOSS_LOGS;
+    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.reason) list = list.filter(r => r.reason === filters.reason);
+    return list;
+  }, [filters]);
+
+  // Tab 1: Aggregated Accepted vs Non Accepted Production Loss
+  const columns1 = ["Idle Reason", "Idle Hours", "Rate/Hr", "Accepted Hrs", "Accepted Loss", "Non Accepted Hrs", "Non Accepted Loss", "Total Loss"];
+  const rows1 = React.useMemo(() => {
+    const groups = {};
+    filteredLogs.forEach(r => {
+      const key = `${r.reason}_${r.ratePerHour}`;
+      if (!groups[key]) {
+        groups[key] = {
+          reason: r.reason,
+          ratePerHour: r.ratePerHour,
+          accHrs: 0,
+          nonAccHrs: 0,
+        };
+      }
+      if (r.isAccepted) {
+        groups[key].accHrs += r.duration;
+      } else {
+        groups[key].nonAccHrs += r.duration;
+      }
+    });
+
+    return Object.values(groups).map(g => {
+      const idleHours = g.accHrs + g.nonAccHrs;
+      const accLoss = g.accHrs * g.ratePerHour;
+      const nonAccLoss = g.nonAccHrs * g.ratePerHour;
+      const totalLoss = accLoss + nonAccLoss;
+
+      return [
+        g.reason,
+        `${idleHours.toFixed(1)} h`,
+        `₹${g.ratePerHour.toLocaleString()}`,
+        `${g.accHrs.toFixed(1)} h`,
+        formatLossValue(accLoss),
+        `${g.nonAccHrs.toFixed(1)} h`,
+        formatLossValue(nonAccLoss),
+        formatLossValue(totalLoss)
+      ];
+    });
+  }, [filteredLogs]);
+
+  // Tab 2: Production Loss Log
+  const columns2 = ["Team", "Machine", "Idle Reason", "Rate/Hr", "Accepted Hours", "Accepted Loss", "Non Accepted Hours", "Non Accepted Loss", "Total Loss"];
+  const rows2 = React.useMemo(() => {
+    return filteredLogs.map(r => [
+      r.team,
+      r.machine,
+      r.reason,
+      `₹${r.ratePerHour.toLocaleString()}`,
+      r.isAccepted ? `${r.duration.toFixed(1)} h` : "0.0 h",
+      r.isAccepted ? formatLossValue(r.duration * r.ratePerHour) : "₹0",
+      !r.isAccepted ? `${r.duration.toFixed(1)} h` : "0.0 h",
+      !r.isAccepted ? formatLossValue(r.duration * r.ratePerHour) : "₹0",
+      formatLossValue(r.duration * r.ratePerHour)
+    ]);
+  }, [filteredLogs]);
+
+  const activeColumns = activeTab === "chart_table" ? columns1 : columns2;
+  const activeRows = activeTab === "chart_table" ? rows1 : rows2;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "chart_table", label: "Accepted vs Non Accepted Production Loss" },
+            { id: "log", label: "Production Loss Log" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: activeTab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: activeTab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => (
+                <th
+                  key={idx}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: "#f2f6fe",
+                    zIndex: 10,
+                    textAlign: idx > 0 && (
+                      col.toLowerCase().includes("qty") ||
+                      col.toLowerCase().includes("value") ||
+                      col.toLowerCase().includes("hours") ||
+                      col.toLowerCase().includes("hrs") ||
+                      col.toLowerCase().includes("hour") ||
+                      col.toLowerCase().includes("rate") ||
+                      col.toLowerCase().includes("ratio") ||
+                      col.toLowerCase().includes("%") ||
+                      col.toLowerCase().includes("day") ||
+                      col.toLowerCase().includes("month") ||
+                      col.toLowerCase().includes("loss")
+                    ) ? "right" : "left"
+                  }}
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
+                  No data available.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > 0 && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hrs") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === 0 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      month: "",
+      year: "",
+      team: "",
+      machineType: "",
+      machine: "",
+    });
+  };
+
+  const chart1Data = React.useMemo(() => {
+    const allMachines = [
+      { name: "CNC1", value: 85, team: "Team A", type: "CNC" },
+      { name: "CNC2", value: 70, team: "Team B", type: "CNC" },
+      { name: "DRL1", value: 95, team: "Team C", type: "Conventional" },
+      { name: "LATHE1", value: 78, team: "Team A", type: "Conventional" },
+    ];
+
+    let filtered = allMachines;
+    if (filters?.team) filtered = filtered.filter(m => m.team === filters.team);
+    if (filters?.machineType) filtered = filtered.filter(m => m.type === filters.machineType);
+    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.0 : -1.0;
+    }
+
+    const labels = filtered.map(m => m.name);
+    const data = filtered.map(m => Math.min(100, Math.max(0, Number((m.value + offset).toFixed(2)))));
+    return { labels, data };
+  }, [filters]);
+
+  const chart2Data = React.useMemo(() => {
+    const allMachines = [
+      { name: "CNC1", value: 85, team: "Team A", type: "CNC" },
+      { name: "CNC2", value: 70, team: "Team B", type: "CNC" },
+      { name: "DRL1", value: 95, team: "Team C", type: "Conventional" },
+      { name: "LATHE1", value: 78, team: "Team A", type: "Conventional" },
+    ];
+
+    let filtered = allMachines;
+    if (filters?.team) filtered = filtered.filter(m => m.team === filters.team);
+    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.0 : -1.0;
+    }
+
+    const groups = { CNC: [], Conventional: [] };
+    filtered.forEach(m => {
+      groups[m.type].push(m.value + offset);
+    });
+
+    const types = ["CNC", "Conventional"];
+    const labels = [];
+    const data = [];
+
+    types.forEach(t => {
+      if (filters?.machineType && filters.machineType !== t) return;
+      const vals = groups[t];
+      if (vals.length > 0) {
+        const avg = vals.reduce((sum, v) => sum + v, 0) / vals.length;
+        labels.push(t);
+        data.push(Number(avg.toFixed(2)));
+      }
+    });
+
+    const isFiltered = filters?.team || filters?.machineType || filters?.machine || filters?.month || filters?.year;
+    if (!isFiltered) {
+      return {
+        labels: ["CNC", "Conventional"],
+        data: [77.83, 76.83]
+      };
+    }
+
+    return { labels, data };
+  }, [filters]);
+
+  const setupChart1 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "pie",
+      data: {
+        labels: chart1Data.labels,
+        datasets: [
+          {
+            data: chart1Data.data,
+            backgroundColor: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"],
+            borderWidth: 1,
+            borderColor: "#ffffff"
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              boxWidth: 12
+            }
+          }
+        }
+      }
+    });
+  }, [chart1Data]);
+
+  const setupChart2 = React.useCallback((canvas) => {
     return new Chart(canvas, {
       type: "bar",
       data: {
-        labels: ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"],
+        labels: chart2Data.labels,
         datasets: [
-          { label: "Availability %", data: [90.2, 88.0, 89.5, 86.2, 88.8], backgroundColor: "rgba(59, 130, 246, 0.7)" },
-          { label: "Performance %", data: [94.5, 92.0, 91.8, 90.5, 91.2], backgroundColor: "rgba(139, 92, 246, 0.7)" },
-          { label: "Quality %", data: [97.8, 96.5, 95.0, 95.5, 96.0], backgroundColor: "rgba(16, 185, 129, 0.7)" }
+          {
+            label: "Average OEE %",
+            data: chart2Data.data,
+            backgroundColor: ["#3b82f6", "#10b981"],
+            borderRadius: 6,
+            borderWidth: 0
+          }
         ]
       },
-      options: { responsive: true, maintainAspectRatio: false }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+          },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              callback: (v) => `${v}%`
+            }
+          }
+        }
+      }
     });
-  }, []);
-  return <PremiumDashboardView title="OEE Comparison Report Dashboard" icon={TrendingUp} color="#0ea5e9" kpis={kpis} setupChart={setupChart} rangeHint="Machine Parameters Comparison" onClose={onClose} />;
+  }, [chart2Data]);
+
+  const activeSlide = activeTab === "oee_by_type" ? 1 : 0;
+
+  const nextSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "oee_by_type" : "machine_oee");
+  };
+
+  const prevSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "oee_by_type" : "machine_oee");
+  };
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeSlide === 0 ? "Machine OEE" : "Average OEE By Machine Type"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={prevSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeSlide + 1} / 2
+          </span>
+          <button
+            type="button"
+            onClick={nextSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeSlide === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`oee1-${JSON.stringify(chart1Data)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`oee2-${JSON.stringify(chart2Data)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const years = ["2025", "2026"];
+  const teams = ["Team A", "Team B", "Team C"];
+  const machineTypes = ["CNC", "Conventional"];
+  const machines = ["CNC1", "CNC2", "DRL1", "LATHE1"];
+
+  return (
+    <PremiumDashboardView
+      title="OEE Report"
+      icon={Target}
+      color="#2d6de8"
+      kpis={null}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint="OEE Analysis Charts"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Month Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Month</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.month || ""}
+            onChange={e => handleInputChange("month", e.target.value)}
+          >
+            <option value="">All Months</option>
+            {months.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Year Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Year</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.year || ""}
+            onChange={e => handleInputChange("year", e.target.value)}
+          >
+            <option value="">All Years</option>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        {/* Team Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Team</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.team || ""}
+            onChange={e => handleInputChange("team", e.target.value)}
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Machine Type Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine Type</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machineType || ""}
+            onChange={e => handleInputChange("machineType", e.target.value)}
+          >
+            <option value="">All Types</option>
+            {machineTypes.map(mt => <option key={mt} value={mt}>{mt}</option>)}
+          </select>
+        </div>
+
+        {/* Machine Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
 }
 
-function OeeComparisonReportBottomTable() {
-  return <OeeReportBottomTable />;
-}
+function OeeReportBottomTable({ filters, activeTab, setActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = React.useState("machine_oee");
+  const tab = activeTab || localActiveTab;
+  const setTab = setActiveTab || setLocalActiveTab;
 
-function EfficiencyEffReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Shop Efficiency", value: "86.2%", icon: "⚡", color: "#10b981" },
-    { label: "Top Operator", value: "Balamurugan (96.5%)", icon: "🥇", color: "#8b5cf6" },
-    { label: "Target", value: "85.0%", icon: "🎯", color: "#3b82f6" },
-    { label: "Variance", value: "+1.2%", icon: "📈", color: "#10b981" }
+  // Tab 1: Machine OEE
+  const columns1 = ["Machine No", "Average OEE %"];
+  const rows1 = React.useMemo(() => {
+    const allMachines = [
+      { name: "CNC1", value: 85, team: "Team A", type: "CNC" },
+      { name: "CNC2", value: 70, team: "Team B", type: "CNC" },
+      { name: "DRL1", value: 95, team: "Team C", type: "Conventional" },
+      { name: "LATHE1", value: 78, team: "Team A", type: "Conventional" },
+    ];
+
+    let filtered = allMachines;
+    if (filters?.team) filtered = filtered.filter(m => m.team === filters.team);
+    if (filters?.machineType) filtered = filtered.filter(m => m.type === filters.machineType);
+    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.0 : -1.0;
+    }
+
+    return filtered.map(m => [
+      m.name,
+      `${Math.min(100, Math.max(0, Number((m.value + offset).toFixed(2))))}%`
+    ]);
+  }, [filters]);
+
+  // Tab 2: Average OEE By Machine Type
+  const columns2 = ["Machine Type", "Average OEE %"];
+  const rows2 = React.useMemo(() => {
+    const allMachines = [
+      { name: "CNC1", value: 85, team: "Team A", type: "CNC" },
+      { name: "CNC2", value: 70, team: "Team B", type: "CNC" },
+      { name: "DRL1", value: 95, team: "Team C", type: "Conventional" },
+      { name: "LATHE1", value: 78, team: "Team A", type: "Conventional" },
+    ];
+
+    let filtered = allMachines;
+    if (filters?.team) filtered = filtered.filter(m => m.team === filters.team);
+    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.0 : -1.0;
+    }
+
+    const groups = { CNC: [], Conventional: [] };
+    filtered.forEach(m => {
+      groups[m.type].push(m.value + offset);
+    });
+
+    const types = ["CNC", "Conventional"];
+    const rows = [];
+
+    types.forEach(t => {
+      if (filters?.machineType && filters.machineType !== t) return;
+      const vals = groups[t];
+      if (vals.length > 0) {
+        const avg = vals.reduce((sum, v) => sum + v, 0) / vals.length;
+        rows.push([t, `${Math.min(100, Math.max(0, Number(avg.toFixed(2))))}%`]);
+      }
+    });
+
+    const isFiltered = filters?.team || filters?.machineType || filters?.machine || filters?.month || filters?.year;
+    if (!isFiltered) {
+      return [
+        ["CNC", "77.83%"],
+        ["Conventional", "76.83%"]
+      ];
+    }
+
+    return rows;
+  }, [filters]);
+
+  // Tab 3: Machine OEE Metrics
+  const columns3 = [
+    "Team", "Machine Type", "Machine No",
+    "Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9", "Day 10",
+    "Day 11", "Day 12", "Day 13", "Day 14", "Day 15", "Day 16", "Day 17", "Day 18", "Day 19", "Day 20",
+    "Day 21", "Day 22", "Day 23", "Day 24", "Day 25", "Day 26", "Day 27", "Day 28", "Day 29", "Day 30"
   ];
-  const setupChart = React.useCallback((canvas) => {
+  const allRows = [
+    [
+      "Team A", "CNC", "CNC1",
+      "85%", "96%", "70%", "69%", "67%", "66%", "65%", "75%", "85%", "96%",
+      "61%", "80%", "78%", "83%", "90%", "92%", "88%", "85%", "81%", "79%",
+      "82%", "86%", "91%", "94%", "89%", "84%", "77%", "80%", "85%", "90%"
+    ],
+    [
+      "Team B", "CNC", "CNC2",
+      "70%", "84%", "94%", "87%", "80%", "73%", "66%", "59%", "52%", "45%",
+      "97%", "75%", "70%", "68%", "72%", "76%", "81%", "85%", "89%", "92%",
+      "90%", "86%", "82%", "79%", "75%", "73%", "78%", "82%", "87%", "91%"
+    ],
+    [
+      "Team C", "Conventional", "DRL1",
+      "95%", "89%", "72%", "62%", "53%", "43%", "68%", "93%", "48%", "68%",
+      "51%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "88%", "82%",
+      "76%", "70%", "64%", "58%", "55%", "62%", "69%", "77%", "84%", "90%"
+    ],
+    [
+      "Team A", "Conventional", "LATHE1",
+      "78%", "82%", "87%", "91%", "53%", "73%", "68%", "63%", "58%", "53%",
+      "96%", "88%", "82%", "76%", "72%", "68%", "65%", "70%", "75%", "80%",
+      "84%", "89%", "93%", "95%", "90%", "85%", "79%", "74%", "70%", "75%"
+    ]
+  ];
+
+  const rows3 = React.useMemo(() => {
+    let list = allRows;
+    if (filters?.team) list = list.filter(r => r[0] === filters.team);
+    if (filters?.machineType) list = list.filter(r => r[1] === filters.machineType);
+    if (filters?.machine) list = list.filter(r => r[2] === filters.machine);
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 9) - 4; // -4% to +4%
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 2 : -2;
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const newRow = [...row];
+        for (let i = 3; i < newRow.length; i++) {
+          const val = parseInt(newRow[i], 10);
+          if (!isNaN(val)) {
+            newRow[i] = `${Math.min(100, Math.max(0, val + offset))}%`;
+          }
+        }
+        return newRow;
+      });
+    }
+    return list;
+  }, [filters, allRows]);
+
+  const activeColumns = tab === "machine_oee" ? columns1 : tab === "oee_by_type" ? columns2 : columns3;
+  const activeRows = tab === "machine_oee" ? rows1 : tab === "oee_by_type" ? rows2 : rows3;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "machine_oee", label: "Machine OEE" },
+            { id: "oee_by_type", label: "Average OEE By Machine Type" },
+            { id: "oee_metrics", label: "Machine OEE Metrics" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: tab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: tab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => (
+                <th
+                  key={idx}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: "#f2f6fe",
+                    zIndex: 10,
+                    textAlign: idx > 0 && (
+                      col.toLowerCase().includes("qty") ||
+                      col.toLowerCase().includes("value") ||
+                      col.toLowerCase().includes("hours") ||
+                      col.toLowerCase().includes("hour") ||
+                      col.toLowerCase().includes("rate") ||
+                      col.toLowerCase().includes("ratio") ||
+                      col.toLowerCase().includes("%") ||
+                      col.toLowerCase().includes("day") ||
+                      col.toLowerCase().includes("month") ||
+                      col.toLowerCase().includes("loss")
+                    ) ? "right" : "left"
+                  }}
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} style={{ textAlign: "center", padding: "20px", color: "var(--pp1-text-4)" }}>
+                  No data available.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > 0 && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === 0 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters?.fromDate && filters?.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters?.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters?.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      month: "",
+      year: "",
+      week: "",
+      machineType: "",
+      machine: "",
+    });
+  };
+
+  const chart1Data = React.useMemo(() => {
+    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"];
+    const baseData = {
+      CNC1: [85, 96, 70, 69, 67, 66, 65, 75, 85, 96, 61],
+      CNC2: [70, 84, 94, 87, 80, 73, 66, 59, 52, 45, 97],
+      DRL1: [95, 89, 72, 62, 53, 43, 68, 93, 48, 68, 51],
+      LATHE1: [78, 82, 87, 91, 53, 73, 68, 63, 58, 53, 96]
+    };
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1 : -1;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    const machinesList = ["CNC1", "CNC2", "DRL1", "LATHE1"];
+    const datasets = [];
+
+    const colors = { CNC1: "#3b82f6", CNC2: "#ef4444", DRL1: "#10b981", LATHE1: "#f59e0b" };
+    const types = { CNC1: "CNC", CNC2: "CNC", DRL1: "Conventional", LATHE1: "Conventional" };
+
+    machinesList.forEach(m => {
+      if (filters?.machineType && types[m] !== filters.machineType) return;
+      if (filters?.machine && m !== filters.machine) return;
+
+      const data = baseData[m].map(val => Math.min(100, Math.max(0, val + offset)));
+      datasets.push({
+        label: m,
+        data,
+        backgroundColor: colors[m],
+        borderRadius: 4
+      });
+    });
+
+    return { labels: months, datasets };
+  }, [filters]);
+
+  const chart2Data = React.useMemo(() => {
+    let cnc1Val = 67;
+    let cnc2Val = 80;
+    let drl1Val = 53;
+    let lathe1Val = 53;
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.0 : -1.0;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2.0 : -2.0;
+    }
+    if (filters?.fromDate) offset += 1.0;
+    if (filters?.toDate) offset -= 1.0;
+
+    cnc1Val = Math.min(100, Math.max(0, cnc1Val + offset));
+    cnc2Val = Math.min(100, Math.max(0, cnc2Val + offset));
+    drl1Val = Math.min(100, Math.max(0, drl1Val + offset));
+    lathe1Val = Math.min(100, Math.max(0, lathe1Val + offset));
+
+    const machinesList = [
+      { name: "CNC1", value: cnc1Val, type: "CNC", index: 0 },
+      { name: "CNC2", value: cnc2Val, type: "CNC", index: 0 },
+      { name: "DRL1", value: drl1Val, type: "Conventional", index: 1 },
+      { name: "LATHE1", value: lathe1Val, type: "Conventional", index: 1 }
+    ];
+
+    const datasets = [];
+    const colors = { CNC1: "#3b82f6", CNC2: "#ef4444", DRL1: "#10b981", LATHE1: "#f59e0b" };
+
+    machinesList.forEach(m => {
+      if (filters?.machineType && m.type !== filters.machineType) return;
+      if (filters?.machine && m.name !== filters.machine) return;
+
+      const dataArr = [null, null];
+      dataArr[m.index] = m.value;
+
+      datasets.push({
+        label: m.name,
+        data: dataArr,
+        backgroundColor: colors[m.name],
+        borderRadius: 4
+      });
+    });
+
+    const activeLabels = [];
+    if (!filters?.machineType || filters.machineType === "CNC") activeLabels.push("CNC");
+    if (!filters?.machineType || filters.machineType === "Conventional") activeLabels.push("Conventional");
+
+    if (filters?.machineType) {
+      datasets.forEach(d => {
+        d.data = d.data.filter(x => x !== null);
+      });
+    }
+
+    return { labels: activeLabels, datasets };
+  }, [filters]);
+
+  const setupChart1 = React.useCallback((canvas) => {
     return new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-        datasets: [{
-          label: "Efficiency (%)",
-          data: [84.1, 85.6, 87.2, 86.0, 88.4, 86.2],
-          borderColor: "#10b981",
-          fill: false
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
+      type: "bar",
+      data: chart1Data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "top",
+            labels: { font: { size: 10, family: "'Inter', sans-serif" }, boxWidth: 10 }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}%` }
+          }
+        }
+      }
     });
-  }, []);
-  return <PremiumDashboardView title="Efficiency (EFF) Report Dashboard" icon={UserCheck} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Daily Efficiency Trend" onClose={onClose} />;
-}
+  }, [chart1Data]);
 
-function EfficiencyEffReportBottomTable() {
-  const columns = ["Operator Name", "Part Produced", "Run Time (Hours)", "Actual Qty", "Target Qty", "Efficiency %"];
-  const rows = [
-    ["Balamurugan.P", "BRK-PAD-M1", "8.0", "850", "880", "96.5%"],
-    ["Gopikrishnan.R", "ROT-DSC-X4", "8.0", "620", "680", "91.2%"],
-    ["Karthi.S", "GBX-HNG-S2", "8.0", "410", "480", "85.4%"],
-    ["Sabarish.V", "ENG-MNT-H1", "8.0", "520", "650", "80.0%"]
-  ];
-  return <PremiumDashboardBottomTable title="Operator Efficiency Ranking" columns={columns} rows={rows} />;
-}
-
-function RejectionReworkReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Total Rejection", value: "520 pcs", icon: "❌", color: "#ef4444" },
-    { label: "Total Rework", value: "310 pcs", icon: "🔄", color: "#f59e0b" },
-    { label: "Rejection Rate", value: "2.1%", icon: "📉", color: "#f43f5e" },
-    { label: "Rework Rate", value: "1.2%", icon: "📈", color: "#f59e0b" }
-  ];
-  const setupChart = React.useCallback((canvas) => {
+  const setupChart2 = React.useCallback((canvas) => {
     return new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels: ["Material Rejection", "Machine Rejection"],
-        datasets: [{
-          data: [312, 208],
-          backgroundColor: ["#f43f5e", "#ef4444"]
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
+      type: "bar",
+      data: chart2Data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "top",
+            labels: { font: { size: 10, family: "'Inter', sans-serif" }, boxWidth: 10 }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}%` }
+          }
+        }
+      }
     });
-  }, []);
-  return <PremiumDashboardView title="Rejection & Rework Report Dashboard" icon={AlertTriangle} color="#f59e0b" kpis={kpis} setupChart={setupChart} rangeHint="Rejection Sources" onClose={onClose} />;
+  }, [chart2Data]);
+
+  const activeSlide = activeTab === "type_comparison" ? 1 : 0;
+
+  const nextSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "type_comparison" : "month_comparison");
+  };
+
+  const prevSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "type_comparison" : "month_comparison");
+  };
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeSlide === 0 ? "Month Wise Machine OEE Comparison" : "Average OEE By Machine Type (Aug-25)"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={prevSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeSlide + 1} / 2
+          </span>
+          <button
+            type="button"
+            onClick={nextSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeSlide === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`comp1-${JSON.stringify(filters)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`comp2-${JSON.stringify(filters)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const years = ["2025", "2026"];
+  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+  const machineTypes = ["CNC", "Conventional"];
+  const machines = ["CNC1", "CNC2", "DRL1", "LATHE1"];
+
+  return (
+    <PremiumDashboardView
+      title="OEE Comparison Report"
+      icon={TrendingUp}
+      color="#0ea5e9"
+      kpis={null}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint="OEE Parameters Comparison"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters?.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters?.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="pp1-date-popup-btn-apply"
+                  onClick={() => setDateOpen(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Month Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Month</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.month || ""}
+            onChange={e => handleInputChange("month", e.target.value)}
+          >
+            <option value="">All Months</option>
+            {months.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Year Filter */}
+        {/* <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Year</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.year || ""}
+            onChange={e => handleInputChange("year", e.target.value)}
+          >
+            <option value="">All Years</option>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div> */}
+
+        {/* Week Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Week</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.week || ""}
+            onChange={e => handleInputChange("week", e.target.value)}
+          >
+            <option value="">All Weeks</option>
+            {weeks.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </div>
+
+        {/* Machine Type Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine Type</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machineType || ""}
+            onChange={e => handleInputChange("machineType", e.target.value)}
+          >
+            <option value="">All Types</option>
+            {machineTypes.map(mt => <option key={mt} value={mt}>{mt}</option>)}
+          </select>
+        </div>
+
+        {/* Machine No Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine No</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
 }
 
-function RejectionReworkReportBottomTable() {
-  const columns = ["Part Number", "Description", "Inspected Qty", "Rejection Qty", "Rework Qty", "Defect Rate %"];
-  const rows = [
-    ["BRK-PAD-M1", "Brake Pad M1", "12,500", "180", "120", "1.4%"],
-    ["ROT-DSC-X4", "Disc Rotor X4", "8,200", "160", "90", "2.0%"],
-    ["GBX-HNG-S2", "Gearbox Hanger S2", "3,500", "110", "70", "3.1%"],
-    ["ENG-MNT-H1", "Engine Mount H1", "2,300", "70", "30", "3.0%"]
+function OeeComparisonReportBottomTable({ filters, activeTab, setActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = React.useState("month_comparison");
+  const tab = activeTab || localActiveTab;
+  const setTab = setActiveTab || setLocalActiveTab;
+
+  const baseMachines = [
+    { type: "CNC", name: "CNC1", baseVal: 67, monthly: [85, 96, 70, 69, 67, 66, 65, 75, 85, 96, 61] },
+    { type: "CNC", name: "CNC2", baseVal: 80, monthly: [70, 84, 94, 87, 80, 73, 66, 59, 52, 45, 97] },
+    { type: "Conventional", name: "DRL1", baseVal: 53, monthly: [95, 89, 72, 62, 53, 43, 68, 93, 48, 68, 51] },
+    { type: "Conventional", name: "LATHE1", baseVal: 53, monthly: [78, 82, 87, 91, 53, 73, 68, 63, 58, 53, 96] }
   ];
-  return <PremiumDashboardBottomTable title="Defect Distribution by Part" columns={columns} rows={rows} />;
+
+  const processedData = React.useMemo(() => {
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 7) - 3;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1 : -1;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    let filtered = baseMachines;
+    if (filters?.machineType) filtered = filtered.filter(m => m.type === filters.machineType);
+    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
+
+    return filtered.map(m => ({
+      ...m,
+      val: Math.min(100, Math.max(0, m.baseVal + offset)),
+      monthlyVals: m.monthly.map(v => Math.min(100, Math.max(0, v + offset)))
+    }));
+  }, [filters]);
+
+  // Tab 1: Month Wise Machine OEE Comparison
+  const columns1 = [
+    "Machine No",
+    "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
+  ];
+  const rows1 = React.useMemo(() => {
+    return processedData.map(m => [
+      m.name,
+      ...m.monthlyVals.map(v => `${v}%`)
+    ]);
+  }, [processedData]);
+
+  // Tab 2: Machine Type Wise OEE Comparison (Aug-25 values)
+  const columns2 = ["Machine Type", "Machine No", "OEE %"];
+  const rows2 = React.useMemo(() => {
+    return processedData.map(m => [
+      m.type,
+      m.name,
+      `${m.val}%`
+    ]);
+  }, [processedData]);
+
+  // Tab 3: Machine OEE Metrics
+  const columns3 = [
+    "Machine Type", "Machine No",
+    "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
+  ];
+  const rows3 = React.useMemo(() => {
+    return processedData.map(m => [
+      m.type,
+      m.name,
+      ...m.monthlyVals.map(v => `${v}%`)
+    ]);
+  }, [processedData]);
+
+  const activeColumns = tab === "month_comparison" ? columns1 : tab === "type_comparison" ? columns2 : columns3;
+  const activeRows = tab === "month_comparison" ? rows1 : tab === "type_comparison" ? rows2 : rows3;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "month_comparison", label: "Month Wise Machine OEE Comparison" },
+            { id: "type_comparison", label: "Machine Type Wise OEE Comparison" },
+            { id: "metrics", label: "Machine OEE Metrics" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: tab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: tab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => {
+                const isRightAligned = idx > (tab === "type_comparison" ? 1 : 0) && (
+                  col.toLowerCase().includes("qty") ||
+                  col.toLowerCase().includes("value") ||
+                  col.toLowerCase().includes("hours") ||
+                  col.toLowerCase().includes("hour") ||
+                  col.toLowerCase().includes("rate") ||
+                  col.toLowerCase().includes("ratio") ||
+                  col.toLowerCase().includes("%") ||
+                  col.toLowerCase().includes("day") ||
+                  col.toLowerCase().includes("month") ||
+                  col.toLowerCase().includes("loss") ||
+                  col.includes("-2") ||
+                  col.toLowerCase().includes("oee")
+                );
+                return (
+                  <th
+                    key={idx}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left"
+                    }}
+                  >
+                    {col}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} style={{ textAlign: "center", padding: "20px", color: "var(--pp1-text-4)" }}>
+                  No data available.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > (tab === "type_comparison" ? 1 : 0) && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss") ||
+                      activeColumns[ci].includes("-2") ||
+                      activeColumns[ci].toLowerCase().includes("oee")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === (tab === "type_comparison" ? 1 : 0) ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EfficiencyEffReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters?.fromDate && filters?.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters?.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters?.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      month: "",
+      year: "",
+      week: "",
+      team: "",
+      machineType: "",
+      machine: "",
+      operatorName: "",
+    });
+  };
+
+  const chart1Data = React.useMemo(() => {
+    const operatorsList = ["Mani", "Kavi", "Rajan", "Kumar"];
+    const baseData = {
+      Mani: [85, 96, 70, 69, 67, 66, 65, 75, 85],
+      Kavi: [70, 84, 94, 87, 80, 73, 66, 59, 52],
+      Rajan: [95, 89, 72, 62, 53, 43, 68, 93, 48],
+      Kumar: [78, 82, 87, 91, 53, 73, 68, 63, 58]
+    };
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 5) - 2;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 2 : -2;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
+    }
+    if (filters?.team) {
+      offset += filters.team.endsWith("A") || filters.team.endsWith("C") ? 1 : -1;
+    }
+    if (filters?.machineType) {
+      offset += filters.machineType === "CNC" ? 1 : -1;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    const activeOperators = filters?.operatorName
+      ? operatorsList.filter(o => o === filters.operatorName)
+      : operatorsList;
+
+    const datasets = [];
+    const colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1"];
+
+    for (let dayIdx = 0; dayIdx < 9; dayIdx++) {
+      const data = activeOperators.map(op => {
+        const val = baseData[op][dayIdx];
+        return Math.min(100, Math.max(0, val + offset));
+      });
+      datasets.push({
+        label: `Day ${dayIdx + 1}`,
+        data,
+        backgroundColor: colors[dayIdx],
+        borderRadius: 3
+      });
+    }
+
+    return { labels: activeOperators, datasets };
+  }, [filters]);
+
+  const setupChart1 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: chart1Data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "top",
+            labels: { font: { size: 8, family: "'Inter', sans-serif" }, boxWidth: 8 }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}%` }
+          }
+        }
+      }
+    });
+  }, [chart1Data]);
+
+  const chart2Data = React.useMemo(() => {
+    let cncVal = 77.83;
+    let convVal = 76.83;
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 5) - 2;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.5 : -1.5;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1.0 : -1.0;
+    }
+    if (filters?.team) {
+      offset += filters.team.endsWith("A") || filters.team.endsWith("C") ? 0.8 : -0.8;
+    }
+    if (filters?.fromDate) offset += 0.5;
+    if (filters?.toDate) offset -= 0.5;
+
+    cncVal = Math.min(100, Math.max(0, cncVal + offset));
+    convVal = Math.min(100, Math.max(0, convVal + offset));
+
+    const labels = [];
+    const data = [];
+
+    if (!filters?.machineType || filters.machineType === "CNC") {
+      labels.push("CNC");
+      data.push(cncVal);
+    }
+    if (!filters?.machineType || filters.machineType === "Conventional") {
+      labels.push("Conventional");
+      data.push(convVal);
+    }
+
+    return {
+      labels,
+      datasets: [{
+        label: "Average Efficiency",
+        data,
+        backgroundColor: ["#10b981", "#3b82f6"],
+        borderRadius: 4,
+        barThickness: 40
+      }]
+    };
+  }, [filters]);
+
+  const setupChart2 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: chart2Data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}%` }
+          }
+        }
+      }
+    });
+  }, [chart2Data]);
+
+  const chart3Data = React.useMemo(() => {
+    let teamA = 89;
+    let teamB = 84;
+    let teamC = 89;
+
+    let offset = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      offset += (hash % 5) - 2;
+    }
+    if (filters?.year) {
+      offset += filters.year === "2026" ? 1.5 : -1.5;
+    }
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1.0 : -1.0;
+    }
+    if (filters?.machineType) {
+      offset += filters.machineType === "CNC" ? 1.0 : -1.0;
+    }
+    if (filters?.fromDate) offset += 0.5;
+    if (filters?.toDate) offset -= 0.5;
+
+    teamA = Math.min(100, Math.max(0, teamA + offset));
+    teamB = Math.min(100, Math.max(0, teamB + offset));
+    teamC = Math.min(100, Math.max(0, teamC + offset));
+
+    const labels = [];
+    const data = [];
+
+    if (!filters?.team || filters.team === "Team A") {
+      labels.push("Team A");
+      data.push(teamA);
+    }
+    if (!filters?.team || filters.team === "Team B") {
+      labels.push("Team B");
+      data.push(teamB);
+    }
+    if (!filters?.team || filters.team === "Team C") {
+      labels.push("Team C");
+      data.push(teamC);
+    }
+
+    return {
+      labels,
+      datasets: [{
+        label: "Average Efficiency",
+        data,
+        backgroundColor: ["#8b5cf6", "#f59e0b", "#ec4899"],
+        borderRadius: 4,
+        barThickness: 40
+      }]
+    };
+  }, [filters]);
+
+  const setupChart3 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: chart3Data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 9 }, callback: (v) => `${v}%` }
+          }
+        }
+      }
+    });
+  }, [chart3Data]);
+
+  const activeSlide = activeTab === "machine_type_efficiency" ? 1 : activeTab === "team_efficiency" ? 2 : 0;
+
+  const nextSlide = () => {
+    if (activeSlide === 0) onActiveTabChange("machine_type_efficiency");
+    else if (activeSlide === 1) onActiveTabChange("team_efficiency");
+    else onActiveTabChange("operator_comparison");
+  };
+
+  const prevSlide = () => {
+    if (activeSlide === 0) onActiveTabChange("team_efficiency");
+    else if (activeSlide === 1) onActiveTabChange("operator_comparison");
+    else onActiveTabChange("machine_type_efficiency");
+  };
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeSlide === 0 ? "Operator Efficiency Comparison" : activeSlide === 1 ? "Average Efficiency by Machine Type" : "Average Efficiency by Team"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={prevSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeSlide + 1} / 3
+          </span>
+          <button
+            type="button"
+            onClick={nextSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeSlide === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`eff1-${JSON.stringify(filters)}`} />
+        ) : activeSlide === 1 ? (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`eff2-${JSON.stringify(filters)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart3} height={220} rebuildToken={`eff3-${JSON.stringify(filters)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const years = ["2025", "2026"];
+  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+  const teams = ["Team A", "Team B", "Team C", "Team D"];
+  const machineTypes = ["CNC", "Conventional"];
+  const machines = ["CNC1", "CNC2", "DRL1", "LATHE1"];
+  const operators = ["Mani", "Kavi", "Rajan", "Kumar"];
+
+  return (
+    <PremiumDashboardView
+      title="Efficiency (EFF) Report"
+      icon={UserCheck}
+      color="#10b981"
+      kpis={null}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint="Efficiency Performance Indicators"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters?.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters?.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="pp1-date-popup-btn-apply"
+                  onClick={() => setDateOpen(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Month Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Month</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.month || ""}
+            onChange={e => handleInputChange("month", e.target.value)}
+          >
+            <option value="">All Months</option>
+            {months.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Year Filter */}
+        {/* <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Year</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.year || ""}
+            onChange={e => handleInputChange("year", e.target.value)}
+          >
+            <option value="">All Years</option>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div> */}
+
+        {/* Week Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Week</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.week || ""}
+            onChange={e => handleInputChange("week", e.target.value)}
+          >
+            <option value="">All Weeks</option>
+            {weeks.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </div>
+
+        {/* Team Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Team</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.team || ""}
+            onChange={e => handleInputChange("team", e.target.value)}
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Machine Type Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine Type</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machineType || ""}
+            onChange={e => handleInputChange("machineType", e.target.value)}
+          >
+            <option value="">All Types</option>
+            {machineTypes.map(mt => <option key={mt} value={mt}>{mt}</option>)}
+          </select>
+        </div>
+
+        {/* Machine No Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine No</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Operator Name Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Operator Name</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.operatorName || ""}
+            onChange={e => handleInputChange("operatorName", e.target.value)}
+          >
+            <option value="">All Operators</option>
+            {operators.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ alignSelf: "flex-end", height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+function EfficiencyEffReportBottomTable({ filters, activeTab, setActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = React.useState("operator_comparison");
+  const tab = activeTab || localActiveTab;
+  const setTab = setActiveTab || setLocalActiveTab;
+
+  // Tab 1: Operator Efficiency Comparison
+  const columns1 = ["Operator", "Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9"];
+  const baseTab1Rows = [
+    ["Mani", "85%", "96%", "70%", "69%", "67%", "66%", "65%", "75%", "85%"],
+    ["Kavi", "70%", "84%", "94%", "87%", "80%", "73%", "66%", "59%", "52%"],
+    ["Rajan", "95%", "89%", "72%", "62%", "53%", "43%", "68%", "93%", "48%"],
+    ["Kumar", "78%", "82%", "87%", "91%", "53%", "73%", "68%", "63%", "58%"]
+  ];
+
+  // Tab 2: Average Efficiency by Machine Type
+  const columns2 = ["Machine Type", "Average Efficiency"];
+  const baseTab2Rows = [
+    ["CNC", "77.83%"],
+    ["Conventional", "76.83%"]
+  ];
+
+  // Tab 3: Average Efficiency by Team
+  const columns3 = ["Team", "Average Efficiency"];
+  const baseTab3Rows = [
+    ["Team A", "89%"],
+    ["Team B", "84%"],
+    ["Team C", "89%"]
+  ];
+
+  // Tab 4: Operator Efficiency Ranking
+  const columns4 = [
+    "Team", "Machine Type", "Machine No", "Operator Name",
+    "Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9", "Day 10",
+    "Day 11", "Day 12", "Day 13", "Day 14", "Day 15", "Day 16", "Day 17", "Day 18", "Day 19", "Day 20",
+    "Day 21", "Day 22", "Day 23", "Day 24", "Day 25", "Day 26", "Day 27", "Day 28", "Day 29", "Day 30"
+  ];
+  const baseTab4Rows = [
+    [
+      "Team A", "CNC", "CNC1", "Mani",
+      "96.5%", "95.0%", "97.2%", "94.8%", "96.0%", "95.5%", "94.2%", "96.8%", "97.5%", "96.1%",
+      "95.9%", "96.3%", "97.0%", "96.5%", "95.2%", "96.0%", "97.4%", "96.8%", "95.5%", "96.2%",
+      "97.1%", "96.6%", "95.8%", "96.4%", "97.2%", "96.9%", "95.7%", "96.1%", "97.3%", "96.5%"
+    ],
+    [
+      "Team B", "CNC", "CNC2", "Kavi",
+      "91.2%", "90.5%", "92.0%", "91.8%", "90.0%", "91.5%", "92.2%", "90.8%", "91.4%", "90.9%",
+      "91.1%", "92.3%", "91.0%", "90.5%", "91.2%", "92.0%", "90.4%", "91.8%", "92.5%", "91.2%",
+      "90.1%", "91.6%", "92.8%", "91.4%", "90.2%", "91.9%", "92.7%", "91.1%", "90.6%", "91.2%"
+    ],
+    [
+      "Team C", "Conventional", "DRL1", "Rajan",
+      "85.4%", "84.8%", "86.2%", "85.0%", "84.5%", "85.9%", "86.1%", "84.9%", "85.3%", "84.2%",
+      "85.1%", "86.3%", "85.0%", "84.7%", "85.2%", "86.0%", "84.4%", "85.8%", "86.5%", "85.2%",
+      "84.1%", "85.6%", "86.8%", "85.4%", "84.2%", "85.9%", "86.7%", "85.1%", "84.6%", "85.4%"
+    ],
+    [
+      "Team A", "Conventional", "LATHE1", "Kumar",
+      "80.0%", "79.5%", "81.0%", "80.8%", "79.0%", "80.5%", "81.2%", "79.8%", "80.4%", "79.9%",
+      "80.1%", "81.3%", "80.0%", "79.5%", "80.2%", "81.0%", "79.4%", "80.8%", "81.5%", "80.2%",
+      "79.1%", "80.6%", "81.8%", "80.4%", "79.2%", "80.9%", "81.7%", "80.1%", "79.6%", "80.0%"
+    ]
+  ];
+
+  // Compute offset variation based on active filters
+  const offset = React.useMemo(() => {
+    let off = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      off += (hash % 5) - 2;
+    }
+    if (filters?.year) {
+      off += filters.year === "2026" ? 1.5 : -1.5;
+    }
+    if (filters?.week) {
+      off += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1.0 : -1.0;
+    }
+    if (filters?.fromDate) off += 0.5;
+    if (filters?.toDate) off -= 0.5;
+    return off;
+  }, [filters]);
+
+  const rows1 = React.useMemo(() => {
+    let list = baseTab1Rows;
+    if (filters?.operatorName) {
+      list = list.filter(r => r[0] === filters.operatorName);
+    }
+    if (offset !== 0) {
+      return list.map(r => {
+        const name = r[0];
+        const days = r.slice(1).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.min(100, Math.max(0, num + offset));
+          return `${newVal.toFixed(1)}%`;
+        });
+        return [name, ...days];
+      });
+    }
+    return list;
+  }, [filters, offset]);
+
+  const rows2 = React.useMemo(() => {
+    let list = baseTab2Rows;
+    if (filters?.machineType) {
+      list = list.filter(r => r[0] === filters.machineType);
+    }
+    if (offset !== 0) {
+      return list.map(r => {
+        const type = r[0];
+        const num = parseFloat(r[1]);
+        const newVal = Math.min(100, Math.max(0, num + offset));
+        return [type, `${newVal.toFixed(2)}%`];
+      });
+    }
+    return list;
+  }, [filters, offset]);
+
+  const rows3 = React.useMemo(() => {
+    let list = baseTab3Rows;
+    if (filters?.team) {
+      list = list.filter(r => r[0] === filters.team);
+    }
+    if (offset !== 0) {
+      return list.map(r => {
+        const team = r[0];
+        const num = parseFloat(r[1]);
+        const newVal = Math.min(100, Math.max(0, num + offset));
+        return [team, `${newVal.toFixed(1)}%`];
+      });
+    }
+    return list;
+  }, [filters, offset]);
+
+  const rows4 = React.useMemo(() => {
+    let list = baseTab4Rows;
+    if (filters?.team) {
+      list = list.filter(r => r[0] === filters.team);
+    }
+    if (filters?.machineType) {
+      list = list.filter(r => r[1] === filters.machineType);
+    }
+    if (filters?.machine) {
+      list = list.filter(r => r[2] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      list = list.filter(r => r[3] === filters.operatorName);
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const metadata = row.slice(0, 4);
+        const days = row.slice(4).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.min(100, Math.max(0, num + offset));
+          return `${newVal.toFixed(1)}%`;
+        });
+        return [...metadata, ...days];
+      });
+    }
+    return list;
+  }, [filters, offset]);
+
+  const activeColumns = tab === "operator_comparison"
+    ? columns1
+    : tab === "machine_type_efficiency"
+      ? columns2
+      : tab === "team_efficiency"
+        ? columns3
+        : columns4;
+
+  const activeRows = tab === "operator_comparison"
+    ? rows1
+    : tab === "machine_type_efficiency"
+      ? rows2
+      : tab === "team_efficiency"
+        ? rows3
+        : rows4;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "operator_comparison", label: "Operator Efficiency Comparison" },
+            { id: "machine_type_efficiency", label: "Average Efficiency by Machine Type" },
+            { id: "team_efficiency", label: "Average Efficiency by Team" },
+            { id: "operator_ranking", label: "Operator Efficiency Ranking" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: tab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: tab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => {
+                const isRightAligned = idx > (tab === "operator_comparison" ? 0 : tab === "machine_type_efficiency" ? 0 : tab === "team_efficiency" ? 0 : 3) && (
+                  col.toLowerCase().includes("qty") ||
+                  col.toLowerCase().includes("value") ||
+                  col.toLowerCase().includes("hours") ||
+                  col.toLowerCase().includes("hour") ||
+                  col.toLowerCase().includes("rate") ||
+                  col.toLowerCase().includes("ratio") ||
+                  col.toLowerCase().includes("%") ||
+                  col.toLowerCase().includes("day") ||
+                  col.toLowerCase().includes("month") ||
+                  col.toLowerCase().includes("loss") ||
+                  col.toLowerCase().includes("efficiency")
+                );
+                return (
+                  <th
+                    key={idx}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left"
+                    }}
+                  >
+                    {col}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
+                  No data matches active filters.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > (tab === "operator_comparison" ? 0 : tab === "machine_type_efficiency" ? 0 : tab === "team_efficiency" ? 0 : 3) && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss") ||
+                      activeColumns[ci].toLowerCase().includes("efficiency")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === 0 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters?.fromDate && filters?.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters?.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters?.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      month: "",
+      week: "",
+      machine: "",
+      operatorName: "",
+    });
+  };
+
+  const operatorToMachine = {
+    Kumar: "CNC1",
+    Siva: "VMC1",
+    Ravi: "HMC1",
+    Sakthi: "CNC1",
+    Rangaraj: "CNC2"
+  };
+
+  const chart1Data = React.useMemo(() => {
+    const rawData = [
+      { machine: "CNC1", "Apr-25": 27, "May-25": 31, "Jun-25": 14, "Jul-25": 21, "Aug-25": 13 },
+      { machine: "CNC2", "Apr-25": 9, "May-25": 14, "Jun-25": 5, "Jul-25": 14, "Aug-25": 2 },
+      { machine: "HMC1", "Apr-25": 14, "May-25": 8, "Jun-25": 9, "Jul-25": 12, "Aug-25": 5 },
+      { machine: "VMC1", "Apr-25": 30, "May-25": 24, "Jun-25": 14, "Jul-25": 13, "Aug-25": 10 }
+    ];
+
+    let filtered = rawData;
+    if (filters?.machine) {
+      filtered = filtered.filter(item => item.machine === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        filtered = filtered.filter(item => item.machine === machineForOperator);
+      }
+    }
+
+    let offset = 0;
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 3 : -3;
+    }
+    if (filters?.fromDate) offset += 2;
+    if (filters?.toDate) offset -= 2;
+
+    const labels = filtered.map(item => item.machine);
+    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+
+    const datasets = months.map((m, idx) => {
+      const colorPalette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+      const data = filtered.map(item => Math.max(0, Math.min(100, item[m] + offset)));
+      return {
+        label: m,
+        data,
+        backgroundColor: colorPalette[idx],
+        borderRadius: 4
+      };
+    });
+
+    const filteredDatasets = filters?.month
+      ? datasets.filter(ds => ds.label === filters.month)
+      : datasets;
+
+    return { labels, datasets: filteredDatasets };
+  }, [filters]);
+
+  const chart2Data = React.useMemo(() => {
+    const rawData = [
+      { operator: "Kumar", machine: "CNC1", "Apr-25": 25, "May-25": 13, "Jun-25": 8, "Jul-25": 11, "Aug-25": 6 },
+      { operator: "Siva", machine: "VMC1", "Apr-25": 30, "May-25": 24, "Jun-25": 14, "Jul-25": 13, "Aug-25": 10 },
+      { operator: "Ravi", machine: "HMC1", "Apr-25": 14, "May-25": 8, "Jun-25": 9, "Jul-25": 12, "Aug-25": 5 },
+      { operator: "Sakthi", machine: "CNC1", "Apr-25": 28, "May-25": 18, "Jun-25": 6, "Jul-25": 10, "Aug-25": 7 },
+      { operator: "Rangaraj", machine: "CNC2", "Apr-25": 9, "May-25": 14, "Jun-25": 5, "Jul-25": 14, "Aug-25": 2 }
+    ];
+
+    let filtered = rawData;
+    if (filters?.machine) {
+      filtered = filtered.filter(item => item.machine === filters.machine);
+    }
+    if (filters?.operatorName) {
+      filtered = filtered.filter(item => item.operator === filters.operatorName);
+    }
+
+    let offset = 0;
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    const labels = filtered.map(item => item.operator);
+    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+
+    const datasets = months.map((m, idx) => {
+      const colorPalette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+      const data = filtered.map(item => Math.max(0, Math.min(100, item[m] + offset)));
+      return {
+        label: m,
+        data,
+        backgroundColor: colorPalette[idx],
+        borderRadius: 4
+      };
+    });
+
+    const filteredDatasets = filters?.month
+      ? datasets.filter(ds => ds.label === filters.month)
+      : datasets;
+
+    return { labels, datasets: filteredDatasets };
+  }, [filters]);
+
+  const setupChart1 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chart1Data.labels,
+        datasets: chart1Data.datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              font: { size: 9, family: "'Inter', sans-serif" },
+              boxWidth: 10
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}%`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+          },
+          y: {
+            min: 0,
+            max: 40,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              callback: (v) => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  }, [chart1Data]);
+
+  const setupChart2 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chart2Data.labels,
+        datasets: chart2Data.datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              font: { size: 9, family: "'Inter', sans-serif" },
+              boxWidth: 10
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}%`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+          },
+          y: {
+            min: 0,
+            max: 40,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              callback: (v) => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  }, [chart2Data]);
+
+  const activeSlide = activeTab === "operator_wise_rejection" ? 1 : 0;
+
+  const nextSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "operator_wise_rejection" : "machine_wise_rejection");
+  };
+
+  const prevSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "operator_wise_rejection" : "machine_wise_rejection");
+  };
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeSlide === 0 ? "Machine Wise Rejection %" : "Operator Wise Rejection %"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={prevSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeSlide + 1} / 2
+          </span>
+          <button
+            type="button"
+            onClick={nextSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeSlide === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`rej1-${JSON.stringify(chart1Data)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`rej2-${JSON.stringify(chart2Data)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+  const machines = ["CNC1", "CNC2", "HMC1", "VMC1"];
+  const operators = ["Kumar", "Siva", "Ravi", "Sakthi", "Rangaraj"];
+
+  return (
+    <PremiumDashboardView
+      title="Rejection Report"
+      icon={AlertTriangle}
+      color="#f59e0b"
+      kpis={null}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint="Rejection Analysis Charts"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters?.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters?.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="pp1-date-popup-btn-apply"
+                  onClick={() => setDateOpen(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Month Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Month</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.month || ""}
+            onChange={e => handleInputChange("month", e.target.value)}
+          >
+            <option value="">All Months</option>
+            {months.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Week Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Week</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.week || ""}
+            onChange={e => handleInputChange("week", e.target.value)}
+          >
+            <option value="">All Weeks</option>
+            {weeks.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </div>
+
+        {/* Machine No Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine No</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Operator Name Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Operator Name</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.operatorName || ""}
+            onChange={e => handleInputChange("operatorName", e.target.value)}
+          >
+            <option value="">All Operators</option>
+            {operators.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ alignSelf: "flex-end", height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+function RejectionReportBottomTable({ filters, activeTab, setActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = React.useState("machine_wise_rejection");
+  const tab = activeTab || localActiveTab;
+  const setTab = setActiveTab || setLocalActiveTab;
+
+  const operatorToMachine = {
+    Kumar: "CNC1",
+    Siva: "VMC1",
+    Ravi: "HMC1",
+    Sakthi: "CNC1",
+    Rangaraj: "CNC2"
+  };
+
+  const offset = React.useMemo(() => {
+    let off = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      off += (hash % 5) - 2; // -2 to +2
+    }
+    if (filters?.week) {
+      off += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
+    }
+    if (filters?.fromDate) off += 1;
+    if (filters?.toDate) off -= 1;
+    return off;
+  }, [filters]);
+
+  // Tab 1: Machine Wise Rejection %
+  const rows1 = React.useMemo(() => {
+    const baseTab1Rows = [
+      ["CNC1", "27%", "31%", "14%", "21%", "13%"],
+      ["CNC2", "9%", "14%", "5%", "14%", "2%"],
+      ["HMC1", "14%", "8%", "9%", "12%", "5%"],
+      ["VMC1", "30%", "24%", "14%", "13%", "10%"]
+    ];
+
+    let list = baseTab1Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[0] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        list = list.filter(r => r[0] === machineForOperator);
+      }
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const machine = row[0];
+        const monthlyVals = row.slice(1).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.max(0, Math.min(100, num + offset));
+          return `${newVal.toFixed(0)}%`;
+        });
+        return [machine, ...monthlyVals];
+      });
+    }
+
+    return list;
+  }, [filters, offset]);
+
+  // Tab 2: Operator Wise Rejection %
+  const rows2 = React.useMemo(() => {
+    const baseTab2Rows = [
+      ["Kumar", "CNC1", "25%", "13%", "8%", "11%", "6%"],
+      ["Siva", "VMC1", "30%", "24%", "14%", "13%", "10%"],
+      ["Ravi", "HMC1", "14%", "8%", "9%", "12%", "5%"],
+      ["Sakthi", "CNC1", "28%", "18%", "6%", "10%", "7%"],
+      ["Rangaraj", "CNC2", "9%", "14%", "5%", "14%", "2%"]
+    ];
+
+    let list = baseTab2Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[1] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      list = list.filter(r => r[0] === filters.operatorName);
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const metadata = row.slice(0, 2);
+        const monthlyVals = row.slice(2).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.max(0, Math.min(100, num + offset));
+          return `${newVal.toFixed(0)}%`;
+        });
+        return [...metadata, ...monthlyVals];
+      });
+    }
+
+    return list;
+  }, [filters, offset]);
+
+  // Tab 3: Defect Distribution by Part
+  const rows3 = React.useMemo(() => {
+    const baseTab3Rows = [
+      ["P-1001", "Brake Rotor Cover", "1500", "45", "3.0%", "CNC1"],
+      ["P-1002", "Gear Shifter Bushing", "2000", "20", "1.0%", "CNC2"],
+      ["P-1003", "Engine Mount Bracket", "1200", "36", "3.0%", "HMC1"],
+      ["P-1004", "Drive Shaft Flange", "1800", "18", "1.0%", "VMC1"]
+    ];
+
+    let list = baseTab3Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[5] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        list = list.filter(r => r[5] === machineForOperator);
+      }
+    }
+
+    return list.map(row => {
+      const partNo = row[0];
+      const desc = row[1];
+      let inspected = parseInt(row[2], 10);
+      let rejection = parseInt(row[3], 10);
+
+      if (offset !== 0) {
+        rejection = Math.max(0, rejection + Math.round(offset * 2));
+        inspected = Math.max(rejection, inspected + Math.round(offset * 10));
+      }
+      const defectRate = inspected > 0 ? ((rejection / inspected) * 100).toFixed(1) + "%" : "0.0%";
+      return [partNo, desc, inspected.toLocaleString(), rejection.toString(), defectRate];
+    });
+  }, [filters, offset]);
+
+  const activeColumns = tab === "machine_wise_rejection"
+    ? ["Machine No", "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"]
+    : tab === "operator_wise_rejection"
+      ? ["Operator Name", "Machine No", "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"]
+      : ["Part Number", "Description", "Inspected Qty", "Rejection Qty", "Defect Rate %"];
+
+  const activeRows = tab === "machine_wise_rejection"
+    ? rows1
+    : tab === "operator_wise_rejection"
+      ? rows2
+      : rows3;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "machine_wise_rejection", label: "Machine Wise Rejection %" },
+            { id: "operator_wise_rejection", label: "Operator Wise Rejection %" },
+            { id: "defect_distribution", label: "Defect Distribution by Part" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: tab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: tab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => {
+                const isRightAligned = idx > (tab === "machine_wise_rejection" ? 0 : tab === "operator_wise_rejection" ? 1 : 1) && (
+                  col.toLowerCase().includes("qty") ||
+                  col.toLowerCase().includes("value") ||
+                  col.toLowerCase().includes("hours") ||
+                  col.toLowerCase().includes("hour") ||
+                  col.toLowerCase().includes("rate") ||
+                  col.toLowerCase().includes("ratio") ||
+                  col.toLowerCase().includes("%") ||
+                  col.toLowerCase().includes("day") ||
+                  col.toLowerCase().includes("month") ||
+                  col.toLowerCase().includes("loss")
+                );
+                return (
+                  <th
+                    key={idx}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left"
+                    }}
+                  >
+                    {col}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
+                  No data matches active filters.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > (tab === "machine_wise_rejection" ? 0 : tab === "operator_wise_rejection" ? 1 : 1) && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === 0 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const dateRangeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
+        setDateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const dateRangeDisplay = () => {
+    if (filters?.fromDate && filters?.toDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
+    }
+    if (filters?.fromDate) {
+      return `${formatDateDisplay(filters.fromDate)} - ...`;
+    }
+    if (filters?.toDate) {
+      return `... - ${formatDateDisplay(filters.toDate)}`;
+    }
+    return "Select Date Range...";
+  };
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      month: "",
+      week: "",
+      machine: "",
+      operatorName: "",
+    });
+  };
+
+  const operatorToMachine = {
+    Kumar: "CNC1",
+    Siva: "VMC1",
+    Ravi: "HMC1",
+    Sakthi: "CNC1",
+    Rangaraj: "CNC2"
+  };
+
+  const chart1Data = React.useMemo(() => {
+    const rawData = [
+      { machine: "CNC1", "Apr-25": 18, "May-25": 20, "Jun-25": 10, "Jul-25": 15, "Aug-25": 9 },
+      { machine: "CNC2", "Apr-25": 6, "May-25": 9, "Jun-25": 3, "Jul-25": 8, "Aug-25": 1 },
+      { machine: "HMC1", "Apr-25": 9, "May-25": 5, "Jun-25": 6, "Jul-25": 8, "Aug-25": 3 },
+      { machine: "VMC1", "Apr-25": 20, "May-25": 16, "Jun-25": 9, "Jul-25": 8, "Aug-25": 7 }
+    ];
+
+    let filtered = rawData;
+    if (filters?.machine) {
+      filtered = filtered.filter(item => item.machine === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        filtered = filtered.filter(item => item.machine === machineForOperator);
+      }
+    }
+
+    let offset = 0;
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    const labels = filtered.map(item => item.machine);
+    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+
+    const datasets = months.map((m, idx) => {
+      const colorPalette = ["#8b5cf6", "#6366f1", "#a855f7", "#ec4899", "#3b82f6"];
+      const data = filtered.map(item => Math.max(0, Math.min(100, item[m] + offset)));
+      return {
+        label: m,
+        data,
+        backgroundColor: colorPalette[idx],
+        borderRadius: 4
+      };
+    });
+
+    const filteredDatasets = filters?.month
+      ? datasets.filter(ds => ds.label === filters.month)
+      : datasets;
+
+    return { labels, datasets: filteredDatasets };
+  }, [filters]);
+
+  const chart2Data = React.useMemo(() => {
+    const rawData = [
+      { operator: "Kumar", machine: "CNC1", "Apr-25": 15, "May-25": 8, "Jun-25": 5, "Jul-25": 7, "Aug-25": 4 },
+      { operator: "Siva", machine: "VMC1", "Apr-25": 20, "May-25": 16, "Jun-25": 9, "Jul-25": 8, "Aug-25": 7 },
+      { operator: "Ravi", machine: "HMC1", "Apr-25": 9, "May-25": 5, "Jun-25": 6, "Jul-25": 8, "Aug-25": 3 },
+      { operator: "Sakthi", machine: "CNC1", "Apr-25": 18, "May-25": 12, "Jun-25": 4, "Jul-25": 6, "Aug-25": 5 },
+      { operator: "Rangaraj", machine: "CNC2", "Apr-25": 6, "May-25": 9, "Jun-25": 3, "Jul-25": 8, "Aug-25": 1 }
+    ];
+
+    let filtered = rawData;
+    if (filters?.machine) {
+      filtered = filtered.filter(item => item.machine === filters.machine);
+    }
+    if (filters?.operatorName) {
+      filtered = filtered.filter(item => item.operator === filters.operatorName);
+    }
+
+    let offset = 0;
+    if (filters?.week) {
+      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
+    }
+    if (filters?.fromDate) offset += 1;
+    if (filters?.toDate) offset -= 1;
+
+    const labels = filtered.map(item => item.operator);
+    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+
+    const datasets = months.map((m, idx) => {
+      const colorPalette = ["#8b5cf6", "#6366f1", "#a855f7", "#ec4899", "#3b82f6"];
+      const data = filtered.map(item => Math.max(0, Math.min(100, item[m] + offset)));
+      return {
+        label: m,
+        data,
+        backgroundColor: colorPalette[idx],
+        borderRadius: 4
+      };
+    });
+
+    const filteredDatasets = filters?.month
+      ? datasets.filter(ds => ds.label === filters.month)
+      : datasets;
+
+    return { labels, datasets: filteredDatasets };
+  }, [filters]);
+
+  const setupChart1 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chart1Data.labels,
+        datasets: chart1Data.datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              font: { size: 9, family: "'Inter', sans-serif" },
+              boxWidth: 10
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}%`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+          },
+          y: {
+            min: 0,
+            max: 30,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              callback: (v) => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  }, [chart1Data]);
+
+  const setupChart2 = React.useCallback((canvas) => {
+    return new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chart2Data.labels,
+        datasets: chart2Data.datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              font: { size: 9, family: "'Inter', sans-serif" },
+              boxWidth: 10
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}%`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+          },
+          y: {
+            min: 0,
+            max: 30,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10, family: "'Inter', sans-serif" },
+              callback: (v) => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  }, [chart2Data]);
+
+  const activeSlide = activeTab === "operator_wise_rework" ? 1 : 0;
+
+  const nextSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "operator_wise_rework" : "machine_wise_rework");
+  };
+
+  const prevSlide = () => {
+    onActiveTabChange(activeSlide === 0 ? "operator_wise_rework" : "machine_wise_rework");
+  };
+
+  const carouselControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+      <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
+          {activeSlide === 0 ? "Machine Wise Rework %" : "Operator Wise Rework %"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={prevSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--pp1-text-3)", minWidth: "30px", textAlign: "center" }}>
+            {activeSlide + 1} / 2
+          </span>
+          <button
+            type="button"
+            onClick={nextSlide}
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "4px",
+              color: "var(--pp1-text-3)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+        {activeSlide === 0 ? (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`rew1-${JSON.stringify(chart1Data)}`} />
+        ) : (
+          <ChartJsCanvas setup={setupChart2} height={220} rebuildToken={`rew2-${JSON.stringify(chart2Data)}`} />
+        )}
+      </div>
+    </div>
+  );
+
+  const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
+  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+  const machines = ["CNC1", "CNC2", "HMC1", "VMC1"];
+  const operators = ["Kumar", "Siva", "Ravi", "Sakthi", "Rangaraj"];
+
+  return (
+    <PremiumDashboardView
+      title="Rework Report"
+      icon={PackageCheck}
+      color="#a855f7"
+      kpis={null}
+      setupChart={null}
+      chartControls={carouselControls}
+      rangeHint="Rework Analysis Charts"
+      onClose={onClose}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <label className="pp1-filter-label">Date Range</label>
+          <div
+            className="pp1-filter-input pp1-filter-input--date-range-trigger"
+            onClick={() => setDateOpen(!dateOpen)}
+          >
+            <span>{dateRangeDisplay()}</span>
+            <Calendar size={13} className="pp1-filter-icon" />
+          </div>
+          {dateOpen && (
+            <div className="pp1-date-popup">
+              <div className="pp1-date-popup-inputs">
+                <div className="pp1-date-popup-field">
+                  <label>From</label>
+                  <input
+                    type="date"
+                    value={filters?.fromDate || ""}
+                    onChange={e => handleInputChange("fromDate", e.target.value)}
+                  />
+                </div>
+                <div className="pp1-date-popup-field">
+                  <label>To</label>
+                  <input
+                    type="date"
+                    value={filters?.toDate || ""}
+                    onChange={e => handleInputChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="pp1-date-popup-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange("fromDate", "");
+                    handleInputChange("toDate", "");
+                    setDateOpen(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="pp1-date-popup-btn-apply"
+                  onClick={() => setDateOpen(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Month Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Month</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.month || ""}
+            onChange={e => handleInputChange("month", e.target.value)}
+          >
+            <option value="">All Months</option>
+            {months.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Week Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Week</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.week || ""}
+            onChange={e => handleInputChange("week", e.target.value)}
+          >
+            <option value="">All Weeks</option>
+            {weeks.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </div>
+
+        {/* Machine No Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Machine No</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.machine || ""}
+            onChange={e => handleInputChange("machine", e.target.value)}
+          >
+            <option value="">All Machines</option>
+            {machines.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        {/* Operator Name Filter */}
+        <div className="pp1-filter-group">
+          <label className="pp1-filter-label">Operator Name</label>
+          <select
+            className="pp1-filter-input"
+            value={filters?.operatorName || ""}
+            onChange={e => handleInputChange("operatorName", e.target.value)}
+          >
+            <option value="">All Operators</option>
+            {operators.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ alignSelf: "flex-end", height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+function ReworkReportBottomTable({ filters, activeTab, setActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = React.useState("machine_wise_rework");
+  const tab = activeTab || localActiveTab;
+  const setTab = setActiveTab || setLocalActiveTab;
+
+  const operatorToMachine = {
+    Kumar: "CNC1",
+    Siva: "VMC1",
+    Ravi: "HMC1",
+    Sakthi: "CNC1",
+    Rangaraj: "CNC2"
+  };
+
+  const offset = React.useMemo(() => {
+    let off = 0;
+    if (filters?.month) {
+      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      off += (hash % 5) - 2; // -2 to +2
+    }
+    if (filters?.week) {
+      off += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
+    }
+    if (filters?.fromDate) off += 1;
+    if (filters?.toDate) off -= 1;
+    return off;
+  }, [filters]);
+
+  // Tab 1: Machine Wise Rework %
+  const rows1 = React.useMemo(() => {
+    const baseTab1Rows = [
+      ["CNC1", "18%", "20%", "10%", "15%", "9%"],
+      ["CNC2", "6%", "9%", "3%", "8%", "1%"],
+      ["HMC1", "9%", "5%", "6%", "8%", "3%"],
+      ["VMC1", "20%", "16%", "9%", "8%", "7%"]
+    ];
+
+    let list = baseTab1Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[0] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        list = list.filter(r => r[0] === machineForOperator);
+      }
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const machine = row[0];
+        const monthlyVals = row.slice(1).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.max(0, Math.min(100, num + offset));
+          return `${newVal.toFixed(0)}%`;
+        });
+        return [machine, ...monthlyVals];
+      });
+    }
+
+    return list;
+  }, [filters, offset]);
+
+  // Tab 2: Operator Wise Rework %
+  const rows2 = React.useMemo(() => {
+    const baseTab2Rows = [
+      ["Kumar", "CNC1", "15%", "8%", "5%", "7%", "4%"],
+      ["Siva", "VMC1", "20%", "16%", "9%", "8%", "7%"],
+      ["Ravi", "HMC1", "9%", "5%", "6%", "8%", "3%"],
+      ["Sakthi", "CNC1", "18%", "12%", "4%", "6%", "5%"],
+      ["Rangaraj", "CNC2", "6%", "9%", "3%", "8%", "1%"]
+    ];
+
+    let list = baseTab2Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[1] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      list = list.filter(r => r[0] === filters.operatorName);
+    }
+
+    if (offset !== 0) {
+      return list.map(row => {
+        const metadata = row.slice(0, 2);
+        const monthlyVals = row.slice(2).map(val => {
+          const num = parseFloat(val);
+          const newVal = Math.max(0, Math.min(100, num + offset));
+          return `${newVal.toFixed(0)}%`;
+        });
+        return [...metadata, ...monthlyVals];
+      });
+    }
+
+    return list;
+  }, [filters, offset]);
+
+  // Tab 3: Rework Distribution by Part
+  const rows3 = React.useMemo(() => {
+    const baseTab3Rows = [
+      ["P-1001", "Brake Rotor Cover", "1500", "30", "2.0%", "CNC1"],
+      ["P-1002", "Gear Shifter Bushing", "2000", "15", "0.8%", "CNC2"],
+      ["P-1003", "Engine Mount Bracket", "1200", "24", "2.0%", "HMC1"],
+      ["P-1004", "Drive Shaft Flange", "1800", "12", "0.7%", "VMC1"]
+    ];
+
+    let list = baseTab3Rows;
+    if (filters?.machine) {
+      list = list.filter(r => r[5] === filters.machine);
+    }
+    if (filters?.operatorName) {
+      const machineForOperator = operatorToMachine[filters.operatorName];
+      if (machineForOperator) {
+        list = list.filter(r => r[5] === machineForOperator);
+      }
+    }
+
+    return list.map(row => {
+      const partNo = row[0];
+      const desc = row[1];
+      let inspected = parseInt(row[2], 10);
+      let rework = parseInt(row[3], 10);
+
+      if (offset !== 0) {
+        rework = Math.max(0, rework + Math.round(offset));
+        inspected = Math.max(rework, inspected + Math.round(offset * 10));
+      }
+      const reworkRate = inspected > 0 ? ((rework / inspected) * 100).toFixed(1) + "%" : "0.0%";
+      return [partNo, desc, inspected.toLocaleString(), rework.toString(), reworkRate];
+    });
+  }, [filters, offset]);
+
+  const activeColumns = tab === "machine_wise_rework"
+    ? ["Machine No", "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"]
+    : tab === "operator_wise_rework"
+      ? ["Operator Name", "Machine No", "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"]
+      : ["Part Number", "Description", "Inspected Qty", "Rework Qty", "Rework Rate %"];
+
+  const activeRows = tab === "machine_wise_rework"
+    ? rows1
+    : tab === "operator_wise_rework"
+      ? rows2
+      : rows3;
+
+  return (
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+          {[
+            { id: "machine_wise_rework", label: "Machine Wise Rework %" },
+            { id: "operator_wise_rework", label: "Operator Wise Rework %" },
+            { id: "rework_distribution", label: "Rework Distribution by Part" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: tab === t.id ? "2.5px solid var(--pp1-blue)" : "none",
+                color: tab === t.id ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+                fontWeight: 700,
+                fontSize: "12px",
+                paddingBottom: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {activeColumns.map((col, idx) => {
+                const isRightAligned = idx > (tab === "machine_wise_rework" ? 0 : tab === "operator_wise_rework" ? 1 : 1) && (
+                  col.toLowerCase().includes("qty") ||
+                  col.toLowerCase().includes("value") ||
+                  col.toLowerCase().includes("hours") ||
+                  col.toLowerCase().includes("hour") ||
+                  col.toLowerCase().includes("rate") ||
+                  col.toLowerCase().includes("ratio") ||
+                  col.toLowerCase().includes("%") ||
+                  col.toLowerCase().includes("day") ||
+                  col.toLowerCase().includes("month") ||
+                  col.toLowerCase().includes("loss")
+                );
+                return (
+                  <th
+                    key={idx}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left"
+                    }}
+                  >
+                    {col}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.length === 0 ? (
+              <tr>
+                <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
+                  No data matches active filters.
+                </td>
+              </tr>
+            ) : (
+              activeRows.map((row, ri) => (
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  {row.map((cell, ci) => {
+                    const isRightAligned = ci > (tab === "machine_wise_rework" ? 0 : tab === "operator_wise_rework" ? 1 : 1) && (
+                      activeColumns[ci].toLowerCase().includes("qty") ||
+                      activeColumns[ci].toLowerCase().includes("value") ||
+                      activeColumns[ci].toLowerCase().includes("hours") ||
+                      activeColumns[ci].toLowerCase().includes("hour") ||
+                      activeColumns[ci].toLowerCase().includes("rate") ||
+                      activeColumns[ci].toLowerCase().includes("ratio") ||
+                      activeColumns[ci].toLowerCase().includes("%") ||
+                      activeColumns[ci].toLowerCase().includes("day") ||
+                      activeColumns[ci].toLowerCase().includes("month") ||
+                      activeColumns[ci].toLowerCase().includes("loss")
+                    );
+                    return (
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: ci === 0 ? 700 : 600
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function CustomerComplaintReportDashboardView({ onClose }) {
@@ -4859,7 +9946,7 @@ function CustomerComplaintReportDashboardView({ onClose }) {
     { label: "Avg Resolution", value: "4.5d", icon: "⏱️", color: "#3b82f6" },
     { label: "Satisfaction", value: "96%", icon: "😊", color: "#8b5cf6" }
   ];
-  return <PremiumDashboardView title="Customer Complaint Report Dashboard" icon={Megaphone} color="#dc2626" kpis={kpis} setupChart={null} rangeHint="Active Range" onClose={onClose} />;
+  return <PremiumDashboardView title="Customer Complaint Report" icon={Megaphone} color="#dc2626" kpis={kpis} setupChart={null} rangeHint="Active Range" onClose={onClose} />;
 }
 
 function CustomerComplaintReportBottomTable() {
@@ -4896,7 +9983,7 @@ function MachineCapacityReportDashboardView({ onClose }) {
       }
     });
   }, []);
-  return <PremiumDashboardView title="Machine Capacity Report Dashboard" icon={Package} color="#ea580c" kpis={kpis} setupChart={setupChart} rangeHint="Machinery Capacity Load" onClose={onClose} />;
+  return <PremiumDashboardView title="Machine Capacity Report" icon={Package} color="#ea580c" kpis={kpis} setupChart={setupChart} rangeHint="Machinery Capacity Load" onClose={onClose} />;
 }
 
 function MachineCapacityReportBottomTable() {
@@ -4941,7 +10028,97 @@ export default function PlantPerformance1() {
     customer: "",
     region: "",
   });
+  const [prodFilters, setProdFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    team: "",
+    machine: "",
+    operator: "",
+    customer: "",
+  });
+  const [idleFilters, setIdleFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    machine: "",
+    team: "",
+    idleReason: "",
+  });
+  const [idleActiveTab, setIdleActiveTab] = useState("chart1");
+  const [nonAccFilters, setNonAccFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    machine: "",
+    team: "",
+    reason: "",
+  });
+  const [oeeFilters, setOeeFilters] = useState({
+    month: "",
+    year: "",
+    team: "",
+    machineType: "",
+    machine: "",
+  });
+  const [oeeActiveTab, setOeeActiveTab] = useState("machine_oee");
+  const [oeeCompActiveTab, setOeeCompActiveTab] = useState("month_comparison");
+  const [effActiveTab, setEffActiveTab] = useState("operator_comparison");
+  const [rejActiveTab, setRejActiveTab] = useState("machine_wise_rejection");
+  const [rewActiveTab, setRewActiveTab] = useState("machine_wise_rework");
+  const [oeeCompFilters, setOeeCompFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    month: "",
+    year: "",
+    week: "",
+    machineType: "",
+    machine: "",
+  });
+  const [effFilters, setEffFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    month: "",
+    year: "",
+    week: "",
+    team: "",
+    machineType: "",
+    machine: "",
+    operatorName: "",
+  });
+  const [rejFilters, setRejFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    month: "",
+    week: "",
+    machine: "",
+    operatorName: "",
+  });
+  const [rewFilters, setRewFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    month: "",
+    week: "",
+    machine: "",
+    operatorName: "",
+  });
   const fetchAbortRef = useRef(null);
+
+  const [showTargetPopover, setShowTargetPopover] = useState(false);
+  const [targetCriteria, setTargetCriteria] = useState({
+    oee: 80,
+    availability: 85,
+    performance: 90,
+    quality: 95
+  });
+  const targetRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (targetRef.current && !targetRef.current.contains(e.target)) {
+        setShowTargetPopover(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchAll = useCallback(async (from, to, signal) => {
     setLoading(true);
@@ -5031,6 +10208,102 @@ export default function PlantPerformance1() {
         />
         {loading && <span className="pp1-fbar-status">Loading live data…</span>}
         {fetchError && <span className="pp1-fbar-error">{fetchError}</span>}
+
+        <div className="pp1-fbar-target-wrap" ref={targetRef}>
+          <button 
+            type="button"
+            className={`pp1-fbar-target-btn ${showTargetPopover ? "pp1-fbar-target-btn--active" : ""}`}
+            onClick={() => setShowTargetPopover(!showTargetPopover)}
+          >
+            <Target size={14} className="pp1-target-icon" />
+            <span>Target Criteria</span>
+          </button>
+
+          {showTargetPopover && (
+            <div className="pp1-target-popover">
+              <div className="pp1-target-popover__header">
+                <div className="pp1-target-popover__title">
+                  <Target size={15} className="pp1-target-popover__icon" />
+                  <span>Target Criteria</span>
+                </div>
+                <button 
+                  type="button"
+                  className="pp1-target-popover__close"
+                  onClick={() => setShowTargetPopover(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="pp1-target-popover__body">
+                <div className="pp1-target-field">
+                  <div className="pp1-target-field__label-row">
+                    <span className="pp1-target-field__name">OEE Target</span>
+                    <span className="pp1-target-field__val">{targetCriteria.oee}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    value={targetCriteria.oee}
+                    onChange={(e) => setTargetCriteria({ ...targetCriteria, oee: parseInt(e.target.value) })}
+                    className="pp1-target-slider"
+                  />
+                </div>
+                <div className="pp1-target-field">
+                  <div className="pp1-target-field__label-row">
+                    <span className="pp1-target-field__name">Availability Target</span>
+                    <span className="pp1-target-field__val">{targetCriteria.availability}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    value={targetCriteria.availability}
+                    onChange={(e) => setTargetCriteria({ ...targetCriteria, availability: parseInt(e.target.value) })}
+                    className="pp1-target-slider"
+                  />
+                </div>
+                <div className="pp1-target-field">
+                  <div className="pp1-target-field__label-row">
+                    <span className="pp1-target-field__name">Performance Target</span>
+                    <span className="pp1-target-field__val">{targetCriteria.performance}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    value={targetCriteria.performance}
+                    onChange={(e) => setTargetCriteria({ ...targetCriteria, performance: parseInt(e.target.value) })}
+                    className="pp1-target-slider"
+                  />
+                </div>
+                <div className="pp1-target-field">
+                  <div className="pp1-target-field__label-row">
+                    <span className="pp1-target-field__name">Quality Target</span>
+                    <span className="pp1-target-field__val">{targetCriteria.quality}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    value={targetCriteria.quality}
+                    onChange={(e) => setTargetCriteria({ ...targetCriteria, quality: parseInt(e.target.value) })}
+                    className="pp1-target-slider"
+                  />
+                </div>
+              </div>
+              <div className="pp1-target-popover__footer">
+                <button 
+                  type="button"
+                  className="pp1-target-btn-primary"
+                  onClick={() => setShowTargetPopover(false)}
+                >
+                  Apply Targets
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="pp1-main">
@@ -5084,9 +10357,26 @@ export default function PlantPerformance1() {
                     <div className="pp1-ac-icon">
                       {typeof a.icon === "string" ? a.icon : React.createElement(a.icon, { size: 16 })}
                     </div>
-                    <div className="pp1-ac-body">
+                    <div className="pp1-ac-body" style={{ flex: 1 }}>
                       <span className="pp1-ac-title">{a.title}</span>
                     </div>
+                    {a.trend && (
+                      <span style={{
+                        fontSize: "9.5px",
+                        fontWeight: 700,
+                        color: a.trend.type === "up" ? "#10b981" : a.trend.type === "down" ? "#ef4444" : "#f59e0b",
+                        background: a.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : a.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                        padding: "2px 8px",
+                        borderRadius: "9999px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "3px",
+                        marginRight: "6px",
+                        whiteSpace: "nowrap"
+                      }}>
+                        {a.trend.type === "up" ? "▲" : a.trend.type === "down" ? "▼" : "●"} {a.trend.value}
+                      </span>
+                    )}
                     <span className="pp1-ac-arrow">{active ? "▼" : "›"}</span>
                   </div>
                 );
@@ -5123,30 +10413,62 @@ export default function PlantPerformance1() {
                   />
                 ) : selectionId === "production_analysis_report_dashboard" ? (
                   <ProductionAnalysisReportDashboardView
+                    filters={prodFilters}
+                    onFilterChange={setProdFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "idle_hours_report_dashboard" ? (
                   <IdleHoursReportDashboardView
+                    filters={idleFilters}
+                    onFilterChange={setIdleFilters}
+                    activeTab={idleActiveTab}
+                    onActiveTabChange={setIdleActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
                   <IdleHoursNonAcceptedReasonLossReportView
+                    filters={nonAccFilters}
+                    onFilterChange={setNonAccFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "oee_report_dashboard" ? (
                   <OeeReportDashboardView
+                    filters={oeeFilters}
+                    onFilterChange={setOeeFilters}
+                    activeTab={oeeActiveTab}
+                    onActiveTabChange={setOeeActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "oee_comparison_report_dashboard" ? (
                   <OeeComparisonReportDashboardView
+                    filters={oeeCompFilters}
+                    onFilterChange={setOeeCompFilters}
+                    activeTab={oeeCompActiveTab}
+                    onActiveTabChange={setOeeCompActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "efficiency_eff_report_dashboard" ? (
                   <EfficiencyEffReportDashboardView
+                    filters={effFilters}
+                    onFilterChange={setEffFilters}
+                    activeTab={effActiveTab}
+                    onActiveTabChange={setEffActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "rejection_rework_report_dashboard" ? (
-                  <RejectionReworkReportDashboardView
+                ) : selectionId === "rejection_report_dashboard" ? (
+                  <RejectionReportDashboardView
+                    filters={rejFilters}
+                    onFilterChange={setRejFilters}
+                    activeTab={rejActiveTab}
+                    onActiveTabChange={setRejActiveTab}
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                  />
+                ) : selectionId === "rework_report_dashboard" ? (
+                  <ReworkReportDashboardView
+                    filters={rewFilters}
+                    onFilterChange={setRewFilters}
+                    activeTab={rewActiveTab}
+                    onActiveTabChange={setRewActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
                 ) : selectionId === "customer_complaint_report_dashboard" ? (
@@ -5208,19 +10530,25 @@ export default function PlantPerformance1() {
         ) : selectionId === "sales_analysis_report_dashboard" ? (
           <SalesAnalysisReportBottomTable filters={salesFilters} />
         ) : selectionId === "production_analysis_report_dashboard" ? (
-          <ProductionAnalysisReportBottomTable />
+          <ProductionAnalysisReportBottomTable filters={prodFilters} />
         ) : selectionId === "idle_hours_report_dashboard" ? (
-          <IdleHoursReportBottomTable />
+          <IdleHoursReportBottomTable
+            filters={idleFilters}
+            activeTab={idleActiveTab}
+            setActiveTab={setIdleActiveTab}
+          />
         ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-          <IdleHoursNonAcceptedReasonLossReportBottomTable />
+          <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
         ) : selectionId === "oee_report_dashboard" ? (
-          <OeeReportBottomTable />
+          <OeeReportBottomTable filters={oeeFilters} activeTab={oeeActiveTab} setActiveTab={setOeeActiveTab} />
         ) : selectionId === "oee_comparison_report_dashboard" ? (
-          <OeeComparisonReportBottomTable />
+          <OeeComparisonReportBottomTable filters={oeeCompFilters} activeTab={oeeCompActiveTab} setActiveTab={setOeeCompActiveTab} />
         ) : selectionId === "efficiency_eff_report_dashboard" ? (
-          <EfficiencyEffReportBottomTable />
-        ) : selectionId === "rejection_rework_report_dashboard" ? (
-          <RejectionReworkReportBottomTable />
+          <EfficiencyEffReportBottomTable filters={effFilters} activeTab={effActiveTab} setActiveTab={setEffActiveTab} />
+        ) : selectionId === "rejection_report_dashboard" ? (
+          <RejectionReportBottomTable filters={rejFilters} activeTab={rejActiveTab} setActiveTab={setRejActiveTab} />
+        ) : selectionId === "rework_report_dashboard" ? (
+          <ReworkReportBottomTable filters={rewFilters} activeTab={rewActiveTab} setActiveTab={setRewActiveTab} />
         ) : selectionId === "customer_complaint_report_dashboard" ? (
           <CustomerComplaintReportBottomTable />
         ) : selectionId === "machine_capacity_report_dashboard" ? (
