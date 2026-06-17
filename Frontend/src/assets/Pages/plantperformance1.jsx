@@ -31,7 +31,10 @@ import {
   Settings,
   Target,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BarChart2,
+  XOctagon,
+  RefreshCw
 } from "lucide-react";
 
 Chart.register(...registerables);
@@ -2551,7 +2554,7 @@ const CHART2_BASE = [
   { month: "Jun-26", date: "2026-06-15", "Customer A": 13, "Customer B": 22, "Customer C": 18, "Customer D": 15 }
 ];
 
-function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose }) {
+function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -2633,6 +2636,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
     const orderValues = chart1Data.map(r => r.orderValue);
     const salesValues = chart1Data.map(r => r.salesValue);
     const pendingValues = chart1Data.map(r => r.pendingValue);
+    const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
+    const orderValueAch = targetConfig?.customer_po?.orderValueAch ?? 85;
 
     return new Chart(canvas, {
       type: "line",
@@ -2671,7 +2676,27 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             pointBackgroundColor: "rgba(245, 158, 11, 1)",
             pointRadius: 4.5,
             fill: true
-          }
+          },
+          {
+            label: "Sales Target",
+            data: labels.map(() => salesTarget),
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
+          },
+          // {
+          //   label: `Achievement Target (${orderValueAch}%)`,
+          //   data: orderValues.map(v => Number((v * orderValueAch / 100).toFixed(2))),
+          //   borderColor: "rgba(139, 92, 246, 0.8)",
+          //   borderDash: [4, 4],
+          //   borderWidth: 2,
+          //   pointRadius: 0,
+          //   fill: false,
+          //   tension: 0.3
+          // }
         ]
       },
       options: {
@@ -2707,7 +2732,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         }
       }
     });
-  }, [chart1Data]);
+  }, [chart1Data, targetConfig]);
 
   // Chart Setup 2: Month Wise Customer Order Trend (Clustered Column Chart)
   const setupClusteredChart = React.useCallback((canvas) => {
@@ -2725,12 +2750,26 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
       "Customer D": "rgba(244, 63, 94, 0.85)"  // Rose
     };
 
-    const datasets = customersList.map(cust => ({
-      label: cust,
-      data: chart2Data.map(r => r[cust]),
-      backgroundColor: colors[cust],
-      borderRadius: 4
-    }));
+    const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
+    const datasets = [
+      ...customersList.map(cust => ({
+        label: cust,
+        data: chart2Data.map(r => r[cust]),
+        backgroundColor: colors[cust],
+        borderRadius: 4
+      })),
+      {
+        type: "line",
+        label: "Sales Target",
+        data: labels.map(() => salesTarget),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
 
     return new Chart(canvas, {
       type: "bar",
@@ -2771,7 +2810,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         }
       }
     });
-  }, [chart2Data, filters.customer]);
+  }, [chart2Data, filters.customer, targetConfig]);
 
   const slides = [
     {
@@ -5347,7 +5386,7 @@ const formatLossValue = (val) => {
   return `₹${val.toLocaleString()}`;
 };
 
-function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
   const activeChart = activeTab === "chart2" ? 1 : 0;
@@ -5507,6 +5546,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
 
   const setupChart1 = React.useCallback((canvas) => {
     const ctx = canvas.getContext("2d");
+    const maxIdleHours = targetConfig?.idle_hours?.maxIdleHours ?? 15;
     return new Chart(ctx, {
       data: {
         labels: chart1Data.labels,
@@ -5542,6 +5582,18 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             tension: 0.25,
             fill: false,
             pointRadius: 4
+          },
+          {
+            type: "line",
+            label: "Max Idle Hours Target",
+            data: chart1Data.labels.map(() => maxIdleHours),
+            yAxisID: "yIdle",
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
           }
         ]
       },
@@ -5571,10 +5623,11 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         }
       }
     });
-  }, [chart1Data]);
+  }, [chart1Data, targetConfig]);
 
   const setupChart2 = React.useCallback((canvas) => {
     const ctx = canvas.getContext("2d");
+    const maxIdleHours = targetConfig?.idle_hours?.maxIdleHours ?? 15;
     return new Chart(ctx, {
       data: {
         labels: chart2Data.labels,
@@ -5600,6 +5653,18 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             tension: 0.25,
             fill: false,
             pointRadius: 4
+          },
+          {
+            type: "line",
+            label: "Max Idle Hours Target",
+            data: chart2Data.labels.map(() => maxIdleHours),
+            yAxisID: "yIdle",
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
           }
         ]
       },
@@ -5629,7 +5694,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         }
       }
     });
-  }, [chart2Data]);
+  }, [chart2Data, targetConfig]);
 
   const teams = ["Team A", "Team B", "Team C", "Team D"];
   const machines = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
@@ -5987,7 +6052,7 @@ function IdleHoursReportBottomTable({ filters, activeTab, setActiveTab }) {
   );
 }
 
-function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onClose }) {
+function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -6118,6 +6183,8 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
 
   const setupChart = React.useCallback((canvas) => {
     const ctx = canvas.getContext("2d");
+    const maxNonAcceptedHours = targetConfig?.idle_hours_non_accepted?.maxNonAcceptedHours ?? 5;
+    const unplannedLimit = targetConfig?.idle_hours_non_accepted?.unplannedLimit ?? 10;
     return new Chart(ctx, {
       data: {
         labels: chartData.labels,
@@ -6179,6 +6246,30 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
             tension: 0.25,
             fill: false,
             pointRadius: 4
+          },
+          {
+            type: "line",
+            label: "Max Non-Accepted Target",
+            data: chartData.labels.map(() => maxNonAcceptedHours),
+            yAxisID: "yHours",
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
+          },
+          {
+            type: "line",
+            label: `Unplanned Loss Threshold (${unplannedLimit}%)`,
+            data: chartData.totalLoss.map(v => Number((v * unplannedLimit / 100).toFixed(3))),
+            yAxisID: "yLoss",
+            borderColor: "rgba(244, 63, 94, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
           }
         ]
       },
@@ -6215,7 +6306,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
         }
       }
     });
-  }, [chartData]);
+  }, [chartData, targetConfig]);
 
   const machines = ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"];
   const teams = ["Team A", "Team B", "Team C", "Team D"];
@@ -6520,7 +6611,7 @@ function IdleHoursNonAcceptedReasonLossReportBottomTable({ filters }) {
   );
 }
 
-function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
   const handleInputChange = (field, val) => {
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
@@ -6644,6 +6735,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
   }, [chart1Data]);
 
   const setupChart2 = React.useCallback((canvas) => {
+    const oeeTarget = targetConfig?.oee ?? 80;
     return new Chart(canvas, {
       type: "bar",
       data: {
@@ -6655,6 +6747,17 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
             backgroundColor: ["#3b82f6", "#10b981"],
             borderRadius: 6,
             borderWidth: 0
+          },
+          {
+            type: "line",
+            label: "OEE Target",
+            data: chart2Data.labels.map(() => oeeTarget),
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
           }
         ]
       },
@@ -6662,7 +6765,11 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false }
+          legend: {
+            display: true,
+            position: "top",
+            labels: { font: { size: 10, family: "'Inter', sans-serif" }, boxWidth: 10 }
+          }
         },
         scales: {
           x: {
@@ -6681,7 +6788,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
         }
       }
     });
-  }, [chart2Data]);
+  }, [chart2Data, targetConfig]);
 
   const activeSlide = activeTab === "oee_by_type" ? 1 : 0;
 
@@ -7107,7 +7214,7 @@ function OeeReportBottomTable({ filters, activeTab, setActiveTab }) {
   );
 }
 
-function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -7270,9 +7377,28 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
   }, [filters]);
 
   const setupChart1 = React.useCallback((canvas) => {
+    const minUtilization = targetConfig?.oee_comparison?.minUtilization ?? 75;
+    const datasetsWithTarget = [
+      ...(chart1Data.datasets || []),
+      {
+        type: "line",
+        label: "Min Utilization Target",
+        data: (chart1Data.labels || []).map(() => minUtilization),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
-      data: chart1Data,
+      data: {
+        labels: chart1Data.labels,
+        datasets: datasetsWithTarget
+      },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -7293,12 +7419,31 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
         }
       }
     });
-  }, [chart1Data]);
+  }, [chart1Data, targetConfig]);
 
   const setupChart2 = React.useCallback((canvas) => {
+    const minUtilization = targetConfig?.oee_comparison?.minUtilization ?? 75;
+    const datasetsWithTarget = [
+      ...(chart2Data.datasets || []),
+      {
+        type: "line",
+        label: "Min Utilization Target",
+        data: (chart2Data.labels || []).map(() => minUtilization),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
-      data: chart2Data,
+      data: {
+        labels: chart2Data.labels,
+        datasets: datasetsWithTarget
+      },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -7319,7 +7464,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
         }
       }
     });
-  }, [chart2Data]);
+  }, [chart2Data, targetConfig]);
 
   const activeSlide = activeTab === "type_comparison" ? 1 : 0;
 
@@ -8551,7 +8696,7 @@ function EfficiencyEffReportBottomTable({ filters, activeTab, setActiveTab }) {
   );
 }
 
-function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -8705,11 +8850,27 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
   }, [filters]);
 
   const setupChart1 = React.useCallback((canvas) => {
+    const rejectionLimit = targetConfig?.rejection?.rejectionLimit ?? 2.0;
+    const datasetsWithTarget = [
+      ...(chart1Data.datasets || []),
+      {
+        type: "line",
+        label: "Max Rejection Target",
+        data: (chart1Data.labels || []).map(() => rejectionLimit),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
-        datasets: chart1Data.datasets
+        datasets: datasetsWithTarget
       },
       options: {
         responsive: true,
@@ -8745,14 +8906,30 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
         }
       }
     });
-  }, [chart1Data]);
+  }, [chart1Data, targetConfig]);
 
   const setupChart2 = React.useCallback((canvas) => {
+    const rejectionLimit = targetConfig?.rejection?.rejectionLimit ?? 2.0;
+    const datasetsWithTarget = [
+      ...(chart2Data.datasets || []),
+      {
+        type: "line",
+        label: "Max Rejection Target",
+        data: (chart2Data.labels || []).map(() => rejectionLimit),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
       data: {
         labels: chart2Data.labels,
-        datasets: chart2Data.datasets
+        datasets: datasetsWithTarget
       },
       options: {
         responsive: true,
@@ -8788,7 +8965,7 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
         }
       }
     });
-  }, [chart2Data]);
+  }, [chart2Data, targetConfig]);
 
   const activeSlide = activeTab === "operator_wise_rejection" ? 1 : 0;
 
@@ -9245,7 +9422,7 @@ function RejectionReportBottomTable({ filters, activeTab, setActiveTab }) {
   );
 }
 
-function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose }) {
+function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -9399,11 +9576,27 @@ function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiv
   }, [filters]);
 
   const setupChart1 = React.useCallback((canvas) => {
+    const reworkLimit = targetConfig?.rework?.reworkLimit ?? 1.5;
+    const datasetsWithTarget = [
+      ...(chart1Data.datasets || []),
+      {
+        type: "line",
+        label: "Max Rework Target",
+        data: (chart1Data.labels || []).map(() => reworkLimit),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
-        datasets: chart1Data.datasets
+        datasets: datasetsWithTarget
       },
       options: {
         responsive: true,
@@ -9439,14 +9632,30 @@ function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiv
         }
       }
     });
-  }, [chart1Data]);
+  }, [chart1Data, targetConfig]);
 
   const setupChart2 = React.useCallback((canvas) => {
+    const reworkLimit = targetConfig?.rework?.reworkLimit ?? 1.5;
+    const datasetsWithTarget = [
+      ...(chart2Data.datasets || []),
+      {
+        type: "line",
+        label: "Max Rework Target",
+        data: (chart2Data.labels || []).map(() => reworkLimit),
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
     return new Chart(canvas, {
       type: "bar",
       data: {
         labels: chart2Data.labels,
-        datasets: chart2Data.datasets
+        datasets: datasetsWithTarget
       },
       options: {
         responsive: true,
@@ -9482,7 +9691,7 @@ function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiv
         }
       }
     });
-  }, [chart2Data]);
+  }, [chart2Data, targetConfig]);
 
   const activeSlide = activeTab === "operator_wise_rework" ? 1 : 0;
 
@@ -10102,23 +10311,78 @@ export default function PlantPerformance1() {
   const fetchAbortRef = useRef(null);
 
   const [showTargetPopover, setShowTargetPopover] = useState(false);
-  const [targetCriteria, setTargetCriteria] = useState({
+  const [targetConfig, setTargetConfig] = useState({
     oee: 80,
     availability: 85,
     performance: 90,
-    quality: 95
+    quality: 95,
+    customer_po: {
+      salesTarget: 25,
+      orderValueAch: 85
+    },
+    idle_hours: {
+      maxIdleHours: 15,
+      reductionTarget: 10
+    },
+    idle_hours_non_accepted: {
+      maxNonAcceptedHours: 5,
+      unplannedLimit: 10
+    },
+    oee_comparison: {
+      minUtilization: 75
+    },
+    rejection: {
+      rejectionLimit: 2.0
+    },
+    rework: {
+      reworkLimit: 1.5
+    }
   });
+
+  const [activeTargetTab, setActiveTargetTab] = useState("core_kpis");
+  const [tempConfig, setTempConfig] = useState(null);
+  const [toast, setToast] = useState(null);
   const targetRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (targetRef.current && !targetRef.current.contains(e.target)) {
-        setShowTargetPopover(false);
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const handleOpenTargetModal = () => {
+    setTempConfig(JSON.parse(JSON.stringify(targetConfig)));
+    setActiveTargetTab("core_kpis");
+    setShowTargetPopover(true);
+  };
+
+  const handleTempConfigChange = (key, val) => {
+    setTempConfig(prev => ({
+      ...prev,
+      [key]: val
+    }));
+  };
+
+  const handleNestedTempConfigChange = (section, key, val) => {
+    setTempConfig(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [key]: val
       }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    }));
+  };
+
+  const applyTargetChanges = () => {
+    setTargetConfig(tempConfig);
+    setShowTargetPopover(false);
+    setToast({
+      title: "Targets Applied Successfully",
+      msg: "Dashboard charts and target lines have been updated.",
+      type: "success"
+    });
+  };
 
   const fetchAll = useCallback(async (from, to, signal) => {
     setLoading(true);
@@ -10187,16 +10451,148 @@ export default function PlantPerformance1() {
     [selectionId, selectionPanel, data]
   );
 
+  // Compute live trend for every ACTION_CARD based on actual values vs targetConfig.
+  // Returns a map: cardId -> { type: "up"|"down"|"average", value: string, message: string }
+  const computedCardTrends = useMemo(() => {
+    if (!targetConfig) return {};
+
+    const map = {};
+
+    // -- actual values (mock / from data) --
+    const salesVal = 18.2;
+    const salesTarget = targetConfig.customer_po?.salesTarget ?? 25;
+    const poOk = salesVal >= salesTarget;
+    const poDiff = (((salesVal - salesTarget) / salesTarget) * 100).toFixed(1);
+    map["customer_po_vs_sales_analysis"] = {
+      type: poOk ? "up" : "down",
+      value: `${poOk ? "+" : ""}${poDiff}% ${poOk ? "Up" : "Down"}`,
+      message: poOk
+        ? `Sales Value (\u20b9${salesVal}L) meets target (\u20b9${salesTarget}L)`
+        : `Sales Value (\u20b9${salesVal}L) is below target (\u20b9${salesTarget}L)`,
+      priority: "medium"
+    };
+
+    const totalIdle = 17.3;
+    const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
+    const idleOk = totalIdle <= maxIdle;
+    const idleDiff = (((maxIdle - totalIdle) / maxIdle) * 100).toFixed(1);
+    map["idle_hours_report_dashboard"] = {
+      type: idleOk ? "up" : "down",
+      value: `${idleOk ? "+" : "-"}${Math.abs(Number(idleDiff))}% ${idleOk ? "Up" : "Down"}`,
+      message: idleOk
+        ? `Total Idle Hours (${totalIdle}h) is within target (${maxIdle}h)`
+        : `Total Idle Hours (${totalIdle}h) exceeds target (${maxIdle}h)`,
+      priority: "medium"
+    };
+
+    const nonAcceptedHrs = 4.8;
+    const maxNonAccepted = targetConfig.idle_hours_non_accepted?.maxNonAcceptedHours ?? 5;
+    const totalIdleForNonAcc = 17.3;
+    const unplannedLossPct = (nonAcceptedHrs / totalIdleForNonAcc) * 100;
+    const unplannedLimit = targetConfig.idle_hours_non_accepted?.unplannedLimit ?? 10;
+    const nonAccOk = nonAcceptedHrs <= maxNonAccepted && unplannedLossPct <= unplannedLimit;
+    const nonAccDiff = (((maxNonAccepted - nonAcceptedHrs) / maxNonAccepted) * 100).toFixed(1);
+    map["idle_hours_non_accepted_reason_production_loss_report"] = {
+      type: nonAccOk ? "up" : "down",
+      value: `${nonAccOk ? "+" : "-"}${Math.abs(Number(nonAccDiff))}% ${nonAccOk ? "Up" : "Down"}`,
+      message: nonAccOk
+        ? `Non-Accepted Hours (${nonAcceptedHrs}h) is within target (${maxNonAccepted}h)`
+        : nonAcceptedHrs > maxNonAccepted
+          ? `Non-Accepted Hours (${nonAcceptedHrs}h) exceeds target (${maxNonAccepted}h)`
+          : `Unplanned Loss (${unplannedLossPct.toFixed(1)}%) exceeds threshold (${unplannedLimit}%)`,
+      priority: "high"
+    };
+
+    const oaOee = 78.5;
+    const oeeTarget = targetConfig.oee ?? 80;
+    const oeeOk = oaOee >= oeeTarget;
+    const oeeDiff = ((oaOee - oeeTarget)).toFixed(1);
+    map["oee_report_dashboard"] = {
+      type: oeeOk ? "up" : "down",
+      value: `${oeeOk ? "+" : ""}${oeeDiff}% ${oeeOk ? "Up" : "Down"}`,
+      message: oeeOk
+        ? `OEE Efficiency (${oaOee}%) meets target (${oeeTarget}%)`
+        : `OEE Efficiency (${oaOee}%) is below target (${oeeTarget}%)`,
+      priority: "medium"
+    };
+
+    const minUtilization = targetConfig.oee_comparison?.minUtilization ?? 75;
+    const oeeCompOk = oaOee >= minUtilization;
+    const oeeCompDiff = ((oaOee - minUtilization)).toFixed(1);
+    map["oee_comparison_report_dashboard"] = {
+      type: oeeCompOk ? "up" : "down",
+      value: `${oeeCompOk ? "+" : ""}${oeeCompDiff}% ${oeeCompOk ? "Up" : "Down"}`,
+      message: oeeCompOk
+        ? `Machine Utilization (${oaOee}%) meets target (${minUtilization}%)`
+        : `Machine Utilization (${oaOee}%) is below target (${minUtilization}%)`,
+      priority: "medium"
+    };
+
+    const rejPct = 1.8;
+    const rejLimit = targetConfig.rejection?.rejectionLimit ?? 2.0;
+    const rejOk = rejPct <= rejLimit;
+    const rejDiff = ((rejLimit - rejPct) / rejLimit * 100).toFixed(1);
+    map["rejection_report_dashboard"] = {
+      type: rejOk ? "up" : "down",
+      value: `${rejOk ? "+" : "-"}${Math.abs(Number(rejDiff))}% ${rejOk ? "Up" : "Down"}`,
+      message: rejOk
+        ? `Rejection Rate (${rejPct}%) is within target limit (${rejLimit}%)`
+        : `Rejection Rate (${rejPct}%) exceeds target limit (${rejLimit}%)`,
+      priority: "high"
+    };
+
+    const rewPct = 1.2;
+    const rewLimit = targetConfig.rework?.reworkLimit ?? 1.5;
+    const rewOk = rewPct <= rewLimit;
+    const rewDiff = ((rewLimit - rewPct) / rewLimit * 100).toFixed(1);
+    map["rework_report_dashboard"] = {
+      type: rewOk ? "up" : "down",
+      value: `${rewOk ? "+" : "-"}${Math.abs(Number(rewDiff))}% ${rewOk ? "Up" : "Down"}`,
+      message: rewOk
+        ? `Rework Rate (${rewPct}%) is within target limit (${rewLimit}%)`
+        : `Rework Rate (${rewPct}%) exceeds target limit (${rewLimit}%)`,
+      priority: "high"
+    };
+
+    return map;
+  }, [targetConfig, data]);
+
+  // actionItems = only cards whose computed trend is "down" (needs action)
+  const actionItems = useMemo(() => {
+    if (!targetConfig || Object.keys(computedCardTrends).length === 0) return [];
+
+    const items = [];
+    ACTION_CARDS.forEach(card => {
+      const computed = computedCardTrends[card.id];
+      if (computed && computed.type === "down") {
+        items.push({
+          id: card.id,
+          title: card.title,
+          icon: card.icon,
+          color: card.color,
+          priority: computed.priority || card.priority || "medium",
+          message: computed.message,
+          trend: { type: computed.type, value: computed.value }
+        });
+      }
+    });
+    return items;
+  }, [targetConfig, computedCardTrends]);
+
   const actionSummary = useMemo(() => {
     let high = 0, medium = 0, low = 0;
-    ACTION_CARDS.forEach((c) => {
-      const p = actionPriority(c, data);
-      if (p === "high") high++;
-      else if (p === "medium") medium++;
+    actionItems.forEach((item) => {
+      if (item.priority === "high") high++;
+      else if (item.priority === "medium") medium++;
       else low++;
     });
     return { high, medium, low };
-  }, [data]);
+  }, [actionItems]);
+
+  const getCardStatus = useCallback((cardId) => {
+    const item = actionItems.find(x => x.id === cardId);
+    return item ? { belowTarget: true } : { belowTarget: false };
+  }, [actionItems]);
 
   return (
     <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`}>
@@ -10210,96 +10606,304 @@ export default function PlantPerformance1() {
         {fetchError && <span className="pp1-fbar-error">{fetchError}</span>}
 
         <div className="pp1-fbar-target-wrap" ref={targetRef}>
-          <button 
+          <button
             type="button"
             className={`pp1-fbar-target-btn ${showTargetPopover ? "pp1-fbar-target-btn--active" : ""}`}
-            onClick={() => setShowTargetPopover(!showTargetPopover)}
+            onClick={handleOpenTargetModal}
           >
             <Target size={14} className="pp1-target-icon" />
             <span>Target Criteria</span>
           </button>
 
-          {showTargetPopover && (
-            <div className="pp1-target-popover">
-              <div className="pp1-target-popover__header">
-                <div className="pp1-target-popover__title">
-                  <Target size={15} className="pp1-target-popover__icon" />
-                  <span>Target Criteria</span>
-                </div>
-                <button 
-                  type="button"
-                  className="pp1-target-popover__close"
-                  onClick={() => setShowTargetPopover(false)}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="pp1-target-popover__body">
-                <div className="pp1-target-field">
-                  <div className="pp1-target-field__label-row">
-                    <span className="pp1-target-field__name">OEE Target</span>
-                    <span className="pp1-target-field__val">{targetCriteria.oee}%</span>
+          {showTargetPopover && tempConfig && (
+            <div
+              className="pp1-target-modal-overlay"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowTargetPopover(false);
+                }
+              }}
+            >
+              <div className="pp1-target-modal">
+                <div className="pp1-target-modal__stripe" />
+                <div className="pp1-target-modal__hd">
+                  <div className="pp1-target-modal__title-group">
+                    <Target size={15} className="pp1-target-modal__icon" />
+                    <h3 className="pp1-target-modal__title">Target Criteria</h3>
                   </div>
-                  <input 
-                    type="range" 
-                    min="50" 
-                    max="100" 
-                    value={targetCriteria.oee}
-                    onChange={(e) => setTargetCriteria({ ...targetCriteria, oee: parseInt(e.target.value) })}
-                    className="pp1-target-slider"
-                  />
+                  <button
+                    type="button"
+                    className="pp1-target-modal__close"
+                    onClick={() => setShowTargetPopover(false)}
+                  >
+                    ✕
+                  </button>
                 </div>
-                <div className="pp1-target-field">
-                  <div className="pp1-target-field__label-row">
-                    <span className="pp1-target-field__name">Availability Target</span>
-                    <span className="pp1-target-field__val">{targetCriteria.availability}%</span>
+
+                <div className="pp1-target-modal__split">
+                  <div className="pp1-target-modal__left">
+                    <span className="pp1-target-modal__list-title">Target Modules</span>
+                    <div className="pp1-target-modal__cards-list">
+                      {[
+                        { id: "core_kpis", label: "OEE & Core KPIs", icon: Target },
+                        { id: "customer_po", label: "Customer PO vs Sales Value", icon: ClipboardList },
+                        { id: "idle_hours", label: "Idle Hours Report", icon: Clock },
+                        { id: "idle_hours_non_accepted", label: "Idle Hours Non-Accepted", icon: AlertTriangle },
+                        { id: "oee_comparison", label: "OEE Comparison Report", icon: BarChart2 },
+                        { id: "rejection", label: "Rejection Report", icon: XOctagon },
+                        { id: "rework", label: "Rework Report", icon: RefreshCw },
+                      ].map(cat => (
+                        <div
+                          key={cat.id}
+                          className={`pp1-target-modal-card ${activeTargetTab === cat.id ? "pp1-target-modal-card--active" : ""}`}
+                          onClick={() => setActiveTargetTab(cat.id)}
+                        >
+                          <span className="pp1-target-modal-card__ico">
+                            {React.createElement(cat.icon, { size: 14 })}
+                          </span>
+                          <span className="pp1-target-modal-card__txt">{cat.label}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <input 
-                    type="range" 
-                    min="50" 
-                    max="100" 
-                    value={targetCriteria.availability}
-                    onChange={(e) => setTargetCriteria({ ...targetCriteria, availability: parseInt(e.target.value) })}
-                    className="pp1-target-slider"
-                  />
-                </div>
-                <div className="pp1-target-field">
-                  <div className="pp1-target-field__label-row">
-                    <span className="pp1-target-field__name">Performance Target</span>
-                    <span className="pp1-target-field__val">{targetCriteria.performance}%</span>
+
+                  <div className="pp1-target-modal__right">
+                    {activeTargetTab === "core_kpis" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">OEE & Core KPIs Targets</h4>
+                        <p className="pp1-target-settings__desc">Configure threshold targets for core plant performance parameters.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">OEE Target</span>
+                            <span className="pp1-target-field__val">{tempConfig.oee}%</span>
+                          </div>
+                          <input
+                            type="range" min="50" max="100"
+                            value={tempConfig.oee}
+                            onChange={(e) => handleTempConfigChange("oee", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Availability Target</span>
+                            <span className="pp1-target-field__val">{tempConfig.availability}%</span>
+                          </div>
+                          <input
+                            type="range" min="50" max="100"
+                            value={tempConfig.availability}
+                            onChange={(e) => handleTempConfigChange("availability", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Performance Target</span>
+                            <span className="pp1-target-field__val">{tempConfig.performance}%</span>
+                          </div>
+                          <input
+                            type="range" min="50" max="100"
+                            value={tempConfig.performance}
+                            onChange={(e) => handleTempConfigChange("performance", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Quality Target</span>
+                            <span className="pp1-target-field__val">{tempConfig.quality}%</span>
+                          </div>
+                          <input
+                            type="range" min="50" max="100"
+                            value={tempConfig.quality}
+                            onChange={(e) => handleTempConfigChange("quality", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTargetTab === "customer_po" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">Customer PO vs Sales Value Target</h4>
+                        <p className="pp1-target-settings__desc">Configure threshold targets for sales value analysis and order fulfillment rates.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Sales Value Target (Lakhs)</span>
+                          </div>
+                          <div className="pp1-target-input-container">
+                            <span className="pp1-target-input-prefix">₹</span>
+                            <input
+                              type="number" step="1" min="1"
+                              value={tempConfig.customer_po.salesTarget}
+                              onChange={(e) => handleNestedTempConfigChange("customer_po", "salesTarget", parseFloat(e.target.value) || 0)}
+                              className="pp1-target-input"
+                            />
+                            <span className="pp1-target-input-unit">Lakhs</span>
+                          </div>
+                        </div>
+
+
+                      </div>
+                    )}
+
+                    {activeTargetTab === "idle_hours" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">Idle Hours Target</h4>
+                        <p className="pp1-target-settings__desc">Set maximum acceptable idle hour thresholds and target reduction levels for plant operation.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Max Allowable Idle Hours</span>
+                          </div>
+                          <div className="pp1-target-input-container">
+                            <input
+                              type="number" step="0.5" min="0"
+                              value={tempConfig.idle_hours.maxIdleHours}
+                              onChange={(e) => handleNestedTempConfigChange("idle_hours", "maxIdleHours", parseFloat(e.target.value) || 0)}
+                              className="pp1-target-input"
+                            />
+                            <span className="pp1-target-input-unit">hrs</span>
+                          </div>
+                        </div>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Idle Hours Reduction Target %</span>
+                            <span className="pp1-target-field__val">{tempConfig.idle_hours.reductionTarget}%</span>
+                          </div>
+                          <input
+                            type="range" min="0" max="100"
+                            value={tempConfig.idle_hours.reductionTarget}
+                            onChange={(e) => handleNestedTempConfigChange("idle_hours", "reductionTarget", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTargetTab === "idle_hours_non_accepted" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">Idle Hours - Non Accepted Reason Target</h4>
+                        <p className="pp1-target-settings__desc">Configure threshold targets for non-accepted idle hours and unplanned loss limit.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Max Non-Accepted Target</span>
+                          </div>
+                          <div className="pp1-target-input-container">
+                            <input
+                              type="number" step="0.5" min="0"
+                              value={tempConfig.idle_hours_non_accepted.maxNonAcceptedHours}
+                              onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "maxNonAcceptedHours", parseFloat(e.target.value) || 0)}
+                              className="pp1-target-input"
+                            />
+                            <span className="pp1-target-input-unit">hrs</span>
+                          </div>
+                        </div>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Unplanned Loss Threshold Limit (%)</span>
+                            <span className="pp1-target-field__val">{tempConfig.idle_hours_non_accepted.unplannedLimit}%</span>
+                          </div>
+                          <input
+                            type="range" min="0" max="100"
+                            value={tempConfig.idle_hours_non_accepted.unplannedLimit}
+                            onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "unplannedLimit", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTargetTab === "oee_comparison" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">OEE Comparison Target</h4>
+                        <p className="pp1-target-settings__desc">Set the minimum machine utilization targets for comparison.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Min Utilization Target (%)</span>
+                            <span className="pp1-target-field__val">{tempConfig.oee_comparison.minUtilization}%</span>
+                          </div>
+                          <input
+                            type="range" min="0" max="100"
+                            value={tempConfig.oee_comparison.minUtilization}
+                            onChange={(e) => handleNestedTempConfigChange("oee_comparison", "minUtilization", parseInt(e.target.value))}
+                            className="pp1-target-slider"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTargetTab === "rejection" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">Rejection Target</h4>
+                        <p className="pp1-target-settings__desc">Set maximum acceptable rejection rate threshold limit.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Max Rejection Target</span>
+                          </div>
+                          <div className="pp1-target-input-container">
+                            <input
+                              type="number" step="0.1" min="0" max="100"
+                              value={tempConfig.rejection.rejectionLimit}
+                              onChange={(e) => handleNestedTempConfigChange("rejection", "rejectionLimit", parseFloat(e.target.value) || 0)}
+                              className="pp1-target-input"
+                            />
+                            <span className="pp1-target-input-unit">%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTargetTab === "rework" && (
+                      <div className="pp1-target-settings">
+                        <h4 className="pp1-target-settings__title">Rework Target</h4>
+                        <p className="pp1-target-settings__desc">Set maximum acceptable rework rate threshold limit.</p>
+
+                        <div className="pp1-target-field">
+                          <div className="pp1-target-field__label-row">
+                            <span className="pp1-target-field__name">Max Rework Target</span>
+                          </div>
+                          <div className="pp1-target-input-container">
+                            <input
+                              type="number" step="0.1" min="0" max="100"
+                              value={tempConfig.rework.reworkLimit}
+                              onChange={(e) => handleNestedTempConfigChange("rework", "reworkLimit", parseFloat(e.target.value) || 0)}
+                              className="pp1-target-input"
+                            />
+                            <span className="pp1-target-input-unit">%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <input 
-                    type="range" 
-                    min="50" 
-                    max="100" 
-                    value={targetCriteria.performance}
-                    onChange={(e) => setTargetCriteria({ ...targetCriteria, performance: parseInt(e.target.value) })}
-                    className="pp1-target-slider"
-                  />
                 </div>
-                <div className="pp1-target-field">
-                  <div className="pp1-target-field__label-row">
-                    <span className="pp1-target-field__name">Quality Target</span>
-                    <span className="pp1-target-field__val">{targetCriteria.quality}%</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="50" 
-                    max="100" 
-                    value={targetCriteria.quality}
-                    onChange={(e) => setTargetCriteria({ ...targetCriteria, quality: parseInt(e.target.value) })}
-                    className="pp1-target-slider"
-                  />
+
+                <div className="pp1-target-modal__ft">
+                  <button
+                    type="button"
+                    className="pp1-target-modal-btn pp1-target-modal-btn--ghost"
+                    onClick={() => setShowTargetPopover(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="pp1-target-modal-btn pp1-target-modal-btn--primary"
+                    onClick={applyTargetChanges}
+                  >
+                    Apply Targets
+                  </button>
                 </div>
-              </div>
-              <div className="pp1-target-popover__footer">
-                <button 
-                  type="button"
-                  className="pp1-target-btn-primary"
-                  onClick={() => setShowTargetPopover(false)}
-                >
-                  Apply Targets
-                </button>
               </div>
             </div>
           )}
@@ -10318,7 +10922,7 @@ export default function PlantPerformance1() {
               <p className="pp1-panel__hint">Click a card to explore details</p>
             </div>
             <div className="pp1-kpi-list">
-              {ACTION_CARDS.map((a, i) => {
+              {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).map((a, i) => {
                 const active = selAction === a.id;
                 return (
                   <div
@@ -10360,23 +10964,26 @@ export default function PlantPerformance1() {
                     <div className="pp1-ac-body" style={{ flex: 1 }}>
                       <span className="pp1-ac-title">{a.title}</span>
                     </div>
-                    {a.trend && (
-                      <span style={{
-                        fontSize: "9.5px",
-                        fontWeight: 700,
-                        color: a.trend.type === "up" ? "#10b981" : a.trend.type === "down" ? "#ef4444" : "#f59e0b",
-                        background: a.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : a.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
-                        padding: "2px 8px",
-                        borderRadius: "9999px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "3px",
-                        marginRight: "6px",
-                        whiteSpace: "nowrap"
-                      }}>
-                        {a.trend.type === "up" ? "▲" : a.trend.type === "down" ? "▼" : "●"} {a.trend.value}
-                      </span>
-                    )}
+                    {(() => {
+                      const ct = computedCardTrends[a.id];
+                      return ct ? (
+                        <span style={{
+                          fontSize: "9.5px",
+                          fontWeight: 700,
+                          color: ct.type === "up" ? "#10b981" : ct.type === "down" ? "#ef4444" : "#f59e0b",
+                          background: ct.type === "up" ? "rgba(16, 185, 129, 0.12)" : ct.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                          padding: "2px 8px",
+                          borderRadius: "9999px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "3px",
+                          marginRight: "6px",
+                          whiteSpace: "nowrap"
+                        }}>
+                          {ct.type === "up" ? "▲" : ct.type === "down" ? "▼" : "●"} {ct.value}
+                        </span>
+                      ) : null;
+                    })()}
                     <span className="pp1-ac-arrow">{active ? "▼" : "›"}</span>
                   </div>
                 );
@@ -10398,6 +11005,7 @@ export default function PlantPerformance1() {
                     activeSlide={poActiveSlide}
                     onActiveSlideChange={setPoActiveSlide}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "purchase_report_dashboard" ? (
                   <PurchaseReportDashboardView
@@ -10424,12 +11032,14 @@ export default function PlantPerformance1() {
                     activeTab={idleActiveTab}
                     onActiveTabChange={setIdleActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
                   <IdleHoursNonAcceptedReasonLossReportView
                     filters={nonAccFilters}
                     onFilterChange={setNonAccFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "oee_report_dashboard" ? (
                   <OeeReportDashboardView
@@ -10438,6 +11048,7 @@ export default function PlantPerformance1() {
                     activeTab={oeeActiveTab}
                     onActiveTabChange={setOeeActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "oee_comparison_report_dashboard" ? (
                   <OeeComparisonReportDashboardView
@@ -10446,6 +11057,7 @@ export default function PlantPerformance1() {
                     activeTab={oeeCompActiveTab}
                     onActiveTabChange={setOeeCompActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "efficiency_eff_report_dashboard" ? (
                   <EfficiencyEffReportDashboardView
@@ -10462,6 +11074,7 @@ export default function PlantPerformance1() {
                     activeTab={rejActiveTab}
                     onActiveTabChange={setRejActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "rework_report_dashboard" ? (
                   <ReworkReportDashboardView
@@ -10470,6 +11083,7 @@ export default function PlantPerformance1() {
                     activeTab={rewActiveTab}
                     onActiveTabChange={setRewActiveTab}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
                   />
                 ) : selectionId === "customer_complaint_report_dashboard" ? (
                   <CustomerComplaintReportDashboardView
@@ -10497,10 +11111,79 @@ export default function PlantPerformance1() {
               <p className="pp1-panel__hint">List of pending actions</p>
             </div>
             <div className="pp1-action-list">
-              <div className="pp1-ac-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "20px", textAlign: "center", color: "var(--pp1-text-4)" }}>
-                <Target size={32} style={{ color: "var(--pp1-rose)", marginBottom: "8px" }} />
-                <p style={{ fontSize: "11.5px", margin: 0, fontWeight: 500 }}>No actions pending. All parameters operational.</p>
-              </div>
+              {actionItems.length === 0 ? (
+                <div className="pp1-ac-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "20px", textAlign: "center", color: "var(--pp1-text-4)" }}>
+                  <CheckCircle2 size={32} style={{ color: "var(--pp1-green)", marginBottom: "8px" }} />
+                  <p style={{ fontSize: "11.5px", margin: 0, fontWeight: 500 }}>No actions pending. All parameters operational.</p>
+                </div>
+              ) : (
+                actionItems.map((item, idx) => {
+                  const active = selAction === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      className={`pp1-ac-card pp1-ac-card--right ${active ? "pp1-ac-card--active" : ""}`}
+                      style={{
+                        "--kc": item.color,
+                        "--kl": item.color + "14",
+                        "--kh": item.color + "08",
+                        "--ko": item.color + "14",
+                        "--ka": item.color + "22",
+                        "--kb": item.color + "40",
+                        "--kib": item.color + "14",
+                        "--kia": item.color + "2b",
+                        "--kr": item.color + "33",
+                        "--ai": idx
+                      }}
+                      onClick={() => handleActionClick(item.id)}
+                      onKeyDown={(e) => e.key === "Enter" && handleActionClick(item.id)}
+                    >
+                      <div className="pp1-ac-card__shimmer" />
+                      <div className="pp1-ac-icon" style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.08)" }}>
+                        <AlertTriangle size={15} />
+                      </div>
+                      <div className="pp1-ac-body" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span className="pp1-ac-title" style={{ fontWeight: 700, fontSize: "11.5px", color: "var(--pp1-navy)" }}>{item.title}</span>
+                        <span style={{ fontSize: "10px", color: "var(--pp1-text-3)", lineHeight: "1.3" }}>
+                          {item.message}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
+                        {item.trend && (
+                          <span style={{
+                            fontSize: "9.5px",
+                            fontWeight: 700,
+                            color: item.trend.type === "up" ? "#10b981" : item.trend.type === "down" ? "#ef4444" : "#f59e0b",
+                            background: item.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : item.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                            padding: "2px 8px",
+                            borderRadius: "9999px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px",
+                            whiteSpace: "nowrap"
+                          }}>
+                            {item.trend.type === "up" ? "▲" : item.trend.type === "down" ? "▼" : "●"} {item.trend.value}
+                          </span>
+                        )}
+                        <span style={{
+                          fontSize: "8.5px",
+                          fontWeight: 800,
+                          color: item.priority === "high" ? "#ef4444" : "#f59e0b",
+                          background: item.priority === "high" ? "rgba(239, 68, 68, 0.08)" : "rgba(245, 158, 11, 0.08)",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.2px"
+                        }}>
+                          {item.priority}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
             <div className="pp1-summary-row">
               {[
@@ -10555,6 +11238,25 @@ export default function PlantPerformance1() {
           <MachineCapacityReportBottomTable />
         ) : null}
       </div>
+
+      {toast && (
+        <div className="pp1-toast">
+          <div className="pp1-toast__icon">
+            <CheckCircle2 size={16} />
+          </div>
+          <div className="pp1-toast__body">
+            <span className="pp1-toast__title">{toast.title}</span>
+            <span className="pp1-toast__msg">{toast.msg}</span>
+          </div>
+          <button
+            type="button"
+            className="pp1-toast__close"
+            onClick={() => setToast(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
