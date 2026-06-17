@@ -2554,7 +2554,7 @@ const CHART2_BASE = [
   { month: "Jun-26", date: "2026-06-15", "Customer A": 13, "Customer B": 22, "Customer C": 18, "Customer D": 15 }
 ];
 
-function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig }) {
+function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig, showTargetOnly, setShowTargetOnly }) {
   const [dateOpen, setDateOpen] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
@@ -2602,6 +2602,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
       partNumber: "",
       category: "",
     });
+    setShowTargetOnly(false);
   };
 
   const handleInputChange = (field, val) => {
@@ -2653,7 +2654,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             tension: 0.3,
             pointBackgroundColor: "rgba(59, 130, 246, 1)",
             pointRadius: 4.5,
-            fill: true
+            fill: true,
+            hidden: showTargetOnly
           },
           {
             label: "Sales Value",
@@ -2664,7 +2666,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             tension: 0.3,
             pointBackgroundColor: "rgba(16, 185, 129, 1)",
             pointRadius: 4.5,
-            fill: true
+            fill: true,
+            hidden: showTargetOnly
           },
           {
             label: "Pending Order Value",
@@ -2675,7 +2678,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             tension: 0.3,
             pointBackgroundColor: "rgba(245, 158, 11, 1)",
             pointRadius: 4.5,
-            fill: true
+            fill: true,
+            hidden: showTargetOnly
           },
           {
             label: "Sales Target",
@@ -2684,28 +2688,45 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             borderDash: [5, 5],
             borderWidth: 2,
             pointRadius: 0,
+            pointHitRadius: 20,
+            pointHoverRadius: 6,
             fill: false,
             tension: 0
-          },
-          // {
-          //   label: `Achievement Target (${orderValueAch}%)`,
-          //   data: orderValues.map(v => Number((v * orderValueAch / 100).toFixed(2))),
-          //   borderColor: "rgba(139, 92, 246, 0.8)",
-          //   borderDash: [4, 4],
-          //   borderWidth: 2,
-          //   pointRadius: 0,
-          //   fill: false,
-          //   tension: 0.3
-          // }
+          }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (event, elements, chart) => {
+          if (elements && elements.length > 0) {
+            const firstElement = elements[0];
+            const datasetIndex = firstElement.datasetIndex;
+            const clickedLabel = chart.data.datasets[datasetIndex].label;
+            if (clickedLabel === "Sales Target") {
+              setShowTargetOnly(prev => !prev);
+            }
+          }
+        },
         plugins: {
           legend: {
             position: "bottom",
-            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 },
+            onClick: (event, legendItem, legend) => {
+              if (legendItem.text === "Sales Target") {
+                setShowTargetOnly(prev => !prev);
+              } else {
+                const index = legendItem.datasetIndex;
+                const ci = legend.chart;
+                if (ci.isDatasetVisible(index)) {
+                  ci.hide(index);
+                  legendItem.hidden = true;
+                } else {
+                  ci.show(index);
+                  legendItem.hidden = false;
+                }
+              }
+            }
           },
           tooltip: {
             backgroundColor: "rgba(15, 23, 42, 0.95)",
@@ -2732,7 +2753,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         }
       }
     });
-  }, [chart1Data, targetConfig]);
+  }, [chart1Data, targetConfig, showTargetOnly]);
 
   // Chart Setup 2: Month Wise Customer Order Trend (Clustered Column Chart)
   const setupClusteredChart = React.useCallback((canvas) => {
@@ -2756,7 +2777,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         label: cust,
         data: chart2Data.map(r => r[cust]),
         backgroundColor: colors[cust],
-        borderRadius: 4
+        borderRadius: 4,
+        hidden: showTargetOnly
       })),
       {
         type: "line",
@@ -2766,6 +2788,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         borderDash: [5, 5],
         borderWidth: 2,
         pointRadius: 0,
+        pointHitRadius: 20,
+        pointHoverRadius: 6,
         fill: false,
         tension: 0
       }
@@ -2780,10 +2804,35 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (event, elements, chart) => {
+          if (elements && elements.length > 0) {
+            const firstElement = elements[0];
+            const datasetIndex = firstElement.datasetIndex;
+            const clickedLabel = chart.data.datasets[datasetIndex].label;
+            if (clickedLabel === "Sales Target") {
+              setShowTargetOnly(prev => !prev);
+            }
+          }
+        },
         plugins: {
           legend: {
             position: "bottom",
-            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 },
+            onClick: (event, legendItem, legend) => {
+              if (legendItem.text === "Sales Target") {
+                setShowTargetOnly(prev => !prev);
+              } else {
+                const index = legendItem.datasetIndex;
+                const ci = legend.chart;
+                if (ci.isDatasetVisible(index)) {
+                  ci.hide(index);
+                  legendItem.hidden = true;
+                } else {
+                  ci.show(index);
+                  legendItem.hidden = false;
+                }
+              }
+            }
           },
           tooltip: {
             backgroundColor: "rgba(15, 23, 42, 0.95)",
@@ -2810,7 +2859,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         }
       }
     });
-  }, [chart2Data, filters.customer, targetConfig]);
+  }, [chart2Data, filters.customer, targetConfig, showTargetOnly]);
 
   const slides = [
     {
@@ -2961,9 +3010,29 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         {/* Chart Carousel */}
         <div className="pp1-chart-carousel">
           <div className="pp1-carousel-header">
-            <div className="pp1-carousel-title-group">
-              <span className="pp1-carousel-title">{slides[activeSlide].title}</span>
-              <span className="pp1-carousel-subtitle">{slides[activeSlide].purpose}</span>
+            <div className="pp1-carousel-title-group" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span className="pp1-carousel-title">{slides[activeSlide].title}</span>
+                <span className="pp1-carousel-subtitle">{slides[activeSlide].purpose}</span>
+              </div>
+              {showTargetOnly && (
+                <span
+                  className="pp1-badge pp1-badge--high"
+                  style={{
+                    cursor: "pointer",
+                    fontSize: "9px",
+                    padding: "3px 10px",
+                    borderRadius: "12px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    boxShadow: "0 1px 3px rgba(239,68,68,0.2)"
+                  }}
+                  onClick={() => setShowTargetOnly(false)}
+                >
+                  🎯 Target View Active ✕
+                </span>
+              )}
             </div>
 
             <div className="pp1-carousel-nav">
@@ -3002,7 +3071,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
               <ChartJsCanvas
                 setup={slides[activeSlide].setup}
                 height={190}
-                rebuildToken={`${activeSlide}|${chart1Data.length}|${chart2Data.length}|${JSON.stringify(filters)}`}
+                rebuildToken={`${activeSlide}|${chart1Data.length}|${chart2Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}`}
               />
             </div>
           </div>
@@ -3012,8 +3081,9 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
   );
 }
 
-function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide, onActiveSlideChange }) {
+function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide, onActiveSlideChange, showTargetOnly, targetConfig }) {
   const activeTab = activeSlide === 0 ? "summary" : "trend";
+  const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
 
   // Process data for Table 1 (Customer PO Value Summary)
   const table1Rows = React.useMemo(() => {
@@ -3025,34 +3095,42 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide
   }, [filters.customer]);
 
   // Process data for Table 2 (Month Wise Customer Order Trend)
-  let table2Columns = ["Month", "Customer A (Lakhs)", "Customer B (Lakhs)", "Customer C (Lakhs)", "Customer D (Lakhs)"];
-  let table2Rows = [
-    ["Apr-26", 13, 22, 18, 15],
-    ["May-26", 20, 18, 16, 21],
-    ["Jun-26", 13, 22, 18, 15]
-  ];
+  const processedTable2 = React.useMemo(() => {
+    let cols = ["Month", "Customer A (Lakhs)", "Customer B (Lakhs)", "Customer C (Lakhs)", "Customer D (Lakhs)"];
+    let rows = [
+      ["Apr-26", 13, 22, 18, 15],
+      ["May-26", 20, 18, 16, 21],
+      ["Jun-26", 13, 22, 18, 15]
+    ];
 
-  // Apply customer filter to Table 2
-  if (filters.customer) {
-    const custIdx = ["Customer A", "Customer B", "Customer C", "Customer D"].indexOf(filters.customer);
-    if (custIdx !== -1) {
-      table2Columns = ["Month", `${filters.customer} (Lakhs)`];
-      table2Rows = table2Rows.map(r => [r[0], r[custIdx + 1]]);
+    if (showTargetOnly) {
+      cols = ["Month", "Sales Target (Lakhs)"];
+      rows = [
+        ["Apr-26", salesTarget],
+        ["May-26", salesTarget],
+        ["Jun-26", salesTarget]
+      ];
+    } else {
+      // Apply customer filter to Table 2
+      if (filters.customer) {
+        const custIdx = ["Customer A", "Customer B", "Customer C", "Customer D"].indexOf(filters.customer);
+        if (custIdx !== -1) {
+          cols = ["Month", `${filters.customer} (Lakhs)`];
+          rows = rows.map(r => [r[0], r[custIdx + 1]]);
+        }
+      }
     }
-  }
 
-  // Apply date range filter to Table 2
-  table2Rows = React.useMemo(() => {
-    let list = table2Rows;
+    // Apply date range filter to Table 2
     const dateMap = { "Apr-26": "2026-04-15", "May-26": "2026-05-15", "Jun-26": "2026-06-15" };
     if (filters.fromDate) {
-      list = list.filter(r => dateMap[r[0]] >= filters.fromDate);
+      rows = rows.filter(r => dateMap[r[0]] >= filters.fromDate);
     }
     if (filters.toDate) {
-      list = list.filter(r => dateMap[r[0]] <= filters.toDate);
+      rows = rows.filter(r => dateMap[r[0]] <= filters.toDate);
     }
-    return list;
-  }, [filters.fromDate, filters.toDate, filters.customer]);
+    return { columns: cols, rows };
+  }, [filters.fromDate, filters.toDate, filters.customer, showTargetOnly, salesTarget]);
 
   return (
     <div className="pp1-cc-bot" key={uid}>
@@ -3101,18 +3179,30 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide
             <thead>
               <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
                 <th>Customer</th>
-                <th style={{ textAlign: "right" }}>Order Value (Lakhs)</th>
-                <th style={{ textAlign: "right" }}>Sales Value (Lakhs)</th>
-                <th style={{ textAlign: "right" }}>Pending Order Value (Lakhs)</th>
+                {showTargetOnly ? (
+                  <th style={{ textAlign: "right", color: "#b91c1c" }}>Sales Target (Lakhs)</th>
+                ) : (
+                  <>
+                    <th style={{ textAlign: "right" }}>Order Value (Lakhs)</th>
+                    <th style={{ textAlign: "right" }}>Sales Value (Lakhs)</th>
+                    <th style={{ textAlign: "right" }}>Pending Order Value (Lakhs)</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {table1Rows.map((r, idx) => (
                 <tr key={idx} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>₹{r.orderValue.toFixed(2)} L</td>
-                  <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{r.salesValue.toFixed(2)} L</td>
-                  <td style={{ textAlign: "right", fontWeight: 600, color: r.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{r.pendingValue.toFixed(2)} L</td>
+                  {showTargetOnly ? (
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
+                  ) : (
+                    <>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{r.orderValue.toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{r.salesValue.toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: r.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{r.pendingValue.toFixed(2)} L</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -3121,20 +3211,20 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
               <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {table2Columns.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left" }}>{col}</th>
+                {processedTable2.columns.map((col, idx) => (
+                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left", color: showTargetOnly && idx > 0 ? "#b91c1c" : undefined }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {table2Rows.length === 0 ? (
-                <tr><td colSpan={table2Columns.length} className="pp1-cc-tbl__empty">No data matches the selected filters.</td></tr>
+              {processedTable2.rows.length === 0 ? (
+                <tr><td colSpan={processedTable2.columns.length} className="pp1-cc-tbl__empty">No data matches the selected filters.</td></tr>
               ) : (
-                table2Rows.map((row, idx) => (
+                processedTable2.rows.map((row, idx) => (
                   <tr key={idx} className="pp1-cc-tbl__tr">
                     <td className="pp1-cc-tbl__mono" style={{ fontWeight: 600 }}>{row[0]}</td>
                     {row.slice(1).map((val, cellIdx) => (
-                      <td key={cellIdx} style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>
+                      <td key={cellIdx} style={{ textAlign: "right", fontWeight: 600, color: showTargetOnly ? "#b91c1c" : "var(--pp1-blue)" }}>
                         {val !== undefined ? `₹${val.toFixed(2)} L` : "—"}
                       </td>
                     ))}
@@ -10225,6 +10315,7 @@ export default function PlantPerformance1() {
     category: "",
   });
   const [poActiveSlide, setPoActiveSlide] = useState(0);
+  const [poShowTargetOnly, setPoShowTargetOnly] = useState(false);
   const [purFilters, setPurFilters] = useState({
     fromDate: "",
     toDate: "",
@@ -10459,7 +10550,8 @@ export default function PlantPerformance1() {
     const map = {};
 
     // -- actual values (mock / from data) --
-    const salesVal = 18.2;
+    // Total sales across all customers from chart data
+    const salesVal = [7, 18, 12, 8].reduce((a, b) => a + b, 0); // = 45L total
     const salesTarget = targetConfig.customer_po?.salesTarget ?? 25;
     const poOk = salesVal >= salesTarget;
     const poDiff = (((salesVal - salesTarget) / salesTarget) * 100).toFixed(1);
@@ -10467,8 +10559,8 @@ export default function PlantPerformance1() {
       type: poOk ? "up" : "down",
       value: `${poOk ? "+" : ""}${poDiff}% ${poOk ? "Up" : "Down"}`,
       message: poOk
-        ? `Sales Value (\u20b9${salesVal}L) meets target (\u20b9${salesTarget}L)`
-        : `Sales Value (\u20b9${salesVal}L) is below target (\u20b9${salesTarget}L)`,
+        ? `Total Sales (\u20b9${salesVal}L) meets target (\u20b9${salesTarget}L)`
+        : `Total Sales (\u20b9${salesVal}L) is below target (\u20b9${salesTarget}L)`,
       priority: "medium"
     };
 
@@ -11004,8 +11096,10 @@ export default function PlantPerformance1() {
                     onFilterChange={setPoFilters}
                     activeSlide={poActiveSlide}
                     onActiveSlideChange={setPoActiveSlide}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }}
                     targetConfig={targetConfig}
+                    showTargetOnly={poShowTargetOnly}
+                    setShowTargetOnly={setPoShowTargetOnly}
                   />
                 ) : selectionId === "purchase_report_dashboard" ? (
                   <PurchaseReportDashboardView
@@ -11207,6 +11301,8 @@ export default function PlantPerformance1() {
             filters={poFilters}
             activeSlide={poActiveSlide}
             onActiveSlideChange={setPoActiveSlide}
+            showTargetOnly={poShowTargetOnly}
+            targetConfig={targetConfig}
           />
         ) : selectionId === "purchase_report_dashboard" ? (
           <PurchaseReportBottomTable filters={purFilters} />
