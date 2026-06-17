@@ -47,6 +47,7 @@ WITH CTE_Rejection AS (
         ISNULL(D.deleted, 0) = 0
         AND ISNULL(IM.deleted, 0) = 0
         AND (ISNULL(D.matrej, 0) > 0 OR ISNULL(D.macrej, 0) > 0)
+        {injob_filter}
 
     UNION ALL
 
@@ -63,6 +64,7 @@ WITH CTE_Rejection AS (
     WHERE
         ISNULL(F.deleted, 0) = 0
         AND ISNULL(FM.deleted, 0) = 0
+        {final_filter}
 
     UNION ALL
 
@@ -79,6 +81,7 @@ WITH CTE_Rejection AS (
     WHERE
         ISNULL(IR.deleted, 0) = 0
         AND ISNULL(IIM.deleted, 0) = 0
+        {inter_filter}
 ),
 CTE_PartType AS (
     SELECT
@@ -177,11 +180,36 @@ CTE_QualityValue AS (
 )
 """
 
-QUALITY_VALUE_TOTAL_SQL = QUALITY_VALUE_BASE_CTE + """
+
+def _build_quality_value_sql(like_term=None):
+    """Build the Quality Value CTE + final SELECT with an optional PartNo/Description LIKE filter.
+
+    Pattern mirrors product_performance: (PartNo LIKE ? OR description LIKE ?)
+    - InJob  : D.PartNo / D.description  (InJob_Det)
+    - Final  : F.PartNo / FM.description (FinalInspRejectionEntryOrg / FinalInspectionEntry)
+    - Inter  : IR.PartNo / IIM.description (Insp_RejectionEntry / InterInspectionEntry)
+    Each branch gets 2 params when like_term is provided.
+    """
+    injob_filter = "AND (D.PartNo LIKE ? OR D.description LIKE ?)" if like_term else ""
+    final_filter = "AND (F.PartNo LIKE ? OR FM.description LIKE ?)" if like_term else ""
+    inter_filter = "AND (IR.PartNo LIKE ? OR IIM.description LIKE ?)" if like_term else ""
+    cte = QUALITY_VALUE_BASE_CTE.format(
+        injob_filter=injob_filter,
+        final_filter=final_filter,
+        inter_filter=inter_filter,
+    )
+    sql = cte + """
 SELECT SUM(TotalQualityValue) AS total_amount
 FROM CTE_QualityValue
 WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
 """
+    return sql
+
+
+
+# Legacy constant kept for backward compat (no part filter)
+QUALITY_VALUE_TOTAL_SQL = _build_quality_value_sql(like_term=None)
+
 
 
 def _format_in_currency(val):
@@ -287,6 +315,8 @@ def quality_analysis_summary(request):
 
     start_date, end_date = parse_date_range(request)
     company_code = tenant.get("company_code")
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     total_inspected = 0
     total_rejected = 0
@@ -331,6 +361,9 @@ def quality_analysis_summary(request):
                 if company_mas and company_code:
                     where_clauses.append("m.[{}] = ?".format(company_mas))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(d.partno LIKE ? OR d.description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT 
@@ -372,6 +405,9 @@ def quality_analysis_summary(request):
                 if company_col and company_code:
                     where_clauses.append("[{}] = ?".format(company_col))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT SUM({0}), SUM({1}), SUM({2})
@@ -409,6 +445,9 @@ def quality_analysis_summary(request):
                 if company_col and company_code:
                     where_clauses.append("[{}] = ?".format(company_col))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT SUM({0}), SUM({1}), SUM({2})
@@ -424,21 +463,43 @@ def quality_analysis_summary(request):
                     total_rework += int(row[2] or 0)
                     db_success = True
 
-        # ── 4. Check Pending Inspections (Waiting) ──
+        # ── 4. Pending Inspections (Waiting) ── filtered by partno+description when q is set
         if table_exists(cursor, "RouteCardStock"):
             final_pending_col = find_first_column(cursor, "RouteCardStock", ["finalinspqty", "FinalInspQty"])
+            partno_col_rcs = find_first_column(cursor, "RouteCardStock", ["partno", "PartNo", "PARTNO"])
+            desc_col_rcs   = find_first_column(cursor, "RouteCardStock", ["description", "Description", "desc"])
             if final_pending_col:
-                cursor.execute("""
-                    SELECT COUNT(DISTINCT [partno]) 
-                    FROM RouteCardStock 
-                    WHERE ISNULL([{}], 0) <> 0
-                """.format(final_pending_col))
+                if like_term and partno_col_rcs:
+                    if desc_col_rcs:
+                        # filter by partno OR description  — same pattern as product performance
+                        cursor.execute("""
+                            SELECT COUNT(DISTINCT [{0}])
+                            FROM RouteCardStock
+                            WHERE ISNULL([{1}], 0) <> 0
+                              AND ([{0}] LIKE ? OR [{2}] LIKE ?)
+                        """.format(partno_col_rcs, final_pending_col, desc_col_rcs),
+                        [like_term, like_term])
+                    else:
+                        cursor.execute("""
+                            SELECT COUNT(DISTINCT [{0}])
+                            FROM RouteCardStock
+                            WHERE ISNULL([{1}], 0) <> 0
+                              AND [{0}] LIKE ?
+                        """.format(partno_col_rcs, final_pending_col),
+                        [like_term])
+                else:
+                    cursor.execute("""
+                        SELECT COUNT(DISTINCT [{0}])
+                        FROM RouteCardStock
+                        WHERE ISNULL([{1}], 0) <> 0
+                    """.format(partno_col_rcs or "partno", final_pending_col))
+
                 row = cursor.fetchone()
                 if row and row[0] is not None:
                     pending_inspections = int(row[0])
                     db_pending_success = True
 
-        # ── 5. Get Rejection Cost / Quality Value ──
+        # ── 5. Get Rejection Cost / Quality Value (filtered by part no when q is set) ──
         has_quality_value_tables = (
             table_exists(cursor, "InJob_Mas") and
             table_exists(cursor, "InJob_Det") and
@@ -448,11 +509,25 @@ def quality_analysis_summary(request):
             table_exists(cursor, "InterInspectionEntry")
         )
         if has_quality_value_tables:
-            cursor.execute(QUALITY_VALUE_TOTAL_SQL, [start_date, end_date])
+            qv_sql = _build_quality_value_sql(like_term)
+            if like_term:
+                # 2 params per UNION branch (InJob, Final, Inter) = 6 + 2 date params at end
+                # mirrors product_performance pattern: (PartNo LIKE ? OR description LIKE ?)
+                qv_params = [
+                    like_term, like_term,   # InJob  PartNo + description
+                    like_term, like_term,   # Final  PartNo + description
+                    like_term, like_term,   # Inter  PartNo + description
+                    start_date, end_date,   # date range
+                ]
+            else:
+                qv_params = [start_date, end_date]
+
+            cursor.execute(qv_sql, qv_params)
             row_qv = cursor.fetchone()
             if row_qv and row_qv[0] is not None:
                 quality_value_amount = float(row_qv[0] or 0.0)
                 db_qv_success = True
+
 
         cursor.close()
         conn.close()
@@ -557,6 +632,8 @@ def quality_analysis_charts(request):
     start_date, end_date = parse_date_range(request)
     company_code = tenant.get("company_code")
     seed_base = f"{start_date}_{end_date}_{company_code or 'DEMO'}"
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     # 1. Weekly Inspection Trend
     labels, keys = _weekly_slots(start_date, end_date)
@@ -689,6 +766,9 @@ def quality_analysis_charts(request):
                 if injob_meta["comp_mas"] and company_code:
                     where_clauses.append("m.[{}] = ?".format(injob_meta["comp_mas"]))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(d.partno LIKE ? OR d.description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT 
@@ -717,6 +797,9 @@ def quality_analysis_charts(request):
                 if final_meta["comp"] and company_code:
                     where_clauses.append("[{}] = ?".format(final_meta["comp"]))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT SUM({0}), SUM({1}), SUM({2})
@@ -741,6 +824,9 @@ def quality_analysis_charts(request):
                 if inter_meta["comp"] and company_code:
                     where_clauses.append("[{}] = ?".format(inter_meta["comp"]))
                     params.append(company_code)
+                if like_term:
+                    where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                    params.extend([like_term, like_term])
 
                 sql = """
                     SELECT SUM({0}), SUM({1}), SUM({2})
@@ -1030,6 +1116,9 @@ def quality_analysis_charts(request):
 
                 cursor.execute(custom_sql, custom_params)
                 qrows = cursor.fetchall()
+                if like_term and qrows:
+                    _q_lower = q.lower()
+                    qrows = [r for r in qrows if _q_lower in (str(r[2]) or "").lower()]
 
                 reason_qty_map = {}
                 total_qty = 0
@@ -1084,6 +1173,9 @@ def quality_analysis_charts(request):
                     if injob_meta["comp_mas"] and company_code:
                         where_clauses.append("m.[{}] = ?".format(injob_meta["comp_mas"]))
                         params.append(company_code)
+                    if like_term:
+                        where_clauses.append("(d.partno LIKE ? OR d.description LIKE ?)")
+                        params.extend([like_term, like_term])
 
                     mat_col = find_first_column(cursor, "InJob_Det", ["matrej", "MatRej"])
                     mac_col = find_first_column(cursor, "InJob_Det", ["macrej", "MacRej"])
@@ -1115,6 +1207,9 @@ def quality_analysis_charts(request):
                     if final_meta["comp"] and company_code:
                         where_clauses.append("[{}] = ?".format(final_meta["comp"]))
                         params.append(company_code)
+                    if like_term:
+                        where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                        params.extend([like_term, like_term])
 
                     # Query material & machine rejection from FinalInspectionEntry
                     sql = """
@@ -1161,6 +1256,9 @@ def quality_analysis_charts(request):
                     if inter_meta["comp"] and company_code:
                         where_clauses.append("[{}] = ?".format(inter_meta["comp"]))
                         params.append(company_code)
+                    if like_term:
+                        where_clauses.append("(partno LIKE ? OR description LIKE ?)")
+                        params.extend([like_term, like_term])
 
                     sql = """
                         SELECT 
@@ -1329,6 +1427,8 @@ def quality_analysis_product_performance(request):
     start_date, end_date = parse_date_range(request)
     company_code = tenant.get("company_code")
     seed_base = f"{start_date}_{end_date}_{company_code or 'DEMO'}"
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     db_success = False
     processed = []
@@ -1346,6 +1446,10 @@ def quality_analysis_product_performance(request):
                     WHERE fr.finspno = f.finspno AND fr.partno = f.partno AND ISNULL(fr.deleted, 0) = 0
                 ), 0) AS INT)
             """ if has_rework_table else "0"
+
+            injob_search = "AND (d.partno LIKE ? OR d.description LIKE ?)" if like_term else ""
+            inter_search = "AND (partno LIKE ? OR description LIKE ?)" if like_term else ""
+            final_search = "AND (f.partno LIKE ? OR f.description LIKE ?)" if like_term else ""
 
             sql = f"""
             SELECT
@@ -1369,6 +1473,7 @@ def quality_analysis_product_performance(request):
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  {injob_search}
 
                 UNION ALL
 
@@ -1383,6 +1488,7 @@ def quality_analysis_product_performance(request):
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted, 0) = 0
                   AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  {inter_search}
 
                 UNION ALL
 
@@ -1397,15 +1503,21 @@ def quality_analysis_product_performance(request):
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
                   AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  {final_search}
             ) AS CombinedInspections
             GROUP BY PartNo, Description
             ORDER BY SUM(InspQty) DESC
             """
-            cursor.execute(sql, [
-                start_date, end_date,
-                start_date, end_date,
-                start_date, end_date
-            ])
+            perf_params = [start_date, end_date]
+            if like_term:
+                perf_params.extend([like_term, like_term])
+            perf_params.extend([start_date, end_date])
+            if like_term:
+                perf_params.extend([like_term, like_term])
+            perf_params.extend([start_date, end_date])
+            if like_term:
+                perf_params.extend([like_term, like_term])
+            cursor.execute(sql, perf_params)
             rows = cursor.fetchall()
 
             db_products = []
@@ -1496,6 +1608,8 @@ def quality_analysis_defect_causes(request):
     start_date, end_date = parse_date_range(request)
     company_code = tenant.get("company_code")
     seed_base = f"{start_date}_{end_date}_{company_code or 'DEMO'}"
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     processed_causes = []
     class_boxes = []
@@ -1713,6 +1827,9 @@ def quality_analysis_defect_causes(request):
 
         cursor.execute(custom_sql, custom_params)
         qrows = cursor.fetchall()
+        if like_term and qrows:
+            _q_lower = q.lower()
+            qrows = [r for r in qrows if _q_lower in (str(r[2]) or "").lower()]
 
         reason_qty_map = {}
         total_qty = 0
@@ -1862,6 +1979,8 @@ def quality_analysis_records(request):
     start_date, end_date = parse_date_range(request)
     company_code = tenant.get("company_code")
     seed_base = f"{start_date}_{end_date}_{company_code or 'DEMO'}"
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     db_success = False
     records = []
@@ -1881,6 +2000,10 @@ def quality_analysis_records(request):
                     WHERE fr.finspno = f.finspno AND fr.partno = f.partno AND ISNULL(fr.deleted, 0) = 0
                 ), 0) AS INT)
             """ if has_rework_table else "0"
+
+            injob_search = "AND (d.partno LIKE ? OR d.description LIKE ?)" if like_term else ""
+            inter_search = "AND (partno LIKE ? OR description LIKE ?)" if like_term else ""
+            final_search = "AND (f.partno LIKE ? OR f.description LIKE ?)" if like_term else ""
 
             sql = f"""
             SELECT
@@ -1917,6 +2040,7 @@ def quality_analysis_records(request):
                 LEFT JOIN ProcessDet pd ON d.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  {injob_search}
 
                 UNION ALL
 
@@ -1938,6 +2062,7 @@ def quality_analysis_records(request):
                 LEFT JOIN ProcessDet pd ON i.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(i.deleted, 0) = 0
                   AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  {inter_search}
 
                 UNION ALL
 
@@ -1959,16 +2084,21 @@ def quality_analysis_records(request):
                 LEFT JOIN ProcessDet pd ON f.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(f.deleted, 0) = 0
                   AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  {final_search}
             ) AS Combined
             WHERE Combined.MatRejQty > 0 OR Combined.MacRejQty > 0 OR Combined.ReworkQty > 0
             ORDER BY Combined.InspDate DESC, Combined.InspNo DESC
             """
-            
-            cursor.execute(sql, [
-                start_date, end_date,
-                start_date, end_date,
-                start_date, end_date
-            ])
+            rec_params = [start_date, end_date]
+            if like_term:
+                rec_params.extend([like_term, like_term])
+            rec_params.extend([start_date, end_date])
+            if like_term:
+                rec_params.extend([like_term, like_term])
+            rec_params.extend([start_date, end_date])
+            if like_term:
+                rec_params.extend([like_term, like_term])
+            cursor.execute(sql, rec_params)
             rows = cursor.fetchall()
             
             db_records = []
@@ -2246,6 +2376,9 @@ def quality_analysis_records(request):
                     
                     cursor.execute(custom_sql, custom_params)
                     custom_rows = cursor.fetchall()
+                    if like_term and custom_rows:
+                        _q_lower = q.lower()
+                        custom_rows = [r for r in custom_rows if _q_lower in (str(r[2]) or "").lower()]
                     
                     for idx, row in enumerate(custom_rows):
                         insp_no = row[0]
@@ -2540,6 +2673,8 @@ def quality_analysis_insights(request):
     start_date, end_date = parse_date_range(request)
     today = date.today()
     period_lbl = f"{start_date.strftime('%d-%b-%Y')} – {end_date.strftime('%d-%b-%Y')}"
+    q = (request.GET.get("q") or "").strip()
+    like_term = f"%{q}%" if q else None
 
     # ── Collect live metrics ──────────────────────────────────
     total_inspected = 0
@@ -2594,7 +2729,11 @@ def quality_analysis_insights(request):
               AND CAST(finspdate AS DATE) BETWEEN ? AND ?
         """
         cursor.execute(combined_sql, [start_date, end_date] * 3)
-        for row in cursor.fetchall():
+        _insight_rows = cursor.fetchall()
+        if like_term:
+            _q_lower = q.lower()
+            _insight_rows = [r for r in _insight_rows if _q_lower in (str(r[0]) or "").lower()]
+        for row in _insight_rows:
             prod  = (row[0] or "Unknown").strip()[:60]
             insp  = int(row[1] or 0)
             rej   = int(row[2] or 0)
@@ -2838,4 +2977,198 @@ def quality_analysis_insights(request):
         "total_inspected":  total_inspected,
         "pass_rate_pct":    pass_rate_pct,
         "rej_rate_pct":     rej_rate_pct,
+    })
+
+
+# ─────────────────────────────────────────────────────────────
+#  ENDPOINT 8 — Part No / Description Search Filter
+# ─────────────────────────────────────────────────────────────
+
+@api_view(["GET"])
+def quality_analysis_search(request):
+    """
+    Live search across InJob_Det (d.partno / d.description),
+    InterInspectionEntry (partno / description) and
+    FinalInspectionEntry (f.partno / f.description).
+
+    Query param:
+        ?q=<search_term>   — minimum 1 character, LIKE %term%
+        ?from_date=YYYY-MM-DD  (optional, same parse_date_range logic)
+        ?to_date=YYYY-MM-DD
+
+    Returns:
+        {
+          "q": "<term>",
+          "results": [
+            {
+              "source":      "InJob" | "Inter" | "Final",
+              "partNo":      "...",
+              "description": "...",
+              "inspQty":     int,
+              "okQty":       int,
+              "matRejQty":   int,
+              "macRejQty":   int,
+              "reworkQty":   int,
+              "totalRej":    int,
+              "passRate":    "xx.x%"
+            },
+            ...
+          ],
+          "count": int
+        }
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    q = (request.GET.get("q") or "").strip()
+    start_date, end_date = parse_date_range(request)
+
+    if not q:
+        return Response({"q": q, "results": [], "count": 0})
+
+    like_term = f"%{q}%"
+    results = []
+
+    try:
+        cursor = conn.cursor()
+
+        # ── 1. InJob_Det  (d.partno / d.description) ─────────────────
+        if table_exists(cursor, "InJob_Mas") and table_exists(cursor, "InJob_Det"):
+            injob_sql = """
+                SELECT
+                    d.partno         AS PartNo,
+                    d.description    AS Description,
+                    SUM(CAST(ISNULL(d.jobqty, 0) AS INT))  AS InspQty,
+                    SUM(CAST(ISNULL(d.okqty,  0) AS INT))  AS OKQty,
+                    SUM(CAST(ISNULL(d.matrej, 0) AS INT))  AS MatRejQty,
+                    SUM(CAST(ISNULL(d.macrej, 0) AS INT))  AS MacRejQty,
+                    SUM(CAST(ISNULL(d.rwqty,  0) AS INT))  AS ReworkQty
+                FROM InJob_Det d
+                INNER JOIN InJob_Mas m ON d.inspno = m.inspno
+                WHERE ISNULL(m.deleted, 0) = 0
+                  AND ISNULL(d.deleted, 0) = 0
+                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND (d.partno LIKE ? OR d.description LIKE ?)
+                GROUP BY d.partno, d.description
+                ORDER BY SUM(CAST(ISNULL(d.jobqty, 0) AS INT)) DESC
+            """
+            cursor.execute(injob_sql, [start_date, end_date, like_term, like_term])
+            for row in cursor.fetchall():
+                part_no   = row[0] or ""
+                desc_val  = row[1] or ""
+                insp_qty  = int(row[2] or 0)
+                ok_qty    = int(row[3] or 0)
+                mat_rej   = int(row[4] or 0)
+                mac_rej   = int(row[5] or 0)
+                rework    = int(row[6] or 0)
+                total_rej = mat_rej + mac_rej
+                pass_rate = round((ok_qty / insp_qty) * 100, 1) if insp_qty > 0 else 0.0
+                results.append({
+                    "source":      "InJob",
+                    "partNo":      part_no,
+                    "description": desc_val,
+                    "inspQty":     insp_qty,
+                    "okQty":       ok_qty,
+                    "matRejQty":   mat_rej,
+                    "macRejQty":   mac_rej,
+                    "reworkQty":   rework,
+                    "totalRej":    total_rej,
+                    "passRate":    f"{pass_rate}%",
+                })
+
+        # ── 2. InterInspectionEntry  (partno / description) ───────────
+        if table_exists(cursor, "InterInspectionEntry"):
+            inter_sql = """
+                SELECT
+                    partno           AS PartNo,
+                    description      AS Description,
+                    SUM(CAST(ISNULL(inspqty,   0) AS INT)) AS InspQty,
+                    SUM(CAST(ISNULL(okqty,     0) AS INT)) AS OKQty,
+                    SUM(CAST(ISNULL(matrejqty, 0) AS INT)) AS MatRejQty,
+                    SUM(CAST(ISNULL(rejqty,    0) AS INT)) AS MacRejQty,
+                    SUM(CAST(ISNULL(rwqty,     0) AS INT)) AS ReworkQty
+                FROM InterInspectionEntry
+                WHERE ISNULL(deleted, 0) = 0
+                  AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND (partno LIKE ? OR description LIKE ?)
+                GROUP BY partno, description
+                ORDER BY SUM(CAST(ISNULL(inspqty, 0) AS INT)) DESC
+            """
+            cursor.execute(inter_sql, [start_date, end_date, like_term, like_term])
+            for row in cursor.fetchall():
+                part_no   = row[0] or ""
+                desc_val  = row[1] or ""
+                insp_qty  = int(row[2] or 0)
+                ok_qty    = int(row[3] or 0)
+                mat_rej   = int(row[4] or 0)
+                mac_rej   = int(row[5] or 0)
+                rework    = int(row[6] or 0)
+                total_rej = mat_rej + mac_rej
+                pass_rate = round((ok_qty / insp_qty) * 100, 1) if insp_qty > 0 else 0.0
+                results.append({
+                    "source":      "Inter",
+                    "partNo":      part_no,
+                    "description": desc_val,
+                    "inspQty":     insp_qty,
+                    "okQty":       ok_qty,
+                    "matRejQty":   mat_rej,
+                    "macRejQty":   mac_rej,
+                    "reworkQty":   rework,
+                    "totalRej":    total_rej,
+                    "passRate":    f"{pass_rate}%",
+                })
+
+        # ── 3. FinalInspectionEntry  (f.partno / f.description) ───────
+        if table_exists(cursor, "FinalInspectionEntry"):
+            final_sql = """
+                SELECT
+                    f.partno         AS PartNo,
+                    f.description    AS Description,
+                    SUM(CAST(ISNULL(f.totqty,    0) AS INT)) AS InspQty,
+                    SUM(CAST(ISNULL(f.okqty,     0) AS INT)) AS OKQty,
+                    SUM(CAST(ISNULL(f.matrejqty, 0) AS INT)) AS MatRejQty,
+                    SUM(CAST(ISNULL(f.rejqty,    0) AS INT)) AS MacRejQty,
+                    0                                         AS ReworkQty
+                FROM FinalInspectionEntry f
+                WHERE ISNULL(f.deleted, 0) = 0
+                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND (f.partno LIKE ? OR f.description LIKE ?)
+                GROUP BY f.partno, f.description
+                ORDER BY SUM(CAST(ISNULL(f.totqty, 0) AS INT)) DESC
+            """
+            cursor.execute(final_sql, [start_date, end_date, like_term, like_term])
+            for row in cursor.fetchall():
+                part_no   = row[0] or ""
+                desc_val  = row[1] or ""
+                insp_qty  = int(row[2] or 0)
+                ok_qty    = int(row[3] or 0)
+                mat_rej   = int(row[4] or 0)
+                mac_rej   = int(row[5] or 0)
+                rework    = int(row[6] or 0)
+                total_rej = mat_rej + mac_rej
+                pass_rate = round((ok_qty / insp_qty) * 100, 1) if insp_qty > 0 else 0.0
+                results.append({
+                    "source":      "Final",
+                    "partNo":      part_no,
+                    "description": desc_val,
+                    "inspQty":     insp_qty,
+                    "okQty":       ok_qty,
+                    "matRejQty":   mat_rej,
+                    "macRejQty":   mac_rej,
+                    "reworkQty":   rework,
+                    "totalRej":    total_rej,
+                    "passRate":    f"{pass_rate}%",
+                })
+
+        cursor.close()
+        conn.close()
+    except Exception as ex:
+        print("Error in quality_analysis_search:", ex)
+
+    return Response({
+        "q":       q,
+        "results": results,
+        "count":   len(results),
     })

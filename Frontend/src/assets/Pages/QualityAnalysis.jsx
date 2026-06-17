@@ -331,10 +331,11 @@ export default function QualityAnalysis() {
 
     const debounceRef = useRef(null);
 
-    const fetchQualityData = useCallback((from, to) => {
+    const fetchQualityData = useCallback((from, to, q = "") => {
         const fromStr = formatYmd(from);
         const toStr = formatYmd(to);
-        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}`;
+        const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
+        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}${qParam}`;
 
         const fetchPanel = async (url, setData, setLoadingState) => {
             setLoadingState(true);
@@ -381,10 +382,21 @@ export default function QualityAnalysis() {
         if (!dateRange.from || !dateRange.to) return;
         clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-            fetchQualityData(dateRange.from, dateRange.to);
+            fetchQualityData(dateRange.from, dateRange.to, searchQuery);
         }, 150);
         return () => clearTimeout(debounceRef.current);
-    }, [dateRange, fetchQualityData]);
+    }, [dateRange, fetchQualityData, searchQuery]);
+
+    // Debounced re-fetch on searchQuery change (400 ms — slightly longer to avoid rapid keystroke spam)
+    const searchDebounceRef = useRef(null);
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(() => {
+            fetchQualityData(dateRange.from, dateRange.to, searchQuery);
+        }, 400);
+        return () => clearTimeout(searchDebounceRef.current);
+    }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const mk = (ref, holder, type, data, opts) => {
@@ -474,7 +486,18 @@ export default function QualityAnalysis() {
         });
     };
 
-    const hasNoData = !summaryLoading && (summaryData === null || summaryData.total_inspected === 0 || summaryData.total_inspected === "0" || !summaryData.total_inspected);
+    // hasNoData = true only when there's genuinely no data AND no search query is active.
+    // When a search query is active, even total_inspected=0 is a valid "no results" state
+    // and should show real filtered zeros (not mock/fallback data).
+    const hasNoData = !summaryLoading && !searchQuery && (
+        summaryData === null ||
+        summaryData.total_inspected === 0 ||
+        summaryData.total_inspected === "0" ||
+        !summaryData.total_inspected
+    );
+    // When search is active and data returned, treat loaded state as hasRealData regardless of qty
+    const hasSearchWithData = !!searchQuery && summaryData !== null;
+
 
     // ── Memoised derived data (avoids re-computation on unrelated renders) ─────
     const activeKpiCards = useMemo(() => {
@@ -490,12 +513,16 @@ export default function QualityAnalysis() {
     }, [summaryData, hasNoData]);
 
     const activeProductQuality  = useMemo(() => {
-        if (hasNoData) return [];
+        if (hasNoData && !hasSearchWithData) return [];
+        // When search is active: use backend-filtered data directly (no additional client filter)
+        // When no search: use raw API data or fallback mock
+        if (searchQuery) {
+            return prodPerfData?.products ?? [];
+        }
         const raw = prodPerfData?.products || PRODUCT_QUALITY;
-        if (!searchQuery) return raw;
-        const q = searchQuery.toLowerCase().trim();
-        return raw.filter(p => p.name?.toLowerCase().includes(q));
-    }, [prodPerfData, hasNoData, searchQuery]);
+        return raw;
+    }, [prodPerfData, hasNoData, hasSearchWithData, searchQuery]);
+
 
     const activeDefectCauses    = useMemo(() => {
         if (hasNoData) return [];
@@ -842,12 +869,12 @@ export default function QualityAnalysis() {
             ) : (
                 <div className="qa2-summary-strip qa2-animate qa2-d2">
                     {[
-                        { lbl: "Period", val: summaryData?.period || "Jan–Feb 2026", cls: "" },
-                        { lbl: "Total Inspected", val: summaryData?.total_inspected || "2,748", cls: "qa2-blue" },
-                        { lbl: "Pass Rate", val: summaryData?.pass_rate || "87.6%", cls: "qa2-green" },
-                        { lbl: "Total Rejected", val: summaryData?.total_rejected || "205", cls: "qa2-red" },
-                        { lbl: "Rework", val: summaryData?.rework || "134", cls: "qa2-orange" },
-                        { lbl: "Pending Insp.", val: summaryData?.pending_inspection || "5", cls: "qa2-yellow" },
+                        { lbl: "Period",          val: summaryData?.period            ?? "Jan–Feb 2026", cls: "" },
+                        { lbl: "Total Inspected", val: summaryData?.total_inspected   ?? "—",            cls: "qa2-blue" },
+                        { lbl: "Pass Rate",       val: summaryData?.pass_rate         ?? "—",            cls: "qa2-green" },
+                        { lbl: "Total Rejected",  val: summaryData?.total_rejected    ?? "—",            cls: "qa2-red" },
+                        { lbl: "Rework",          val: summaryData?.rework            ?? "—",            cls: "qa2-orange" },
+                        { lbl: "Pending Insp.",   val: summaryData?.pending_inspection ?? "—",           cls: "qa2-yellow" },
                     ].map((s, i) => (
                         <div className="qa2-strip-item" key={i}>
                             <div className="qa2-strip-lbl">{s.lbl}</div>
@@ -856,6 +883,7 @@ export default function QualityAnalysis() {
                     ))}
                 </div>
             )}
+
 
             {/* ── KPI Cards ── */}
             {summaryLoading ? (
