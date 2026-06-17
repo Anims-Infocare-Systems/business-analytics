@@ -429,9 +429,37 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     );
 }
 
-function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus }) {
+function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus, searchQuery }) {
+    const [filterStatus, setFilterStatus] = useState("Pending");
+
+    useEffect(() => {
+        if (searchQuery) {
+            setFilterStatus("All");
+        } else {
+            setFilterStatus("Pending");
+        }
+    }, [searchQuery]);
+
     const pendingCount = cards.filter(c => resolvedStatus(c) === "Pending").length;
     const approvedCount = cards.filter(c => resolvedStatus(c) === "Approved").length;
+
+    const displayedCards = useMemo(() => {
+        if (filterStatus === "Pending") {
+            return cards.filter(c => resolvedStatus(c) === "Pending");
+        }
+        if (filterStatus === "Approved") {
+            return cards.filter(c => resolvedStatus(c) === "Approved");
+        }
+        return cards;
+    }, [cards, filterStatus, resolvedStatus]);
+
+    const handlePillClick = (e, status) => {
+        e.stopPropagation();
+        setFilterStatus(status);
+        if (collapsed) {
+            onToggle();
+        }
+    };
 
     return (
         <div className="tap-group">
@@ -439,9 +467,28 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                 <div className="tap-group__hd-left">
                     <span className="tap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS["Invoice - General"]}</span>
                     <span className="tap-group__hd-title">{type}</span>
-                    <span className="tap-group__hd-count">{cards.length} document{cards.length !== 1 ? "s" : ""}</span>
-                    {pendingCount > 0 && <span className="tap-group__pill tap-group__pill--pending">{pendingCount} Pending</span>}
-                    {approvedCount > 0 && <span className="tap-group__pill tap-group__pill--approved">{approvedCount} Approved</span>}
+                    
+                    <button
+                        type="button"
+                        className={`tap-group__pill tap-group__pill--all ${filterStatus === "All" ? "tap-group__pill--all-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "All")}
+                    >
+                        {cards.length} All
+                    </button>
+                    <button
+                        type="button"
+                        className={`tap-group__pill tap-group__pill--pending ${filterStatus === "Pending" ? "tap-group__pill--pending-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "Pending")}
+                    >
+                        {pendingCount} Pending
+                    </button>
+                    <button
+                        type="button"
+                        className={`tap-group__pill tap-group__pill--approved ${filterStatus === "Approved" ? "tap-group__pill--approved-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "Approved")}
+                    >
+                        {approvedCount} Approved
+                    </button>
                 </div>
                 <button type="button" className="tap-group__collapse-btn">
                     <span>{collapsed ? "Expand" : "Collapse"}</span>
@@ -450,7 +497,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
 
             <div className={`tap-group__body${collapsed ? " tap-group__body--collapsed" : ""}`}>
                 <div className="tap-grid tap-grid--group">
-                    {cards.map((card, i) => {
+                    {displayedCards.map((card, i) => {
                         const status = resolvedStatus(card);
                         const labels = docLabels(card);
                         return (
@@ -725,13 +772,25 @@ export default function TApproval() {
 
             <div className="tap-filter">
                 <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} theme="teal" />
-                <input
-                    className="tap-filter__search"
-                    type="text"
-                    placeholder="Search invoices & DCs…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                />
+                <div className="tap-filter__search-wrap">
+                    <input
+                        className="tap-filter__search"
+                        type="text"
+                        placeholder="Search invoices & DCs…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="tap-filter__clear-btn"
+                            onClick={() => setSearch("")}
+                            aria-label="Clear search"
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
                 <button type="button" className="tap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
             </div>
 
@@ -785,6 +844,7 @@ export default function TApproval() {
                                 onModify={handleModify}
                                 actionLoading={actionLoading}
                                 resolvedStatus={resolvedStatus}
+                                searchQuery={search}
                             />
                         ))
                     )}

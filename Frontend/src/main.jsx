@@ -155,11 +155,16 @@ const wasDismissed = () =>
 const markDismissed = () =>
   localStorage.setItem(DISMISSED_KEY, String(Date.now()));
 
+const isLoginPage = () => {
+  const path = window.location.pathname;
+  return path === "/" || path === "/index.html" || path === "/login" || path === "/AnimsBusinessAnalytics/";
+};
+
 // ── Android / Desktop — toast-style install prompt ────────────────────────────
 let deferredPrompt = null;
 
 function showAndroidInstallToast() {
-  if (wasDismissed()) return;
+  if (wasDismissed() || !isLoginPage()) return;
 
   showToast({
     message:     "Install Anims BA",
@@ -181,7 +186,7 @@ function showAndroidInstallToast() {
 
 // ── iOS Safari — toast with step hint ────────────────────────────────────────
 function showIosInstallToast() {
-  if (isStandalone() || wasDismissed()) return;
+  if (isStandalone() || wasDismissed() || !isLoginPage()) return;
 
   showToast({
     message:  "Add to Home Screen",
@@ -207,6 +212,24 @@ window.addEventListener("appinstalled", () => {
 if (isIos() && !isStandalone()) {
   setTimeout(showIosInstallToast, 3500);
 }
+
+// ── URL Change Listener to dismiss PWA Toast outside Login ────────────────────
+const dismissPwaToastOutsideLogin = () => {
+  if (!isLoginPage()) {
+    document.getElementById("pwa-install-toast")?.remove();
+  }
+};
+window.addEventListener("popstate", dismissPwaToastOutsideLogin);
+const originalPushState = window.history.pushState;
+window.history.pushState = function(...args) {
+  originalPushState.apply(this, args);
+  dismissPwaToastOutsideLogin();
+};
+const originalReplaceState = window.history.replaceState;
+window.history.replaceState = function(...args) {
+  originalReplaceState.apply(this, args);
+  dismissPwaToastOutsideLogin();
+};
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Register Service Worker

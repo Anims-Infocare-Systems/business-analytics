@@ -157,9 +157,16 @@
 .tap-filter__chk { width: 16px; height: 16px; accent-color: var(--tap-teal-lt); cursor: pointer; }
 .tap-filter__chk-lbl { font-size: .86rem; color: var(--tap-sub); font-weight: 500; }
 
+.tap-filter__search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+}
 .tap-filter__search {
-    flex: 1; min-width: 200px;
-    padding: .65rem 1rem;
+    width: 100%;
+    padding: .65rem 2.2rem .65rem 1rem;
     background: var(--tap-surface);
     border: 1.5px solid var(--tap-border);
     border-radius: 8px;
@@ -172,6 +179,28 @@
     border-color: var(--tap-teal-lt);
     background: rgba(20,184,166,.03);
     box-shadow: 0 0 0 3.5px rgba(20,184,166,.14);
+}
+.tap-filter__clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    font-size: 1.15rem;
+    color: var(--tap-muted);
+    cursor: pointer;
+    padding: 0.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    transition: all var(--tap-tr);
+}
+.tap-filter__clear-btn:hover {
+    background: rgba(20, 184, 166, 0.1);
+    color: var(--tap-teal);
 }
 
 .tap-filter__btn {
@@ -813,13 +842,80 @@
     font-family: 'DM Sans','Outfit',-apple-system,sans-serif;
 }
 .tap-group__pill {
-    display: inline-flex; align-items: center;
-    padding: .22rem .65rem; border-radius: 20px;
-    font-size: .66rem; font-weight: 700; letter-spacing: .3px;
-    font-family: 'DM Sans','Outfit',-apple-system,sans-serif;
+    display: inline-flex;
+    align-items: center;
+    padding: .22rem .65rem;
+    border-radius: 20px;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .3px;
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    border: 1.5px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--tap-tr);
 }
-.tap-group__pill--pending  { background: rgba(245,158,11,.12); color: #d97706; border: 1.5px solid rgba(245,158,11,.28); }
-.tap-group__pill--approved { background: rgba(16,185,129,.12); color: #059669; border: 1.5px solid rgba(16,185,129,.28); }
+.tap-group__pill--all {
+    background: rgba(13, 148, 136, .08);
+    color: #0d9488;
+    border: 1.5px solid rgba(13, 148, 136, .22);
+}
+.tap-group__pill--all:not(.tap-group__pill--all-active):hover {
+    background: rgba(13, 148, 136, .16);
+    border-color: rgba(13, 148, 136, .38);
+    transform: translateY(-1px);
+}
+.tap-group__pill--all-active {
+    background: #0d9488;
+    color: #ffffff;
+    border-color: #0d9488;
+}
+.tap-group__pill--all-active:hover {
+    background: #0b7a70;
+    border-color: #0b7a70;
+    transform: translateY(-1px);
+}
+.tap-group__pill--pending {
+    background: rgba(245, 158, 11, .08);
+    color: #d97706;
+    border: 1.5px solid rgba(245, 158, 11, .22);
+}
+.tap-group__pill--pending:not(.tap-group__pill--pending-active):hover {
+    background: rgba(245, 158, 11, .16);
+    border-color: rgba(245, 158, 11, .38);
+    transform: translateY(-1px);
+}
+.tap-group__pill--pending-active {
+    background: #f59e0b;
+    color: #ffffff;
+    border-color: #f59e0b;
+}
+.tap-group__pill--pending-active:hover {
+    background: #d97706;
+    border-color: #d97706;
+    transform: translateY(-1px);
+}
+.tap-group__pill--approved {
+    background: rgba(16, 185, 129, .08);
+    color: #059669;
+    border: 1.5px solid rgba(16, 185, 129, .22);
+}
+.tap-group__pill--approved:not(.tap-group__pill--approved-active):hover {
+    background: rgba(16, 185, 129, .16);
+    border-color: rgba(16, 185, 129, .38);
+    transform: translateY(-1px);
+}
+.tap-group__pill--approved-active {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #10b981;
+}
+.tap-group__pill--approved-active:hover {
+    background: #059669;
+    border-color: #059669;
+    transform: translateY(-1px);
+}
 
 .tap-group__collapse-btn {
     display: inline-flex; align-items: center; gap: .38rem;

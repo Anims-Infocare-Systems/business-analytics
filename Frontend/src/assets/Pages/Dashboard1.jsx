@@ -498,11 +498,92 @@ function RefreshIcon({ spinning }) {
 }
 
 // ════════════════════════════════════════════
+//  Skeleton Cards for Lazy Loading UI
+// ════════════════════════════════════════════
+function KpiCardSkeleton() {
+    return (
+        <div className="d1-kc d1-kc--loading" style={{ height: "var(--d1-kpi-h)", display: "flex", flexDirection: "column" }}>
+            <div className="d1-kc__top" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="d1-skeleton-pulse" style={{ width: 40, height: 40, borderRadius: "10px" }} />
+                <div className="d1-skeleton-pulse" style={{ width: 60, height: 18, borderRadius: "100px" }} />
+            </div>
+            <div className="d1-kc__body" style={{ marginTop: "16px", display: "flex", flexDirection: "column", flex: 1 }}>
+                <div className="d1-skeleton-pulse" style={{ width: "40%", height: 10, marginBottom: "8px", borderRadius: "4px" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "75%", height: 26, marginBottom: "8px", borderRadius: "4px" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "50%", height: 11, marginTop: "auto", borderRadius: "4px" }} />
+            </div>
+        </div>
+    );
+}
+
+function ChartCardSkeleton() {
+    return (
+        <div className="d1-cc d1-cc--loading" style={{ height: "var(--d1-chart-h)", display: "flex", flexDirection: "column" }}>
+            <div className="d1-cc__hd" style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="d1-skeleton-pulse" style={{ width: "55%", height: 14, borderRadius: "4px" }} />
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <div className="d1-skeleton-pulse" style={{ width: 32, height: 8, borderRadius: "2px" }} />
+                    <div className="d1-skeleton-pulse" style={{ width: 32, height: 8, borderRadius: "2px" }} />
+                </div>
+            </div>
+            <div className="d1-cc__body" style={{ display: "flex", alignItems: "flex-end", gap: "10%", height: "90px", padding: "0 10px 10px", flex: 1 }}>
+                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "35%", borderRadius: "4px 4px 0 0" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "60%", borderRadius: "4px 4px 0 0" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "75%", borderRadius: "4px 4px 0 0" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "50%", borderRadius: "4px 4px 0 0" }} />
+                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "85%", borderRadius: "4px 4px 0 0" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginTop: "6px", borderTop: "1px solid #f1f5f9", paddingTop: "8px" }}>
+                <div className="d1-skeleton-pulse" style={{ width: 70, height: 10, borderRadius: "4px" }} />
+                <div className="d1-skeleton-pulse" style={{ width: 70, height: 10, borderRadius: "4px" }} />
+            </div>
+        </div>
+    );
+}
+
+function AnalysisTableSkeleton() {
+    return (
+        <div className="d1-tc d1-tc--loading" style={{ height: "var(--d1-table-h)", display: "flex", flexDirection: "column" }}>
+            <div className="d1-tc__hd" style={{ padding: "11px 14px", borderBottom: "1px solid var(--d1-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ flex: 1 }}>
+                    <div className="d1-skeleton-pulse" style={{ width: "50%", height: 13, marginBottom: "6px", borderRadius: "4px" }} />
+                    <div className="d1-skeleton-pulse" style={{ width: "30%", height: 9, borderRadius: "4px" }} />
+                </div>
+                <div className="d1-skeleton-pulse" style={{ width: 48, height: 16, borderRadius: "100px" }} />
+            </div>
+            <div className="d1-tc__body" style={{ padding: "12px 14px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "8px", borderBottom: i < 5 ? "1px solid #f1f5f9" : "none" }}>
+                        <div className="d1-skeleton-pulse" style={{ width: "30%", height: 11, borderRadius: "4px" }} />
+                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
+                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
+                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════
 //  Main Dashboard1 Component (UPDATED with API)
 // ════════════════════════════════════════════
+const getSparkData = (kpiData, fallback) => {
+    if (kpiData && kpiData.spark_data && kpiData.spark_data.length > 0) {
+        const nonZeroCount = kpiData.spark_data.filter(v => Math.abs(Number(v)) > 0.001).length;
+        if (nonZeroCount >= 4) {
+            return kpiData.spark_data;
+        }
+    }
+    return fallback;
+};
+
 export default function Dashboard1() {
     const [spinning, setSpinning] = useState(false);
-    const [period, setPeriod] = useState({ year: 2026, month: 2 });
+    const [period, setPeriod] = useState(() => {
+        const d = new Date();
+        return { year: d.getFullYear(), month: d.getMonth() };
+    });
     const [salesData, setSalesData] = useState(null);
     const [purchaseData, setPurchaseData] = useState(null);
     const [productionData, setProductionData] = useState(null);
@@ -592,7 +673,7 @@ export default function Dashboard1() {
     const getSalesAnalysisCell = (periodKey, metricKey) => {
         const value = getSalesAnalysisValue(periodKey, metricKey);
         return {
-            val: formatRupees(value),
+            val: value ? formatRupees(value) : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -605,7 +686,7 @@ export default function Dashboard1() {
     const getPurchaseAnalysisCell = (periodKey, metricKey) => {
         const value = getPurchaseAnalysisValue(periodKey, metricKey);
         return {
-            val: formatRupees(value),
+            val: value ? formatRupees(value) : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -618,7 +699,7 @@ export default function Dashboard1() {
     const getProductionAnalysisCell = (periodKey) => {
         const value = getProductionAnalysisValue(periodKey);
         return {
-            val: value ? `${formatMetric(value)}%` : "0",
+            val: value ? `${formatMetric(value)}%` : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -631,7 +712,7 @@ export default function Dashboard1() {
     const getQualityRejectionAnalysisCell = (periodKey, metricKey) => {
         const value = getQualityRejectionAnalysisValue(periodKey, metricKey);
         return {
-            val: formatMetric(value),
+            val: value ? formatMetric(value) : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -641,45 +722,45 @@ export default function Dashboard1() {
         {
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>),
-            delta: salesData ? `${salesData.delta_type === 'up' ? '↑' : '↓'} ${salesData.delta}%` : "↑ 12.4%",
-            deltaType: salesData ? salesData.delta_type : "up",
+            delta: salesData ? `${salesData.delta_type === 'up' ? '↑' : '↓'} ${salesData.delta}%` : "—",
+            deltaType: salesData ? salesData.delta_type : "na",
             label: "Sales Value",
-            value: salesData ? formatRupees(salesData.current_value) : "35,09,948",
-            footer: salesData ? `${MONTHS_FULL[period.month]} ${period.year} · ${salesData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: salesData ? salesData.spark_data : [278, 305, 292, 328, 310, 335, 317],
+            value: salesData ? formatRupees(salesData.current_value) : "—",
+            footer: salesData ? `${MONTHS_FULL[period.month]} ${period.year} · ${salesData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
+            sparkData: getSparkData(salesData, [12, 19, 8, 15, 22, 14, 20]),
             sparkColor: "#1a56db",
         },
         {
             kgrad: "linear-gradient(90deg,#f59e0b,#fbbf24)", kbg: "#fffbeb", kclr: "#b45309", animDelay: ".07s",
-            icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>),
-            delta: purchaseData ? `${purchaseData.delta_type === "up" ? "↑" : "↓"} ${purchaseData.delta}%` : "↓ 3.1%",
-            deltaType: purchaseData ? purchaseData.delta_type : "dn",
+            icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>),
+            delta: purchaseData ? `${purchaseData.delta_type === "up" ? "↑" : "↓"} ${purchaseData.delta}%` : "—",
+            deltaType: purchaseData ? purchaseData.delta_type : "na",
             label: "Purchase Value",
-            value: purchaseData ? formatRupees(purchaseData.current_value) : "2,05,32,587",
-            footer: purchaseData ? `${MONTHS_FULL[period.month]} ${period.year} · ${purchaseData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: purchaseData ? purchaseData.spark_data : [218, 200, 225, 208, 234, 211, 205],
+            value: purchaseData ? formatRupees(purchaseData.current_value) : "—",
+            footer: purchaseData ? `${MONTHS_FULL[period.month]} ${period.year} · ${purchaseData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
+            sparkData: getSparkData(purchaseData, [10, 14, 18, 11, 15, 9, 13]),
             sparkColor: "#f59e0b",
         },
         {
             kgrad: "linear-gradient(90deg,#10b981,#34d399)", kbg: "#ecfdf5", kclr: "#059669", animDelay: ".14s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20h.01M7 20v-4" /><path d="M12 20V10" /><path d="M17 20V4" /><path d="M22 20h.01" /></svg>),
-            delta: productionData ? `${productionData.delta_type === "up" ? "↑" : "↓"} ${productionData.delta}%` : "↑ 8.7%",
-            deltaType: productionData ? productionData.delta_type : "up",
+            delta: productionData ? `${productionData.delta_type === "up" ? "↑" : "↓"} ${productionData.delta}%` : "—",
+            deltaType: productionData ? productionData.delta_type : "na",
             label: "Production Value",
-            value: productionData ? formatRupees(productionData.current_value) : "10,17,528",
-            footer: productionData ? `${MONTHS_FULL[period.month]} ${period.year} · ${productionData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: productionData ? productionData.spark_data : [90, 104, 97, 112, 106, 99, 102],
+            value: productionData ? formatRupees(productionData.current_value) : "—",
+            footer: productionData ? `${MONTHS_FULL[period.month]} ${period.year} · ${productionData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
+            sparkData: getSparkData(productionData, [15, 10, 18, 12, 20, 15, 22]),
             sparkColor: "#10b981",
         },
         {
             kgrad: "linear-gradient(90deg,#8b5cf6,#c4b5fd)", kbg: "#f5f3ff", kclr: "#7c3aed", animDelay: ".21s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>),
-            delta: qualityValueData ? `${qualityValueData.delta_type === "up" ? "↑" : "↓"} ${qualityValueData.delta}%` : "↑ 5.2%",
-            deltaType: qualityValueData ? qualityValueData.delta_type : "up",
+            delta: qualityValueData ? `${qualityValueData.delta_type === "up" ? "↑" : "↓"} ${qualityValueData.delta}%` : "—",
+            deltaType: qualityValueData ? qualityValueData.delta_type : "na",
             label: "Quality Value",
-            value: qualityValueData ? formatRupees(qualityValueData.current_value) : "1,66,71,682",
-            footer: qualityValueData ? `${MONTHS_FULL[period.month]} ${period.year} · ${qualityValueData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year} · Financial Year`,
-            sparkData: qualityValueData ? qualityValueData.spark_data : [152, 160, 145, 168, 157, 164, 167],
+            value: qualityValueData ? formatRupees(qualityValueData.current_value) : "—",
+            footer: qualityValueData ? `${MONTHS_FULL[period.month]} ${period.year} · ${qualityValueData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
+            sparkData: getSparkData(qualityValueData, [12, 18, 14, 16, 10, 15, 12]),
             sparkColor: "#8b5cf6",
         },
     ];
@@ -692,18 +773,18 @@ export default function Dashboard1() {
                 c,
                 salesProjectionsData?.labels?.length ? salesProjectionsData.labels : [MONTHS_SHORT[period.month]],
                 [
-                    { data: salesProjectionsData?.sales ?? [0], color: "#1a56db" },
-                    { data: salesProjectionsData?.po ?? [0], color: "#f59e0b" },
+                    { data: salesProjectionsData?.sales ?? [], color: "#1a56db" },
+                    { data: salesProjectionsData?.po ?? [], color: "#f59e0b" },
                 ]
             ),
             deps: [salesProjectionsData, period],
             footer: (
                 <>
                     <span className="d1-cc__foot-val d1-cc__foot-val--sales">
-                        Sales: {formatRupees(salesProjectionsData?.sales_rupees?.[0] ?? 0)}
+                        Sales: {salesProjectionsData?.sales_rupees?.[0] != null ? formatRupees(salesProjectionsData.sales_rupees[0]) : "—"}
                     </span>
                     <span className="d1-cc__foot-val d1-cc__foot-val--po">
-                        Projections: {formatRupees(salesProjectionsData?.po_rupees?.[0] ?? 0)}
+                        Projections: {salesProjectionsData?.po_rupees?.[0] != null ? formatRupees(salesProjectionsData.po_rupees[0]) : "—"}
                     </span>
                 </>
             ),
@@ -715,18 +796,18 @@ export default function Dashboard1() {
                 c,
                 purchaseProjectionsData?.labels?.length ? purchaseProjectionsData.labels : [MONTHS_SHORT[period.month]],
                 [
-                    { data: purchaseProjectionsData?.po ?? [0], color: "#1a56db" },
-                    { data: purchaseProjectionsData?.grn ?? [0], color: "#f59e0b" },
+                    { data: purchaseProjectionsData?.po ?? [], color: "#1a56db" },
+                    { data: purchaseProjectionsData?.grn ?? [], color: "#f59e0b" },
                 ]
             ),
             deps: [purchaseProjectionsData, period],
             footer: (
                 <>
                     <span className="d1-cc__foot-val d1-cc__foot-val--sales">
-                        PO: {formatRupees(purchaseProjectionsData?.po_amount?.[0] ?? 0)}
+                        PO: {purchaseProjectionsData?.po_amount?.[0] != null ? formatRupees(purchaseProjectionsData.po_amount[0]) : "—"}
                     </span>
                     <span className="d1-cc__foot-val d1-cc__foot-val--po">
-                        GRN: {formatRupees(purchaseProjectionsData?.grn_amount?.[0] ?? 0)}
+                        GRN: {purchaseProjectionsData?.grn_amount?.[0] != null ? formatRupees(purchaseProjectionsData.grn_amount[0]) : "—"}
                     </span>
                 </>
             ),
@@ -737,10 +818,10 @@ export default function Dashboard1() {
             drawFn: (c) => {
                 const oaWeeklyLabels = oaEfficiencyWeeklyData?.labels?.length
                     ? oaEfficiencyWeeklyData.labels
-                    : ["W1", "W2", "W3", "W4", "W5"];
+                    : [];
                 const oaWeeklySeries = oaEfficiencyWeeklyData?.data?.length
                     ? oaEfficiencyWeeklyData.data
-                    : [71, 74.5, 67.8, 70.5, 73.2];
+                    : [];
                 drawLineChart(
                     c,
                     [{ data: oaWeeklySeries, color: "#10b981" }],
@@ -752,9 +833,9 @@ export default function Dashboard1() {
             deps: [oaEfficiencyWeeklyData, period],
             footer: (
                 <>
-                    {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : ["W1", "W2", "W3", "W4", "W5"]).map((label, index) => (
+                    {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : []).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "9px" }}>
-                            {label}: {formatMetric(oaEfficiencyWeeklyData?.data?.[index] ?? 0)}%
+                            {label}: {oaEfficiencyWeeklyData?.data?.[index] != null ? `${formatMetric(oaEfficiencyWeeklyData.data[index])}%` : "—"}
                         </span>
                     ))}
                 </>
@@ -767,13 +848,13 @@ export default function Dashboard1() {
             drawFn: (c) => {
                 const qualityWeeklyLabels = qualityRejectionsWeeklyData?.labels?.length
                     ? qualityRejectionsWeeklyData.labels
-                    : ["W1", "W2", "W3", "W4", "W5"];
+                    : [];
                 const machineSeries = qualityRejectionsWeeklyData?.machine?.length
                     ? qualityRejectionsWeeklyData.machine
-                    : [27000, 31500, 14500, 23000, 37000];
+                    : [];
                 const materialSeries = qualityRejectionsWeeklyData?.material?.length
                     ? qualityRejectionsWeeklyData.material
-                    : [34000, 39500, 19500, 29000, 41000];
+                    : [];
                 drawLineChart(
                     c,
                     [
@@ -788,15 +869,15 @@ export default function Dashboard1() {
             deps: [qualityRejectionsWeeklyData, period],
             footer: (
                 <>
-                    {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : ["W1", "W2", "W3", "W4", "W5"]).map((label, index) => (
+                    {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : []).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val" style={{ fontSize: "8.5px" }}>
                             {label}:{" "}
                             <span style={{ color: "#ef4444" }}>
-                                Mac {formatMetric(qualityRejectionsWeeklyData?.machine?.[index] ?? 0)}
+                                Mac {qualityRejectionsWeeklyData?.machine?.[index] != null ? formatMetric(qualityRejectionsWeeklyData.machine[index]) : "—"}
                             </span>{" "}
                             /{" "}
                             <span style={{ color: "#1a56db" }}>
-                                Mat {formatMetric(qualityRejectionsWeeklyData?.material?.[index] ?? 0)}
+                                Mat {qualityRejectionsWeeklyData?.material?.[index] != null ? formatMetric(qualityRejectionsWeeklyData.material[index]) : "—"}
                             </span>
                         </span>
                     ))}
@@ -877,17 +958,29 @@ export default function Dashboard1() {
 
             <SectionHeader title="Key Performance Indicators" collapsed={kpiCollapsed} onToggle={() => setKpiCollapsed(v => !v)} accent="#1a56db" />
             <div className={`d1-kpi-grid${kpiCollapsed ? " d1-grid--collapsed" : ""}`}>
-                {kpiCards.map((k) => <KpiCard key={k.label} {...k} collapsed={kpiCollapsed} />)}
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)
+                ) : (
+                    kpiCards.map((k) => <KpiCard key={k.label} {...k} collapsed={kpiCollapsed} />)
+                )}
             </div>
 
             <SectionHeader title="Charts & Projections" collapsed={chartsCollapsed} onToggle={() => setChartsCollapsed(v => !v)} accent="#10b981" />
             <div className={`d1-charts-grid${chartsCollapsed ? " d1-grid--collapsed" : ""}`}>
-                {chartCards.map((c, i) => <ChartCard key={i} {...c} deps={c.deps ?? []} collapsed={chartsCollapsed} />)}
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => <ChartCardSkeleton key={i} />)
+                ) : (
+                    chartCards.map((c, i) => <ChartCard key={i} {...c} deps={c.deps ?? []} collapsed={chartsCollapsed} />)
+                )}
             </div>
 
             <SectionHeader title="Analysis Tables" collapsed={tablesCollapsed} onToggle={() => setTablesCollapsed(v => !v)} accent="#8b5cf6" />
             <div className={`d1-tables-grid${tablesCollapsed ? " d1-grid--collapsed" : ""}`}>
-                {tables.map((t) => <AnalysisTable key={t.title} {...t} collapsed={tablesCollapsed} />)}
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => <AnalysisTableSkeleton key={i} />)
+                ) : (
+                    tables.map((t) => <AnalysisTable key={t.title} {...t} collapsed={tablesCollapsed} />)
+                )}
             </div>
         </div>
     );

@@ -392,9 +392,37 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 }
 
 // ─── Collapsible Group Section ────────────────────────────────
-function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus }) {
+function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus, searchQuery }) {
+    const [filterStatus, setFilterStatus] = useState("Pending");
+
+    useEffect(() => {
+        if (searchQuery) {
+            setFilterStatus("All");
+        } else {
+            setFilterStatus("Pending");
+        }
+    }, [searchQuery]);
+
     const pendingCount = cards.filter(c => resolvedStatus(c) === "Pending").length;
     const approvedCount = cards.filter(c => resolvedStatus(c) === "Approved").length;
+
+    const displayedCards = useMemo(() => {
+        if (filterStatus === "Pending") {
+            return cards.filter(c => resolvedStatus(c) === "Pending");
+        }
+        if (filterStatus === "Approved") {
+            return cards.filter(c => resolvedStatus(c) === "Approved");
+        }
+        return cards;
+    }, [cards, filterStatus, resolvedStatus]);
+
+    const handlePillClick = (e, status) => {
+        e.stopPropagation();
+        setFilterStatus(status);
+        if (collapsed) {
+            onToggle();
+        }
+    };
 
     return (
         <div className="eap-group">
@@ -403,9 +431,28 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                 <div className="eap-group__hd-left">
                     <span className="eap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS.General}</span>
                     <span className="eap-group__hd-title">{type}</span>
-                    <span className="eap-group__hd-count">{cards.length} order{cards.length !== 1 ? "s" : ""}</span>
-                    {pendingCount > 0 && <span className="eap-group__pill eap-group__pill--pending">{pendingCount} Pending</span>}
-                    {approvedCount > 0 && <span className="eap-group__pill eap-group__pill--approved">{approvedCount} Approved</span>}
+                    
+                    <button
+                        type="button"
+                        className={`eap-group__pill eap-group__pill--all ${filterStatus === "All" ? "eap-group__pill--all-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "All")}
+                    >
+                        {cards.length} All
+                    </button>
+                    <button
+                        type="button"
+                        className={`eap-group__pill eap-group__pill--pending ${filterStatus === "Pending" ? "eap-group__pill--pending-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "Pending")}
+                    >
+                        {pendingCount} Pending
+                    </button>
+                    <button
+                        type="button"
+                        className={`eap-group__pill eap-group__pill--approved ${filterStatus === "Approved" ? "eap-group__pill--approved-active" : ""}`}
+                        onClick={(e) => handlePillClick(e, "Approved")}
+                    >
+                        {approvedCount} Approved
+                    </button>
                 </div>
                 <button type="button" className="eap-group__collapse-btn" aria-label={collapsed ? "Expand" : "Collapse"}>
                     <svg
@@ -422,7 +469,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
             {/* Grid of cards — animated collapse */}
             <div className={`eap-group__body${collapsed ? " eap-group__body--collapsed" : ""}`}>
                 <div className="eap-grid eap-grid--group">
-                    {cards.map((card, i) => {
+                    {displayedCards.map((card, i) => {
                         const status = resolvedStatus(card);
                         return (
                             <div
@@ -710,13 +757,25 @@ export default function EApproval() {
                     onChange={setDateRange}
                     theme="indigo"
                 />
-                <input
-                    className="eap-filter__search"
-                    type="text"
-                    placeholder="Search e-approvals…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                />
+                <div className="eap-filter__search-wrap">
+                    <input
+                        className="eap-filter__search"
+                        type="text"
+                        placeholder="Search e-approvals…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="eap-filter__clear-btn"
+                            onClick={() => setSearch("")}
+                            aria-label="Clear search"
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
                 <button type="button" className="eap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
             </div>
 
@@ -773,6 +832,7 @@ export default function EApproval() {
                                 onModify={handleModify}
                                 actionLoading={actionLoading}
                                 resolvedStatus={resolvedStatus}
+                                searchQuery={search}
                             />
                         ))
                     )}
