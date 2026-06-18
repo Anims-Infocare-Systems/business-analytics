@@ -159,40 +159,50 @@ export default function LoginPage() {
     const [loginError, setLoginError] = useState("");
     const [loginBusy, setLoginBusy] = useState(false);
 
-    // ── Auto-fetch company name (debounced 500ms) ────────────
+    // ── Auto-fetch company name (debounced 600ms, with abort on change) ──
     useEffect(() => {
         setCompanyName("");
         setCompanyState("idle");
 
         const trimmed = userId.trim();
-        if (!trimmed) return;
+        // Don't fetch until at least 3 characters — avoids error on partial typing
+        if (trimmed.length < 3) return;
 
         setCompanyState("loading");
+
+        let cancelled = false;
+        const controller = new AbortController();
 
         const timer = setTimeout(async () => {
             try {
                 const res = await fetch(
                     `${API}/company/${encodeURIComponent(trimmed)}/`,
-                    { credentials: "include" }
+                    { credentials: "include", signal: controller.signal }
                 );
                 const data = await res.json();
+
+                if (cancelled) return; // userId changed — discard stale response
 
                 if (res.ok && data.company_name) {
                     setCompanyName(data.company_name);
                     setCompanyState("found");
                 } else {
-                    // 404 — company code not in tenants table
                     setCompanyState("error");
                 }
             } catch (err) {
-                // Network / CORS error — Django not reachable
+                if (cancelled || err.name === "AbortError") return; // ignore aborted/stale
                 console.error("Company fetch failed:", err);
                 setCompanyState("network");
             }
-        }, 500);
+        }, 600);
 
-        return () => clearTimeout(timer);
+        return () => {
+            cancelled = true;       // mark any in-flight fetch as stale
+            controller.abort();     // cancel the fetch if already in progress
+            clearTimeout(timer);    // cancel pending debounce timer
+        };
     }, [userId]);
+
 
     // ── Placeholder text based on state ─────────────────────
     const companyPlaceholder = {
@@ -357,7 +367,7 @@ export default function LoginPage() {
                             </p>
                         </div>
 
-                        <form className="lp__form" onSubmit={handleLogin} noValidate autoComplete="nope">
+                        <form className="lp__form" onSubmit={handleLogin} noValidate autoComplete="off">
 
                             {/* ── Organization / Company Code ── */}
                             <div className="lp__field anim-fade-up" style={{ animationDelay: "0.2s" }}>
@@ -430,7 +440,7 @@ export default function LoginPage() {
                                             setUsername(e.target.value);
                                             setLoginError("");
                                         }}
-                                        autoComplete="nope"
+                                        autoComplete="off"
                                     />
                                 </div>
                             </div>
@@ -450,7 +460,7 @@ export default function LoginPage() {
                                             setPassword(e.target.value);
                                             setLoginError("");
                                         }}
-                                        autoComplete="one-time-code"
+                                        autoComplete="off"
                                     />
                                     <button
                                         type="button"

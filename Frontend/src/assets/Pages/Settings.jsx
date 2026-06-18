@@ -560,7 +560,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                         </div>
                                     </div>
 
-                                    <form className="st-acct-pwd__form" onSubmit={handleSavePassword}>
+                                    <form className="st-acct-pwd__form" onSubmit={handleSavePassword} autoComplete="off">
                                         <div className="st-acct-pwd__row st-acct-pwd__row--single">
                                             <div className="st-acct-pwd__field">
                                                 <label className="st-acct-pwd__label">Current Password</label>
@@ -572,7 +572,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                                         placeholder="Enter current password"
                                                         value={curPass}
                                                         onChange={(e) => setCurPass(e.target.value)}
-                                                        autoComplete="current-password"
+                                                        autoComplete="off"
                                                     />
                                                     <button type="button" className="st-acct-eye" onClick={() => setShowCurPass(v => !v)} aria-label="Toggle">
                                                         <span className={`st-acct-eye__icon${showCurPass ? " st-acct-eye__icon--on" : ""}`}>

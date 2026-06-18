@@ -73,7 +73,7 @@ function drawSparkline(canvas, data, color) {
 
 function drawBarChart(canvas, labels, sets, h = 118) {
     const s = setupCanvas(canvas, h);
-    if (!s || !labels.length || !sets.length) return;
+    if (!s || !labels.length || !sets.length) return [];
     const { ctx, w } = s;
     const pad = { l: 32, r: 6, t: 6, b: 20 };
     const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
@@ -92,6 +92,8 @@ function drawBarChart(canvas, labels, sets, h = 118) {
     }
     const ng = labels.length, nb = sets.length, gap = 3;
     const bw = cw / ng, bW = (bw - gap * (nb + 1)) / nb;
+    // Hit-test data: one entry per (group × series)
+    const hitData = [];
     sets.forEach((ds, di) =>
         ds.data.forEach((val, gi) => {
             const bh = Math.max(0, (Number(val) || 0) / mx * ch);
@@ -108,19 +110,30 @@ function drawBarChart(canvas, labels, sets, h = 118) {
             ctx.lineTo(x + bW, y + bh); ctx.lineTo(x, y + bh); ctx.lineTo(x, y + r);
             ctx.quadraticCurveTo(x, y, x + r, y);
             ctx.closePath(); ctx.fill();
+            hitData.push({
+                type: "bar",
+                cx: x + bW / 2,
+                cy: y,
+                x1: x, y1: y, x2: x + bW, y2: pad.t + ch,
+                label: labels[gi],
+                seriesLabel: ds.label || "",
+                color: ds.color,
+                value: Number(val) || 0,
+            });
         })
     );
     ctx.fillStyle = "#94a3b8";
     ctx.font = "9px 'DM Sans',sans-serif";
     ctx.textAlign = "center";
     labels.forEach((l, i) => ctx.fillText(l, pad.l + i * bw + bw / 2, h - 4));
+    return hitData;
 }
 
 function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
     const labels = Array.isArray(labelsOrHeight) ? labelsOrHeight : [];
     const chartHeight = typeof labelsOrHeight === "number" ? labelsOrHeight : h;
     const s = setupCanvas(canvas, chartHeight);
-    if (!s) return;
+    if (!s) return [];
     const { ctx, w } = s;
     const pad = { l: 32, r: 6, t: 6, b: 20 };
     const cw = w - pad.l - pad.r, ch = chartHeight - pad.t - pad.b;
@@ -141,36 +154,55 @@ function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
         );
     }
 
+    // Hit-test data: one entry per (series × point)
+    const hitData = [];
     sets.forEach((ds) => {
         const n = ds.data.length;
-        if (n < 2) return;
-        const px = (i) => pad.l + i * (cw / (n - 1));
+        if (n < 1) return;
+        const pxFn = n <= 1
+            ? () => pad.l + cw / 2
+            : (i) => pad.l + i * (cw / (n - 1));
         const py = (v) => pad.t + ch * (1 - (v - mn) / span);
-        const g3 = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
-        g3.addColorStop(0, ds.color + "2a");
-        g3.addColorStop(1, ds.color + "00");
-        ctx.beginPath();
-        ctx.moveTo(px(0), py(ds.data[0]));
-        for (let i = 1; i < n; i++) {
-            const cx = (px(i - 1) + px(i)) / 2;
-            ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), px(i), py(ds.data[i]));
-        }
-        ctx.lineTo(px(n - 1), pad.t + ch);
-        ctx.lineTo(px(0), pad.t + ch);
-        ctx.closePath();
-        ctx.fillStyle = g3; ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(px(0), py(ds.data[0]));
-        for (let i = 1; i < n; i++) {
-            const cx = (px(i - 1) + px(i)) / 2;
-            ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), px(i), py(ds.data[i]));
-        }
-        ctx.strokeStyle = ds.color; ctx.lineWidth = 2.2; ctx.stroke();
-        for (let i = 0; i < n; i++) {
+
+        if (n >= 2) {
+            const g3 = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+            g3.addColorStop(0, ds.color + "2a");
+            g3.addColorStop(1, ds.color + "00");
             ctx.beginPath();
-            ctx.arc(px(i), py(ds.data[i]), 2.8, 0, Math.PI * 2);
+            ctx.moveTo(pxFn(0), py(ds.data[0]));
+            for (let i = 1; i < n; i++) {
+                const cx = (pxFn(i - 1) + pxFn(i)) / 2;
+                ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), pxFn(i), py(ds.data[i]));
+            }
+            ctx.lineTo(pxFn(n - 1), pad.t + ch);
+            ctx.lineTo(pxFn(0), pad.t + ch);
+            ctx.closePath();
+            ctx.fillStyle = g3; ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(pxFn(0), py(ds.data[0]));
+            for (let i = 1; i < n; i++) {
+                const cx = (pxFn(i - 1) + pxFn(i)) / 2;
+                ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), pxFn(i), py(ds.data[i]));
+            }
+            ctx.strokeStyle = ds.color; ctx.lineWidth = 2.2; ctx.stroke();
+        }
+
+        for (let i = 0; i < n; i++) {
+            const dotX = pxFn(i);
+            const dotY = py(ds.data[i]);
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 2.8, 0, Math.PI * 2);
             ctx.fillStyle = "#fff"; ctx.fill();
             ctx.strokeStyle = ds.color; ctx.lineWidth = 2; ctx.stroke();
+            hitData.push({
+                type: "point",
+                cx: dotX,
+                cy: dotY,
+                label: labels[i] || `P${i + 1}`,
+                seriesLabel: ds.label || "",
+                color: ds.color,
+                value: ds.data[i],
+            });
         }
     });
 
@@ -185,6 +217,7 @@ function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
         ctx.textAlign = "center";
         labels.forEach((label, i) => ctx.fillText(label, pxLabel(i), chartHeight - 8));
     }
+    return hitData;
 }
 
 function getOaWeeklyRange(data) {
@@ -365,11 +398,26 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
 
     useEffect(() => {
         if (collapsed || !canvasRef.current) return;
-        try {
-            drawSparkline(canvasRef.current, sparkData, sparkColor);
-        } catch (error) {
-            console.error(`Dashboard1 KPI sparkline failed: ${label}`, error);
-        }
+
+        const handleDraw = () => {
+            try {
+                drawSparkline(canvasRef.current, sparkData, sparkColor);
+            } catch (error) {
+                console.error(`Dashboard1 KPI sparkline failed: ${label}`, error);
+            }
+        };
+
+        const parent = canvasRef.current.parentElement;
+        if (!parent) return;
+
+        const observer = new ResizeObserver(() => {
+            requestAnimationFrame(handleDraw);
+        });
+        observer.observe(parent);
+
+        return () => {
+            observer.disconnect();
+        };
     }, [sparkData, sparkColor, collapsed, label]);
 
     return (
@@ -394,23 +442,143 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
 }
 
 // ════════════════════════════════════════════
-//  Chart Card (UNCHANGED)
+//  Chart Card — with hover tooltip
 // ════════════════════════════════════════════
-function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer }) {
+function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer, formatValue }) {
     const canvasRef = useRef(null);
+    const wrapRef = useRef(null);
+    const hitRef = useRef([]);           // stores hit-test rectangles / points
+    const [tooltip, setTooltip] = useState(null); // { x, y, items: [{label,seriesLabel,value,color}] }
 
     useEffect(() => {
         if (collapsed || !canvasRef.current) return;
-        try {
-            drawFn(canvasRef.current);
-        } catch (error) {
-            console.error(`Dashboard1 chart render failed: ${title}`, error);
-        }
+
+        const handleDraw = () => {
+            try {
+                const hitData = drawFn(canvasRef.current);
+                hitRef.current = Array.isArray(hitData) ? hitData : [];
+            } catch (error) {
+                console.error(`Dashboard1 chart render failed: ${title}`, error);
+                hitRef.current = [];
+            }
+        };
+
+        const parent = canvasRef.current.parentElement;
+        if (!parent) return;
+
+        const observer = new ResizeObserver(() => {
+            requestAnimationFrame(handleDraw);
+        });
+        observer.observe(parent);
+
+        return () => {
+            observer.disconnect();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [...deps, collapsed]);
 
+    const handleMouseMove = (e) => {
+        const canvas = canvasRef.current;
+        const wrap = wrapRef.current;
+        if (!canvas || !wrap || hitRef.current.length === 0) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        const hits = hitRef.current;
+        let bestHit = null;
+        let bestDist = Infinity;
+
+        hits.forEach((h) => {
+            if (h.type === "bar") {
+                // Check if mouse is inside the bar rectangle
+                if (mx >= h.x1 && mx <= h.x2 && my >= h.y1 && my <= h.y2) {
+                    const dist = Math.abs(mx - h.cx);
+                    if (dist < bestDist) { bestDist = dist; bestHit = h; }
+                }
+            } else {
+                // Line chart point: proximity within 18px
+                const dist = Math.hypot(mx - h.cx, my - h.cy);
+                if (dist < 18 && dist < bestDist) { bestDist = dist; bestHit = h; }
+            }
+        });
+
+        if (!bestHit) {
+            // For bar charts: find which group column the mouse is in and show all series
+            if (hits.length > 0 && hits[0].type === "bar") {
+                // Group by label
+                const labelMap = {};
+                hits.forEach((h) => {
+                    if (!labelMap[h.label]) labelMap[h.label] = [];
+                    labelMap[h.label].push(h);
+                });
+                // Find group whose cx range contains mx
+                for (const [, group] of Object.entries(labelMap)) {
+                    const xs = group.map(g => g.x1);
+                    const xe = group.map(g => g.x2);
+                    if (mx >= Math.min(...xs) - 2 && mx <= Math.max(...xe) + 2) {
+                        const wrapRect = wrap.getBoundingClientRect();
+                        const tipX = e.clientX - wrapRect.left;
+                        const tipY = e.clientY - wrapRect.top;
+                        setTooltip({
+                            x: tipX, y: tipY,
+                            label: group[0].label,
+                            items: group.map(g => ({
+                                seriesLabel: g.seriesLabel,
+                                color: g.color,
+                                value: g.value,
+                            }))
+                        });
+                        return;
+                    }
+                }
+            }
+            setTooltip(null);
+            return;
+        }
+
+        const wrapRect = wrap.getBoundingClientRect();
+        const tipX = e.clientX - wrapRect.left;
+        const tipY = e.clientY - wrapRect.top;
+
+        if (bestHit.type === "bar") {
+            // Group all same-label bars for combined tooltip
+            const group = hits.filter(h => h.label === bestHit.label);
+            setTooltip({
+                x: tipX, y: tipY,
+                label: bestHit.label,
+                items: group.map(g => ({
+                    seriesLabel: g.seriesLabel,
+                    color: g.color,
+                    value: g.value,
+                }))
+            });
+        } else {
+            // Line chart: group same-label points from all series
+            const group = hits.filter(h => h.label === bestHit.label);
+            setTooltip({
+                x: tipX, y: tipY,
+                label: bestHit.label,
+                items: group.map(g => ({
+                    seriesLabel: g.seriesLabel,
+                    color: g.color,
+                    value: g.value,
+                }))
+            });
+        }
+    };
+
+    const handleMouseLeave = () => setTooltip(null);
+
+    const fmtVal = formatValue || ((v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return "—";
+        return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    });
+
     return (
-        <div className={`d1-cc${collapsed ? " d1-cc--collapsed" : ""}`}>
+        <div className={`d1-cc${collapsed ? " d1-cc--collapsed" : ""}`} ref={wrapRef} style={{ position: "relative" }}>
             <div className="d1-cc__hd">
                 <div className="d1-cc__title">{title}</div>
                 <div className="d1-cc__legend">
@@ -422,10 +590,39 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
                     ))}
                 </div>
             </div>
-            <div className="d1-cc__body">
+            <div className="d1-cc__body"
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                style={{ position: "relative" }}
+            >
                 <canvas ref={canvasRef} height={canvasHeight} />
             </div>
             {footer ? <div className="d1-cc__foot">{footer}</div> : null}
+
+            {/* Hover Tooltip */}
+            {tooltip && (
+                <div
+                    className="d1-chart-tooltip"
+                    style={{
+                        left: tooltip.x,
+                        top: tooltip.y,
+                        transform: tooltip.x > 140 ? "translate(-100%, -110%)" : "translate(8px, -110%)",
+                    }}
+                >
+                    {tooltip.label && (
+                        <div className="d1-chart-tooltip__label">{tooltip.label}</div>
+                    )}
+                    {tooltip.items.map((item, i) => (
+                        <div key={i} className="d1-chart-tooltip__row">
+                            <span className="d1-chart-tooltip__dot" style={{ background: item.color }} />
+                            {item.seriesLabel && (
+                                <span className="d1-chart-tooltip__series">{item.seriesLabel}:</span>
+                            )}
+                            <span className="d1-chart-tooltip__val">{fmtVal(item.value)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -721,7 +918,7 @@ export default function Dashboard1() {
     const kpiCards = [
         {
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
-            icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>),
+            icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12" /><path d="M6 8h12" /><path d="m6 13 8.5 8" /><path d="M6 13h3" /><path d="M9 13c6.667 0 6.667-10 0-10" /></svg>),
             delta: salesData ? `${salesData.delta_type === 'up' ? '↑' : '↓'} ${salesData.delta}%` : "—",
             deltaType: salesData ? salesData.delta_type : "na",
             label: "Sales Value",
@@ -773,11 +970,12 @@ export default function Dashboard1() {
                 c,
                 salesProjectionsData?.labels?.length ? salesProjectionsData.labels : [MONTHS_SHORT[period.month]],
                 [
-                    { data: salesProjectionsData?.sales ?? [], color: "#1a56db" },
-                    { data: salesProjectionsData?.po ?? [], color: "#f59e0b" },
+                    { data: salesProjectionsData?.sales ?? [], color: "#1a56db", label: "Sales" },
+                    { data: salesProjectionsData?.po ?? [], color: "#f59e0b", label: "Projections" },
                 ]
             ),
             deps: [salesProjectionsData, period],
+            formatValue: (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}L`,
             footer: (
                 <>
                     <span className="d1-cc__foot-val d1-cc__foot-val--sales">
@@ -796,11 +994,12 @@ export default function Dashboard1() {
                 c,
                 purchaseProjectionsData?.labels?.length ? purchaseProjectionsData.labels : [MONTHS_SHORT[period.month]],
                 [
-                    { data: purchaseProjectionsData?.po ?? [], color: "#1a56db" },
-                    { data: purchaseProjectionsData?.grn ?? [], color: "#f59e0b" },
+                    { data: purchaseProjectionsData?.po ?? [], color: "#1a56db", label: "PO" },
+                    { data: purchaseProjectionsData?.grn ?? [], color: "#f59e0b", label: "GRN" },
                 ]
             ),
             deps: [purchaseProjectionsData, period],
+            formatValue: (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}L`,
             footer: (
                 <>
                     <span className="d1-cc__foot-val d1-cc__foot-val--sales">
@@ -813,7 +1012,7 @@ export default function Dashboard1() {
             ),
         },
         {
-            title: "OA Efficiency % — Weekly",
+            title: "OEE % — Weekly",
             legend: [{ label: "OA %", color: "#10b981", round: true }],
             drawFn: (c) => {
                 const oaWeeklyLabels = oaEfficiencyWeeklyData?.labels?.length
@@ -822,15 +1021,16 @@ export default function Dashboard1() {
                 const oaWeeklySeries = oaEfficiencyWeeklyData?.data?.length
                     ? oaEfficiencyWeeklyData.data
                     : [];
-                drawLineChart(
+                return drawLineChart(
                     c,
-                    [{ data: oaWeeklySeries, color: "#10b981" }],
+                    [{ data: oaWeeklySeries, color: "#10b981", label: "OA %" }],
                     getOaWeeklyRange(oaWeeklySeries),
                     oaWeeklyLabels,
                     86
                 );
             },
             deps: [oaEfficiencyWeeklyData, period],
+            formatValue: (v) => `${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}%`,
             footer: (
                 <>
                     {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : []).map((label, index) => (
@@ -855,11 +1055,11 @@ export default function Dashboard1() {
                 const materialSeries = qualityRejectionsWeeklyData?.material?.length
                     ? qualityRejectionsWeeklyData.material
                     : [];
-                drawLineChart(
+                return drawLineChart(
                     c,
                     [
-                        { data: machineSeries, color: "#ef4444" },
-                        { data: materialSeries, color: "#1a56db" },
+                        { data: machineSeries, color: "#ef4444", label: "Mac Rej" },
+                        { data: materialSeries, color: "#1a56db", label: "Mat Rej" },
                     ],
                     getWeeklyQuantityRange([machineSeries, materialSeries]),
                     qualityWeeklyLabels,
@@ -867,6 +1067,7 @@ export default function Dashboard1() {
                 );
             },
             deps: [qualityRejectionsWeeklyData, period],
+            formatValue: (v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }),
             footer: (
                 <>
                     {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : []).map((label, index) => (

@@ -271,12 +271,14 @@ window.addEventListener("online", () => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  Global fetch interceptor — 401 session expiry
 // ══════════════════════════════════════════════════════════════════════════════
+let _redirecting401 = false; // Guard: prevents multiple simultaneous 401 redirects
 const _fetch = window.fetch;
 window.fetch = async (...args) => {
   const res = await _fetch(...args);
-  if (res.status === 401) {
+  if (res.status === 401 && !_redirecting401) {
     const url = typeof args[0] === "string" ? args[0] : (args[0]?.url ?? "");
     if (!url.includes("/login/") && !url.includes("/forgot-password/")) {
+      _redirecting401 = true;
       try {
         localStorage.removeItem("user");
         localStorage.removeItem("ba_user_rights");
@@ -295,9 +297,7 @@ window.fetch = async (...args) => {
 //  React root
 // ══════════════════════════════════════════════════════════════════════════════
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
 );

@@ -793,7 +793,7 @@ export default function UserRights() {
                                 ×
                             </button>
                         </div>
-                        <form onSubmit={handleAddUserSubmit}>
+                        <form onSubmit={handleAddUserSubmit} autoComplete="off">
                             <div className="ur-modal__body">
                                 {addError && (
                                     <div className="ur-banner ur-banner--error" style={{ marginBottom: "1rem" }} role="alert">
@@ -834,6 +834,7 @@ export default function UserRights() {
                                         onChange={e => setAddForm(prev => ({ ...prev, password: e.target.value }))}
                                         disabled={adding}
                                         required
+                                        autoComplete="new-password"
                                     />
                                 </div>
                                 <div className="ur-form-group">
@@ -846,6 +847,7 @@ export default function UserRights() {
                                         onChange={e => setAddForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                         disabled={adding}
                                         required
+                                        autoComplete="new-password"
                                     />
                                 </div>
                             </div>

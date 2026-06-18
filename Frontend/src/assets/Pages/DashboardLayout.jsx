@@ -500,13 +500,13 @@ export default function DashboardLayout() {
         }
     }, [planId, allowedMenuItems, activeItem, activeSubItem]);
 
-    /* Background heartbeat to check session validity and trigger auto-logout if terminated from elsewhere */
+    /* Background heartbeat to check session validity (idle users only — active users are covered by the global 401 interceptor) */
     useEffect(() => {
         const checkSession = () => {
             fetch(`${API}/user-rights/me/`, { credentials: "include" })
                 .catch(() => { });
         };
-        const interval = setInterval(checkSession, 10000); // Check every 10 seconds
+        const interval = setInterval(checkSession, 300000); // Check every 5 minutes
         return () => clearInterval(interval);
     }, []);
 
@@ -657,7 +657,7 @@ export default function DashboardLayout() {
     }
 
     return (
-        <div className={`dl-root dark-theme ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"}`}>
+        <div className={`dl-root dark-theme ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"} ${isMobile && drawerOpen ? "dl-root--drawer-open" : ""}`}>
 
             {/* Mobile overlay */}
             {isMobile && drawerOpen && (
@@ -817,7 +817,6 @@ export default function DashboardLayout() {
                 {/* Topbar */}
                 <div className="dl-topbar">
                     <div className="dl-topbar__inner">
-                        <span className="dl-topbar__spinner-icon"><Icons.Spinner /></span>
                         <TopbarHeading text={topbarHeading} />
                         <div className="dl-topbar__actions" />
                     </div>
