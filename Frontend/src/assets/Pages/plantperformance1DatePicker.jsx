@@ -1,388 +1,187 @@
 /**
- * PlantPerformance1DatePicker.jsx
- * Prefix: d3dp-
- * Rich animated date-range picker — period pills + calendar popup
- * For: Plant Performance Dashboard (Dashboard3)
+ * plantperformance1DatePicker.jsx — Dual-Calendar Date Range Picker
+ * Adapted from EfficiencyReportDatePicker.jsx — prefix: pp1dp-
+ * Theme: #2d6de8 (Plant Performance blue)
  */
-
 import { useState, useRef, useEffect } from "react";
-import "./PlantPerformance1DatePicker.css";
+import { createPortal } from "react-dom";
+import "./plantperformance1DatePicker.css";
 
-// ── Constants ─────────────────────────────────────────────────────
-const PERIODS = [
-  { key: "today",   label: "Today",      icon: "⚡" },
-  { key: "week",    label: "This Week",  icon: "📅" },
-  { key: "month",   label: "This Month", icon: "🗓️" },
-  { key: "custom",  label: "Custom",     icon: "✂️" },
-];
+const PAD  = n => String(n).padStart(2, "0");
+const FMT  = d => d ? `${PAD(d.getDate())}-${PAD(d.getMonth() + 1)}-${d.getFullYear()}` : "";
+const MONTHS     = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAYS_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
-const MONTHS_FULL = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
-const DAYS_ABR = ["Su","Mo","Tu","We","Th","Fr","Sa"];
-
-// ── Helpers ────────────────────────────────────────────────────────
-function pad(n) { return String(n).padStart(2, "0"); }
-function fmt(d) {
-  if (!d) return "";
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
 function sameDay(a, b) {
-  return a && b && a.toDateString() === b.toDateString();
+    return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
-function between(d, from, to) {
-  return d && from && to && d > from && d < to;
-}
-function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
-function firstDow(y, m)    { return new Date(y, m, 1).getDay(); }
-
-function presetRange(key) {
-  const t = new Date(); t.setHours(0, 0, 0, 0);
-  if (key === "today") {
-    return { from: new Date(t), to: new Date(t) };
-  } else if (key === "week") {
-    const f = new Date(t); f.setDate(t.getDate() - t.getDay());
-    const e = new Date(t); e.setDate(t.getDate() + (6 - t.getDay()));
-    return { from: f, to: e };
-  } else if (key === "month") {
-    return {
-      from: new Date(t.getFullYear(), t.getMonth(), 1),
-      to:   new Date(t),
-    };
-  }
-  return { from: null, to: null };
+function startOf(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+function calDays(year, month) {
+    const first = new Date(year, month, 1).getDay();
+    const total = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < first; i++) cells.push(null);
+    for (let d = 1; d <= total; d++) cells.push(new Date(year, month, d));
+    while (cells.length % 7) cells.push(null);
+    return cells;
 }
 
-function rangeChipLabel(activePeriod, fromDate, toDate) {
-  if (activePeriod !== "custom") {
-    const { from, to } = presetRange(activePeriod);
-    if (!from) return "Select range…";
-    if (sameDay(from, to)) return fmt(from);
-    return `${fmt(from)}  →  ${fmt(to)}`;
-  }
-  if (fromDate && toDate) return `${fmt(fromDate)}  →  ${fmt(toDate)}`;
-  if (fromDate)           return `${fmt(fromDate)}  →  …`;
-  return "Pick a date range…";
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  MAIN COMPONENT
-// ════════════════════════════════════════════════════════════════════
-export default function PlantPerformance1DatePicker({
-  activePeriod = "today",
-  onPeriodChange,
-  onRangeChange,
-}) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-
-  const [open,      setOpen]      = useState(false);
-  const [fromDate,  setFromDate]  = useState(null);
-  const [toDate,    setToDate]    = useState(null);
-  const [hovDate,   setHovDate]   = useState(null);
-  const [picking,   setPicking]   = useState("from");   // "from" | "to"
-  const [calYear,   setCalYear]   = useState(today.getFullYear());
-  const [calMonth,  setCalMonth]  = useState(today.getMonth());
-  const [slideDir,  setSlideDir]  = useState("");        // "left" | "right"
-  const [calKey,    setCalKey]    = useState(0);
-  const [popAnim,   setPopAnim]   = useState("");        // "in" | "out"
-
-  const rootRef = useRef(null);
-
-  // ── Close on outside click
-  useEffect(() => {
-    const fn = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) {
-        closePopup();
-      }
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, []);
-
-  // ── Popup helpers
-  const openPopup = () => {
-    setOpen(true);
-    setPopAnim("in");
-  };
-  const closePopup = () => {
-    setPopAnim("out");
-    setTimeout(() => setOpen(false), 200);
-  };
-
-  // ── Period pill click
-  const selectPeriod = (key) => {
-    onPeriodChange?.(key);
-    if (key === "custom") {
-      openPopup();
-    } else {
-      closePopup();
-      const range = presetRange(key);
-      setFromDate(range.from);
-      setToDate(range.to);
-      setPicking("from");
-      onRangeChange?.({ ...range, period: key });
-    }
-  };
-
-  // ── Month navigation
-  const navMonth = (dir) => {
-    setSlideDir(dir > 0 ? "right" : "left");
-    setCalKey((k) => k + 1);
-    let m = calMonth + dir, y = calYear;
-    if (m > 11) { m = 0; y++; }
-    if (m < 0)  { m = 11; y--; }
-    setCalMonth(m);
-    setCalYear(y);
-  };
-
-  // ── Day pick logic
-  const pickDay = (date) => {
-    if (picking === "from") {
-      setFromDate(date);
-      setToDate(null);
-      setPicking("to");
-    } else {
-      if (date < fromDate) {
-        setFromDate(date);
-        setToDate(fromDate);
-      } else {
-        setToDate(date);
-      }
-      setPicking("from");
-      setHovDate(null);
-    }
-  };
-
-  // ── Quick range setter (shortcuts)
-  const setQuick = (from, to) => {
-    setFromDate(from);
-    setToDate(to);
-    setPicking("from");
-    setHovDate(null);
-  };
-
-  // ── Apply / Clear
-  const apply = () => {
-    if (!fromDate || !toDate) return;
-    onRangeChange?.({ from: fromDate, to: toDate, period: "custom" });
-    closePopup();
-  };
-  const clear = () => {
-    setFromDate(null);
-    setToDate(null);
-    setPicking("from");
-    setHovDate(null);
-  };
-
-  // ── Build grid cells
-  const cells = [];
-  for (let i = 0; i < firstDow(calYear, calMonth); i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth(calYear, calMonth); d++)
-    cells.push(new Date(calYear, calMonth, d));
-
-  // Preview to-date while hovering
-  const previewTo =
-    toDate ||
-    (picking === "to" && hovDate && fromDate && hovDate >= fromDate
-      ? hovDate
-      : null);
-
-  const canApply = !!(fromDate && toDate);
-
-  return (
-    <div className="d3dp-root" ref={rootRef}>
-
-      {/* ══════════════ Period Pills ══════════════ */}
-      <div className="d3dp-pills">
-        <span className="d3dp-pills-label">PERIOD</span>
-        <div className="d3dp-pills-track">
-          {PERIODS.map((p, i) => (
-            <button
-              key={p.key}
-              className={`d3dp-pill ${activePeriod === p.key ? "d3dp-pill--on" : ""}`}
-              style={{ "--pi": i }}
-              onClick={() => selectPeriod(p.key)}
-            >
-              <span className="d3dp-pill-ico">{p.icon}</span>
-              <span className="d3dp-pill-txt">{p.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ══════════════ Range Chip ══════════════ */}
-      <div
-        className={[
-          "d3dp-chip",
-          activePeriod === "custom" ? "d3dp-chip--custom" : "",
-          open ? "d3dp-chip--open" : "",
-        ].join(" ")}
-        onClick={() => activePeriod === "custom" && (open ? closePopup() : openPopup())}
-      >
-        <span className="d3dp-chip-cal">📅</span>
-        <span className="d3dp-chip-txt">
-          {rangeChipLabel(activePeriod, fromDate, toDate)}
-        </span>
-        {activePeriod === "custom" && (
-          <span className={`d3dp-chip-caret ${open ? "d3dp-chip-caret--up" : ""}`}>▾</span>
-        )}
-      </div>
-
-      {/* ══════════════ Calendar Popup ══════════════ */}
-      {open && (
-        <div className={`d3dp-popup d3dp-popup--${popAnim}`}>
-
-          {/* Gradient top stripe */}
-          <div className="d3dp-popup__stripe" />
-
-          {/* Header */}
-          <div className="d3dp-popup__hd">
-            <div className="d3dp-popup__hd-left">
-              <span className="d3dp-popup__ico">🏭</span>
-              <span className="d3dp-popup__title">Custom Date Range</span>
-            </div>
-            <button className="d3dp-popup__x" onClick={closePopup}>✕</button>
-          </div>
-
-          {/* From / To indicator row */}
-          <div className="d3dp-inds">
-            <D3Indicator
-              badge="FROM"
-              value={fmt(fromDate) || "Pick start date"}
-              state={picking === "from" ? "active" : fromDate ? "set" : "idle"}
-            />
-            <div className="d3dp-ind-arrow">→</div>
-            <D3Indicator
-              badge="TO"
-              value={fmt(toDate) || (picking === "to" ? "Pick end date" : "—")}
-              state={picking === "to" ? "active" : toDate ? "set" : "idle"}
-            />
-          </div>
-
-          {/* Month Navigation */}
-          <div className="d3dp-nav">
-            <D3NavBtn dir="prev" onClick={() => navMonth(-1)} />
-            <span className="d3dp-nav-label">
-              {MONTHS_FULL[calMonth]} {calYear}
-            </span>
-            <D3NavBtn dir="next" onClick={() => navMonth(1)} />
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="d3dp-grid-wrap">
-            <div
-              className={`d3dp-grid d3dp-grid--${slideDir}`}
-              key={calKey}
-            >
-              {/* Day-of-week headers */}
-              {DAYS_ABR.map((d) => (
-                <div key={d} className="d3dp-dname">{d}</div>
-              ))}
-
-              {/* Day cells */}
-              {cells.map((date, idx) => {
-                if (!date) return (
-                  <div key={`blank-${idx}`} className="d3dp-cell d3dp-cell--blank" />
-                );
-                const isFrom  = sameDay(date, fromDate);
-                const isTo    = sameDay(date, toDate);
-                const inRng   = between(date, fromDate, previewTo);
-                const isToday = sameDay(date, today);
-                const isHov   = picking === "to" && sameDay(date, hovDate) && fromDate && date >= fromDate;
-
-                return (
-                  <div
-                    key={date.toISOString()}
-                    className={[
-                      "d3dp-cell",
-                      isFrom  ? "d3dp-cell--from"  : "",
-                      isTo    ? "d3dp-cell--to"    : "",
-                      inRng   ? "d3dp-cell--range" : "",
-                      isToday && !isFrom && !isTo ? "d3dp-cell--today" : "",
-                      isHov   ? "d3dp-cell--hov"   : "",
-                    ].filter(Boolean).join(" ")}
-                    onClick={() => pickDay(date)}
-                    onMouseEnter={() => picking === "to" && setHovDate(date)}
-                    onMouseLeave={() => picking === "to" && setHovDate(null)}
-                  >
-                    <span className="d3dp-cell-n">{date.getDate()}</span>
-                    {isToday && !isFrom && !isTo && (
-                      <span className="d3dp-today-pip" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Quick Shortcuts */}
-          <div className="d3dp-shortcuts">
-            {D3_SHORTCUTS.map((s) => (
-              <button
-                key={s.label}
-                className="d3dp-shortcut"
-                onClick={() => setQuick(s.from(), s.to())}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Footer */}
-          <div className="d3dp-footer">
-            <button className="d3dp-btn d3dp-btn--ghost" onClick={clear}>
-              Clear
-            </button>
-            <button
-              className={`d3dp-btn d3dp-btn--apply ${canApply ? "" : "d3dp-btn--dim"}`}
-              onClick={apply}
-              disabled={!canApply}
-            >
-              Apply Range
-              <span className="d3dp-btn-arrow">→</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  SUB-COMPONENTS
-// ════════════════════════════════════════════════════════════════════
-
-function D3Indicator({ badge, value, state }) {
-  return (
-    <div className={`d3dp-ind d3dp-ind--${state}`}>
-      <span className="d3dp-ind-badge">{badge}</span>
-      <span className="d3dp-ind-val">{value}</span>
-    </div>
-  );
-}
-
-function D3NavBtn({ dir, onClick }) {
-  return (
-    <button className={`d3dp-nav-btn d3dp-nav-btn--${dir}`} onClick={onClick}>
-      {dir === "prev" ? "‹" : "›"}
-    </button>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  SHORTCUTS DATA
-// ════════════════════════════════════════════════════════════════════
-const mk = (n) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d; };
-const soM = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); };
-const eoM = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0); };
-const soQ = () => { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return new Date(d.getFullYear(), q * 3, 1); };
-const eoQ = () => { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return new Date(d.getFullYear(), q * 3 + 3, 0); };
-
-const D3_SHORTCUTS = [
-  { label: "Last 7 Days",   from: () => mk(-6),  to: () => mk(0)   },
-  { label: "Last 14 Days",  from: () => mk(-13), to: () => mk(0)   },
-  { label: "Last 30 Days",  from: () => mk(-29), to: () => mk(0)   },
-  { label: "This Month",    from: soM,           to: eoM           },
-  { label: "This Quarter",  from: soQ,           to: eoQ           },
+const PRESETS = [
+    { label: "Today",        get: () => { const t = new Date(); return { from: startOf(t), to: startOf(t) }; } },
+    { label: "Yesterday",    get: () => { const y = new Date(); y.setDate(y.getDate()-1); return { from: startOf(y), to: startOf(y) }; } },
+    { label: "Last 7 Days",  get: () => { const t=new Date(),s=new Date(); s.setDate(s.getDate()-6); return { from: startOf(s), to: startOf(t) }; } },
+    { label: "Last 30 Days", get: () => { const t=new Date(),s=new Date(); s.setDate(s.getDate()-29); return { from: startOf(s), to: startOf(t) }; } },
+    { label: "This Month",   get: () => { const t=new Date(); return { from: new Date(t.getFullYear(),t.getMonth(),1), to: startOf(t) }; } },
+    { label: "Last Month",   get: () => { const t=new Date(); const s=new Date(t.getFullYear(),t.getMonth()-1,1); const e=new Date(t.getFullYear(),t.getMonth(),0); return { from:s, to:e }; } },
+    { label: "This Year",    get: () => { const t=new Date(); return { from: new Date(t.getFullYear(),0,1), to: startOf(t) }; } },
+    { label: "Q1 2026",      get: () => ({ from: new Date(2026,0,1), to: new Date(2026,2,31) }) },
+    { label: "Q2 2026",      get: () => ({ from: new Date(2026,3,1), to: new Date(2026,5,30) }) },
 ];
+
+function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover }) {
+    const cells = calDays(year, month);
+    return (
+        <div className="pp1dp-cal">
+            <div className="pp1dp-cal__head">
+                {DAYS_SHORT.map(d => <span key={d} className="pp1dp-cal__dow">{d}</span>)}
+            </div>
+            <div className="pp1dp-cal__body">
+                {cells.map((day, i) => {
+                    if (!day) return <span key={i} className="pp1dp-day pp1dp-day--empty" />;
+                    const effectiveTo = to || hovered;
+                    const cls = [
+                        "pp1dp-day",
+                        sameDay(day,from)        ? "pp1dp-day--from"  : "",
+                        sameDay(day,effectiveTo) ? "pp1dp-day--to"    : "",
+                        from && effectiveTo && day > startOf(from) && day < startOf(effectiveTo) ? "pp1dp-day--in" : "",
+                        sameDay(day,new Date())  ? "pp1dp-day--today" : "",
+                    ].filter(Boolean).join(" ");
+                    return <span key={i} className={cls} onClick={()=>onDayClick(day)} onMouseEnter={()=>onDayHover(day)}>{day.getDate()}</span>;
+                })}
+            </div>
+        </div>
+    );
+}
+
+function PopupPortal({ anchorRef, children }) {
+    const [style, setStyle] = useState({});
+    useEffect(() => {
+        if (!anchorRef.current) return;
+        const reposition = () => {
+            const rect = anchorRef.current.getBoundingClientRect();
+            const popupH = 460;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const top = spaceBelow >= popupH || spaceBelow >= window.innerHeight/2 ? rect.bottom+8 : rect.top-popupH-8;
+            setStyle({ position:"fixed", top:Math.max(8,top), left:Math.min(rect.left, window.innerWidth-700), zIndex:999999 });
+        };
+        reposition();
+        window.addEventListener("resize", reposition);
+        window.addEventListener("scroll", reposition, true);
+        return () => { window.removeEventListener("resize", reposition); window.removeEventListener("scroll", reposition, true); };
+    }, [anchorRef]);
+    return createPortal(<div className="pp1dp-portal-wrap" style={style}>{children}</div>, document.body);
+}
+
+export default function PlantPerformance1DatePicker({ from, to, onChange }) {
+    const today = new Date();
+    const [open,         setOpen]        = useState(false);
+    const [leftMonth,    setLeft]        = useState(from ? new Date(from.getFullYear(),from.getMonth(),1) : addMonths(today,-1));
+    const [selecting,    setSelecting]   = useState(null);
+    const [hovered,      setHovered]     = useState(null);
+    const [activePreset, setActivePreset]= useState(null);
+    const wrapRef    = useRef(null);
+    const triggerRef = useRef(null);
+    const rightMonth = addMonths(leftMonth, 1);
+
+    useEffect(() => {
+        if (!open) return;
+        const h = e => {
+            if (wrapRef.current?.contains(e.target)) return;
+            if (e.target.closest(".pp1dp-portal-wrap")) return;
+            setOpen(false);
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, [open]);
+
+    useEffect(() => { if (from) setLeft(new Date(from.getFullYear(),from.getMonth(),1)); }, [from]);
+
+    const handleDayClick = (day) => {
+        if (!selecting) {
+            setSelecting(day); setHovered(null); onChange({ from: day, to: null }); setActivePreset(null);
+        } else {
+            const [f,t] = day < selecting ? [day, selecting] : [selecting, day];
+            onChange({ from:f, to:t }); setSelecting(null); setHovered(null); setOpen(false);
+        }
+    };
+
+    const handlePreset = (preset) => {
+        const range = preset.get();
+        onChange(range); setSelecting(null);
+        setLeft(new Date(range.from.getFullYear(),range.from.getMonth(),1));
+        setActivePreset(preset.label); setOpen(false);
+    };
+
+    const days = from && to ? Math.round((to - from) / 86400000) + 1 : null;
+    const label = from && to
+        ? `${FMT(from)}  →  ${FMT(to)}${days ? `  (${days}d)` : ""}`
+        : from ? `${FMT(from)}  →  Pick end date`
+        : "Select date range";
+
+    return (
+        <div className="pp1dp-wrap" ref={wrapRef}>
+            <button ref={triggerRef} className={`pp1dp-trigger ${open?"pp1dp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
+                <svg className="pp1dp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span className="pp1dp-trigger__label">{label}</span>
+                <svg className={`pp1dp-trigger__caret ${open?"pp1dp-trigger__caret--up":""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+            </button>
+
+            {open && (
+                <PopupPortal anchorRef={triggerRef}>
+                    <div className="pp1dp-popup">
+                        <div className="pp1dp-presets">
+                            {PRESETS.map(p => (
+                                <button key={p.label} className={`pp1dp-preset ${activePreset===p.label?"pp1dp-preset--active":""}`} onClick={()=>handlePreset(p)} type="button">{p.label}</button>
+                            ))}
+                        </div>
+                        <div className="pp1dp-calendars">
+                            <div className="pp1dp-month-col">
+                                <div className="pp1dp-month-nav">
+                                    <button className="pp1dp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg></button>
+                                    <span className="pp1dp-month-label">{MONTHS[leftMonth.getMonth()]} {leftMonth.getFullYear()}</span>
+                                    <button className="pp1dp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,18 15,12 9,6"/></svg></button>
+                                </div>
+                                <MonthGrid year={leftMonth.getFullYear()} month={leftMonth.getMonth()} from={selecting||from} to={!selecting?to:null} hovered={hovered} onDayClick={handleDayClick} onDayHover={setHovered}/>
+                            </div>
+                            <div className="pp1dp-divider"/>
+                            <div className="pp1dp-month-col">
+                                <div className="pp1dp-month-nav">
+                                    <button className="pp1dp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,-1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg></button>
+                                    <span className="pp1dp-month-label">{MONTHS[rightMonth.getMonth()]} {rightMonth.getFullYear()}</span>
+                                    <button className="pp1dp-nav-btn" onClick={()=>setLeft(addMonths(leftMonth,1))} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,18 15,12 9,6"/></svg></button>
+                                </div>
+                                <MonthGrid year={rightMonth.getFullYear()} month={rightMonth.getMonth()} from={selecting||from} to={!selecting?to:null} hovered={hovered} onDayClick={handleDayClick} onDayHover={setHovered}/>
+                            </div>
+                        </div>
+                        <div className="pp1dp-footer">
+                            <div className="pp1dp-footer__range">
+                                <span className="pp1dp-footer__field"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>{from?FMT(from):"From date"}</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13,6 19,12 13,18"/></svg>
+                                <span className="pp1dp-footer__field"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>{to?FMT(to):"To date"}</span>
+                                {days && <span className="pp1dp-footer__days">{days} days</span>}
+                            </div>
+                            <div className="pp1dp-footer__btns">
+                                <button className="pp1dp-footer-btn pp1dp-footer-btn--sec" onClick={()=>{onChange({from:null,to:null});setSelecting(null);setActivePreset(null);}} type="button">Clear</button>
+                                <button className="pp1dp-footer-btn pp1dp-footer-btn--pri" onClick={()=>setOpen(false)} type="button">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+                </PopupPortal>
+            )}
+        </div>
+    );
+}

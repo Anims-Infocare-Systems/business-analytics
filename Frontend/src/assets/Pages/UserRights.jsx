@@ -6,6 +6,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { 
+    LayoutDashboard, 
+    ClipboardCheck, 
+    FileText, 
+    Factory, 
+    TrendingUp, 
+    Settings,
+    Users,
+    Lock,
+    CheckSquare,
+    BarChart3
+} from "lucide-react";
 import "./UserRights.css";
 import { resolveApiBase } from "../../apiBase";
 
@@ -91,16 +103,16 @@ const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"
 const ADMIN_ONLY_MODULES = ["Utility"];
 
 const MODULES = [
-    { key: "Dashboard", label: "Dashboard", icon: "📊", color: "#3b82f6" },
-    { key: "Approvals", label: "Approvals", icon: "✅", color: "#10b981" },
-    { key: "Reports", label: "Reports", icon: "📋", color: "#8b5cf6" },
-    { key: "MIS", label: "MIS", icon: "🏭", color: "#06b6d4" },
-    { key: "Charts", label: "Charts", icon: "📈", color: "#f97316" },
-    { key: "Utility", label: "Utility", icon: "⚙️", color: "#ec4899" },
+    { key: "Dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#3b82f6" },
+    { key: "Approvals", label: "Approvals", icon: ClipboardCheck, color: "#10b981" },
+    { key: "Reports", label: "Reports", icon: FileText, color: "#8b5cf6" },
+    { key: "MIS", label: "MIS", icon: Factory, color: "#06b6d4" },
+    { key: "Charts", label: "Charts", icon: TrendingUp, color: "#f97316" },
+    { key: "Utility", label: "Utility", icon: Settings, color: "#ec4899" },
 ];
 
 const SUB_MENUS = {
-    Dashboard: ["Top Management Dashboard", "Plant Performance Dashboard", "Plant performance-1"],
+    Dashboard: ["Top Management Dashboard", "Plant Performance Dashboard"],
     Approvals: ["E-Approval", "T-Approval"],
     Reports: [
         "Sales Analysis",
@@ -149,10 +161,12 @@ function Toggle({ checked, onChange, color, disabled }) {
     );
 }
 
-function StatCard({ label, value, icon, color, delay }) {
+function StatCard({ label, value, icon: Icon, color, delay }) {
     return (
         <div className="ur-stat" style={{ "--sc": color, animationDelay: delay }}>
-            <div className="ur-stat__icon">{icon}</div>
+            <div className="ur-stat__icon">
+                {Icon && <Icon size={20} />}
+            </div>
             <div className="ur-stat__body">
                 <span className="ur-stat__value">{value}</span>
                 <span className="ur-stat__label">{label}</span>
@@ -206,7 +220,10 @@ function SubMenuModal({ isOpen, module, userName, currentRights, onApply, onCanc
                 <div className="ur-submodal__header">
                     <div className="ur-submodal__title-group">
                         <span className="ur-submodal__icon" style={{ background: module.color + "22", color: module.color }}>
-                            {module.icon}
+                            {(() => {
+                                const Icon = module.icon;
+                                return <Icon size={18} />;
+                            })()}
                         </span>
                         <div>
                             <h3 className="ur-submodal__title">{module.label} — Sub-menu Access</h3>
@@ -544,10 +561,10 @@ export default function UserRights() {
         <div className="ur-root">
 
             <div className="ur-stats">
-                <StatCard label="Total Users" value={loading ? "…" : `${totalUsers}/${maxUsers || "—"}`} icon="👥" color="#3b82f6" delay="0s" />
-                <StatCard label="Active Users" value={loading ? "…" : activeUsers} icon="🔐" color="#10b981" delay=".06s" />
-                <StatCard label="Rights Granted" value={loading ? "…" : totalGrants} icon="✅" color="#f97316" delay=".12s" />
-                <StatCard label="Avg Access" value={loading ? "…" : `${avgAccess}%`} icon="📊" color="#8b5cf6" delay=".18s" />
+                <StatCard label="Total Users" value={loading ? "…" : `${totalUsers}/${maxUsers || "—"}`} icon={Users} color="#3b82f6" delay="0s" />
+                <StatCard label="Active Users" value={loading ? "…" : activeUsers} icon={Lock} color="#10b981" delay=".06s" />
+                <StatCard label="Rights Granted" value={loading ? "…" : totalGrants} icon={CheckSquare} color="#f97316" delay=".12s" />
+                <StatCard label="Avg Access" value={loading ? "…" : `${avgAccess}%`} icon={BarChart3} color="#8b5cf6" delay=".18s" />
             </div>
 
             <div className="ur-toolbar">
@@ -613,14 +630,19 @@ export default function UserRights() {
                             <thead>
                                 <tr>
                                     <th className="ur-th ur-th--user"><span>User</span></th>
-                                    {MODULES.map(m => (
-                                        <th key={m.key} className="ur-th ur-th--compact" title={m.label}>
-                                            <div className="ur-th__inner">
-                                                <span className="ur-th__icon" style={{ background: m.color + "22", color: m.color }}>{m.icon}</span>
-                                                <span className="ur-th__label">{m.label}</span>
-                                            </div>
-                                        </th>
-                                    ))}
+                                    {MODULES.map(m => {
+                                        const Icon = m.icon;
+                                        return (
+                                            <th key={m.key} className="ur-th ur-th--compact" title={m.label}>
+                                                <div className="ur-th__inner">
+                                                    <span className="ur-th__icon">
+                                                        <Icon size={14} />
+                                                    </span>
+                                                    <span className="ur-th__label">{m.label}</span>
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
                                     <th className="ur-th ur-th--actions">Actions</th>
                                 </tr>
                             </thead>

@@ -49,7 +49,7 @@ const MENU_ITEMS = [
     {
         key: "Dashboard",
         icon: Icons.Dashboard,
-        children: ["Top Management Dashboard", "Plant Performance Dashboard", "Plant performance-1"],
+        children: ["Top Management Dashboard", "Plant Performance Dashboard"],
     },
     {
         key: "Approvals",
@@ -88,7 +88,6 @@ const HEADING_MAP = {
     "Top Management Dashboard": "Top Management Dashboard",
     "Dashboard2": "Plant Performance Dashboard",
     "Plant Performance Dashboard": "Plant Performance Dashboard",
-    "Plant performance-1": "Plant Performance-1 Dashboard",
     "E-Approval": "E-Approval Workflow",
     "T-Approval": "T-Approval Workflow",
     "Sales Analysis": "Reports — Sales Analysis",
@@ -128,8 +127,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     if (ai === "Welcome") node = <Welcome userName={userName} companyName={companyName} onNavigate={onNavigate} userRights={userRights} isSuperAdmin={isSuperAdmin} />;
     else if (si === "Top Management Dashboard") node = <Dashboard1 />;
     else if (si === "Dashboard2") node = <Dashboard2 />;
-    else if (si === "Plant Performance Dashboard") node = <Dashboard3 />;
-    else if (si === "Plant performance-1") node = <PlantPerformance1 />;
+    else if (si === "Plant Performance Dashboard") node = <PlantPerformance1 />;
     else if (si === "E-Approval") node = <EApproval />;
     else if (si === "T-Approval") node = <TApproval />;
     else if (si === "Sales Analysis") node = <SalesAnalysis />;
@@ -154,7 +152,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
         </div>
     );
 
-    const isPlant = si === "Plant Performance Dashboard" || si === "Plant performance-1";
+    const isPlant = si === "Plant Performance Dashboard";
 
     return (
         <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}${isPlant ? " dl-page-wrap--plant" : ""}`}>

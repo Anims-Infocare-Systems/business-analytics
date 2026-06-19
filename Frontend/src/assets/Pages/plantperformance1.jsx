@@ -32,9 +32,12 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   BarChart2,
   XOctagon,
-  RefreshCw
+  RefreshCw,
+  IndianRupee,
+  Users
 } from "lucide-react";
 
 Chart.register(...registerables);
@@ -280,19 +283,17 @@ const CURRENT_STATE_CARDS = [
 ];
 
 const ACTION_CARDS = [
-  { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Value Analysis", icon: Scale, color: "#2d6de8", priority: "medium", trend: { value: "+5.8% Up", type: "up" } },
-  { id: "purchase_report_dashboard", title: "Purchase Report", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
-  { id: "sales_analysis_report_dashboard", title: "Sales Analysis Report", icon: TrendingUp, color: "#10b981", priority: "medium" },
-  { id: "production_analysis_report_dashboard", title: "Production Analysis Report", icon: Factory, color: "#8b5cf6", priority: "medium" },
-  { id: "idle_hours_report_dashboard", title: "Idle Hours Report", icon: Timer, color: "#ef4444", priority: "medium", trend: { value: "-3.2% Down", type: "down" } },
-  { id: "idle_hours_non_accepted_reason_production_loss_report", title: "Idle Hours – Non Accepted Reason Production Loss Report", icon: AlertTriangle, color: "#f43f5e", priority: "high", trend: { value: "-12.5% Down", type: "down" } },
+  { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Value", icon: Scale, color: "#2d6de8", priority: "medium", trend: { value: "+5.8% Up", type: "up" } },
+  { id: "purchase_report_dashboard", title: "GRN Value", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
+  { id: "sales_analysis_report_dashboard", title: "Sales Analysis", icon: TrendingUp, color: "#10b981", priority: "medium" },
+  { id: "production_analysis_report_dashboard", title: "Production Value Vs Actual Value", icon: Factory, color: "#8b5cf6", priority: "medium" },
+  { id: "idle_hours_report_dashboard", title: "Idle Hours", icon: Timer, color: "#ef4444", priority: "medium", trend: { value: "-3.2% Down", type: "down" } },
   { id: "oee_report_dashboard", title: "OEE Report", icon: Target, color: "#2d6de8", priority: "medium", trend: { value: "+2.4% Up", type: "up" } },
-  { id: "oee_comparison_report_dashboard", title: "OEE Comparison Report", icon: TrendingUp, color: "#0ea5e9", priority: "medium", trend: { value: "+0.5% Up", type: "up" } },
-  { id: "efficiency_eff_report_dashboard", title: "Efficiency (EFF) Report", icon: UserCheck, color: "#10b981", priority: "medium" },
-  { id: "rejection_report_dashboard", title: "Rejection Report", icon: AlertTriangle, color: "#f59e0b", priority: "high", trend: { value: "-8.4% Down", type: "down" } },
-  { id: "rework_report_dashboard", title: "Rework Report", icon: PackageCheck, color: "#a855f7", priority: "high", trend: { value: "0.0% Avg", type: "average" } },
-  { id: "customer_complaint_report_dashboard", title: "Customer Complaint Report", icon: Megaphone, color: "#dc2626", priority: "high" },
-  { id: "machine_capacity_report_dashboard", title: "Machine Capacity Report", icon: Package, color: "#ea580c", priority: "medium" }
+  { id: "oee_comparison_report_dashboard", title: "OEE", icon: TrendingUp, color: "#0ea5e9", priority: "medium", trend: { value: "+0.5% Up", type: "up" } },
+  { id: "efficiency_eff_report_dashboard", title: "Efficiency (EFF)", icon: UserCheck, color: "#10b981", priority: "medium" },
+  { id: "rejection_report_dashboard", title: "Rejection", icon: AlertTriangle, color: "#f59e0b", priority: "high", trend: { value: "-8.4% Down", type: "down" } },
+  { id: "rework_report_dashboard", title: "Rework", icon: PackageCheck, color: "#a855f7", priority: "high", trend: { value: "0.0% Avg", type: "average" } },
+  { id: "customer_complaint_report_dashboard", title: "Customer Complaint", icon: Megaphone, color: "#dc2626", priority: "high" }
 ];
 
 function formatLocalYmd(d) {
@@ -407,8 +408,7 @@ function buildActionSidebar(card, data, loading) {
     efficiency_eff_report_dashboard: { desc: "Performance and operator efficiency report based on actual run cycle time vs standards.", time: "Performance grade" },
     rejection_report_dashboard: { desc: "Track rejections, scrap counts, and defect distribution across production lines.", time: "Quality statistics" },
     rework_report_dashboard: { desc: "Track rework cycles, recovery loops, and part repair metrics across production lines.", time: "Quality statistics" },
-    customer_complaint_report_dashboard: { desc: "Customer complaints log, resolution status, corrective actions, and permanent preventions.", time: "Customer QC audits" },
-    machine_capacity_report_dashboard: { desc: "Capacity utilization of machinery: available capacity vs run hours, load, and overload warnings.", time: "Capacity audit" }
+    customer_complaint_report_dashboard: { desc: "Customer complaints log, resolution status, corrective actions, and permanent preventions.", time: "Customer QC audits" }
   };
   const m = map[card.id] ?? { desc: "—", time: "—" };
   return { ...m, priority: card.priority || "medium", loading };
@@ -2542,26 +2542,40 @@ function GrnPipelineBottomTable({ data, loading, uid }) {
 }
 
 const CHART1_BASE = [
-  { customer: "Customer A", orderValue: 13, salesValue: 7, pendingValue: 6 },
-  { customer: "Customer B", orderValue: 22, salesValue: 18, pendingValue: 4 },
-  { customer: "Customer C", orderValue: 18, salesValue: 12, pendingValue: 6 },
-  { customer: "Customer D", orderValue: 15, salesValue: 8, pendingValue: 7 }
-];
-
-const CHART2_BASE = [
-  { month: "Apr-26", date: "2026-04-15", "Customer A": 13, "Customer B": 22, "Customer C": 18, "Customer D": 15 },
-  { month: "May-26", date: "2026-05-15", "Customer A": 20, "Customer B": 18, "Customer C": 16, "Customer D": 21 },
-  { month: "Jun-26", date: "2026-06-15", "Customer A": 13, "Customer B": 22, "Customer C": 18, "Customer D": 15 }
+  { customer: "Customer A", month: "Apr-26", date: "2026-04-15", orderValue: 13.0, salesValue: 7.0, pendingValue: 6.0, poNumber: "PO-A01", partNumber: "PART-101" },
+  { customer: "Customer A", month: "May-26", date: "2026-05-15", orderValue: 20.0, salesValue: 11.0, pendingValue: 9.0, poNumber: "PO-A02", partNumber: "PART-102" },
+  { customer: "Customer A", month: "Jun-26", date: "2026-06-15", orderValue: 13.0, salesValue: 7.0, pendingValue: 6.0, poNumber: "PO-A03", partNumber: "PART-103" },
+  { customer: "Customer B", month: "Apr-26", date: "2026-04-15", orderValue: 22.0, salesValue: 18.0, pendingValue: 4.0, poNumber: "PO-B01", partNumber: "PART-201" },
+  { customer: "Customer B", month: "May-26", date: "2026-05-15", orderValue: 25.0, salesValue: 20.0, pendingValue: 5.0, poNumber: "PO-B02", partNumber: "PART-202" },
+  { customer: "Customer B", month: "Jun-26", date: "2026-06-15", orderValue: 22.0, salesValue: 18.0, pendingValue: 4.0, poNumber: "PO-B03", partNumber: "PART-203" },
+  { customer: "Customer C", month: "Apr-26", date: "2026-04-15", orderValue: 18.0, salesValue: 12.0, pendingValue: 6.0, poNumber: "PO-C01", partNumber: "PART-301" },
+  { customer: "Customer C", month: "May-26", date: "2026-05-15", orderValue: 24.0, salesValue: 15.0, pendingValue: 9.0, poNumber: "PO-C02", partNumber: "PART-302" },
+  { customer: "Customer C", month: "Jun-26", date: "2026-06-15", orderValue: 18.0, salesValue: 12.0, pendingValue: 6.0, poNumber: "PO-C03", partNumber: "PART-303" },
+  { customer: "Customer D", month: "Apr-26", date: "2026-04-15", orderValue: 15.0, salesValue: 8.0, pendingValue: 7.0, poNumber: "PO-D01", partNumber: "PART-401" },
+  { customer: "Customer D", month: "May-26", date: "2026-05-15", orderValue: 18.0, salesValue: 10.0, pendingValue: 8.0, poNumber: "PO-D02", partNumber: "PART-402" },
+  { customer: "Customer D", month: "Jun-26", date: "2026-06-15", orderValue: 15.0, salesValue: 8.0, pendingValue: 7.0, poNumber: "PO-D03", partNumber: "PART-403" }
 ];
 
 function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig, showTargetOnly, setShowTargetOnly }) {
-  const [dateOpen, setDateOpen] = React.useState(false);
-  const dateRangeRef = React.useRef(null);
+  const [custOpen, setCustOpen] = React.useState(false);
+  const custRef = React.useRef(null);
+  const [partOpen, setPartOpen] = React.useState(false);
+  const partRef = React.useRef(null);
+
+  const partSuggestions = React.useMemo(() => {
+    if (!filters.partNumber) return [];
+    const parts = CHART1_BASE.map(r => r.partNumber);
+    const uniqueParts = Array.from(new Set(parts));
+    return uniqueParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
+  }, [filters.partNumber]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
-        setDateOpen(false);
+      if (custRef.current && !custRef.current.contains(event.target)) {
+        setCustOpen(false);
+      }
+      if (partRef.current && !partRef.current.contains(event.target)) {
+        setPartOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -2570,25 +2584,59 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
     };
   }, []);
 
+  const pickerFrom = React.useMemo(() => filters.fromDate ? new Date(filters.fromDate) : null, [filters.fromDate]);
+  const pickerTo = React.useMemo(() => filters.toDate ? new Date(filters.toDate) : null, [filters.toDate]);
+
+  const handlePickerChange = React.useCallback(({ from, to }) => {
+    const formatLocalDate = (d) => {
+      if (!d) return "";
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    onFilterChange(prev => ({
+      ...prev,
+      fromDate: formatLocalDate(from),
+      toDate: formatLocalDate(to)
+    }));
+  }, [onFilterChange]);
+
   // Filtered rows for dynamic chart display
   const chart1Data = React.useMemo(() => {
     let list = CHART1_BASE;
+    if (filters.fromDate) {
+      list = list.filter(r => r.date >= filters.fromDate);
+    }
+    if (filters.toDate) {
+      list = list.filter(r => r.date <= filters.toDate);
+    }
     if (filters.customer) {
       list = list.filter(r => r.customer === filters.customer);
     }
-    return list;
-  }, [filters.customer]);
+    if (filters.poNumber) {
+      list = list.filter(r => r.poNumber.toLowerCase().includes(filters.poNumber.toLowerCase()));
+    }
+    if (filters.partNumber) {
+      list = list.filter(r => r.partNumber.toLowerCase().includes(filters.partNumber.toLowerCase()));
+    }
 
-  const chart2Data = React.useMemo(() => {
-    let list = CHART2_BASE;
-    if (filters.fromDate) {
-      list = list.filter(m => m.date >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      list = list.filter(m => m.date <= filters.toDate);
-    }
-    return list;
-  }, [filters.fromDate, filters.toDate]);
+    // Aggregate values month-wise
+    const monthGroup = {};
+    list.forEach(r => {
+      if (!monthGroup[r.month]) {
+        monthGroup[r.month] = { month: r.month, orderValue: 0, salesValue: 0, pendingValue: 0 };
+      }
+      monthGroup[r.month].orderValue += r.orderValue;
+      monthGroup[r.month].salesValue += r.salesValue;
+      monthGroup[r.month].pendingValue += r.pendingValue;
+    });
+
+    const sortedMonths = ["Apr-26", "May-26", "Jun-26"];
+    return sortedMonths
+      .map(m => monthGroup[m])
+      .filter(Boolean);
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber]);
 
   const customers = ["Customer A", "Customer B", "Customer C", "Customer D"];
   const categories = ["Standard Parts", "Custom Fabrication"];
@@ -2608,32 +2656,11 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
   const handleInputChange = (field, val) => {
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
+  // Helper methods removed; now using PlantPerformance1DatePicker
 
-  const formatDateDisplay = (dateStr) => {
-    if (!dateStr) return "";
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
-    }
-    return dateStr;
-  };
-
-  const dateRangeDisplay = () => {
-    if (filters.fromDate && filters.toDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
-    }
-    if (filters.fromDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ...`;
-    }
-    if (filters.toDate) {
-      return `... - ${formatDateDisplay(filters.toDate)}`;
-    }
-    return "Select Date Range...";
-  };
-
-  // Chart Setup 1: Customer Wise PO Value vs Sales Value vs Pending Value (Multi-Line Chart)
+  // Chart Setup 1: Month Wise PO Value vs Sales Value vs Pending Value (Multi-Line Chart)
   const setupLineChart = React.useCallback((canvas) => {
-    const labels = chart1Data.map(r => r.customer);
+    const labels = chart1Data.map(r => r.month);
     const orderValues = chart1Data.map(r => r.orderValue);
     const salesValues = chart1Data.map(r => r.salesValue);
     const pendingValues = chart1Data.map(r => r.pendingValue);
@@ -2755,124 +2782,12 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
     });
   }, [chart1Data, targetConfig, showTargetOnly]);
 
-  // Chart Setup 2: Month Wise Customer Order Trend (Clustered Column Chart)
-  const setupClusteredChart = React.useCallback((canvas) => {
-    const labels = chart2Data.map(r => r.month);
-
-    let customersList = ["Customer A", "Customer B", "Customer C", "Customer D"];
-    if (filters.customer) {
-      customersList = [filters.customer];
-    }
-
-    const colors = {
-      "Customer A": "rgba(59, 130, 246, 0.85)", // Blue
-      "Customer B": "rgba(16, 185, 129, 0.85)", // Green
-      "Customer C": "rgba(139, 92, 246, 0.85)", // Purple
-      "Customer D": "rgba(244, 63, 94, 0.85)"  // Rose
-    };
-
-    const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
-    const datasets = [
-      ...customersList.map(cust => ({
-        label: cust,
-        data: chart2Data.map(r => r[cust]),
-        backgroundColor: colors[cust],
-        borderRadius: 4,
-        hidden: showTargetOnly
-      })),
-      {
-        type: "line",
-        label: "Sales Target",
-        data: labels.map(() => salesTarget),
-        borderColor: "rgba(239, 68, 68, 0.85)",
-        borderDash: [5, 5],
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHitRadius: 20,
-        pointHoverRadius: 6,
-        fill: false,
-        tension: 0
-      }
-    ];
-
-    return new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        onClick: (event, elements, chart) => {
-          if (elements && elements.length > 0) {
-            const firstElement = elements[0];
-            const datasetIndex = firstElement.datasetIndex;
-            const clickedLabel = chart.data.datasets[datasetIndex].label;
-            if (clickedLabel === "Sales Target") {
-              setShowTargetOnly(prev => !prev);
-            }
-          }
-        },
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 },
-            onClick: (event, legendItem, legend) => {
-              if (legendItem.text === "Sales Target") {
-                setShowTargetOnly(prev => !prev);
-              } else {
-                const index = legendItem.datasetIndex;
-                const ci = legend.chart;
-                if (ci.isDatasetVisible(index)) {
-                  ci.hide(index);
-                  legendItem.hidden = true;
-                } else {
-                  ci.show(index);
-                  legendItem.hidden = false;
-                }
-              }
-            }
-          },
-          tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.95)",
-            padding: 8,
-            callbacks: {
-              label: (context) => ` ${context.dataset.label}: ₹${context.raw} L`
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { color: "#64748b", font: { size: 9, weight: 600 } },
-            grid: { display: false }
-          },
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: "#64748b",
-              font: { size: 9 },
-              callback: (val) => `₹${val} L`
-            },
-            grid: { color: "rgba(0, 0, 0, 0.05)" }
-          }
-        }
-      }
-    });
-  }, [chart2Data, filters.customer, targetConfig, showTargetOnly]);
-
   const slides = [
     {
-      title: "Customer Wise PO Value vs Sales Value vs Pending Value",
+      title: "Month Wise PO Value vs Sales Value vs Pending Value",
       purpose: "Value Analysis (Lakhs)",
       type: "line",
       setup: setupLineChart,
-    },
-    {
-      title: "Month Wise Customer Order Trend",
-      purpose: "Monthly Trend Analysis (Lakhs)",
-      type: "bar",
-      setup: setupClusteredChart,
     }
   ];
 
@@ -2886,12 +2801,12 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
   return (
     <div className="pp1-action-detail" key={uid} style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-action-detail__header" style={{ "--act-color": "var(--pp1-blue)", padding: "10px 14px", gap: "10px" }}>
-        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px" }}>
+        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "var(--act-color)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Scale size={16} style={{ color: "#fff" }} />
         </div>
         <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>Customer PO vs Sales Value Analysis</p>
-          <span className="pp1-badge pp1-badge--medium" style={{ padding: "1px 6px", fontSize: "9px" }}>Medium Priority</span>
+          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>Customer PO vs Sales Value</p>
+          {/* <span className="pp1-badge pp1-badge--medium" style={{ padding: "1px 6px", fontSize: "9px" }}>Medium Priority</span> */}
         </div>
         <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
       </div>
@@ -2900,63 +2815,53 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         {/* Filters Bar */}
         <div className="pp1-filters-bar">
           {/* Date Range Picker */}
-          <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <div className="pp1-filter-group pp1-filter-group--date-range">
             <label className="pp1-filter-label">Date Range</label>
-            <div
-              className="pp1-filter-input pp1-filter-input--date-range-trigger"
-              onClick={() => setDateOpen(!dateOpen)}
-            >
-              <span>{dateRangeDisplay()}</span>
-              <Calendar size={13} className="pp1-filter-icon" />
-            </div>
-            {dateOpen && (
-              <div className="pp1-date-popup">
-                <div className="pp1-date-popup-inputs">
-                  <div className="pp1-date-popup-field">
-                    <label>From</label>
-                    <input
-                      type="date"
-                      value={filters.fromDate}
-                      onChange={e => handleInputChange("fromDate", e.target.value)}
-                    />
-                  </div>
-                  <div className="pp1-date-popup-field">
-                    <label>To</label>
-                    <input
-                      type="date"
-                      value={filters.toDate}
-                      onChange={e => handleInputChange("toDate", e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="pp1-date-popup-footer">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleInputChange("fromDate", "");
-                      handleInputChange("toDate", "");
-                      setDateOpen(false);
-                    }}
-                  >
-                    Clear
-                  </button>
-                  <button type="button" className="pp1-btn-apply" onClick={() => setDateOpen(false)}>Done</button>
-                </div>
-              </div>
-            )}
+            <PlantPerformance1DatePicker
+              from={pickerFrom}
+              to={pickerTo}
+              onChange={handlePickerChange}
+            />
           </div>
 
           {/* Customer Dropdown */}
-          <div className="pp1-filter-group">
+          <div className="pp1-filter-group" ref={custRef}>
             <label className="pp1-filter-label">Customer</label>
-            <select
-              className="pp1-filter-input"
-              value={filters.customer}
-              onChange={e => handleInputChange("customer", e.target.value)}
-            >
-              <option value="">All Customers</option>
-              {customers.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="pp1-custom-select-wrap">
+              <button
+                type="button"
+                className={`pp1-custom-select-trigger ${custOpen ? "open" : ""}`}
+                onClick={() => setCustOpen(o => !o)}
+              >
+                <span>{filters.customer || "All Customers"}</span>
+                <ChevronDown size={12} className="pp1-custom-select-caret" />
+              </button>
+              {custOpen && (
+                <div className="pp1-custom-select-options">
+                  <div
+                    className={`pp1-custom-select-option ${!filters.customer ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("customer", "");
+                      setCustOpen(false);
+                    }}
+                  >
+                    All Customers
+                  </div>
+                  {customers.map(c => (
+                    <div
+                      key={c}
+                      className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
+                      onClick={() => {
+                        handleInputChange("customer", c);
+                        setCustOpen(false);
+                      }}
+                    >
+                      {c}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Category Dropdown (Mocked) */}
@@ -2973,7 +2878,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
           </div> */}
 
           {/* PO Number Search (Mocked) */}
-          <div className="pp1-filter-group">
+          {/* <div className="pp1-filter-group">
             <label className="pp1-filter-label">PO Number</label>
             <input
               type="text"
@@ -2982,18 +2887,39 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
               value={filters.poNumber}
               onChange={e => handleInputChange("poNumber", e.target.value)}
             />
-          </div>
+          </div> */}
 
-          {/* Part Number Search (Mocked) */}
-          <div className="pp1-filter-group">
+          {/* Part Number Autocomplete */}
+          <div className="pp1-filter-group" ref={partRef}>
             <label className="pp1-filter-label">Part Number</label>
-            <input
-              type="text"
-              className="pp1-filter-input"
-              placeholder="Part No..."
-              value={filters.partNumber}
-              onChange={e => handleInputChange("partNumber", e.target.value)}
-            />
+            <div className="pp1-part-autocomplete-wrap">
+              <input
+                type="text"
+                className="pp1-filter-input pp1-part-autocomplete-input"
+                placeholder="Part No..."
+                value={filters.partNumber}
+                onChange={e => {
+                  handleInputChange("partNumber", e.target.value);
+                  setPartOpen(true);
+                }}
+              />
+              {partOpen && partSuggestions.length > 0 && (
+                <div className="pp1-part-suggestions">
+                  {partSuggestions.map(p => (
+                    <div
+                      key={p}
+                      className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
+                      onClick={() => {
+                        handleInputChange("partNumber", p);
+                        setPartOpen(false);
+                      }}
+                    >
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Reset Button */}
@@ -3035,35 +2961,37 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
               )}
             </div>
 
-            <div className="pp1-carousel-nav">
-              <button
-                type="button"
-                className="pp1-carousel-btn"
-                onClick={prevSlide}
-                aria-label="Previous Chart"
-              >
-                <ChevronLeft size={14} />
-              </button>
+            {slides.length > 1 && (
+              <div className="pp1-carousel-nav">
+                <button
+                  type="button"
+                  className="pp1-carousel-btn"
+                  onClick={prevSlide}
+                  aria-label="Previous Chart"
+                >
+                  <ChevronLeft size={14} />
+                </button>
 
-              <div className="pp1-carousel-dots">
-                {slides.map((_, idx) => (
-                  <span
-                    key={idx}
-                    className={`pp1-carousel-dot ${idx === activeSlide ? "active" : ""}`}
-                    onClick={() => onActiveSlideChange(idx)}
-                  />
-                ))}
+                <div className="pp1-carousel-dots">
+                  {slides.map((_, idx) => (
+                    <span
+                      key={idx}
+                      className={`pp1-carousel-dot ${idx === activeSlide ? "active" : ""}`}
+                      onClick={() => onActiveSlideChange(idx)}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  className="pp1-carousel-btn"
+                  onClick={nextSlide}
+                  aria-label="Next Chart"
+                >
+                  <ChevronRight size={14} />
+                </button>
               </div>
-
-              <button
-                type="button"
-                className="pp1-carousel-btn"
-                onClick={nextSlide}
-                aria-label="Next Chart"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
+            )}
           </div>
 
           <div className="pp1-carousel-content">
@@ -3071,7 +2999,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
               <ChartJsCanvas
                 setup={slides[activeSlide].setup}
                 height={190}
-                rebuildToken={`${activeSlide}|${chart1Data.length}|${chart2Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}`}
+                rebuildToken={`${activeSlide}|${chart1Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}`}
               />
             </div>
           </div>
@@ -3081,159 +3009,87 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
   );
 }
 
-function CustomerPoCompareBottomTable({ data, loading, uid, filters, activeSlide, onActiveSlideChange, showTargetOnly, targetConfig }) {
-  const activeTab = activeSlide === 0 ? "summary" : "trend";
+function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetOnly, targetConfig }) {
   const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
 
   // Process data for Table 1 (Customer PO Value Summary)
   const table1Rows = React.useMemo(() => {
     let list = CHART1_BASE;
+    if (filters.fromDate) {
+      list = list.filter(r => r.date >= filters.fromDate);
+    }
+    if (filters.toDate) {
+      list = list.filter(r => r.date <= filters.toDate);
+    }
     if (filters.customer) {
       list = list.filter(r => r.customer === filters.customer);
     }
+    if (filters.poNumber) {
+      list = list.filter(r => r.poNumber.toLowerCase().includes(filters.poNumber.toLowerCase()));
+    }
+    if (filters.partNumber) {
+      list = list.filter(r => r.partNumber.toLowerCase().includes(filters.partNumber.toLowerCase()));
+    }
     return list;
-  }, [filters.customer]);
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber]);
 
-  // Process data for Table 2 (Month Wise Customer Order Trend)
-  const processedTable2 = React.useMemo(() => {
-    let cols = ["Month", "Customer A (Lakhs)", "Customer B (Lakhs)", "Customer C (Lakhs)", "Customer D (Lakhs)"];
-    let rows = [
-      ["Apr-26", 13, 22, 18, 15],
-      ["May-26", 20, 18, 16, 21],
-      ["Jun-26", 13, 22, 18, 15]
-    ];
-
-    if (showTargetOnly) {
-      cols = ["Month", "Sales Target (Lakhs)"];
-      rows = [
-        ["Apr-26", salesTarget],
-        ["May-26", salesTarget],
-        ["Jun-26", salesTarget]
-      ];
-    } else {
-      // Apply customer filter to Table 2
-      if (filters.customer) {
-        const custIdx = ["Customer A", "Customer B", "Customer C", "Customer D"].indexOf(filters.customer);
-        if (custIdx !== -1) {
-          cols = ["Month", `${filters.customer} (Lakhs)`];
-          rows = rows.map(r => [r[0], r[custIdx + 1]]);
-        }
-      }
-    }
-
-    // Apply date range filter to Table 2
-    const dateMap = { "Apr-26": "2026-04-15", "May-26": "2026-05-15", "Jun-26": "2026-06-15" };
-    if (filters.fromDate) {
-      rows = rows.filter(r => dateMap[r[0]] >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      rows = rows.filter(r => dateMap[r[0]] <= filters.toDate);
-    }
-    return { columns: cols, rows };
-  }, [filters.fromDate, filters.toDate, filters.customer, showTargetOnly, salesTarget]);
-
+  // Render table content
   return (
     <div className="pp1-cc-bot" key={uid}>
       <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
-          <button
-            type="button"
+          <span
             style={{
               background: "none",
               border: "none",
-              borderBottom: activeTab === "summary" ? "2.5px solid var(--pp1-blue)" : "none",
-              color: activeTab === "summary" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
+              borderBottom: "2.5px solid var(--pp1-blue)",
+              color: "var(--pp1-blue)",
               fontWeight: 700,
               fontSize: "12px",
               paddingBottom: "6px",
-              cursor: "pointer",
               transition: "all 0.15s ease"
             }}
-            onClick={() => onActiveSlideChange(0)}
           >
             Customer PO Value Summary
-          </button>
-          <button
-            type="button"
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: activeTab === "trend" ? "2.5px solid var(--pp1-blue)" : "none",
-              color: activeTab === "trend" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
-              fontWeight: 700,
-              fontSize: "12px",
-              paddingBottom: "6px",
-              cursor: "pointer",
-              transition: "all 0.15s ease"
-            }}
-            onClick={() => onActiveSlideChange(1)}
-          >
-            Month Wise Customer Order Trend
-          </button>
+          </span>
         </div>
       </div>
 
-      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
-        {activeTab === "summary" ? (
-          <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
-            <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                <th>Customer</th>
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "5px" }}>
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              <th>Customer</th>
+              <th>Month</th>
+              {showTargetOnly ? (
+                <th style={{ textAlign: "right", color: "#b91c1c" }}>Sales Target (Lakhs)</th>
+              ) : (
+                <>
+                  <th style={{ textAlign: "right" }}>Order Value (Lakhs)</th>
+                  <th style={{ textAlign: "right" }}>Sales Value (Lakhs)</th>
+                  <th style={{ textAlign: "right" }}>Pending Order Value (Lakhs)</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {table1Rows.map((r, idx) => (
+              <tr key={idx} className="pp1-cc-tbl__tr">
+                <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
+                <td style={{ fontWeight: 600, color: "var(--pp1-text-2)" }}>{r.month}</td>
                 {showTargetOnly ? (
-                  <th style={{ textAlign: "right", color: "#b91c1c" }}>Sales Target (Lakhs)</th>
+                  <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
                 ) : (
                   <>
-                    <th style={{ textAlign: "right" }}>Order Value (Lakhs)</th>
-                    <th style={{ textAlign: "right" }}>Sales Value (Lakhs)</th>
-                    <th style={{ textAlign: "right" }}>Pending Order Value (Lakhs)</th>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{r.orderValue.toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{r.salesValue.toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: r.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{r.pendingValue.toFixed(2)} L</td>
                   </>
                 )}
               </tr>
-            </thead>
-            <tbody>
-              {table1Rows.map((r, idx) => (
-                <tr key={idx} className="pp1-cc-tbl__tr">
-                  <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
-                  {showTargetOnly ? (
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
-                  ) : (
-                    <>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{r.orderValue.toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{r.salesValue.toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: r.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{r.pendingValue.toFixed(2)} L</td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
-            <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {processedTable2.columns.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left", color: showTargetOnly && idx > 0 ? "#b91c1c" : undefined }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {processedTable2.rows.length === 0 ? (
-                <tr><td colSpan={processedTable2.columns.length} className="pp1-cc-tbl__empty">No data matches the selected filters.</td></tr>
-              ) : (
-                processedTable2.rows.map((row, idx) => (
-                  <tr key={idx} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__mono" style={{ fontWeight: 600 }}>{row[0]}</td>
-                    {row.slice(1).map((val, cellIdx) => (
-                      <td key={cellIdx} style={{ textAlign: "right", fontWeight: 600, color: showTargetOnly ? "#b91c1c" : "var(--pp1-blue)" }}>
-                        {val !== undefined ? `₹${val.toFixed(2)} L` : "—"}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -3729,7 +3585,13 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
             {kpis.map((k, i) => (
               <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
-                  <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+                  {typeof k.icon === "string" ? (
+                    <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+                  ) : k.icon ? (
+                    <span className="pp1-detail__chip-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: k.color + "20" }}>
+                      <k.icon size={13} style={{ color: k.color }} />
+                    </span>
+                  ) : null}
                   <p className="pp1-detail__chip-val" style={{ fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
                 </div>
                 <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
@@ -3827,14 +3689,48 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
 }
 
 /* ── Specific Dashboards View & Table components ── */
-function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
-  const [dateOpen, setDateOpen] = React.useState(false);
-  const dateRangeRef = React.useRef(null);
+function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetConfig, trend }) {
+  const [suppOpen, setSuppOpen] = React.useState(false);
+  const suppRef = React.useRef(null);
+  const [catOpen, setCatOpen] = React.useState(false);
+  const catRef = React.useRef(null);
+  const [partOpen, setPartOpen] = React.useState(false);
+  const partRef = React.useRef(null);
+
+  const pickerFrom = React.useMemo(() => filters.fromDate ? new Date(filters.fromDate) : null, [filters.fromDate]);
+  const pickerTo = React.useMemo(() => filters.toDate ? new Date(filters.toDate) : null, [filters.toDate]);
+
+  const handlePickerChange = React.useCallback(({ from, to }) => {
+    const formatLocalDate = (d) => {
+      if (!d) return "";
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    onFilterChange(prev => ({
+      ...prev,
+      fromDate: formatLocalDate(from),
+      toDate: formatLocalDate(to)
+    }));
+  }, [onFilterChange]);
+
+  const partSuggestions = React.useMemo(() => {
+    if (!filters.partNumber) return [];
+    const uniqueParts = ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05", "MAT-CR-12"];
+    return uniqueParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
+  }, [filters.partNumber]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
-        setDateOpen(false);
+      if (suppRef.current && !suppRef.current.contains(event.target)) {
+        setSuppOpen(false);
+      }
+      if (catRef.current && !catRef.current.contains(event.target)) {
+        setCatOpen(false);
+      }
+      if (partRef.current && !partRef.current.contains(event.target)) {
+        setPartOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -3858,8 +3754,20 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
       months = months.filter(m => m.date <= filters.toDate);
     }
 
+    if (filters.partNumber) {
+      const partToMonth = {
+        "MAT-HR-05": "April",
+        "MAT-CR-12": "May",
+        "MAT-MS-02": "January",
+        "MAT-AL-04": "February",
+        "MAT-SS-10": "March"
+      };
+      const month = partToMonth[filters.partNumber];
+      months = months.filter(m => m.month === month);
+    }
+
     return months;
-  }, [filters.fromDate, filters.toDate]);
+  }, [filters.fromDate, filters.toDate, filters.partNumber]);
 
   const kpis = React.useMemo(() => {
     let suppliers = ["Supplier Name A", "Supplier Name B", "Supplier Name C"];
@@ -3909,11 +3817,11 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
     });
 
     return [
-      { label: "Total Purchase Value", value: `₹${total.toFixed(1)}L`, icon: "💰", color: "#ea580c" },
-      { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier.replace("Supplier Name ", "Supplier ") : "—", icon: "🏆", color: "#3b82f6" },
-      { label: "Highest Month", value: highestMonth !== "—" ? `${highestMonth} 2026` : "—", icon: "📅", color: "#10b981" },
-      { label: "Average Purchase", value: `₹${avg.toFixed(2)}L`, icon: "📊", color: "#f59e0b" },
-      { label: "Active Suppliers", value: suppliers.length.toString(), icon: "🤝", color: "#8b5cf6" }
+      { label: "Total Purchase Value", value: `₹${total.toFixed(1)}L`, icon: IndianRupee, color: "#ea580c" },
+      { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier.replace("Supplier Name ", "Supplier ") : "—", icon: Award, color: "#3b82f6" },
+      { label: "Highest Month", value: highestMonth !== "—" ? `${highestMonth} 2026` : "—", icon: Calendar, color: "#10b981" },
+      { label: "Average Purchase", value: `₹${avg.toFixed(2)}L`, icon: BarChart2, color: "#f59e0b" },
+      { label: "Active Suppliers", value: suppliers.length.toString(), icon: Users, color: "#8b5cf6" }
     ];
   }, [chartData, filters.supplier, filters.category]);
 
@@ -3930,30 +3838,49 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
       scaleFactor = filters.category === "Sheet Metal" ? 0.35 : filters.category === "Aluminum Extrusion" ? 0.22 : 0.43;
     }
 
-    const colors = {
-      "Supplier Name A": "rgba(234, 88, 12, 0.85)", // Orange
-      "Supplier Name B": "rgba(59, 130, 246, 0.85)", // Blue
-      "Supplier Name C": "rgba(16, 185, 129, 0.85)"  // Green
-    };
+    const totalData = chartData.map(r => {
+      let sum = 0;
+      suppliers.forEach(s => {
+        sum += (r[s] || 0) * scaleFactor;
+      });
+      return sum;
+    });
 
-    const datasets = suppliers.map(s => ({
-      label: s,
-      data: chartData.map(r => (r[s] || 0) * scaleFactor),
-      backgroundColor: colors[s],
-      borderRadius: 4
-    }));
+    const grnTarget = targetConfig?.grn_value?.minGrnValueL ?? null;
+
+    const datasets = [{
+      label: "Total GRN Value",
+      data: totalData,
+      backgroundColor: "rgba(234, 88, 12, 0.85)",
+      borderRadius: 4,
+      order: 2
+    }];
+
+    if (grnTarget !== null) {
+      datasets.push({
+        label: `Target ₹${grnTarget}L`,
+        data: labels.map(() => grnTarget),
+        type: "line",
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHitRadius: 20,
+        fill: false,
+        tension: 0,
+        order: 1
+      });
+    }
 
     return new Chart(canvas, {
       type: "bar",
-      data: {
-        labels,
-        datasets
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: {
+            display: grnTarget !== null,
             position: "bottom",
             labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
           },
@@ -3961,7 +3888,7 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
             backgroundColor: "rgba(15, 23, 42, 0.95)",
             padding: 8,
             callbacks: {
-              label: (context) => ` ${context.dataset.label}: ₹${context.raw.toFixed(1)} L`
+              label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(1)} L`
             }
           }
         },
@@ -3982,7 +3909,7 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
         }
       }
     });
-  }, [chartData, filters.supplier, filters.category]);
+  }, [chartData, filters.supplier, filters.category, targetConfig]);
 
   const handleReset = () => {
     onFilterChange({
@@ -3990,36 +3917,19 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
       toDate: "",
       supplier: "",
       category: "",
+      partNumber: "",
     });
+    setSuppOpen(false);
+    setCatOpen(false);
+    setPartOpen(false);
   };
 
   const handleInputChange = (field, val) => {
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
-  const formatDateDisplay = (dateStr) => {
-    if (!dateStr) return "";
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
-    }
-    return dateStr;
-  };
-
-  const dateRangeDisplay = () => {
-    if (filters.fromDate && filters.toDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
-    }
-    if (filters.fromDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ...`;
-    }
-    if (filters.toDate) {
-      return `... - ${formatDateDisplay(filters.toDate)}`;
-    }
-    return "Select Date Range...";
-  };
-
   const categories = ["Sheet Metal", "Aluminum Extrusion", "Stainless Steel Rods", "HR Plates", "CR Coils"];
+  const suppliers = ["Supplier Name A", "Supplier Name B", "Supplier Name C"];
 
   return (
     <div className="pp1-action-detail" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -4028,7 +3938,22 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
           <ShoppingCart size={16} style={{ color: "#fff" }} />
         </div>
         <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>Purchase Report</p>
+          <p className="pp1-action-detail__title" style={{ fontSize: "13.5px", fontWeight: 800, margin: 0 }}>GRN Value</p>
+          {trend && (
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 700,
+              color: trend.type === "up" ? "#10b981" : "#ef4444",
+              background: trend.type === "up" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+              padding: "3px 10px",
+              borderRadius: "9999px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px"
+            }}>
+              {trend.type === "up" ? "▲" : "▼"} {trend.value}
+            </span>
+          )}
         </div>
         <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
       </div>
@@ -4037,78 +3962,126 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
         {/* Filters Bar */}
         <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
           {/* Date Range Picker */}
-          <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+          <div className="pp1-filter-group pp1-filter-group--date-range">
             <label className="pp1-filter-label">Date Range</label>
-            <div
-              className="pp1-filter-input pp1-filter-input--date-range-trigger"
-              onClick={() => setDateOpen(!dateOpen)}
-            >
-              <span>{dateRangeDisplay()}</span>
-              <Calendar size={13} className="pp1-filter-icon" />
-            </div>
-            {dateOpen && (
-              <div className="pp1-date-popup">
-                <div className="pp1-date-popup-inputs">
-                  <div className="pp1-date-popup-field">
-                    <label>From</label>
-                    <input
-                      type="date"
-                      value={filters.fromDate}
-                      onChange={e => handleInputChange("fromDate", e.target.value)}
-                    />
-                  </div>
-                  <div className="pp1-date-popup-field">
-                    <label>To</label>
-                    <input
-                      type="date"
-                      value={filters.toDate}
-                      onChange={e => handleInputChange("toDate", e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="pp1-date-popup-footer">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleInputChange("fromDate", "");
-                      handleInputChange("toDate", "");
-                      setDateOpen(false);
-                    }}
-                  >
-                    Clear
-                  </button>
-                  <button type="button" className="pp1-btn-apply" onClick={() => setDateOpen(false)}>Done</button>
-                </div>
-              </div>
-            )}
+            <PlantPerformance1DatePicker
+              from={pickerFrom}
+              to={pickerTo}
+              onChange={handlePickerChange}
+            />
           </div>
 
           {/* Supplier Dropdown */}
-          <div className="pp1-filter-group">
+          <div className="pp1-filter-group" ref={suppRef}>
             <label className="pp1-filter-label">Supplier</label>
-            <select
-              className="pp1-filter-input"
-              value={filters.supplier}
-              onChange={e => handleInputChange("supplier", e.target.value)}
-            >
-              <option value="">All Suppliers</option>
-              <option value="Supplier Name A">Supplier Name A</option>
-              <option value="Supplier Name B">Supplier Name B</option>
-              <option value="Supplier Name C">Supplier Name C</option>
-            </select>
+            <div className="pp1-custom-select-wrap">
+              <button
+                type="button"
+                className={`pp1-custom-select-trigger ${suppOpen ? "open" : ""}`}
+                onClick={() => setSuppOpen(o => !o)}
+              >
+                <span>{filters.supplier || "All Suppliers"}</span>
+                <ChevronDown size={12} className="pp1-custom-select-caret" />
+              </button>
+              {suppOpen && (
+                <div className="pp1-custom-select-options">
+                  <div
+                    className={`pp1-custom-select-option ${!filters.supplier ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("supplier", "");
+                      setSuppOpen(false);
+                    }}
+                  >
+                    All Suppliers
+                  </div>
+                  {suppliers.map(s => (
+                    <div
+                      key={s}
+                      className={`pp1-custom-select-option ${filters.supplier === s ? "selected" : ""}`}
+                      onClick={() => {
+                        handleInputChange("supplier", s);
+                        setSuppOpen(false);
+                      }}
+                    >
+                      {s}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Category Dropdown */}
-          <div className="pp1-filter-group">
+          <div className="pp1-filter-group" ref={catRef}>
             <label className="pp1-filter-label">Material Category</label>
-            <select
-              className="pp1-filter-input"
-              value={filters.category}
-              onChange={e => handleInputChange("category", e.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="pp1-custom-select-wrap">
+              <button
+                type="button"
+                className={`pp1-custom-select-trigger ${catOpen ? "open" : ""}`}
+                onClick={() => setCatOpen(o => !o)}
+              >
+                <span>{filters.category || "All Categories"}</span>
+                <ChevronDown size={12} className="pp1-custom-select-caret" />
+              </button>
+              {catOpen && (
+                <div className="pp1-custom-select-options">
+                  <div
+                    className={`pp1-custom-select-option ${!filters.category ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("category", "");
+                      setCatOpen(false);
+                    }}
+                  >
+                    All Categories
+                  </div>
+                  {categories.map(c => (
+                    <div
+                      key={c}
+                      className={`pp1-custom-select-option ${filters.category === c ? "selected" : ""}`}
+                      onClick={() => {
+                        handleInputChange("category", c);
+                        setCatOpen(false);
+                      }}
+                    >
+                      {c}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Part Number Autocomplete */}
+          <div className="pp1-filter-group" ref={partRef}>
+            <label className="pp1-filter-label">Part Number</label>
+            <div className="pp1-part-autocomplete-wrap">
+              <input
+                type="text"
+                className="pp1-filter-input pp1-part-autocomplete-input"
+                placeholder="Part No..."
+                value={filters.partNumber || ""}
+                onChange={e => {
+                  handleInputChange("partNumber", e.target.value);
+                  setPartOpen(true);
+                }}
+              />
+              {partOpen && partSuggestions.length > 0 && (
+                <div className="pp1-part-suggestions">
+                  {partSuggestions.map(p => (
+                    <div
+                      key={p}
+                      className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
+                      onClick={() => {
+                        handleInputChange("partNumber", p);
+                        setPartOpen(false);
+                      }}
+                    >
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Reset Button */}
@@ -4122,11 +4095,12 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
           </button>
         </div>
 
-        {/* KPI Strip */}
         <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
           {kpis.map((k, i) => (
             <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20` }}>
-              <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+              <span className="pp1-detail__chip-icon" style={{ fontSize: "14px", display: "inline-flex", alignItems: "center" }}>
+                {typeof k.icon === "string" ? k.icon : React.createElement(k.icon, { size: 14 })}
+              </span>
               <p className="pp1-detail__chip-val" style={{ fontSize: "15px", fontWeight: 700, margin: "2px 0 0 0" }}>{k.value}</p>
               <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: 0, textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
             </div>
@@ -4140,7 +4114,7 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose }) {
               <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>Trend Analysis (April - July 2026)</div>
             </div>
             <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-              <ChartJsCanvas setup={setupChart} height={220} rebuildToken={`purchase-trend|${JSON.stringify(filters)}`} />
+              <ChartJsCanvas setup={setupChart} height={220} rebuildToken={`purchase-trend|${JSON.stringify(filters)}|${targetConfig?.grn_value?.minGrnValueL}`} />
             </div>
           </div>
         )}
@@ -4162,8 +4136,19 @@ function PurchaseReportBottomTable({ filters }) {
     if (filters.supplier) {
       list = list.filter(r => r[0] === filters.supplier);
     }
+    if (filters.partNumber) {
+      const partToSupplier = {
+        "MAT-HR-05": "Supplier Name A",
+        "MAT-CR-12": "Supplier Name B",
+        "MAT-MS-02": "Supplier Name A",
+        "MAT-AL-04": "Supplier Name B",
+        "MAT-SS-10": "Supplier Name C"
+      };
+      const supplier = partToSupplier[filters.partNumber];
+      list = list.filter(r => r[0] === supplier);
+    }
     return list;
-  }, [filters.supplier]);
+  }, [filters.supplier, filters.partNumber]);
 
   // Process detailed orders summary
   const rowsOrders = React.useMemo(() => {
@@ -4193,6 +4178,10 @@ function PurchaseReportBottomTable({ filters }) {
       list = list.filter(r => r[9] === filters.category);
     }
 
+    if (filters.partNumber) {
+      list = list.filter(r => r[4].toLowerCase().includes(filters.partNumber.toLowerCase()));
+    }
+
     if (filters.fromDate) {
       list = list.filter(r => r[3] >= filters.fromDate);
     }
@@ -4201,7 +4190,7 @@ function PurchaseReportBottomTable({ filters }) {
     }
 
     return list;
-  }, [filters.supplier, filters.category, filters.fromDate, filters.toDate]);
+  }, [filters.supplier, filters.category, filters.fromDate, filters.toDate, filters.partNumber]);
 
   const columnsMonthWise = ["Supplier Name", "April (Lakhs)", "May (Lakhs)", "June (Lakhs)", "July (Lakhs)", "Total Value (Lakhs)"];
   const columnsOrders = ["Supplier", "Month", "PO No", "PO Date", "Material Code", "Material Name", "Qty", "Rate", "Purchase Value"];
@@ -4312,14 +4301,14 @@ function PurchaseReportBottomTable({ filters }) {
   );
 }
 
-function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) {
-  const [dateOpen, setDateOpen] = React.useState(false);
-  const dateRangeRef = React.useRef(null);
+function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, targetConfig, trend }) {
+  const [custOpen, setCustOpen] = React.useState(false);
+  const custRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target)) {
-        setDateOpen(false);
+      if (custRef.current && !custRef.current.contains(event.target)) {
+        setCustOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -4327,6 +4316,17 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) 
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const pickerFrom = React.useMemo(() => filters.fromDate ? new Date(filters.fromDate) : null, [filters.fromDate]);
+  const pickerTo   = React.useMemo(() => filters.toDate   ? new Date(filters.toDate)   : null, [filters.toDate]);
+
+  const handlePickerChange = React.useCallback(({ from, to }) => {
+    const fmt = (d) => {
+      if (!d) return "";
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    onFilterChange(prev => ({ ...prev, fromDate: fmt(from), toDate: fmt(to) }));
+  }, [onFilterChange]);
 
   const handleInputChange = (field, val) => {
     onFilterChange(prev => ({ ...prev, [field]: val }));
@@ -4337,31 +4337,10 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) 
       fromDate: "",
       toDate: "",
       customer: "",
-      region: "",
     });
   };
 
-  const formatDateDisplay = (dateStr) => {
-    if (!dateStr) return "";
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
-    }
-    return dateStr;
-  };
 
-  const dateRangeDisplay = () => {
-    if (filters.fromDate && filters.toDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ${formatDateDisplay(filters.toDate)}`;
-    }
-    if (filters.fromDate) {
-      return `${formatDateDisplay(filters.fromDate)} - ...`;
-    }
-    if (filters.toDate) {
-      return `... - ${formatDateDisplay(filters.toDate)}`;
-    }
-    return "Select Date Range...";
-  };
 
   const chartMonths = React.useMemo(() => {
     const months = [
@@ -4439,9 +4418,9 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) 
       }
     });
 
-    if (highestCustLabel === "Customer A") maxCustName = "Tata\nMotors";
-    else if (highestCustLabel === "Customer B") maxCustName = "Mahindra &\nMahindra";
-    else if (highestCustLabel === "Customer C") maxCustName = "Maruti\nSuzuki";
+    if (highestCustLabel === "Customer A") maxCustName = "Tata Motors";
+    else if (highestCustLabel === "Customer B") maxCustName = "Mahindra & Mahindra";
+    else if (highestCustLabel === "Customer C") maxCustName = "Maruti Suzuki";
 
     // Determine highest month
     let maxMonthName = "—";
@@ -4461,132 +4440,155 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose }) 
     const avgSalesVal = chartMonths.length > 0 ? totalSalesVal / chartMonths.length : 0;
 
     return [
-      { label: "Total Sales", value: `₹${totalSalesVal.toFixed(1)}L`, icon: "💰", color: "#10b981" },
-      { label: "Highest Customer", value: maxCustVal > 0 ? maxCustName : "—", icon: "🏆", color: "#3b82f6" },
-      { label: "Highest Month", value: maxMonthName !== "—" ? `${maxMonthName} 2026` : "—", icon: "📅", color: "#8b5cf6" },
-      { label: "Average Sales", value: `₹${avgSalesVal.toFixed(1)}L`, icon: "📊", color: "#f59e0b" },
-      { label: "Active Customers", value: activeCustCount.toString(), icon: "👥", color: "#ec4899" }
+      { label: "Total Sales", value: `₹${totalSalesVal.toFixed(1)}L`, icon: IndianRupee, color: "#10b981" },
+      { label: "Highest Customer", value: maxCustVal > 0 ? maxCustName : "—", icon: Award, color: "#3b82f6" },
+      { label: "Highest Month", value: maxMonthName !== "—" ? `${maxMonthName} 2026` : "—", icon: Calendar, color: "#8b5cf6" },
+      { label: "Average Sales", value: `₹${avgSalesVal.toFixed(1)}L`, icon: BarChart2, color: "#f59e0b" },
+      { label: "Active Customers", value: activeCustCount.toString(), icon: Users, color: "#ec4899" }
     ];
   }, [datasets, chartMonths, filters.customer]);
 
+  // Aggregate total sales per month across all customers/datasets
+  const monthTotalsDataset = React.useMemo(() => {
+    const totals = chartMonths.map((_, idx) => {
+      return datasets.reduce((sum, ds) => sum + (ds.data[idx] || 0), 0);
+    });
+    return [{
+      label: "Total Sales",
+      data: totals,
+      backgroundColor: chartMonths.map((_, i) => {
+        const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b"];
+        return palette[i % palette.length] + "cc";
+      }),
+      borderColor: chartMonths.map((_, i) => {
+        const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b"];
+        return palette[i % palette.length];
+      }),
+      borderWidth: 1.5,
+      borderRadius: 6,
+      borderSkipped: false,
+    }];
+  }, [chartMonths, datasets]);
+
   const setupChart = React.useCallback((canvas) => {
+    const maxVal = Math.max(...monthTotalsDataset[0].data, 0);
+    const monthlyTarget = targetConfig?.sales_analysis?.monthlyTarget ?? 150;
+    const targetVal = monthlyTarget; // per-month target line
     return new Chart(canvas, {
       type: "bar",
       data: {
         labels: chartMonths.map(m => m.name),
-        datasets
+        datasets: [
+          ...monthTotalsDataset,
+          // Invisible line dataset to draw the target
+          {
+            type: "line",
+            label: `Target (₹${targetVal}L/month)`,
+            data: chartMonths.map(() => targetVal),
+            borderColor: "#ef4444",
+            borderWidth: 2,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            tension: 0,
+            order: 0,
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            position: "top",
-            labels: { boxWidth: 12, font: { size: 10, weight: 600 } }
+            display: true,
+            position: "bottom",
+            labels: {
+              color: "#475569",
+              font: { size: 9, weight: 600 },
+              boxWidth: 10,
+              padding: 6
+            }
           },
           tooltip: {
+            backgroundColor: "rgba(15,23,42,0.92)",
+            titleColor: "#fff",
+            bodyColor: "#cbd5e1",
+            padding: 10,
             callbacks: {
-              label: (context) => `${context.dataset.label}: ₹${context.raw} Lakhs`
+              label: (ctx) => {
+                if (ctx.dataset.label?.startsWith("Target")) return ` Target: ₹${targetVal}L/month`;
+                return ` ₹${ctx.raw}L  (Total Sales)`;
+              }
             }
-          }
+          },
+          datalabels: false
         },
         scales: {
-          x: { grid: { display: false } },
+          x: {
+            grid: { display: false },
+            ticks: { color: "#475569", font: { size: 11, weight: 600 } }
+          },
           y: {
-            title: { display: true, text: "Sales Value (Lakhs)", font: { size: 10, weight: 600 } },
-            ticks: { callback: (val) => `₹${val}L` }
+            beginAtZero: true,
+            suggestedMax: Math.max(maxVal, targetVal) * 1.25 || 100,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            title: { display: true, text: "Total Sales Value (Lakhs)", font: { size: 10, weight: 600 }, color: "#64748b" },
+            ticks: { color: "#64748b", callback: (val) => `₹${val}L` }
           }
         }
       }
     });
-  }, [chartMonths, datasets]);
+  }, [chartMonths, monthTotalsDataset, targetConfig]);
 
   return (
-    <PremiumDashboardView title="Sales Analysis Report" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Turnover Report" onClose={onClose} rebuildToken={JSON.stringify(datasets)}>
+    <PremiumDashboardView title="Sales Analysis" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Total Sales" onClose={onClose} rebuildToken={`${JSON.stringify(monthTotalsDataset)}|${targetConfig?.sales_analysis?.monthlyTarget}`}>
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
-        {/* Date Range Picker */}
-        <div className="pp1-filter-group pp1-filter-group--date-range" ref={dateRangeRef}>
+        {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
+        <div className="pp1-filter-group pp1-filter-group--date-range">
           <label className="pp1-filter-label">Date Range</label>
-          <div
-            className="pp1-filter-input pp1-filter-input--date-range-trigger"
-            onClick={() => setDateOpen(!dateOpen)}
-          >
-            <span>{dateRangeDisplay()}</span>
-            <Calendar size={13} className="pp1-filter-icon" />
-          </div>
-          {dateOpen && (
-            <div className="pp1-date-popup">
-              <div className="pp1-date-popup-inputs">
-                <div className="pp1-date-popup-field">
-                  <label>From</label>
-                  <input
-                    type="date"
-                    value={filters.fromDate}
-                    onChange={e => handleInputChange("fromDate", e.target.value)}
-                  />
-                </div>
-                <div className="pp1-date-popup-field">
-                  <label>To</label>
-                  <input
-                    type="date"
-                    value={filters.toDate}
-                    onChange={e => handleInputChange("toDate", e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="pp1-date-popup-footer">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleInputChange("fromDate", "");
-                    handleInputChange("toDate", "");
-                    setDateOpen(false);
-                  }}
-                >
-                  Clear
-                </button>
-                <button type="button" className="pp1-btn-apply" onClick={() => setDateOpen(false)}>Done</button>
-              </div>
-            </div>
-          )}
+          <PlantPerformance1DatePicker
+            from={pickerFrom}
+            to={pickerTo}
+            onChange={handlePickerChange}
+          />
         </div>
 
-        {/* Customer Dropdown */}
-        <div className="pp1-filter-group">
+        {/* Customer — custom button dropdown (same as Customer PO vs Sales Value) */}
+        <div className="pp1-filter-group" ref={custRef}>
           <label className="pp1-filter-label">Customer</label>
-          <select
-            className="pp1-filter-input"
-            value={filters.customer}
-            onChange={e => handleInputChange("customer", e.target.value)}
-          >
-            <option value="">All Customers</option>
-            <option value="Customer A">Customer A</option>
-            <option value="Customer B">Customer B</option>
-            <option value="Customer C">Customer C</option>
-            <option value="Tata Motors">Tata Motors</option>
-            <option value="Mahindra & Mahindra">Mahindra & Mahindra</option>
-            <option value="Maruti Suzuki">Maruti Suzuki</option>
-            <option value="Ashok Leyland">Ashok Leyland</option>
-          </select>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${custOpen ? "open" : ""}`}
+              onClick={() => setCustOpen(o => !o)}
+            >
+              <span>{filters.customer || "All Customers"}</span>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {custOpen && (
+              <div className="pp1-custom-select-options">
+                <div
+                  className={`pp1-custom-select-option ${!filters.customer ? "selected" : ""}`}
+                  onClick={() => { handleInputChange("customer", ""); setCustOpen(false); }}
+                >
+                  All Customers
+                </div>
+                {["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"].map(c => (
+                  <div
+                    key={c}
+                    className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
+                    onClick={() => { handleInputChange("customer", c); setCustOpen(false); }}
+                  >
+                    {c}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Region Dropdown */}
-        <div className="pp1-filter-group">
-          <label className="pp1-filter-label">Region</label>
-          <select
-            className="pp1-filter-input"
-            value={filters.region}
-            onChange={e => handleInputChange("region", e.target.value)}
-          >
-            <option value="">All Regions</option>
-            <option value="North">North</option>
-            <option value="South">South</option>
-            <option value="East">East</option>
-            <option value="West">West</option>
-          </select>
-        </div>
-
-        {/* Reset Button */}
+        {/* Reset */}
         <button
           type="button"
           className="pp1-filter-btn pp1-filter-btn--reset"
@@ -5063,7 +5065,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
 
   return (
     <PremiumDashboardView
-      title="Production Analysis Report"
+      title="Production Value Vs Actual Value"
       icon={Factory}
       color="#8b5cf6"
       kpis={kpis}
@@ -5416,14 +5418,14 @@ function ProductionAnalysisReportBottomTable({ filters }) {
 }
 
 const MOCK_IDLE_LOGS = [
-  { date: "2026-06-15", machine: "CNC1", machineType: "CNC", team: "Team A", reason: "No Load", shift: "A Shift", duration: 250, perMonth: 20.83, ratePerHour: 600 },
-  { date: "2026-06-15", machine: "VMC7", machineType: "VMC", team: "Team B", reason: "Under Maintenance", shift: "A Shift", duration: 480, perMonth: 40.00, ratePerHour: 750 },
-  { date: "2026-06-14", machine: "CNC2", machineType: "CNC", team: "Team A", reason: "No Operator", shift: "B Shift", duration: 950, perMonth: 79.17, ratePerHour: 540 },
-  { date: "2026-06-13", machine: "HMC9", machineType: "HMC", team: "Team D", reason: "No Load", shift: "B Shift", duration: 270, perMonth: 22.50, ratePerHour: 980 },
-  { date: "2026-06-12", machine: "VTL3", machineType: "VTL", team: "Team C", reason: "Break Down", shift: "C Shift", duration: 320, perMonth: 26.67, ratePerHour: 320 },
-  { date: "2026-06-11", machine: "CNC1", machineType: "CNC", team: "Team A", reason: "No Operator", shift: "A Shift", duration: 150, perMonth: 20.83, ratePerHour: 600 },
-  { date: "2026-06-10", machine: "VMC7", machineType: "VMC", team: "Team B", reason: "Break Down", shift: "C Shift", duration: 180, perMonth: 40.00, ratePerHour: 750 },
-  { date: "2026-06-09", machine: "HMC9", machineType: "HMC", team: "Team D", reason: "Under Maintenance", shift: "B Shift", duration: 310, perMonth: 22.50, ratePerHour: 980 }
+  { date: "2026-06-15", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Load", shift: "A Shift", duration: 250, perMonth: 20.83, ratePerHour: 600 },
+  { date: "2026-06-15", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Under Maintenance", shift: "A Shift", duration: 480, perMonth: 40.00, ratePerHour: 750 },
+  { date: "2026-06-14", machine: "CNC2", machineType: "CNC", operator: "Gopikrishnan.R", reason: "No Operator", shift: "B Shift", duration: 950, perMonth: 79.17, ratePerHour: 540 },
+  { date: "2026-06-13", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "No Load", shift: "B Shift", duration: 270, perMonth: 22.50, ratePerHour: 980 },
+  { date: "2026-06-12", machine: "VTL3", machineType: "VTL", operator: "Senthil.K", reason: "Break Down", shift: "C Shift", duration: 320, perMonth: 26.67, ratePerHour: 320 },
+  { date: "2026-06-11", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Operator", shift: "A Shift", duration: 150, perMonth: 20.83, ratePerHour: 600 },
+  { date: "2026-06-10", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Break Down", shift: "C Shift", duration: 180, perMonth: 40.00, ratePerHour: 750 },
+  { date: "2026-06-09", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "Under Maintenance", shift: "B Shift", duration: 310, perMonth: 22.50, ratePerHour: 980 }
 ];
 
 const MOCK_NON_ACCEPTED_LOSS_LOGS = [
@@ -5502,7 +5504,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       fromDate: "",
       toDate: "",
       machine: "",
-      team: "",
+      operator: "",
       idleReason: "",
     });
   };
@@ -5533,7 +5535,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     let list = MOCK_IDLE_LOGS;
     if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
     if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
-    if (filters.team) list = list.filter(r => r.team === filters.team);
+    if (filters.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters.idleReason) list = list.filter(r => r.reason === filters.idleReason);
     return list;
@@ -5576,19 +5578,18 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       monthStr = filters.fromDate.substring(0, 7);
     }
     let listMonthly = MOCK_IDLE_LOGS.filter(r => r.date.startsWith(monthStr));
-    if (filters.team) listMonthly = listMonthly.filter(r => r.team === filters.team);
+    if (filters.operator) listMonthly = listMonthly.filter(r => r.operator === filters.operator);
     if (filters.machine) listMonthly = listMonthly.filter(r => r.machine === filters.machine);
     if (filters.idleReason) listMonthly = listMonthly.filter(r => r.reason === filters.idleReason);
     const monthlySum = listMonthly.reduce((s, r) => s + (r.duration / 12), 0);
 
     return [
-      { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: "⏱️", color: "#ef4444" },
-      { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: "💸", color: "#ea580c" },
-      { label: "Highest Loss Machine", value: highestLossMachine, icon: "⚙️", color: "#3b82f6" },
-      { label: "Highest Loss Reason", value: highestLossReason, icon: "⚠️", color: "#f59e0b" },
-      { label: "Total Monthly Idle Hours", value: `${monthlySum.toFixed(2)} h`, icon: "📅", color: "#10b981" }
+      { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: Timer, color: "#ef4444" },
+      { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: IndianRupee, color: "#ea580c" },
+      { label: "Highest Loss Machine", value: highestLossMachine, icon: Settings, color: "#3b82f6" },
+      { label: "Highest Loss Reason", value: highestLossReason, icon: AlertTriangle, color: "#f59e0b" }
     ];
-  }, [filteredLogs, filters.fromDate, filters.team, filters.machine, filters.idleReason]);
+  }, [filteredLogs, filters.fromDate, filters.operator, filters.machine, filters.idleReason]);
 
   const chart1Data = React.useMemo(() => {
     const categories = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
@@ -5786,7 +5787,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
   }, [chart2Data, targetConfig]);
 
-  const teams = ["Team A", "Team B", "Team C", "Team D"];
+  const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K", "Sankar"];
   const machines = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
   const idleReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
 
@@ -5848,7 +5849,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
 
   return (
     <PremiumDashboardView
-      title="Idle Hours Report"
+      title="Idle Hours"
       icon={Timer}
       color="#ef4444"
       kpis={kpis}
@@ -5918,16 +5919,16 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
           </select>
         </div>
 
-        {/* Team Dropdown */}
+        {/* Operator Dropdown */}
         <div className="pp1-filter-group">
-          <label className="pp1-filter-label">Team</label>
+          <label className="pp1-filter-label">Operator</label>
           <select
             className="pp1-filter-input"
-            value={filters.team || ""}
-            onChange={e => handleInputChange("team", e.target.value)}
+            value={filters.operator || ""}
+            onChange={e => handleInputChange("operator", e.target.value)}
           >
-            <option value="">All Teams</option>
-            {teams.map(t => <option key={t} value={t}>{t}</option>)}
+            <option value="">All Operators</option>
+            {operators.map(op => <option key={op} value={op}>{op}</option>)}
           </select>
         </div>
 
@@ -5964,17 +5965,17 @@ function IdleHoursReportBottomTable({ filters, activeTab, setActiveTab }) {
     let list = MOCK_IDLE_LOGS;
     if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
     if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
-    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters?.idleReason) list = list.filter(r => r.reason === filters.idleReason);
     return list;
   }, [filters]);
 
   // Tab 1 Data
-  const columns1 = ["Team", "Machine", "Idle Reason", "Ideal Hours", "Per Month", "Rate Per Hour", "Production Loss (Lakhs)"];
+  const columns1 = ["Operator", "Machine", "Idle Reason", "Ideal Hours", "Per Month", "Rate Per Hour", "Production Loss (Lakhs)"];
   const rows1 = React.useMemo(() => {
     return filteredLogs.map(r => [
-      r.team,
+      r.operator,
       r.machine,
       r.reason,
       `${r.duration} h`,
@@ -6000,39 +6001,8 @@ function IdleHoursReportBottomTable({ filters, activeTab, setActiveTab }) {
     ]);
   }, [filteredLogs]);
 
-  // Tab 3 Data
-  const columns3 = ["Team", "Machine", "Machine Type", "Idle Reason", "Idle Hours", "Per Day", "Per Month", "Rate Per Hour", "Production Loss"];
-  const rows3 = React.useMemo(() => {
-    const getPerDay = (machine, date) => {
-      const sum = MOCK_IDLE_LOGS
-        .filter(x => x.machine === machine && x.date === date)
-        .reduce((s, x) => s + x.duration, 0);
-      return `${sum.toFixed(1)} h`;
-    };
-
-    const getPerMonth = (machine, date) => {
-      const monthStr = date.substring(0, 7);
-      const sum = MOCK_IDLE_LOGS
-        .filter(x => x.machine === machine && x.date.startsWith(monthStr))
-        .reduce((s, x) => s + x.duration, 0);
-      return `${sum.toFixed(1)} h`;
-    };
-
-    return filteredLogs.map(r => [
-      r.team,
-      r.machine,
-      r.machineType,
-      r.reason,
-      `${r.duration.toFixed(1)} h`,
-      getPerDay(r.machine, r.date),
-      getPerMonth(r.machine, r.date),
-      `₹${r.ratePerHour.toLocaleString()}`,
-      `₹${(r.duration * r.ratePerHour).toLocaleString()}`
-    ]);
-  }, [filteredLogs]);
-
-  const activeColumns = activeTab === "chart1" ? columns1 : activeTab === "chart2" ? columns2 : columns3;
-  const activeRows = activeTab === "chart1" ? rows1 : activeTab === "chart2" ? rows2 : rows3;
+  const activeColumns = activeTab === "chart1" ? columns1 : columns2;
+  const activeRows = activeTab === "chart1" ? rows1 : rows2;
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -6040,8 +6010,7 @@ function IdleHoursReportBottomTable({ filters, activeTab, setActiveTab }) {
         <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
           {[
             { id: "chart1", label: "Idle Hours vs Production Loss Value" },
-            { id: "chart2", label: "Machine Wise Idle Loss" },
-            { id: "log", label: "Idle Time Accepted Log" }
+            { id: "chart2", label: "Machine Wise Idle Loss" }
           ].map(t => (
             <button
               key={t.id}
@@ -6404,7 +6373,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
 
   return (
     <PremiumDashboardView
-      title="Idle Hours – Non Accepted Reason Production Loss Report"
+      title="Idle Hours – Non Accepted Reason Production Loss"
       icon={AlertTriangle}
       color="#f43f5e"
       kpis={kpis}
@@ -7630,7 +7599,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
 
   return (
     <PremiumDashboardView
-      title="OEE Comparison Report"
+      title="OEE"
       icon={TrendingUp}
       color="#0ea5e9"
       kpis={null}
@@ -8327,7 +8296,7 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, activeTab, 
 
   return (
     <PremiumDashboardView
-      title="Efficiency (EFF) Report"
+      title="Efficiency (EFF)"
       icon={UserCheck}
       color="#10b981"
       kpis={null}
@@ -9130,7 +9099,7 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
 
   return (
     <PremiumDashboardView
-      title="Rejection Report"
+      title="Rejection"
       icon={AlertTriangle}
       color="#f59e0b"
       kpis={null}
@@ -9856,7 +9825,7 @@ function ReworkReportDashboardView({ filters, onFilterChange, activeTab, onActiv
 
   return (
     <PremiumDashboardView
-      title="Rework Report"
+      title="Rework"
       icon={PackageCheck}
       color="#a855f7"
       kpis={null}
@@ -10245,7 +10214,7 @@ function CustomerComplaintReportDashboardView({ onClose }) {
     { label: "Avg Resolution", value: "4.5d", icon: "⏱️", color: "#3b82f6" },
     { label: "Satisfaction", value: "96%", icon: "😊", color: "#8b5cf6" }
   ];
-  return <PremiumDashboardView title="Customer Complaint Report" icon={Megaphone} color="#dc2626" kpis={kpis} setupChart={null} rangeHint="Active Range" onClose={onClose} />;
+  return <PremiumDashboardView title="Customer Complaint" icon={Megaphone} color="#dc2626" kpis={kpis} setupChart={null} rangeHint="Active Range" onClose={onClose} />;
 }
 
 function CustomerComplaintReportBottomTable() {
@@ -10258,44 +10227,6 @@ function CustomerComplaintReportBottomTable() {
   return <PremiumDashboardBottomTable title="Customer Complaints Registry" columns={columns} rows={rows} />;
 }
 
-function MachineCapacityReportDashboardView({ onClose }) {
-  const kpis = [
-    { label: "Available Hours", value: "2,400 h", icon: "📅", color: "#ea580c" },
-    { label: "Utilized Hours", value: "1,850 h", icon: "⚙️", color: "#3b82f6" },
-    { label: "Capacity Load", value: "77.1%", icon: "📊", color: "#10b981" },
-    { label: "Overload Alerts", value: "0", icon: "🚨", color: "#10b981" }
-  ];
-  const setupChart = React.useCallback((canvas) => {
-    return new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels: ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"],
-        datasets: [
-          { label: "Run Hours", data: [380, 350, 360, 310, 280], backgroundColor: "#3b82f6" },
-          { label: "Available Hours", data: [480, 480, 480, 480, 480], backgroundColor: "#e2e8f0" }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { x: { stacked: true }, y: { stacked: false } }
-      }
-    });
-  }, []);
-  return <PremiumDashboardView title="Machine Capacity Report" icon={Package} color="#ea580c" kpis={kpis} setupChart={setupChart} rangeHint="Machinery Capacity Load" onClose={onClose} />;
-}
-
-function MachineCapacityReportBottomTable() {
-  const columns = ["Machine Name", "Available Hours", "Setup Hours", "Run Hours", "Idle Hours", "Load %", "Status"];
-  const rows = [
-    ["CNC-01", "480", "40", "380", "60", "87.5%", "Normal"],
-    ["CNC-02", "480", "45", "350", "85", "82.3%", "Normal"],
-    ["VMC-01", "480", "30", "360", "90", "81.2%", "Normal"],
-    ["VMC-02", "480", "35", "310", "135", "71.9%", "Normal"],
-    ["Grinding-01", "480", "20", "280", "180", "62.5%", "Normal"]
-  ];
-  return <PremiumDashboardBottomTable title="Machine Load and Availability Details" columns={columns} rows={rows} />;
-}
 
 export default function PlantPerformance1() {
   const [selKpi, setSelKpi] = useState(0);
@@ -10321,6 +10252,7 @@ export default function PlantPerformance1() {
     toDate: "",
     supplier: "",
     category: "",
+    partNumber: "",
   });
   const [salesFilters, setSalesFilters] = useState({
     fromDate: "",
@@ -10340,7 +10272,7 @@ export default function PlantPerformance1() {
     fromDate: "",
     toDate: "",
     machine: "",
-    team: "",
+    operator: "",
     idleReason: "",
   });
   const [idleActiveTab, setIdleActiveTab] = useState("chart1");
@@ -10411,6 +10343,12 @@ export default function PlantPerformance1() {
       salesTarget: 25,
       orderValueAch: 85
     },
+    grn_value: {
+      minGrnValueL: 100
+    },
+    sales_analysis: {
+      monthlyTarget: 150
+    },
     idle_hours: {
       maxIdleHours: 15,
       reductionTarget: 10
@@ -10430,10 +10368,18 @@ export default function PlantPerformance1() {
     }
   });
 
-  const [activeTargetTab, setActiveTargetTab] = useState("core_kpis");
+  const [activeTargetTab, setActiveTargetTab] = useState("customer_po");
   const [tempConfig, setTempConfig] = useState(null);
   const [toast, setToast] = useState(null);
   const targetRef = useRef(null);
+
+  // ── Admin check: only super-admins can see Target Criteria ──
+  const isAdmin = (() => {
+    try {
+      const cache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
+      return !!cache.isSuperAdmin;
+    } catch { return false; }
+  })();
 
   useEffect(() => {
     if (toast) {
@@ -10444,7 +10390,7 @@ export default function PlantPerformance1() {
 
   const handleOpenTargetModal = () => {
     setTempConfig(JSON.parse(JSON.stringify(targetConfig)));
-    setActiveTargetTab("core_kpis");
+    setActiveTargetTab("customer_po");
     setShowTargetPopover(true);
   };
 
@@ -10557,10 +10503,38 @@ export default function PlantPerformance1() {
     const poDiff = (((salesVal - salesTarget) / salesTarget) * 100).toFixed(1);
     map["customer_po_vs_sales_analysis"] = {
       type: poOk ? "up" : "down",
-      value: `${poOk ? "+" : ""}${poDiff}% ${poOk ? "Up" : "Down"}`,
+      value: `${poOk ? "+" : ""}${poDiff}%`,
       message: poOk
-        ? `Total Sales (\u20b9${salesVal}L) meets target (\u20b9${salesTarget}L)`
-        : `Total Sales (\u20b9${salesVal}L) is below target (\u20b9${salesTarget}L)`,
+        ? `Total Sales (₹${salesVal}L) meets target (₹${salesTarget}L)`
+        : `Total Sales (₹${salesVal}L) is below target (₹${salesTarget}L)`,
+      priority: "medium"
+    };
+
+    // Sales Analysis monthly total vs target
+    const salesMonthlyTotal = [115, 190, 200, 215].reduce((a, b) => a + b, 0); // total Lakhs across months
+    const salesMonthlyTarget = (targetConfig.sales_analysis?.monthlyTarget ?? 150) * 4; // 4 months
+    const salesAnaOk = salesMonthlyTotal >= salesMonthlyTarget;
+    const salesAnaDiff = (((salesMonthlyTotal - salesMonthlyTarget) / salesMonthlyTarget) * 100).toFixed(1);
+    map["sales_analysis_report_dashboard"] = {
+      type: salesAnaOk ? "up" : "down",
+      value: `${salesAnaOk ? "+" : ""}${salesAnaDiff}%`,
+      message: salesAnaOk
+        ? `Total Sales (₹${salesMonthlyTotal}L) meets target (₹${salesMonthlyTarget}L)`
+        : `Total Sales (₹${salesMonthlyTotal}L) is below target (₹${salesMonthlyTarget}L)`,
+      priority: salesAnaOk ? "medium" : "high"
+    };
+
+    // GRN Value trend
+    const grnTotal = [28, 38, 48, 37].reduce((a, b) => a + b, 0); // mock total across months = 151L
+    const grnTarget = targetConfig.grn_value?.minGrnValueL ?? 100;
+    const grnOk = grnTotal >= grnTarget;
+    const grnDiff = (((grnTotal - grnTarget) / grnTarget) * 100).toFixed(1);
+    map["purchase_report_dashboard"] = {
+      type: grnOk ? "up" : "down",
+      value: `${grnOk ? "+" : ""}${grnDiff}%`,
+      message: grnOk
+        ? `Total GRN Value (₹${grnTotal}L) meets target (₹${grnTarget}L)`
+        : `Total GRN Value (₹${grnTotal}L) is below target (₹${grnTarget}L)`,
       priority: "medium"
     };
 
@@ -10570,7 +10544,7 @@ export default function PlantPerformance1() {
     const idleDiff = (((maxIdle - totalIdle) / maxIdle) * 100).toFixed(1);
     map["idle_hours_report_dashboard"] = {
       type: idleOk ? "up" : "down",
-      value: `${idleOk ? "+" : "-"}${Math.abs(Number(idleDiff))}% ${idleOk ? "Up" : "Down"}`,
+      value: `${idleOk ? "+" : "-"}${Math.abs(Number(idleDiff))}%`,
       message: idleOk
         ? `Total Idle Hours (${totalIdle}h) is within target (${maxIdle}h)`
         : `Total Idle Hours (${totalIdle}h) exceeds target (${maxIdle}h)`,
@@ -10586,7 +10560,7 @@ export default function PlantPerformance1() {
     const nonAccDiff = (((maxNonAccepted - nonAcceptedHrs) / maxNonAccepted) * 100).toFixed(1);
     map["idle_hours_non_accepted_reason_production_loss_report"] = {
       type: nonAccOk ? "up" : "down",
-      value: `${nonAccOk ? "+" : "-"}${Math.abs(Number(nonAccDiff))}% ${nonAccOk ? "Up" : "Down"}`,
+      value: `${nonAccOk ? "+" : "-"}${Math.abs(Number(nonAccDiff))}%`,
       message: nonAccOk
         ? `Non-Accepted Hours (${nonAcceptedHrs}h) is within target (${maxNonAccepted}h)`
         : nonAcceptedHrs > maxNonAccepted
@@ -10595,38 +10569,13 @@ export default function PlantPerformance1() {
       priority: "high"
     };
 
-    const oaOee = 78.5;
-    const oeeTarget = targetConfig.oee ?? 80;
-    const oeeOk = oaOee >= oeeTarget;
-    const oeeDiff = ((oaOee - oeeTarget)).toFixed(1);
-    map["oee_report_dashboard"] = {
-      type: oeeOk ? "up" : "down",
-      value: `${oeeOk ? "+" : ""}${oeeDiff}% ${oeeOk ? "Up" : "Down"}`,
-      message: oeeOk
-        ? `OEE Efficiency (${oaOee}%) meets target (${oeeTarget}%)`
-        : `OEE Efficiency (${oaOee}%) is below target (${oeeTarget}%)`,
-      priority: "medium"
-    };
-
-    const minUtilization = targetConfig.oee_comparison?.minUtilization ?? 75;
-    const oeeCompOk = oaOee >= minUtilization;
-    const oeeCompDiff = ((oaOee - minUtilization)).toFixed(1);
-    map["oee_comparison_report_dashboard"] = {
-      type: oeeCompOk ? "up" : "down",
-      value: `${oeeCompOk ? "+" : ""}${oeeCompDiff}% ${oeeCompOk ? "Up" : "Down"}`,
-      message: oeeCompOk
-        ? `Machine Utilization (${oaOee}%) meets target (${minUtilization}%)`
-        : `Machine Utilization (${oaOee}%) is below target (${minUtilization}%)`,
-      priority: "medium"
-    };
-
     const rejPct = 1.8;
     const rejLimit = targetConfig.rejection?.rejectionLimit ?? 2.0;
     const rejOk = rejPct <= rejLimit;
     const rejDiff = ((rejLimit - rejPct) / rejLimit * 100).toFixed(1);
     map["rejection_report_dashboard"] = {
       type: rejOk ? "up" : "down",
-      value: `${rejOk ? "+" : "-"}${Math.abs(Number(rejDiff))}% ${rejOk ? "Up" : "Down"}`,
+      value: `${rejOk ? "+" : "-"}${Math.abs(Number(rejDiff))}%`,
       message: rejOk
         ? `Rejection Rate (${rejPct}%) is within target limit (${rejLimit}%)`
         : `Rejection Rate (${rejPct}%) exceeds target limit (${rejLimit}%)`,
@@ -10639,7 +10588,7 @@ export default function PlantPerformance1() {
     const rewDiff = ((rewLimit - rewPct) / rewLimit * 100).toFixed(1);
     map["rework_report_dashboard"] = {
       type: rewOk ? "up" : "down",
-      value: `${rewOk ? "+" : "-"}${Math.abs(Number(rewDiff))}% ${rewOk ? "Up" : "Down"}`,
+      value: `${rewOk ? "+" : "-"}${Math.abs(Number(rewDiff))}%`,
       message: rewOk
         ? `Rework Rate (${rewPct}%) is within target limit (${rewLimit}%)`
         : `Rework Rate (${rewPct}%) exceeds target limit (${rewLimit}%)`,
@@ -10690,316 +10639,306 @@ export default function PlantPerformance1() {
     <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`}>
       <div className="pp1-fbar">
         <PlantPerformance1DatePicker
-          activePeriod={activePeriod}
-          onPeriodChange={setActivePeriod}
-          onRangeChange={handleRangeChange}
+          from={dateRange.from}
+          to={dateRange.to}
+          onChange={handleRangeChange}
         />
         {loading && <span className="pp1-fbar-status">Loading live data…</span>}
         {fetchError && <span className="pp1-fbar-error">{fetchError}</span>}
 
-        <div className="pp1-fbar-target-wrap" ref={targetRef}>
-          <button
-            type="button"
-            className={`pp1-fbar-target-btn ${showTargetPopover ? "pp1-fbar-target-btn--active" : ""}`}
-            onClick={handleOpenTargetModal}
-          >
-            <Target size={14} className="pp1-target-icon" />
-            <span>Target Criteria</span>
-          </button>
-
-          {showTargetPopover && tempConfig && (
-            <div
-              className="pp1-target-modal-overlay"
-              onClick={(e) => {
-                if (e.target === e.currentTarget) {
-                  setShowTargetPopover(false);
-                }
-              }}
+        {isAdmin && (
+          <div className="pp1-fbar-target-wrap" ref={targetRef}>
+            <button
+              type="button"
+              className={`pp1-fbar-target-btn ${showTargetPopover ? "pp1-fbar-target-btn--active" : ""}`}
+              onClick={handleOpenTargetModal}
             >
-              <div className="pp1-target-modal">
-                <div className="pp1-target-modal__stripe" />
-                <div className="pp1-target-modal__hd">
-                  <div className="pp1-target-modal__title-group">
-                    <Target size={15} className="pp1-target-modal__icon" />
-                    <h3 className="pp1-target-modal__title">Target Criteria</h3>
-                  </div>
-                  <button
-                    type="button"
-                    className="pp1-target-modal__close"
-                    onClick={() => setShowTargetPopover(false)}
-                  >
-                    ✕
-                  </button>
-                </div>
+              <Target size={14} className="pp1-target-icon" />
+              <span>Target Criteria</span>
+            </button>
 
-                <div className="pp1-target-modal__split">
-                  <div className="pp1-target-modal__left">
-                    <span className="pp1-target-modal__list-title">Target Modules</span>
-                    <div className="pp1-target-modal__cards-list">
-                      {[
-                        { id: "core_kpis", label: "OEE & Core KPIs", icon: Target },
-                        { id: "customer_po", label: "Customer PO vs Sales Value", icon: ClipboardList },
-                        { id: "idle_hours", label: "Idle Hours Report", icon: Clock },
-                        { id: "idle_hours_non_accepted", label: "Idle Hours Non-Accepted", icon: AlertTriangle },
-                        { id: "oee_comparison", label: "OEE Comparison Report", icon: BarChart2 },
-                        { id: "rejection", label: "Rejection Report", icon: XOctagon },
-                        { id: "rework", label: "Rework Report", icon: RefreshCw },
-                      ].map(cat => (
-                        <div
-                          key={cat.id}
-                          className={`pp1-target-modal-card ${activeTargetTab === cat.id ? "pp1-target-modal-card--active" : ""}`}
-                          onClick={() => setActiveTargetTab(cat.id)}
-                        >
-                          <span className="pp1-target-modal-card__ico">
-                            {React.createElement(cat.icon, { size: 14 })}
-                          </span>
-                          <span className="pp1-target-modal-card__txt">{cat.label}</span>
+            {showTargetPopover && tempConfig && (
+              <div
+                className="pp1-target-modal-overlay"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setShowTargetPopover(false);
+                  }
+                }}
+              >
+                <div className="pp1-target-modal">
+                  <div className="pp1-target-modal__stripe" />
+                  <div className="pp1-target-modal__hd">
+                    <div className="pp1-target-modal__title-group">
+                      <Target size={15} className="pp1-target-modal__icon" />
+                      <h3 className="pp1-target-modal__title">Target Criteria</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="pp1-target-modal__close"
+                      onClick={() => setShowTargetPopover(false)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="pp1-target-modal__split">
+                    <div className="pp1-target-modal__left">
+                      <span className="pp1-target-modal__list-title">Target Modules</span>
+                      <div className="pp1-target-modal__cards-list">
+                        {[
+                          { id: "customer_po", label: "Customer PO vs Sales Value", icon: ClipboardList },
+                          { id: "grn_value", label: "GRN Value", icon: ShoppingCart },
+                          { id: "sales_analysis", label: "Sales Analysis", icon: TrendingUp },
+                          { id: "idle_hours", label: "Idle Hours", icon: Clock },
+                          { id: "idle_hours_non_accepted", label: "Idle Hours Non-Accepted", icon: AlertTriangle },
+                          { id: "oee_comparison", label: "OEE", icon: BarChart2 },
+                          { id: "rejection", label: "Rejection", icon: XOctagon },
+                          { id: "rework", label: "Rework", icon: RefreshCw },
+                        ].map(cat => (
+                          <div
+                            key={cat.id}
+                            className={`pp1-target-modal-card ${activeTargetTab === cat.id ? "pp1-target-modal-card--active" : ""}`}
+                            onClick={() => setActiveTargetTab(cat.id)}
+                          >
+                            <span className="pp1-target-modal-card__ico">
+                              {React.createElement(cat.icon, { size: 14 })}
+                            </span>
+                            <span className="pp1-target-modal-card__txt">{cat.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pp1-target-modal__right">
+                      {activeTargetTab === "customer_po" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Customer PO vs Sales Value Target</h4>
+                          <p className="pp1-target-settings__desc">Configure threshold targets for sales value analysis and order fulfillment rates.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Sales Value Target (Lakhs)</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <span className="pp1-target-input-prefix">₹</span>
+                              <input
+                                type="number" step="1" min="1"
+                                value={tempConfig.customer_po.salesTarget}
+                                onChange={(e) => handleNestedTempConfigChange("customer_po", "salesTarget", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">Lakhs</span>
+                            </div>
+                          </div>
+
+
                         </div>
-                      ))}
+                      )}
+
+                      {activeTargetTab === "grn_value" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">GRN Value Target</h4>
+                          <p className="pp1-target-settings__desc">Set the minimum total GRN purchase value target per period (in Lakhs). A target line will be drawn on the trend chart.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Min GRN Value Target (Lakhs)</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <span className="pp1-target-input-prefix">₹</span>
+                              <input
+                                type="number" step="1" min="0"
+                                value={tempConfig.grn_value.minGrnValueL}
+                                onChange={(e) => handleNestedTempConfigChange("grn_value", "minGrnValueL", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">Lakhs</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "sales_analysis" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Sales Analysis Target</h4>
+                          <p className="pp1-target-settings__desc">Set the monthly total sales value target (in Lakhs). A target line will appear on the Month Wise Total Sales chart and the trend % will be computed against this target.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Monthly Sales Target (Lakhs/month)</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <span className="pp1-target-input-prefix">₹</span>
+                              <input
+                                type="number" step="5" min="0"
+                                value={tempConfig.sales_analysis?.monthlyTarget ?? 150}
+                                onChange={(e) => handleNestedTempConfigChange("sales_analysis", "monthlyTarget", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">L / month</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "idle_hours" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Idle Hours Target</h4>
+                          <p className="pp1-target-settings__desc">Set maximum acceptable idle hour thresholds and target reduction levels for plant operation.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Max Allowable Idle Hours</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.5" min="0"
+                                value={tempConfig.idle_hours.maxIdleHours}
+                                onChange={(e) => handleNestedTempConfigChange("idle_hours", "maxIdleHours", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">hrs</span>
+                            </div>
+                          </div>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Idle Hours Reduction Target %</span>
+                              <span className="pp1-target-field__val">{tempConfig.idle_hours.reductionTarget}%</span>
+                            </div>
+                            <input
+                              type="range" min="0" max="100"
+                              value={tempConfig.idle_hours.reductionTarget}
+                              onChange={(e) => handleNestedTempConfigChange("idle_hours", "reductionTarget", parseInt(e.target.value))}
+                              className="pp1-target-slider"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "idle_hours_non_accepted" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Idle Hours - Non Accepted Reason Target</h4>
+                          <p className="pp1-target-settings__desc">Configure threshold targets for non-accepted idle hours and unplanned loss limit.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Max Non-Accepted Target</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.5" min="0"
+                                value={tempConfig.idle_hours_non_accepted.maxNonAcceptedHours}
+                                onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "maxNonAcceptedHours", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">hrs</span>
+                            </div>
+                          </div>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Unplanned Loss Threshold Limit (%)</span>
+                              <span className="pp1-target-field__val">{tempConfig.idle_hours_non_accepted.unplannedLimit}%</span>
+                            </div>
+                            <input
+                              type="range" min="0" max="100"
+                              value={tempConfig.idle_hours_non_accepted.unplannedLimit}
+                              onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "unplannedLimit", parseInt(e.target.value))}
+                              className="pp1-target-slider"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "oee_comparison" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">OEE Comparison Target</h4>
+                          <p className="pp1-target-settings__desc">Set the minimum machine utilization targets for comparison.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Min Utilization Target (%)</span>
+                              <span className="pp1-target-field__val">{tempConfig.oee_comparison.minUtilization}%</span>
+                            </div>
+                            <input
+                              type="range" min="0" max="100"
+                              value={tempConfig.oee_comparison.minUtilization}
+                              onChange={(e) => handleNestedTempConfigChange("oee_comparison", "minUtilization", parseInt(e.target.value))}
+                              className="pp1-target-slider"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "rejection" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Rejection Target</h4>
+                          <p className="pp1-target-settings__desc">Set maximum acceptable rejection rate threshold limit.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Max Rejection Target</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.1" min="0" max="100"
+                                value={tempConfig.rejection.rejectionLimit}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "rejectionLimit", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeTargetTab === "rework" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Rework Target</h4>
+                          <p className="pp1-target-settings__desc">Set maximum acceptable rework rate threshold limit.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Max Rework Target</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.1" min="0" max="100"
+                                value={tempConfig.rework.reworkLimit}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "reworkLimit", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="pp1-target-modal__right">
-                    {activeTargetTab === "core_kpis" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">OEE & Core KPIs Targets</h4>
-                        <p className="pp1-target-settings__desc">Configure threshold targets for core plant performance parameters.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">OEE Target</span>
-                            <span className="pp1-target-field__val">{tempConfig.oee}%</span>
-                          </div>
-                          <input
-                            type="range" min="50" max="100"
-                            value={tempConfig.oee}
-                            onChange={(e) => handleTempConfigChange("oee", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Availability Target</span>
-                            <span className="pp1-target-field__val">{tempConfig.availability}%</span>
-                          </div>
-                          <input
-                            type="range" min="50" max="100"
-                            value={tempConfig.availability}
-                            onChange={(e) => handleTempConfigChange("availability", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Performance Target</span>
-                            <span className="pp1-target-field__val">{tempConfig.performance}%</span>
-                          </div>
-                          <input
-                            type="range" min="50" max="100"
-                            value={tempConfig.performance}
-                            onChange={(e) => handleTempConfigChange("performance", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Quality Target</span>
-                            <span className="pp1-target-field__val">{tempConfig.quality}%</span>
-                          </div>
-                          <input
-                            type="range" min="50" max="100"
-                            value={tempConfig.quality}
-                            onChange={(e) => handleTempConfigChange("quality", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTargetTab === "customer_po" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">Customer PO vs Sales Value Target</h4>
-                        <p className="pp1-target-settings__desc">Configure threshold targets for sales value analysis and order fulfillment rates.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Sales Value Target (Lakhs)</span>
-                          </div>
-                          <div className="pp1-target-input-container">
-                            <span className="pp1-target-input-prefix">₹</span>
-                            <input
-                              type="number" step="1" min="1"
-                              value={tempConfig.customer_po.salesTarget}
-                              onChange={(e) => handleNestedTempConfigChange("customer_po", "salesTarget", parseFloat(e.target.value) || 0)}
-                              className="pp1-target-input"
-                            />
-                            <span className="pp1-target-input-unit">Lakhs</span>
-                          </div>
-                        </div>
-
-
-                      </div>
-                    )}
-
-                    {activeTargetTab === "idle_hours" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">Idle Hours Target</h4>
-                        <p className="pp1-target-settings__desc">Set maximum acceptable idle hour thresholds and target reduction levels for plant operation.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Max Allowable Idle Hours</span>
-                          </div>
-                          <div className="pp1-target-input-container">
-                            <input
-                              type="number" step="0.5" min="0"
-                              value={tempConfig.idle_hours.maxIdleHours}
-                              onChange={(e) => handleNestedTempConfigChange("idle_hours", "maxIdleHours", parseFloat(e.target.value) || 0)}
-                              className="pp1-target-input"
-                            />
-                            <span className="pp1-target-input-unit">hrs</span>
-                          </div>
-                        </div>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Idle Hours Reduction Target %</span>
-                            <span className="pp1-target-field__val">{tempConfig.idle_hours.reductionTarget}%</span>
-                          </div>
-                          <input
-                            type="range" min="0" max="100"
-                            value={tempConfig.idle_hours.reductionTarget}
-                            onChange={(e) => handleNestedTempConfigChange("idle_hours", "reductionTarget", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTargetTab === "idle_hours_non_accepted" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">Idle Hours - Non Accepted Reason Target</h4>
-                        <p className="pp1-target-settings__desc">Configure threshold targets for non-accepted idle hours and unplanned loss limit.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Max Non-Accepted Target</span>
-                          </div>
-                          <div className="pp1-target-input-container">
-                            <input
-                              type="number" step="0.5" min="0"
-                              value={tempConfig.idle_hours_non_accepted.maxNonAcceptedHours}
-                              onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "maxNonAcceptedHours", parseFloat(e.target.value) || 0)}
-                              className="pp1-target-input"
-                            />
-                            <span className="pp1-target-input-unit">hrs</span>
-                          </div>
-                        </div>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Unplanned Loss Threshold Limit (%)</span>
-                            <span className="pp1-target-field__val">{tempConfig.idle_hours_non_accepted.unplannedLimit}%</span>
-                          </div>
-                          <input
-                            type="range" min="0" max="100"
-                            value={tempConfig.idle_hours_non_accepted.unplannedLimit}
-                            onChange={(e) => handleNestedTempConfigChange("idle_hours_non_accepted", "unplannedLimit", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTargetTab === "oee_comparison" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">OEE Comparison Target</h4>
-                        <p className="pp1-target-settings__desc">Set the minimum machine utilization targets for comparison.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Min Utilization Target (%)</span>
-                            <span className="pp1-target-field__val">{tempConfig.oee_comparison.minUtilization}%</span>
-                          </div>
-                          <input
-                            type="range" min="0" max="100"
-                            value={tempConfig.oee_comparison.minUtilization}
-                            onChange={(e) => handleNestedTempConfigChange("oee_comparison", "minUtilization", parseInt(e.target.value))}
-                            className="pp1-target-slider"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTargetTab === "rejection" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">Rejection Target</h4>
-                        <p className="pp1-target-settings__desc">Set maximum acceptable rejection rate threshold limit.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Max Rejection Target</span>
-                          </div>
-                          <div className="pp1-target-input-container">
-                            <input
-                              type="number" step="0.1" min="0" max="100"
-                              value={tempConfig.rejection.rejectionLimit}
-                              onChange={(e) => handleNestedTempConfigChange("rejection", "rejectionLimit", parseFloat(e.target.value) || 0)}
-                              className="pp1-target-input"
-                            />
-                            <span className="pp1-target-input-unit">%</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTargetTab === "rework" && (
-                      <div className="pp1-target-settings">
-                        <h4 className="pp1-target-settings__title">Rework Target</h4>
-                        <p className="pp1-target-settings__desc">Set maximum acceptable rework rate threshold limit.</p>
-
-                        <div className="pp1-target-field">
-                          <div className="pp1-target-field__label-row">
-                            <span className="pp1-target-field__name">Max Rework Target</span>
-                          </div>
-                          <div className="pp1-target-input-container">
-                            <input
-                              type="number" step="0.1" min="0" max="100"
-                              value={tempConfig.rework.reworkLimit}
-                              onChange={(e) => handleNestedTempConfigChange("rework", "reworkLimit", parseFloat(e.target.value) || 0)}
-                              className="pp1-target-input"
-                            />
-                            <span className="pp1-target-input-unit">%</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  <div className="pp1-target-modal__ft">
+                    <button
+                      type="button"
+                      className="pp1-target-modal-btn pp1-target-modal-btn--ghost"
+                      onClick={() => setShowTargetPopover(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="pp1-target-modal-btn pp1-target-modal-btn--primary"
+                      onClick={applyTargetChanges}
+                    >
+                      Apply Targets
+                    </button>
                   </div>
                 </div>
-
-                <div className="pp1-target-modal__ft">
-                  <button
-                    type="button"
-                    className="pp1-target-modal-btn pp1-target-modal-btn--ghost"
-                    onClick={() => setShowTargetPopover(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="pp1-target-modal-btn pp1-target-modal-btn--primary"
-                    onClick={applyTargetChanges}
-                  >
-                    Apply Targets
-                  </button>
-                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="pp1-main">
@@ -11060,7 +10999,7 @@ export default function PlantPerformance1() {
                       const ct = computedCardTrends[a.id];
                       return ct ? (
                         <span style={{
-                          fontSize: "9.5px",
+                          fontSize: "11px",
                           fontWeight: 700,
                           color: ct.type === "up" ? "#10b981" : ct.type === "down" ? "#ef4444" : "#f59e0b",
                           background: ct.type === "up" ? "rgba(16, 185, 129, 0.12)" : ct.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
@@ -11106,12 +11045,16 @@ export default function PlantPerformance1() {
                     filters={purFilters}
                     onFilterChange={setPurFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
+                    trend={computedCardTrends["purchase_report_dashboard"]}
                   />
                 ) : selectionId === "sales_analysis_report_dashboard" ? (
                   <SalesAnalysisReportDashboardView
                     filters={salesFilters}
                     onFilterChange={setSalesFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    targetConfig={targetConfig}
+                    trend={computedCardTrends["sales_analysis_report_dashboard"]}
                   />
                 ) : selectionId === "production_analysis_report_dashboard" ? (
                   <ProductionAnalysisReportDashboardView
@@ -11183,10 +11126,6 @@ export default function PlantPerformance1() {
                   <CustomerComplaintReportDashboardView
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
                   />
-                ) : selectionId === "machine_capacity_report_dashboard" ? (
-                  <MachineCapacityReportDashboardView
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                  />
                 ) : (
                   <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
                     Select a dashboard from the list to view report details.
@@ -11247,7 +11186,7 @@ export default function PlantPerformance1() {
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
                         {item.trend && (
                           <span style={{
-                            fontSize: "9.5px",
+                            fontSize: "11px",
                             fontWeight: 700,
                             color: item.trend.type === "up" ? "#10b981" : item.trend.type === "down" ? "#ef4444" : "#f59e0b",
                             background: item.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : item.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
@@ -11299,8 +11238,6 @@ export default function PlantPerformance1() {
             loading={loading}
             uid={`bot-pocomp-${centerKey}`}
             filters={poFilters}
-            activeSlide={poActiveSlide}
-            onActiveSlideChange={setPoActiveSlide}
             showTargetOnly={poShowTargetOnly}
             targetConfig={targetConfig}
           />
@@ -11330,8 +11267,6 @@ export default function PlantPerformance1() {
           <ReworkReportBottomTable filters={rewFilters} activeTab={rewActiveTab} setActiveTab={setRewActiveTab} />
         ) : selectionId === "customer_complaint_report_dashboard" ? (
           <CustomerComplaintReportBottomTable />
-        ) : selectionId === "machine_capacity_report_dashboard" ? (
-          <MachineCapacityReportBottomTable />
         ) : null}
       </div>
 
