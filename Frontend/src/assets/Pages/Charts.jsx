@@ -9,6 +9,22 @@ import { Chart, registerables } from "chart.js";
 import jsPDF from "jspdf";
 import ChartDatePicker from "./ChartDatePicker";
 import { resolveApiBase } from "../../apiBase";
+import { 
+  LayoutGrid, 
+  TrendingUp, 
+  CheckCircle2, 
+  Factory, 
+  Settings, 
+  ShoppingCart, 
+  Users, 
+  User, 
+  BarChart3, 
+  LineChart, 
+  PieChart, 
+  FolderOpen, 
+  Inbox,
+  AlertTriangle
+} from "lucide-react";
 import "./Charts.css";
 Chart.register(...registerables);
 
@@ -191,15 +207,15 @@ const CHART_DEFS = [
 
 // ─── Category / Type meta ─────────────────────────────────────
 const CAT_META = {
-  all: { label: "All", icon: "⊞", color: "#3b82f6" },
-  sales: { label: "Sales", icon: "📈", color: "#22c55e" },
-  quality: { label: "Quality", icon: "✅", color: "#a855f7" },
-  production: { label: "Production", icon: "🏭", color: "#f97316" },
-  operations: { label: "Operations", icon: "⚙️", color: "#06b6d4" },
-  purchase: { label: "Purchase", icon: "🛒", color: "#f59e0b" },
-  vendor: { label: "Vendor", icon: "🤝", color: "#8b5cf6" },
+  all: { label: "All", icon: LayoutGrid, color: "#3b82f6" },
+  sales: { label: "Sales", icon: TrendingUp, color: "#22c55e" },
+  quality: { label: "Quality", icon: CheckCircle2, color: "#a855f7" },
+  production: { label: "Production", icon: Factory, color: "#f97316" },
+  operations: { label: "Operations", icon: Settings, color: "#06b6d4" },
+  purchase: { label: "Purchase", icon: ShoppingCart, color: "#f59e0b" },
+  vendor: { label: "Vendor", icon: Users, color: "#8b5cf6" },
 };
-const TYPE_META = { all: { label: "All Types", icon: "📊" }, line: { label: "Line", icon: "📉" }, bar: { label: "Bar", icon: "📊" }, pie: { label: "Pie", icon: "🥧" } };
+const TYPE_META = { all: { label: "All Types", icon: BarChart3 }, line: { label: "Line", icon: LineChart }, bar: { label: "Bar", icon: BarChart3 }, pie: { label: "Pie", icon: PieChart } };
 
 // ─── Helper: format date ──────────────────────────────────────
 function formatLocalDate(d) {
@@ -232,7 +248,7 @@ function hexToRgb(hex) {
 }
 
 // ─── Filter Dropdown ──────────────────────────────────────────
-function FilterDropdown({ label, icon, options, value, onChange }) {
+function FilterDropdown({ label, icon: Icon, options, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState({});
   const ref = useRef(null);
@@ -265,18 +281,21 @@ function FilterDropdown({ label, icon, options, value, onChange }) {
   return (
     <div className="ch-dd" ref={ref}>
       <button ref={triggerRef} className={`ch-dd__trigger ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => setOpen(o => !o)} type="button">
-        <span className="ch-dd__icon">{icon}</span>
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Icon size={14} /></span>
         <span className="ch-dd__label-group"><span className="ch-dd__group-name">{label}</span><span className="ch-dd__value">{current.label}</span></span>
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
         <div className="ch-dd__menu" ref={menuRef} style={menuStyle}>
-          {Object.entries(options).map(([key, meta]) => (
-            <button key={key} className={`ch-dd__item ${value === key ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(key); setOpen(false); }} type="button">
-              <span className="ch-dd__item-icon">{meta.icon}</span><span>{meta.label}</span>
-              {value === key && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
-            </button>
-          ))}
+          {Object.entries(options).map(([key, meta]) => {
+            const ItemIcon = meta.icon;
+            return (
+              <button key={key} className={`ch-dd__item ${value === key ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(key); setOpen(false); }} type="button">
+                <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon size={14} /></span><span>{meta.label}</span>
+                {value === key && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              </button>
+            );
+          })}
         </div>, document.body
       )}
     </div>
@@ -315,14 +334,14 @@ function OperatorDropdown({ value, onChange, operators, loading }) {
   return (
     <div className="ch-dd ch-dd--compact" ref={ref}>
       <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading operators..." : value || "Select Operator"}>
-        <span className="ch-dd__icon">👤</span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Operator")}</span>
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><User size={12} /></span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Operator")}</span>
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
         <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
           {operators.length === 0 ? (<div style={{ padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>No operators found</div>) : operators.map(opr => (
             <button key={opr} className={`ch-dd__item ${value === opr ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(opr); setOpen(false); }} type="button">
-              <span className="ch-dd__item-icon">👤</span><span>{opr}</span>
+              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><User size={12} /></span><span>{opr}</span>
               {value === opr && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
             </button>
           ))}
@@ -364,14 +383,14 @@ function MachineDropdown({ value, onChange, machines, loading }) {
   return (
     <div className="ch-dd ch-dd--compact" ref={ref}>
       <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading machines..." : value || "Select Machine"}>
-        <span className="ch-dd__icon">⚙️</span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Machine")}</span>
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Settings size={12} /></span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Machine")}</span>
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
         <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
           {machines.length === 0 ? (<div style={{ padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>No machines found</div>) : machines.map(mac => (
             <button key={mac} className={`ch-dd__item ${value === mac ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(mac); setOpen(false); }} type="button">
-              <span className="ch-dd__item-icon">⚙️</span><span>{mac}</span>
+              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span><span>{mac}</span>
               {value === mac && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
             </button>
           ))}
@@ -575,7 +594,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         {def.status === "archived" && <span className="ch-tag ch-tag--archived">Archived</span>}
       </div>
       {loading && (<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.75)", borderRadius: 12, zIndex: 5 }}><div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>⏳ Loading chart…</div></div>)}
-      {error && !loading && (<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.9)", borderRadius: 12, zIndex: 5, padding: 16 }}><div style={{ fontSize: 22 }}>⚠️</div><div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, textAlign: "center" }}>{error}</div></div>)}
+      {error && !loading && (<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.9)", borderRadius: 12, zIndex: 5, padding: 16 }}><div style={{ display: "flex", alignItems: "center" }}><AlertTriangle size={24} style={{ color: "#ef4444" }} /></div><div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, textAlign: "center" }}>{error}</div></div>)}
       <div className="ch-canvas-wrap"><canvas ref={canvasRef} /></div>
       <div className="ch-card__actions">
         <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
@@ -821,8 +840,8 @@ export default function Charts() {
         <div className="ch-filter-bar__label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46" /></svg>Filters</div>
         <div className="ch-filter-bar__sep" />
         <div className="ch-filter-bar__dropdowns">
-          <FilterDropdown label="Category" icon="📂" options={CAT_META} value={filters.category} onChange={v => setFilter("category", v)} />
-          <FilterDropdown label="Chart Type" icon="📊" options={TYPE_META} value={filters.type} onChange={v => setFilter("type", v)} />
+          <FilterDropdown label="Category" icon={FolderOpen} options={CAT_META} value={filters.category} onChange={v => setFilter("category", v)} />
+          <FilterDropdown label="Chart Type" icon={BarChart3} options={TYPE_META} value={filters.type} onChange={v => setFilter("type", v)} />
           <div className="ch-filter-bar__sep ch-filter-bar__sep--v" />
           <ChartDatePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
         </div>
@@ -839,7 +858,7 @@ export default function Charts() {
         </div>
       ) : (
         <div className="ch-empty">
-          <div className="ch-empty__icon">📭</div>
+          <div className="ch-empty__icon" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><Inbox size={48} style={{ color: "#94a3b8" }} /></div>
           <h3 className="ch-empty__title">No charts match your filters</h3>
           <p className="ch-empty__sub">Try adjusting or resetting your filters</p>
           <button className="ch-filter-bar__reset ch-filter-bar__reset--lg" onClick={reset}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="1,4 1,10 7,10" /><path d="M3.51 15a9 9 0 1 0 .49-3.5" /></svg>Reset Filters</button>

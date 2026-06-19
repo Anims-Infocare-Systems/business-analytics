@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { resolveApiBase } from "../../apiBase";
+import {
+  IndianRupee,
+  Building2,
+  Package,
+  Trophy,
+  Scale,
+  TrendingUp,
+  TrendingDown,
+  Info,
+  AlertTriangle,
+  Calendar,
+  FileText,
+  Lightbulb,
+  Pin
+} from "lucide-react";
 import "./SalesAnalysis.css";
 import ChartDatePicker from "./ChartDatePicker";
 
@@ -62,11 +77,11 @@ function formatInvDate(iso) {
 }
 
 const KPI_CARD_META = [
-  { icon: "💰", label: "Total Sales Value" },
-  { icon: "🏢", label: "Active Customers" },
-  { icon: "📦", label: "Top Product Revenue" },
-  { icon: "🏆", label: "Top Customer" },
-  { icon: "⚖️", label: "Avg Selling Rate" },
+  { icon: IndianRupee, iconColor: "#2d6de8", label: "Total Sales Value" },
+  { icon: Building2, iconColor: "#06b6d4", label: "Active Customers" },
+  { icon: Package, iconColor: "#10b981", label: "Top Product Revenue" },
+  { icon: Trophy, iconColor: "#f97316", label: "Top Customer" },
+  { icon: Scale, iconColor: "#8b5cf6", label: "Avg Selling Rate" },
 ];
 
 function buildKpiCards(summary) {
@@ -152,11 +167,11 @@ function buildTopProducts(rows) {
 }
 
 const INSIGHTS = [
-  { icon: "🟢", title: "Vasanthi Foundry drives majority revenue", sub: "52.6% of total sales (₹4.93L) — single-customer dependency. Explore deeper engagement.", val: "₹4.93L", valColor: "#15803d" },
-  { icon: "🟡", title: "February sales down vs January", sub: "Feb ₹3.23L vs Jan ₹6.15L (↓47.5%). Investigate order pipeline drop.", val: "↓47.5%", valColor: "#92400e" },
-  { icon: "🔵", title: "Segment Carrier is top revenue product", sub: "₹3.82L (40.7%) — capacity planning and raw material stocking should prioritize this.", val: "40.7%", valColor: "#1d4ed8" },
-  { icon: "🟠", title: "VR Foundries showing growth potential", sub: "7 line items, diverse mix. Target to grow from 20.6% to 30% share by Q2.", val: "20.6%", valColor: "#c2410c" },
-  { icon: "🔴", title: "SS Round Bar — low realisation rate", sub: "₹2.50/unit on 19,555 units = ₹49K only. Review pricing strategy for this product.", val: "₹2.50", valColor: "#b91c1c" },
+  { icon: Info, iconColor: "#15803d", title: "Vasanthi Foundry drives majority revenue", sub: "52.6% of total sales (₹4.93L) — single-customer dependency. Explore deeper engagement.", val: "₹4.93L", valColor: "#15803d" },
+  { icon: TrendingDown, iconColor: "#92400e", title: "February sales down vs January", sub: "Feb ₹3.23L vs Jan ₹6.15L (↓47.5%). Investigate order pipeline drop.", val: "↓47.5%", valColor: "#92400e" },
+  { icon: Package, iconColor: "#1d4ed8", title: "Segment Carrier is top revenue product", sub: "₹3.82L (40.7%) — capacity planning and raw material stocking should prioritize this.", val: "40.7%", valColor: "#1d4ed8" },
+  { icon: TrendingUp, iconColor: "#c2410c", title: "VR Foundries showing growth potential", sub: "7 line items, diverse mix. Target to grow from 20.6% to 30% share by Q2.", val: "20.6%", valColor: "#c2410c" },
+  { icon: AlertTriangle, iconColor: "#b91c1c", title: "SS Round Bar — low realisation rate", sub: "₹2.50/unit on 19,555 units = ₹49K only. Review pricing strategy for this product.", val: "₹2.50", valColor: "#b91c1c" },
 ];
 
 const TREND_CHART_OPTS = (font, maxValue = 0) => {
@@ -550,62 +565,19 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Filter Section ── */}
-      <div className="sa-filter-card">
-        <div className="sa-filter-card__title">
+      <div className="sa-filter-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: '12px', padding: '12px 24px' }}>
+        <div className="sa-filter-card__title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
           Report Filters
         </div>
-        <div className="sa-filter-grid">
-          <div className="sa-fg" style={{ gridColumn: "span 2" }}>
-            <label className="sa-fl">Date Range</label>
-            <ChartDatePicker
-              from={dateRange.from}
-              to={dateRange.to}
-              onChange={({ from, to }) => setDateRange({ from, to })}
-            />
-          </div>
-          {/* <div className="sa-fg">
-            <label className="sa-fl">Customer Group</label>
-            <select className="sa-fi" value={filters.customer} onChange={e => setF("customer", e.target.value)}>
-              <option>All Customers</option>
-              <option>Musk Metals Pvt Ltd</option>
-              <option>Vasanthi Foundry</option>
-              <option>VR Foundries</option>
-              <option>Standax Enterprises</option>
-            </select>
-          </div> */}
-          {/* <div className="sa-fg">
-            <label className="sa-fl">Product Group</label>
-            <select className="sa-fi" value={filters.product} onChange={e => setF("product", e.target.value)}>
-              <option>All Products</option>
-              <option>SS Round Bar</option>
-              <option>Segment Carrier</option>
-              <option>Motor Bracket</option>
-              <option>Thrust Plate</option>
-            </select>
-          </div> */}
-          {/* <div className="sa-fg">
-            <label className="sa-fl">Sales Group</label>
-            <select className="sa-fi" value={filters.salesGroup} onChange={e => setF("salesGroup", e.target.value)}>
-              <option>Sales Group</option>
-              <option>Direct Sales</option>
-              <option>Channel</option>
-            </select>
-          </div> */}
-          {/* <div className="sa-fg">
-            <label className="sa-fl">With Rejection</label>
-            <select className="sa-fi" value={filters.rejection} onChange={e => setF("rejection", e.target.value)}>
-              <option>No</option>
-              <option>Yes</option>
-            </select>
-          </div> */}
-          <div className="sa-fg sa-fg--actions">
-            <label className="sa-fl">&nbsp;</label>
-            <div className="sa-filter-btns">
-              {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Generating report…")}>🔄 Generate</button> */}
-              {/* <button className="sa-btn sa-btn--ghost"   onClick={resetFilters}>✕ Reset</button> */}
-            </div>
-          </div>
+        <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 8px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+          <span className="sa-fl" style={{ margin: 0, fontSize: '0.62rem', color: '#5a6a9a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date Range</span>
+          <ChartDatePicker
+            from={dateRange.from}
+            to={dateRange.to}
+            onChange={({ from, to }) => setDateRange({ from, to })}
+          />
         </div>
       </div>
 
@@ -635,24 +607,29 @@ export default function SalesAnalysis() {
 
       {/* ── KPI Cards ── */}
       <div className="sa-kpi-grid">
-        {kpiCards.map((k, i) => (
-          <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i }}>
-            <div className="sa-kpi-card__glow" />
-            <div className="sa-kpi-card__icon">{k.icon}</div>
-            <div className="sa-kpi-card__label">{k.label}</div>
-            <div className="sa-kpi-card__val">{k.value}</div>
-            <div className="sa-kpi-card__sub">{k.sub}</div>
-            <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
-          </div>
-        ))}
+        {kpiCards.map((k, i) => {
+          const Icon = k.icon;
+          return (
+            <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i }}>
+              <div className="sa-kpi-card__glow" />
+              <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
+                <Icon size={22} />
+              </div>
+              <div className="sa-kpi-card__label">{k.label}</div>
+              <div className="sa-kpi-card__val">{k.value}</div>
+              <div className="sa-kpi-card__sub">{k.sub}</div>
+              <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Charts Row ── */}
       <div className="sa-charts-row">
         <div className="sa-card sa-card--chart">
           <div className="sa-card__head">
-            <span className="sa-card__title">
-              📈 Weekly Sales Trend{weeklyTrend?.period ? ` (${weeklyTrend.period})` : summary?.period ? ` (${summary.period})` : ""}
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{weeklyTrend?.period ? ` (${weeklyTrend.period})` : summary?.period ? ` (${summary.period})` : ""}
             </span>
             <span className="sa-badge sa-badge--blue">
               {weeklyTrend != null
@@ -666,13 +643,17 @@ export default function SalesAnalysis() {
         </div>
         <div className="sa-card sa-card--chart">
           <div className="sa-card__head">
-            <span className="sa-card__title">🏢 Revenue by Customer</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Building2 size={16} style={{ color: "#10b981" }} /> Revenue by Customer
+            </span>
           </div>
           <div className="sa-chart-wrap"><canvas ref={custRef} /></div>
         </div>
         <div className="sa-card sa-card--chart">
           <div className="sa-card__head">
-            <span className="sa-card__title">📦 Revenue by Product</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Package size={16} style={{ color: "#f97316" }} /> Revenue by Product
+            </span>
           </div>
           <div className="sa-chart-wrap"><canvas ref={prodRef} /></div>
         </div>
@@ -684,7 +665,9 @@ export default function SalesAnalysis() {
         {/* Customer Ranking */}
         <div className="sa-card">
           <div className="sa-card__head">
-            <span className="sa-card__title">🏆 Customer Revenue Ranking</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Trophy size={16} style={{ color: "#8b5cf6" }} /> Customer Revenue Ranking
+            </span>
             <span className="sa-card__sub">by invoice value</span>
           </div>
           <div className="sa-rank-list">
@@ -705,7 +688,9 @@ export default function SalesAnalysis() {
         {/* Month Summary */}
         <div className="sa-card">
           <div className="sa-card__head">
-            <span className="sa-card__title">📅 Month-wise Sales Summary</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Sales Summary
+            </span>
             <span className="sa-badge sa-badge--green">
               {monthSummary?.period ?? summary?.period ?? "—"}
             </span>
@@ -798,7 +783,9 @@ export default function SalesAnalysis() {
       {/* ── Invoice Table ── */}
       <div className="sa-card sa-card--table">
         <div className="sa-card__head">
-          <span className="sa-card__title">🧾 Invoice Details — All Transactions</span>
+          <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
+          </span>
           <div className="sa-inv-head-actions">
             <div className="sa-inv-filter">
               <div className="sa-inv-filter__icon" aria-hidden>
@@ -882,7 +869,9 @@ export default function SalesAnalysis() {
         {/* Top Products */}
         <div className="sa-card">
           <div className="sa-card__head">
-            <span className="sa-card__title">📦 Top Products by Revenue</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Package size={16} style={{ color: "#f97316" }} /> Top Products by Revenue
+            </span>
             <span className="sa-card__sub">{topProductsRaw?.period ?? summary?.period ?? "—"}</span>
           </div>
           <div className="sa-prod-list">
@@ -905,23 +894,32 @@ export default function SalesAnalysis() {
         {/* Insights */}
         <div className="sa-card">
           <div className="sa-card__head">
-            <span className="sa-card__title">💡 Management Insights</span>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Lightbulb size={16} style={{ color: "#eab308" }} /> Management Insights
+            </span>
             <span className="sa-badge sa-badge--orange">5 Key Points</span>
           </div>
           <div className="sa-insight-list">
-            {INSIGHTS.map((ins, i) => (
-              <div className="sa-insight-row" key={i} style={{ "--ii": i }}>
-                <div className="sa-insight-row__icon">{ins.icon}</div>
-                <div className="sa-insight-row__body">
-                  <div className="sa-insight-row__title">{ins.title}</div>
-                  <div className="sa-insight-row__sub">{ins.sub}</div>
+            {INSIGHTS.map((ins, i) => {
+              const IconComp = ins.icon;
+              return (
+                <div className="sa-insight-row" key={i} style={{ "--ii": i }}>
+                  <div className="sa-insight-row__icon" style={{ display: "inline-flex", alignItems: "center", color: ins.iconColor, marginTop: "2px" }}>
+                    <IconComp size={16} />
+                  </div>
+                  <div className="sa-insight-row__body">
+                    <div className="sa-insight-row__title">{ins.title}</div>
+                    <div className="sa-insight-row__sub">{ins.sub}</div>
+                  </div>
+                  <div className="sa-insight-row__val" style={{ color: ins.valColor }}>{ins.val}</div>
                 </div>
-                <div className="sa-insight-row__val" style={{ color: ins.valColor }}>{ins.val}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="sa-priority-box">
-            <div className="sa-priority-box__title">📌 Priority Action for Management</div>
+            <div className="sa-priority-box__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Pin size={14} style={{ color: "#ef4444", transform: "rotate(45deg)" }} /> Priority Action for Management
+            </div>
             <div className="sa-priority-box__body">
               Feb sales slump needs immediate attention. Confirm pending orders from{" "}
               <strong>VR Foundries</strong> and <strong>Vasanthi Foundry</strong> for March delivery

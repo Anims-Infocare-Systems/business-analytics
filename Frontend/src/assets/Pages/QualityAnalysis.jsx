@@ -69,8 +69,13 @@ const KPI_CARDS = [
     { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
-    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot · Not filtered by selected date range", trend: "Action needed", cls: "qa2-t-down" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
+    
+    { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: "115", sub: "Material defects", trend: "Action required", cls: "qa2-t-down" },
+    { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "90", sub: "Processing defects", trend: "Under watch", cls: "qa2-t-down" },
+    { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "3", sub: "Log complaints", trend: "3 open issues", cls: "qa2-t-down" },
+    { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "74,599 PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: "qa2-t-down" },
+    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot", trend: "Action needed", cls: "qa2-t-down" },
 ];
 
 const EMPTY_KPI_CARDS = [
@@ -78,8 +83,13 @@ const EMPTY_KPI_CARDS = [
     { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
-    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
+    
+    { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: "0", sub: "Material defects", trend: "Healthy status", cls: "qa2-t-up" },
+    { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "0", sub: "Processing defects", trend: "All clear", cls: "qa2-t-up" },
+    { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "0", sub: "Log complaints", trend: "0 complaints", cls: "qa2-t-up" },
+    { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "0 PPM", sub: "Defect PPM level", trend: "Within control", cls: "qa2-t-up" },
+    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
 ];
 
 const PRODUCT_QUALITY = [
@@ -121,6 +131,15 @@ const REJECTION_ROWS = [
 
 const REWORK_QUEUE = [
     { dotColor: "#ef4444", name: "PDC0018 - Thinner GP 015 (RAS)", code: "INS-2601-005 · Rework Needed · Quality dept", qty: "60 Nos", daysBg: "#fee2e2", daysFg: "#b91c1c", daysLbl: "+5d" }
+];
+
+const TRACEABILITY_ROWS = [
+    { routecardNo: "RC-2602-081", date: "22-Feb-2026", supplierName: "A-One Steel Forgings", customerName: "TVS Motor Company", materialName: "Steel Bar EN8", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", operator: "Operator John", qty: "100", okQty: "100", rejQty: "0", rwQty: "0" },
+    { routecardNo: "RC-2602-082", date: "22-Feb-2026", supplierName: "Apex Industries Ltd", customerName: "Sundram Fasteners", materialName: "Thinner GP 015", partNoDesc: "PDC0018 - Thinner GP 015", operator: "Operator Sam", qty: "60", okQty: "0", rejQty: "0", rwQty: "60" },
+    { routecardNo: "RC-2602-083", date: "21-Feb-2026", supplierName: "Dynamic Precision India", customerName: "Lucas TVS Ltd", materialName: "Paint GP Grey", partNoDesc: "PDC0017 - Paint-Seal Cast", operator: "Operator Sarah", qty: "75", okQty: "0", rejQty: "75", rwQty: "0" },
+    { routecardNo: "RC-2602-084", date: "20-Feb-2026", supplierName: "Micro Tools & Dies", customerName: "Brakes India", materialName: "CCMT Carbide Insert", partNoDesc: "PDCT0165 - Insert CCMT 09T304", operator: "Operator Alex", qty: "200", okQty: "200", rejQty: "0", rwQty: "0" },
+    { routecardNo: "RC-2602-085", date: "19-Feb-2026", supplierName: "Super Forge Pvt Ltd", customerName: "TVS Motor Company", materialName: "Round Rod DIA 65MM", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", operator: "Operator John", qty: "150", okQty: "150", rejQty: "0", rwQty: "0" },
+    { routecardNo: "RC-2602-086", date: "18-Feb-2026", supplierName: "Ultra Tech Engineering", customerName: "Lucas TVS Ltd", materialName: "Casting EN9", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", operator: "Operator Mike", qty: "183", okQty: "183", rejQty: "0", rwQty: "0" },
 ];
 
 // CALIBRATION_ROWS removed — live data from Ins_Mas only
@@ -207,6 +226,16 @@ const getProcessName = (product) => {
     return "Forging";
 };
 
+const getDepartmentForProcess = (process) => {
+    const p = String(process).toLowerCase();
+    if (p.includes("cut") || p.includes("machin") || p.includes("turn")) return "Machining";
+    if (p.includes("forg") || p.includes("press")) return "Forging";
+    if (p.includes("assembl")) return "Assembly";
+    if (p.includes("dip") || p.includes("mix") || p.includes("paint") || p.includes("coat")) return "Finishing & Paint";
+    if (p.includes("pack") || p.includes("receiv") || p.includes("stores")) return "Logistics & Incoming";
+    return "Production";
+};
+
 const getInspectorName = (id) => {
     const idx = parseInt(id?.replace(/\D/g, "")) || 0;
     const inspectors = ["Operator John", "Operator Sam", "Operator Sarah", "Operator Alex", "Operator Chris", "Operator Mike", "Operator Lisa"];
@@ -267,6 +296,22 @@ const formatDisplayDate = (dStr) => {
     return dStr;
 };
 
+const parseDisplayDate = (dStr) => {
+    if (!dStr) return null;
+    const parts = dStr.split("-");
+    if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const mStr = parts[1].toLowerCase();
+        const y = parseInt(parts[2], 10);
+        const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+        const m = months.indexOf(mStr);
+        if (m !== -1) {
+            return new Date(y, m, d);
+        }
+    }
+    return null;
+};
+
 // ─────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────
@@ -299,6 +344,8 @@ export default function QualityAnalysis() {
         product: "All Products", defectType: "All Defects",
     });
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedType, setSelectedType] = useState("ALL");
+    const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
     const [animated, setAnimated] = useState(false);
 
     // API state data
@@ -500,17 +547,22 @@ export default function QualityAnalysis() {
 
 
     // ── Memoised derived data (avoids re-computation on unrelated renders) ─────
-    const activeKpiCards = useMemo(() => {
-        if (hasNoData) return EMPTY_KPI_CARDS;
-        return summaryData?.kpis ? [
-            { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", ...summaryData.kpis.total_inspected_card },
-            { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate",             ...summaryData.kpis.pass_rate_card },
-            { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate",        ...summaryData.kpis.rejection_rate_card },
-            { icon: Wrench, iconColor: "#f97316", label: "Rework Rate",           ...summaryData.kpis.rework_rate_card },
-            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting",   ...summaryData.kpis.pending_insp_card },
-            { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value",         ...summaryData.kpis.quality_value_card },
-        ] : KPI_CARDS;
-    }, [summaryData, hasNoData]);
+
+    const searchFilteredInspectionRows = useMemo(() => {
+        if (hasNoData) return [];
+        const raw = recordsData?.inspection_records || INSPECTION_ROWS;
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(r => 
+            (r.id && r.id.toLowerCase().includes(q)) ||
+            (r.partyName && r.partyName.toLowerCase().includes(q)) ||
+            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
+            (r.process && r.process.toLowerCase().includes(q)) ||
+            (r.inspBy && r.inspBy.toLowerCase().includes(q)) ||
+            (r.result && r.result.toLowerCase().includes(q)) ||
+            (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
+        );
+    }, [recordsData, hasNoData, searchQuery]);
 
     const activeProductQuality  = useMemo(() => {
         if (hasNoData && !hasSearchWithData) return [];
@@ -542,23 +594,19 @@ export default function QualityAnalysis() {
         ];
     }, [defectCausesData, hasNoData]);
 
-    const activeInspectionRows  = useMemo(() => {
-        if (hasNoData) return [];
-        const raw = recordsData?.inspection_records || INSPECTION_ROWS;
-        if (!searchQuery) return raw;
-        const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r => 
-            (r.id && r.id.toLowerCase().includes(q)) ||
-            (r.partyName && r.partyName.toLowerCase().includes(q)) ||
-            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
-            (r.process && r.process.toLowerCase().includes(q)) ||
-            (r.inspBy && r.inspBy.toLowerCase().includes(q)) ||
-            (r.result && r.result.toLowerCase().includes(q)) ||
-            (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
-        );
-    }, [recordsData, hasNoData, searchQuery]);
+    const activeInspectionRows = useMemo(() => {
+        if (selectedType === "ALL") return searchFilteredInspectionRows;
+        return searchFilteredInspectionRows.filter(r => {
+            const l = (r.typeLabel || "").toLowerCase();
+            const id = (r.id || "").toLowerCase();
+            if (selectedType === "INTER") return l.includes("inter") || id.startsWith("ii");
+            if (selectedType === "FINAL") return l.includes("final") || id.startsWith("fi");
+            if (selectedType === "JOB") return l.includes("job") || id.startsWith("ji");
+            return true;
+        });
+    }, [searchFilteredInspectionRows, selectedType]);
 
-    const activeRejectionRows   = useMemo(() => {
+    const searchFilteredRejectionRows = useMemo(() => {
         if (hasNoData) return [];
         const raw = recordsData?.rejection_rows || REJECTION_ROWS;
         if (!searchQuery) return raw;
@@ -571,6 +619,24 @@ export default function QualityAnalysis() {
             (r.disp && r.disp.toLowerCase().includes(q))
         );
     }, [recordsData, hasNoData, searchQuery]);
+
+    const activeRejectionRows = useMemo(() => {
+        if (selectedDispFilter === "ALL") return searchFilteredRejectionRows;
+        return searchFilteredRejectionRows.filter(r => {
+            const d = (r.disp || "").toLowerCase();
+            if (selectedDispFilter === "REJECTION") return d.includes("reject");
+            if (selectedDispFilter === "REWORK") return d.includes("rework");
+            return true;
+        });
+    }, [searchFilteredRejectionRows, selectedDispFilter]);
+
+    const rejectionCount = useMemo(() => 
+        searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("reject")).length,
+    [searchFilteredRejectionRows]);
+
+    const reworkCount = useMemo(() => 
+        searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("rework")).length,
+    [searchFilteredRejectionRows]);
 
     const activeReworkQueue     = useMemo(() => {
         if (hasNoData) return [];
@@ -591,8 +657,8 @@ export default function QualityAnalysis() {
     const activeVendorRejection = useMemo(() => {
         const vendorMap = {};
         
-        // Aggregate from activeInspectionRows (which are dynamically search-filtered and date-range filtered)
-        activeInspectionRows.forEach(r => {
+        // Aggregate from searchFilteredInspectionRows (which are dynamically search-filtered and date-range filtered)
+        searchFilteredInspectionRows.forEach(r => {
             const vendor = r.partyName || "Unknown Vendor";
             if (!vendorMap[vendor]) {
                 vendorMap[vendor] = { name: vendor, insp: 0, pass: 0, rej: 0 };
@@ -643,13 +709,13 @@ export default function QualityAnalysis() {
                 color: color
             };
         }).sort((a, b) => b.rej - a.rej);
-    }, [activeInspectionRows, hasNoData, searchQuery]);
+    }, [searchFilteredInspectionRows, hasNoData, searchQuery]);
 
     const activeProcessRejection = useMemo(() => {
         const processMap = {};
         
-        // Aggregate from activeInspectionRows (which are dynamically search-filtered and date-range filtered)
-        activeInspectionRows.forEach(r => {
+        // Aggregate from searchFilteredInspectionRows (which are dynamically search-filtered and date-range filtered)
+        searchFilteredInspectionRows.forEach(r => {
             const process = r.process || "Unknown Process";
             if (!processMap[process]) {
                 processMap[process] = { name: process, insp: 0, pass: 0, rej: 0 };
@@ -701,7 +767,98 @@ export default function QualityAnalysis() {
                 color: color
             };
         }).sort((a, b) => b.rej - a.rej);
-    }, [activeInspectionRows, hasNoData, searchQuery]);
+    }, [searchFilteredInspectionRows, hasNoData, searchQuery]);
+
+    const topMaterialRejections = useMemo(() => {
+        const map = {};
+        searchFilteredInspectionRows.forEach(r => {
+            const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
+            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            if (matRej > 0) {
+                if (!map[partNoDesc]) {
+                    map[partNoDesc] = { name: partNoDesc, qty: 0, process: r.process || "—" };
+                }
+                map[partNoDesc].qty += matRej;
+            }
+        });
+        let list = Object.values(map).sort((a, b) => b.qty - a.qty);
+        
+        if (list.length === 0 || hasNoData) {
+            list = [
+                { name: "Round Rod DIA 50MM", qty: 48, process: "Cutting" },
+                { name: "Paint-Seal Cast", qty: 75, process: "Dipping" },
+                { name: "VCI Cover 8\"×8\"", qty: 4, process: "Packaging" }
+            ];
+        }
+        return list.slice(0, 5);
+    }, [searchFilteredInspectionRows, hasNoData]);
+
+    const topMachineRejections = useMemo(() => {
+        const map = {};
+        searchFilteredInspectionRows.forEach(r => {
+            const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
+            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            if (macRej > 0) {
+                if (!map[partNoDesc]) {
+                    map[partNoDesc] = { name: partNoDesc, qty: 0, process: r.process || "—" };
+                }
+                map[partNoDesc].qty += macRej;
+            }
+        });
+        let list = Object.values(map).sort((a, b) => b.qty - a.qty);
+        
+        if (list.length === 0 || hasNoData) {
+            list = [
+                { name: "Segment Carrier RM", qty: 40, process: "Assembly" },
+                { name: "Bottom Bearing Housing", qty: 6, process: "Machining" }
+            ];
+        }
+        return list.slice(0, 5);
+    }, [searchFilteredInspectionRows, hasNoData]);
+
+    const departmentRejections = useMemo(() => {
+        const map = {};
+        searchFilteredInspectionRows.forEach(r => {
+            const dept = getDepartmentForProcess(r.process || "Other");
+            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            const rej = matRej + macRej;
+            const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
+            
+            if (!map[dept]) {
+                map[dept] = { department: dept, inspected: 0, rejected: 0 };
+            }
+            map[dept].inspected += qty;
+            map[dept].rejected += rej;
+        });
+
+        let list = Object.values(map);
+
+        if (list.length === 0 || hasNoData) {
+            list = [
+                { department: "Machining", inspected: 800, rejected: 24 },
+                { department: "Forging", inspected: 300, rejected: 5 },
+                { department: "Assembly", inspected: 620, rejected: 40 },
+                { department: "Finishing & Paint", inspected: 475, rejected: 75 },
+                { department: "Logistics & Incoming", inspected: 450, rejected: 6 }
+            ];
+        }
+
+        const totalAllRejections = list.reduce((sum, d) => sum + d.rejected, 0);
+
+        return list.map(d => {
+            const rateVal = d.inspected > 0 ? (d.rejected / d.inspected) * 100 : 0;
+            const shareVal = totalAllRejections > 0 ? (d.rejected / totalAllRejections) * 100 : 0;
+            return {
+                department: d.department,
+                inspected: d.inspected,
+                rejected: d.rejected,
+                rate: `${rateVal.toFixed(1)}%`,
+                share: `${shareVal.toFixed(1)}%`,
+                shareVal: shareVal
+            };
+        }).sort((a, b) => b.rejected - a.rejected);
+    }, [searchFilteredInspectionRows, hasNoData]);
 
     const activeCustomerComplaints = useMemo(() => {
         if (hasNoData) return [];
@@ -741,15 +898,41 @@ export default function QualityAnalysis() {
         );
     }, [customerComplaintsData, hasNoData, searchQuery]);
 
+    const activeTraceabilityRows = useMemo(() => {
+        if (hasNoData) return [];
+        let list = TRACEABILITY_ROWS;
+        
+        // Filter by date range if active
+        if (dateRange.from && dateRange.to) {
+            list = list.filter(r => {
+                const rd = parseDisplayDate(r.date);
+                if (!rd) return true;
+                return rd >= dateRange.from && rd <= dateRange.to;
+            });
+        }
+        
+        // Filter by search query if active
+        if (!searchQuery) return list;
+        const q = searchQuery.toLowerCase().trim();
+        return list.filter(r => 
+            (r.routecardNo && r.routecardNo.toLowerCase().includes(q)) ||
+            (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
+            (r.customerName && r.customerName.toLowerCase().includes(q)) ||
+            (r.materialName && r.materialName.toLowerCase().includes(q)) ||
+            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
+            (r.operator && r.operator.toLowerCase().includes(q))
+        );
+    }, [hasNoData, dateRange, searchQuery]);
+
     const interInspCount = useMemo(() =>
-        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.startsWith("II")).length,
-    [activeInspectionRows]);
+        searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.toLowerCase().startsWith("ii")).length,
+    [searchFilteredInspectionRows]);
     const finalInspCount = useMemo(() =>
-        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("final") || r.id?.startsWith("FI")).length,
-    [activeInspectionRows]);
+        searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("final") || r.id?.toLowerCase().startsWith("fi")).length,
+    [searchFilteredInspectionRows]);
     const jobOrderCount  = useMemo(() =>
-        activeInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("job")   || r.id?.startsWith("JI")).length,
-    [activeInspectionRows]);
+        searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("job")   || r.id?.toLowerCase().startsWith("ji")).length,
+    [searchFilteredInspectionRows]);
 
     // Count items that are overdue or due within 7 days
     const calibrationAlertCount = useMemo(() =>
@@ -787,6 +970,62 @@ export default function QualityAnalysis() {
                 "3) Review assembly fixture for Segment Carrier alignment."
               ];
     }, [insightsData, hasNoData]);
+
+
+    const activeKpiCards = useMemo(() => {
+        if (hasNoData) return EMPTY_KPI_CARDS;
+
+        const totalInspected = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalMaterialRej = searchFilteredInspectionRows.reduce((sum, r) => {
+            return sum + (parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
+        }, 0);
+        const totalMachineRej = searchFilteredInspectionRows.reduce((sum, r) => {
+            return sum + (parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
+        }, 0);
+        const complaintsCount = activeCustomerComplaints.length;
+        const ppm = totalInspected > 0 ? Math.round(((totalMaterialRej + totalMachineRej) / totalInspected) * 1000000) : 0;
+
+        const insQty = summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN");
+        const passRate = summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "87.6%");
+        const rejRate = summaryData?.kpis?.rejection_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "7.5%");
+        const reworkRate = summaryData?.kpis?.rework_rate_card?.value || "4.9%";
+        const pendingInsp = summaryData?.kpis?.pending_insp_card?.value || "5";
+        const qualityVal = summaryData?.kpis?.quality_value_card?.value || "₹56,589";
+
+        return [
+            { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: insQty, sub: "Selected Period", trend: `${searchFilteredInspectionRows.length} records`, cls: "qa2-t-neutral" },
+            { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: passRate, sub: "Inspected units", trend: "↑ 2.1% vs last", cls: "qa2-t-up" },
+            { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: rejRate, sub: "Defective units", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
+            { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: reworkRate, sub: "Reworked units", trend: "Within tolerance", cls: "qa2-t-neutral" },
+            { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: qualityVal, sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
+            
+            { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: totalMaterialRej.toLocaleString("en-IN"), sub: "Material defects", trend: totalMaterialRej > 0 ? "Action required" : "Healthy status", cls: totalMaterialRej > 0 ? "qa2-t-down" : "qa2-t-up" },
+            { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: totalMachineRej.toLocaleString("en-IN"), sub: "Processing defects", trend: totalMachineRej > 0 ? "Under watch" : "All clear", cls: totalMachineRej > 0 ? "qa2-t-down" : "qa2-t-up" },
+            { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: complaintsCount.toString(), sub: "Log complaints", trend: complaintsCount > 0 ? `${complaintsCount} open issues` : "0 complaints", cls: complaintsCount > 0 ? "qa2-t-down" : "qa2-t-up" },
+            { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: ppm.toLocaleString("en-IN") + " PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: ppm < 10000 ? "qa2-t-up" : "qa2-t-down" },
+            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" }
+        ];
+    }, [summaryData, hasNoData, searchFilteredInspectionRows, activeCustomerComplaints]);
+
+    const handleTypeBadgeClick = (label) => {
+        const l = String(label).toLowerCase();
+        if (l.includes("inter")) {
+            setSelectedType(prev => prev === "INTER" ? "ALL" : "INTER");
+        } else if (l.includes("final")) {
+            setSelectedType(prev => prev === "FINAL" ? "ALL" : "FINAL");
+        } else if (l.includes("job")) {
+            setSelectedType(prev => prev === "JOB" ? "ALL" : "JOB");
+        }
+    };
+
+    const handleDispBadgeClick = (disp) => {
+        const d = String(disp).toLowerCase();
+        if (d.includes("reject")) {
+            setSelectedDispFilter(prev => prev === "REJECTION" ? "ALL" : "REJECTION");
+        } else if (d.includes("rework")) {
+            setSelectedDispFilter(prev => prev === "REWORK" ? "ALL" : "REWORK");
+        }
+    };
 
     return (
         <div className={`qa2-root ${animated ? "qa2-root--visible" : ""}`}>
@@ -1240,20 +1479,145 @@ export default function QualityAnalysis() {
                 </div>
             </div>
 
+            {/* ── Top 5 Material Rejection + Top 5 Machine Rejection + Dept Rejection (3-Col Grid) ── */}
+            <div className="qa2-charts-3-equal qa2-animate qa2-d4">
+
+                {/* Top 5 Material Rejection */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Package} iconColor="#f43f5e" title="Top 5 Material Rejection"
+                        extra={<span className="qa2-section-sub">Highest quantity material failures</span>} />
+                    <div className="qa2-pq-header">
+                        <span className="qa2-pqh-name">Material / Product</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '70px', textAlign: 'right' }}>Rej Qty</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '90px', textAlign: 'right' }}>Operation</span>
+                    </div>
+                    <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
+                        {topMaterialRejections.length > 0 ? (
+                            topMaterialRejections.map((m, i) => (
+                                <div className="qa2-pq-row" key={i}>
+                                    <div className="qa2-pq-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
+                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '70px', textAlign: 'right', fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '90px', textAlign: 'right' }}>{m.process}</div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No material rejections found
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Top 5 Machine Rejection */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Activity} iconColor="#0f766e" title="Top 5 Machine Rejection"
+                        extra={<span className="qa2-section-sub">Highest quantity processing failures</span>} />
+                    <div className="qa2-pq-header">
+                        <span className="qa2-pqh-name">Product / Part</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '70px', textAlign: 'right' }}>Rej Qty</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '90px', textAlign: 'right' }}>Operation</span>
+                    </div>
+                    <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
+                        {topMachineRejections.length > 0 ? (
+                            topMachineRejections.map((m, i) => (
+                                <div className="qa2-pq-row" key={i}>
+                                    <div className="qa2-pq-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
+                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '70px', textAlign: 'right', fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '90px', textAlign: 'right' }}>{m.process}</div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No machine rejections found
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Department wise Rejection */}
+                <div className="qa2-card qa2-card-premium">
+                    <SectionHead icon={Users} iconColor="#2d6de8" title="Department wise Rejection"
+                        extra={<span className="qa2-section-sub">Department share of rejections</span>} />
+                    <div className="qa2-pq-header">
+                        <span className="qa2-pqh-name">Department</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '60px', textAlign: 'right' }}>Inspected</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '50px', textAlign: 'right' }}>Rej Qty</span>
+                        <span className="qa2-pqh-num" style={{ minWidth: '60px', textAlign: 'right' }}>Rej Rate</span>
+                        <span className="qa2-pqh-bar" style={{ width: '90px', textAlign: 'right' }}>Contribution</span>
+                    </div>
+                    <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
+                        {departmentRejections.length > 0 ? (
+                            departmentRejections.map((d, i) => (
+                                <div className="qa2-pq-row" key={i}>
+                                    <div className="qa2-pq-name" title={d.department} style={{ fontWeight: 600 }}>{d.department}</div>
+                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '60px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.inspected.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '50px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d.rejected.toLocaleString()}</div>
+                                    <div className="qa2-pq-num" style={{ minWidth: '60px', textAlign: 'right', fontWeight: 700, color: parseFloat(d.rate) > 5.0 ? '#ef4444' : (parseFloat(d.rate) > 2.5 ? '#f97316' : '#10b981'), fontVariantNumeric: 'tabular-nums' }}>{d.rate}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '90px', flexShrink: 0, justifyContent: 'flex-end' }}>
+                                        <div className="qa2-pq-bar-track" style={{ flex: 1, background: '#f1f5f9', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div className="qa2-pq-bar-fill" style={{ width: `${d.shareVal}%`, background: '#2d6de8', height: '100%', borderRadius: '3px' }} />
+                                        </div>
+                                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#475569', minWidth: '34px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.share}</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No department records found
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+            </div>
+
             {/* ── Full Inspection Table ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
                 <div className="qa2-table-header">
                     <SectionHead icon={FileText} iconColor="#3b82f6" title="Inspection Records — All Transactions" />
                     <div className="qa2-tag-row">
-                        <span className="qa2-badge qa2-badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span 
+                            className={`qa2-badge qa2-badge-blue qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "INTER" ? "qa2-badge-inactive" : ""} ${selectedType === "INTER" ? "qa2-badge-active-blue" : ""}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => setSelectedType(prev => prev === "INTER" ? "ALL" : "INTER")}
+                        >
                             <Activity size={10} style={{ strokeWidth: 3 }} /> Inter Insp: {interInspCount}
                         </span>
-                        <span className="qa2-badge qa2-badge-teal" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span 
+                            className={`qa2-badge qa2-badge-teal qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "FINAL" ? "qa2-badge-inactive" : ""} ${selectedType === "FINAL" ? "qa2-badge-active-teal" : ""}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => setSelectedType(prev => prev === "FINAL" ? "ALL" : "FINAL")}
+                        >
                             <CheckCircle size={10} style={{ strokeWidth: 3 }} /> Final Insp: {finalInspCount}
                         </span>
-                        <span className="qa2-badge qa2-badge-purple" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span 
+                            className={`qa2-badge qa2-badge-purple qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "JOB" ? "qa2-badge-inactive" : ""} ${selectedType === "JOB" ? "qa2-badge-active-purple" : ""}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => setSelectedType(prev => prev === "JOB" ? "ALL" : "JOB")}
+                        >
                             <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
                         </span>
+                        {selectedType !== "ALL" && (
+                            <button 
+                                className="qa2-clear-type-filter-btn"
+                                onClick={() => setSelectedType("ALL")}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#2d6de8',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    padding: '0 4px',
+                                    marginLeft: '4px'
+                                }}
+                            >
+                                <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
+                            </button>
+                        )}
                     </div>
                 </div>
                 {recordsLoading ? (
@@ -1297,7 +1661,15 @@ export default function QualityAnalysis() {
 
                                         return (
                                             <tr key={i} className="qa2-tr">
-                                                <td style={getColStyle("Type")}><span className={`qa2-badge ${typeCls}`}>{typeLabel}</span></td>
+                                                <td style={getColStyle("Type")}>
+                                                     <span 
+                                                         className={`qa2-badge ${typeCls} qa2-badge-interactive`}
+                                                         style={{ display: 'inline-flex', alignItems: 'center' }}
+                                                         onClick={() => handleTypeBadgeClick(typeLabel)}
+                                                     >
+                                                         {typeLabel}
+                                                     </span>
+                                                 </td>
                                                 <td style={getColStyle("Insp No")}><span className="qa2-insp-id">{inspNo}</span></td>
                                                 <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp Date")}>{inspDate}</td>
                                                 <td className="qa2-mono qa2-muted" style={getColStyle("Part No – Description")}>{partNoDesc}</td>
@@ -1330,8 +1702,60 @@ export default function QualityAnalysis() {
 
             {/* ── Rejection & Rework Summary (Full Width) ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary"
-                    badge={`${activeRejectionRows.length} Records`} badgeCls="qa2-badge-red" />
+                <div className="qa2-table-header">
+                    <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary" />
+                    <div className="qa2-tag-row">
+                        <span 
+                            className="qa2-badge" 
+                            style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '4px', 
+                                background: '#f1f5f9', 
+                                color: '#475569', 
+                                border: '1px solid #e2e8f0', 
+                                fontWeight: 600 
+                            }}
+                        >
+                            {activeRejectionRows.length} Record{activeRejectionRows.length !== 1 ? 's' : ''}
+                        </span>
+                        <span 
+                            className={`qa2-badge qa2-badge-red qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REJECTION" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REJECTION" ? "qa2-badge-active-red" : ""}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => setSelectedDispFilter(prev => prev === "REJECTION" ? "ALL" : "REJECTION")}
+                        >
+                            <XCircle size={10} style={{ strokeWidth: 3 }} /> Rejection: {rejectionCount}
+                        </span>
+                        <span 
+                            className={`qa2-badge qa2-badge-orange qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REWORK" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REWORK" ? "qa2-badge-active-orange" : ""}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => setSelectedDispFilter(prev => prev === "REWORK" ? "ALL" : "REWORK")}
+                        >
+                            <Wrench size={10} style={{ strokeWidth: 3 }} /> Rework: {reworkCount}
+                        </span>
+                        {selectedDispFilter !== "ALL" && (
+                            <button 
+                                className="qa2-clear-type-filter-btn"
+                                onClick={() => setSelectedDispFilter("ALL")}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#2d6de8',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    padding: '0 4px',
+                                    marginLeft: '4px'
+                                }}
+                            >
+                                <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
+                            </button>
+                        )}
+                    </div>
+                </div>
                 {recordsLoading ? (
                     <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
                         {[1, 2, 3, 4].map(i => (
@@ -1361,7 +1785,15 @@ export default function QualityAnalysis() {
                                             <td>{r.product}</td>
                                             <td>{r.reason}</td>
                                             <td className="qa2-td-r">{r.qty}</td>
-                                            <td><span className={`qa2-badge ${r.dispCls}`}>{r.disp}</span></td>
+                                            <td>
+                                                <span 
+                                                    className={`qa2-badge ${r.dispCls} qa2-badge-interactive`}
+                                                    style={{ display: 'inline-flex', alignItems: 'center' }}
+                                                    onClick={() => handleDispBadgeClick(r.disp)}
+                                                >
+                                                    {r.disp}
+                                                </span>
+                                            </td>
                                             <td className="qa2-muted qa2-nowrap">{r.date}</td>
                                         </tr>
                                     ))
@@ -1441,7 +1873,59 @@ export default function QualityAnalysis() {
                 )}
             </div>
 
-
+            {/* ── Traceability (Full Width) ── */}
+            <div className="qa2-card qa2-card-premium qa2-animate qa2-d4">
+                <SectionHead 
+                    icon={FileText} 
+                    iconColor="#8b5cf6" 
+                    title="Traceability Records" 
+                    badge={`${activeTraceabilityRows.length} Record${activeTraceabilityRows.length !== 1 ? "s" : ""}`} 
+                    badgeCls="qa2-badge-purple" 
+                />
+                <div className="qa2-table-scroll">
+                    <table className="qa2-table">
+                        <thead>
+                            <tr>
+                                {["Routecard No", "Routecard Date", "Supplier Name", "Customer Name", "Material Name", "Part No – Description", "Operator", "Qty", "OK Qty", "Rej Qty", "Rw Qty"].map(h => (
+                                    <th key={h} className={["Qty", "OK Qty", "Rej Qty", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {activeTraceabilityRows.length > 0 ? (
+                                activeTraceabilityRows.map((r, i) => (
+                                    <tr key={i} className="qa2-tr">
+                                        <td style={{ minWidth: "130px" }}>
+                                            <span 
+                                                className="qa2-badge" 
+                                                style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6", fontWeight: 700 }}
+                                            >
+                                                {r.routecardNo}
+                                            </span>
+                                        </td>
+                                        <td className="qa2-muted qa2-nowrap" style={{ minWidth: "120px" }}>{r.date}</td>
+                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.supplierName}</td>
+                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.customerName}</td>
+                                        <td className="qa2-muted" style={{ minWidth: "150px" }}>{r.materialName}</td>
+                                        <td className="qa2-mono qa2-muted" style={{ minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" }}>{r.partNoDesc}</td>
+                                        <td className="qa2-nowrap" style={{ minWidth: "130px" }}>{r.operator}</td>
+                                        <td className="qa2-td-r" style={{ minWidth: "80px", fontWeight: 600 }}>{r.qty}</td>
+                                        <td className="qa2-td-r qa2-green" style={{ minWidth: "80px", fontWeight: 600 }}>{r.okQty}</td>
+                                        <td className="qa2-td-r qa2-red" style={{ minWidth: "80px" }}>{r.rejQty}</td>
+                                        <td className="qa2-td-r qa2-orange" style={{ minWidth: "80px" }}>{r.rwQty}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="11" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                        No traceability records found for the selected period
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             {/* ── Management Insights ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
