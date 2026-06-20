@@ -290,15 +290,25 @@
     transition: opacity .2s;
 }
 
-.d1-ymp__chip:hover {
-    border-color: #a5b4fc;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, .10);
-    transform: translateY(-1px) scale(1.01);
+.d1-ymp__chip:hover:not(:disabled) {
+    border-color: var(--d1-blue);
+    box-shadow: 0 0 0 3px rgba(26, 86, 219, .22);
+    background: #f8fafc;
+    transform: none;
 }
 
 .d1-ymp__chip:hover::after {
     opacity: 1;
     animation: d1-chip-shimmer .55s ease;
+}
+
+.d1-ymp__chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+    background: var(--d1-bg);
+    border-color: var(--d1-border);
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 .d1-ymp__chip--open {
@@ -665,6 +675,13 @@
 
 .d1-ref-btn:active {
     transform: scale(0.97);
+}
+
+.d1-ref-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 .d1-spinning {

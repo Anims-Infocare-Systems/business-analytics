@@ -196,76 +196,11 @@ const MOCK_DATA = {
   },
   customerPoCompare: {
     rows: [
-      {
-        customer: "Tata Motors",
-        po_no: "PO-2026-8801",
-        po_date: "2026-06-01",
-        part_no: "BRK-PAD-M1",
-        ordered_qty: 5000,
-        produced_qty: 4800,
-        dispatch_qty: 4500,
-        pending_qty: 500,
-        rejected_qty: 50,
-        delivery_date: "2026-06-20",
-        status: "In Progress",
-        category: "Brake Parts"
-      },
-      {
-        customer: "Mahindra & Mahindra",
-        po_no: "PO-2026-9042",
-        po_date: "2026-06-03",
-        part_no: "ROT-DSC-X4",
-        ordered_qty: 3000,
-        produced_qty: 3000,
-        dispatch_qty: 3000,
-        pending_qty: 0,
-        rejected_qty: 20,
-        delivery_date: "2026-06-15",
-        status: "Completed",
-        category: "Rotors"
-      },
-      {
-        customer: "Maruti Suzuki",
-        po_no: "PO-2026-7719",
-        po_date: "2026-06-05",
-        part_no: "GBX-HNG-S2",
-        ordered_qty: 1500,
-        produced_qty: 1200,
-        dispatch_qty: 1000,
-        pending_qty: 500,
-        rejected_qty: 15,
-        delivery_date: "2026-06-25",
-        status: "In Progress",
-        category: "Gearbox"
-      },
-      {
-        customer: "Hyundai India",
-        po_no: "PO-2026-6652",
-        po_date: "2026-06-08",
-        part_no: "ENG-MNT-H1",
-        ordered_qty: 2500,
-        produced_qty: 0,
-        dispatch_qty: 0,
-        pending_qty: 2500,
-        rejected_qty: 0,
-        delivery_date: "2026-06-30",
-        status: "Pending",
-        category: "Engine Parts"
-      },
-      {
-        customer: "Ashok Leyland",
-        po_no: "PO-2026-4401",
-        po_date: "2026-06-10",
-        part_no: "TRK-AXL-L9",
-        ordered_qty: 800,
-        produced_qty: 780,
-        dispatch_qty: 750,
-        pending_qty: 50,
-        rejected_qty: 8,
-        delivery_date: "2026-06-18",
-        status: "In Progress",
-        category: "Axle Parts"
-      }
+      { customer: "Tata Motors", month: "Jun-26", date: "2026-06-01", orderValue: 50.0, salesValue: 45.0, pendingValue: 5.0, poNumber: "PO-2026-8801", partNumber: "BRK-PAD-M1" },
+      { customer: "Mahindra & Mahindra", month: "Jun-26", date: "2026-06-03", orderValue: 30.0, salesValue: 30.0, pendingValue: 0.0, poNumber: "PO-2026-9042", partNumber: "ROT-DSC-X4" },
+      { customer: "Maruti Suzuki", month: "Jun-26", date: "2026-06-05", orderValue: 15.0, salesValue: 10.0, pendingValue: 5.0, poNumber: "PO-2026-7719", partNumber: "GBX-HNG-S2" },
+      { customer: "Hyundai India", month: "Jun-26", date: "2026-06-08", orderValue: 25.0, salesValue: 0.0, pendingValue: 25.0, poNumber: "PO-2026-6652", partNumber: "ENG-MNT-H1" },
+      { customer: "Ashok Leyland", month: "Jun-26", date: "2026-06-10", orderValue: 8.0, salesValue: 7.5, pendingValue: 0.5, poNumber: "PO-2026-4401", partNumber: "TRK-AXL-L9" }
     ]
   }
 };
@@ -2564,10 +2499,23 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
 
   const partSuggestions = React.useMemo(() => {
     if (!filters.partNumber) return [];
-    const parts = CHART1_BASE.map(r => r.partNumber);
+    const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows)) 
+      ? data.customerPoCompare.rows 
+      : [];
+    const parts = source.map(r => r.partNumber).filter(Boolean);
     const uniqueParts = Array.from(new Set(parts));
     return uniqueParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber]);
+  }, [filters.partNumber, data?.customerPoCompare?.rows]);
+
+  const custSuggestions = React.useMemo(() => {
+    const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows)) 
+      ? data.customerPoCompare.rows 
+      : [];
+    const names = source.map(r => r.customer).filter(Boolean);
+    const uniqueNames = Array.from(new Set(names)).sort();
+    if (!filters.customer) return uniqueNames;
+    return uniqueNames.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
+  }, [filters.customer, data?.customerPoCompare?.rows]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -2584,8 +2532,16 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
     };
   }, []);
 
-  const pickerFrom = React.useMemo(() => filters.fromDate ? new Date(filters.fromDate) : null, [filters.fromDate]);
-  const pickerTo = React.useMemo(() => filters.toDate ? new Date(filters.toDate) : null, [filters.toDate]);
+  const pickerFrom = React.useMemo(() => {
+    if (filters.fromDate) return new Date(filters.fromDate);
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, [filters.fromDate]);
+
+  const pickerTo = React.useMemo(() => {
+    if (filters.toDate) return new Date(filters.toDate);
+    return new Date();
+  }, [filters.toDate]);
 
   const handlePickerChange = React.useCallback(({ from, to }) => {
     const formatLocalDate = (d) => {
@@ -2604,41 +2560,69 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
 
   // Filtered rows for dynamic chart display
   const chart1Data = React.useMemo(() => {
-    let list = CHART1_BASE;
-    if (filters.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
+    let list = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows)) 
+      ? data.customerPoCompare.rows 
+      : [];
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const defaultFrom = `${year}-${month}-01`;
+    const defaultTo = `${year}-${month}-${day}`;
+
+    const activeFrom = filters.fromDate || defaultFrom;
+    const activeTo = filters.toDate || defaultTo;
+      
+    list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
     if (filters.customer) {
       list = list.filter(r => r.customer === filters.customer);
     }
     if (filters.poNumber) {
-      list = list.filter(r => r.poNumber.toLowerCase().includes(filters.poNumber.toLowerCase()));
+      list = list.filter(r => r.poNumber && String(r.poNumber).toLowerCase().includes(filters.poNumber.toLowerCase()));
     }
     if (filters.partNumber) {
-      list = list.filter(r => r.partNumber.toLowerCase().includes(filters.partNumber.toLowerCase()));
+      list = list.filter(r => r.partNumber && String(r.partNumber).toLowerCase().includes(filters.partNumber.toLowerCase()));
     }
 
     // Aggregate values month-wise
     const monthGroup = {};
     list.forEach(r => {
+      if (!r.month) return;
       if (!monthGroup[r.month]) {
-        monthGroup[r.month] = { month: r.month, orderValue: 0, salesValue: 0, pendingValue: 0 };
+        monthGroup[r.month] = { 
+          month: r.month, 
+          orderValue: 0, 
+          salesValue: 0, 
+          pendingValue: 0,
+          minDate: r.date || "" 
+        };
       }
-      monthGroup[r.month].orderValue += r.orderValue;
-      monthGroup[r.month].salesValue += r.salesValue;
-      monthGroup[r.month].pendingValue += r.pendingValue;
+      monthGroup[r.month].orderValue += Number(r.orderValue || 0);
+      monthGroup[r.month].salesValue += Number(r.salesValue || 0);
+      monthGroup[r.month].pendingValue += Number(r.pendingValue || 0);
+      if (r.date && (!monthGroup[r.month].minDate || r.date < monthGroup[r.month].minDate)) {
+        monthGroup[r.month].minDate = r.date;
+      }
     });
 
-    const sortedMonths = ["Apr-26", "May-26", "Jun-26"];
-    return sortedMonths
-      .map(m => monthGroup[m])
-      .filter(Boolean);
-  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber]);
+    // Sort months chronologically by minDate
+    const sortedMonthsData = Object.values(monthGroup).sort((a, b) => {
+      if (!a.minDate) return 1;
+      if (!b.minDate) return -1;
+      return a.minDate.localeCompare(b.minDate);
+    });
 
-  const customers = ["Customer A", "Customer B", "Customer C", "Customer D"];
+    return sortedMonthsData;
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, data?.customerPoCompare?.rows]);
+
+  const customers = React.useMemo(() => {
+    const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows)) 
+      ? data.customerPoCompare.rows 
+      : [];
+    const names = source.map(r => r.customer).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [data?.customerPoCompare?.rows]);
   const categories = ["Standard Parts", "Custom Fabrication"];
 
   const handleReset = () => {
@@ -2666,6 +2650,32 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
     const pendingValues = chart1Data.map(r => r.pendingValue);
     const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
     const orderValueAch = targetConfig?.customer_po?.orderValueAch ?? 85;
+
+    // Custom plugin to draw target horizontal line across the entire chart area
+    const horizontalLinePlugin = {
+      id: 'horizontalLine',
+      afterDraw: (chart) => {
+        const yScale = chart.scales.y;
+        const xScale = chart.scales.x;
+        if (!yScale || !xScale) return;
+
+        const targetIndex = chart.data.datasets.findIndex(ds => ds.label === 'Sales Target');
+        if (targetIndex === -1 || !chart.isDatasetVisible(targetIndex)) return;
+
+        const yPos = yScale.getPixelForValue(salesTarget);
+        const ctx = chart.ctx;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.85)";
+        ctx.moveTo(xScale.left, yPos);
+        ctx.lineTo(xScale.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
 
     return new Chart(canvas, {
       type: "line",
@@ -2778,7 +2788,8 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             grid: { color: "rgba(0, 0, 0, 0.05)" }
           }
         }
-      }
+      },
+      plugins: [horizontalLinePlugin]
     });
   }, [chart1Data, targetConfig, showTargetOnly]);
 
@@ -2824,22 +2835,25 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             />
           </div>
 
-          {/* Customer Dropdown */}
+          {/* Customer Autocomplete */}
           <div className="pp1-filter-group" ref={custRef}>
             <label className="pp1-filter-label">Customer</label>
-            <div className="pp1-custom-select-wrap">
-              <button
-                type="button"
-                className={`pp1-custom-select-trigger ${custOpen ? "open" : ""}`}
-                onClick={() => setCustOpen(o => !o)}
-              >
-                <span>{filters.customer || "All Customers"}</span>
-                <ChevronDown size={12} className="pp1-custom-select-caret" />
-              </button>
-              {custOpen && (
-                <div className="pp1-custom-select-options">
+            <div className="pp1-part-autocomplete-wrap">
+              <input
+                type="text"
+                className="pp1-filter-input pp1-part-autocomplete-input"
+                placeholder="Customer..."
+                value={filters.customer}
+                onChange={e => {
+                  handleInputChange("customer", e.target.value);
+                  setCustOpen(true);
+                }}
+                onFocus={() => setCustOpen(true)}
+              />
+              {custOpen && custSuggestions.length > 0 && (
+                <div className="pp1-part-suggestions">
                   <div
-                    className={`pp1-custom-select-option ${!filters.customer ? "selected" : ""}`}
+                    className={`pp1-part-suggestion-item ${!filters.customer ? "selected" : ""}`}
                     onClick={() => {
                       handleInputChange("customer", "");
                       setCustOpen(false);
@@ -2847,10 +2861,10 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
                   >
                     All Customers
                   </div>
-                  {customers.map(c => (
+                  {custSuggestions.map(c => (
                     <div
                       key={c}
-                      className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
+                      className={`pp1-part-suggestion-item ${filters.customer === c ? "selected" : ""}`}
                       onClick={() => {
                         handleInputChange("customer", c);
                         setCustOpen(false);
@@ -3014,24 +3028,50 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
 
   // Process data for Table 1 (Customer PO Value Summary)
   const table1Rows = React.useMemo(() => {
-    let list = CHART1_BASE;
-    if (filters.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
+    let list = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows)) 
+      ? data.customerPoCompare.rows 
+      : [];
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const defaultFrom = `${year}-${month}-01`;
+    const defaultTo = `${year}-${month}-${day}`;
+
+    const activeFrom = filters.fromDate || defaultFrom;
+    const activeTo = filters.toDate || defaultTo;
+      
+    list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
     if (filters.customer) {
       list = list.filter(r => r.customer === filters.customer);
     }
     if (filters.poNumber) {
-      list = list.filter(r => r.poNumber.toLowerCase().includes(filters.poNumber.toLowerCase()));
+      list = list.filter(r => r.poNumber && String(r.poNumber).toLowerCase().includes(filters.poNumber.toLowerCase()));
     }
     if (filters.partNumber) {
-      list = list.filter(r => r.partNumber.toLowerCase().includes(filters.partNumber.toLowerCase()));
+      list = list.filter(r => r.partNumber && String(r.partNumber).toLowerCase().includes(filters.partNumber.toLowerCase()));
     }
-    return list;
-  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber]);
+
+    // Group by customer to make it Customer summary wise
+    const customerGroups = {};
+    list.forEach(r => {
+      const cust = r.customer || "—";
+      if (!customerGroups[cust]) {
+        customerGroups[cust] = {
+          customer: cust,
+          orderValue: 0,
+          salesValue: 0,
+          pendingValue: 0
+        };
+      }
+      customerGroups[cust].orderValue += Number(r.orderValue || 0);
+      customerGroups[cust].salesValue += Number(r.salesValue || 0);
+      customerGroups[cust].pendingValue += Number(r.pendingValue || 0);
+    });
+
+    return Object.values(customerGroups).sort((a, b) => a.customer.localeCompare(b.customer));
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, data?.customerPoCompare?.rows]);
 
   // Render table content
   return (
@@ -3060,7 +3100,6 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
               <th>Customer</th>
-              <th>Month</th>
               {showTargetOnly ? (
                 <th style={{ textAlign: "right", color: "#b91c1c" }}>Sales Target (Lakhs)</th>
               ) : (
@@ -3076,14 +3115,13 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
             {table1Rows.map((r, idx) => (
               <tr key={idx} className="pp1-cc-tbl__tr">
                 <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
-                <td style={{ fontWeight: 600, color: "var(--pp1-text-2)" }}>{r.month}</td>
                 {showTargetOnly ? (
                   <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
                 ) : (
                   <>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{r.orderValue.toFixed(2)} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{r.salesValue.toFixed(2)} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: r.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{r.pendingValue.toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(r.orderValue || 0).toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{Number(r.salesValue || 0).toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{Number(r.pendingValue || 0).toFixed(2)} L</td>
                   </>
                 )}
               </tr>
@@ -3689,7 +3727,67 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
 }
 
 /* ── Specific Dashboards View & Table components ── */
-function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetConfig, trend }) {
+/* ── GRN Value helpers (same filter/aggregate pattern as Customer PO vs Sales) ── */
+function normalizeGrnDate(d) {
+  if (!d) return "";
+  return String(d).trim().slice(0, 10);
+}
+
+function filterGrnRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const grnDate = normalizeGrnDate(r.grnDate);
+    if (!grnDate || grnDate < activeFrom || grnDate > activeTo) return false;
+    if (filters.supplier && r.supplierName !== filters.supplier) return false;
+    if (filters.partNumber) {
+      const pno = String(r.partNo || "").toLowerCase();
+      if (!pno.includes(String(filters.partNumber).toLowerCase())) return false;
+    }
+    if (filters.category && (r.dtype || "") !== filters.category) return false;
+    return true;
+  });
+}
+
+function grnMonthLabel(r) {
+  if (r.month && r.month !== "—") return r.month;
+  const d = normalizeGrnDate(r.grnDate);
+  if (!d || d.length < 7) return null;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const m = parseInt(d.slice(5, 7), 10);
+  if (!m || m < 1 || m > 12) return null;
+  return `${months[m - 1]}-${d.slice(2, 4)}`;
+}
+
+function buildGrnMonthChartData(filteredRows) {
+  const monthGroup = {};
+  filteredRows.forEach((r) => {
+    const month = grnMonthLabel(r);
+    if (!month) return;
+    const grnDate = normalizeGrnDate(r.grnDate);
+    if (!monthGroup[month]) {
+      monthGroup[month] = {
+        month,
+        total: 0,
+        minDate: grnDate,
+      };
+    }
+    monthGroup[month].total += Number(r.amount || 0);
+    if (grnDate && (!monthGroup[month].minDate || grnDate < monthGroup[month].minDate)) {
+      monthGroup[month].minDate = grnDate;
+    }
+  });
+
+  return Object.values(monthGroup).sort((a, b) => {
+    if (!a.minDate) return 1;
+    if (!b.minDate) return -1;
+    return a.minDate.localeCompare(b.minDate);
+  });
+}
+
+function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, trend }) {
   const [suppOpen, setSuppOpen] = React.useState(false);
   const suppRef = React.useRef(null);
   const [catOpen, setCatOpen] = React.useState(false);
@@ -3715,11 +3813,38 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
     }));
   }, [onFilterChange]);
 
+  const grnRows = React.useMemo(
+    () => (Array.isArray(data?.grnValueCompare?.rows) ? data.grnValueCompare.rows : []),
+    [data?.grnValueCompare?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterGrnRows(grnRows, filters, defaultRange.from, defaultRange.to),
+    [grnRows, filters, defaultRange]
+  );
+
+  const suppliers = React.useMemo(() => {
+    const names = grnRows.map(r => r.supplierName).filter(s => s && s !== "—");
+    return Array.from(new Set(names)).sort();
+  }, [grnRows]);
+
   const partSuggestions = React.useMemo(() => {
     if (!filters.partNumber) return [];
-    const uniqueParts = ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05", "MAT-CR-12"];
+    const parts = grnRows.map(r => r.partNo).filter(Boolean);
+    const uniqueParts = Array.from(new Set(parts));
     return uniqueParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber]);
+  }, [filters.partNumber, grnRows]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -3739,177 +3864,169 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
     };
   }, []);
 
-  const chartData = React.useMemo(() => {
-    let months = [
-      { month: "April", date: "2026-04-15", "Supplier Name A": 5, "Supplier Name B": 9, "Supplier Name C": 14 },
-      { month: "May", date: "2026-05-15", "Supplier Name A": 12, "Supplier Name B": 8, "Supplier Name C": 18 },
-      { month: "June", date: "2026-06-15", "Supplier Name A": 20, "Supplier Name B": 4, "Supplier Name C": 24 },
-      { month: "July", date: "2026-07-15", "Supplier Name A": 14, "Supplier Name B": 12, "Supplier Name C": 11 }
-    ];
-
-    if (filters.fromDate) {
-      months = months.filter(m => m.date >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      months = months.filter(m => m.date <= filters.toDate);
-    }
-
-    if (filters.partNumber) {
-      const partToMonth = {
-        "MAT-HR-05": "April",
-        "MAT-CR-12": "May",
-        "MAT-MS-02": "January",
-        "MAT-AL-04": "February",
-        "MAT-SS-10": "March"
-      };
-      const month = partToMonth[filters.partNumber];
-      months = months.filter(m => m.month === month);
-    }
-
-    return months;
-  }, [filters.fromDate, filters.toDate, filters.partNumber]);
+  const chartData = React.useMemo(
+    () => buildGrnMonthChartData(filteredRows),
+    [filteredRows]
+  );
 
   const kpis = React.useMemo(() => {
-    let suppliers = ["Supplier Name A", "Supplier Name B", "Supplier Name C"];
-    if (filters.supplier) {
-      suppliers = [filters.supplier];
-    }
-
-    let scaleFactor = 1.0;
-    if (filters.category) {
-      scaleFactor = filters.category === "Sheet Metal" ? 0.35 : filters.category === "Aluminum Extrusion" ? 0.22 : 0.43;
-    }
-
     let total = 0;
-    let highestSupplier = "Supplier Name C";
-    let highestVal = 0;
+    const supplierTotals = {};
+    const monthTotals = {};
 
-    const supplierTotals = { "Supplier Name A": 0, "Supplier Name B": 0, "Supplier Name C": 0 };
-
-    chartData.forEach(m => {
-      suppliers.forEach(s => {
-        const val = (m[s] || 0) * scaleFactor;
-        total += val;
-        supplierTotals[s] += val;
-      });
-    });
-
-    suppliers.forEach(s => {
-      if (supplierTotals[s] > highestVal) {
-        highestVal = supplierTotals[s];
-        highestSupplier = s;
+    filteredRows.forEach((r) => {
+      const amount = Number(r.amount || 0);
+      total += amount;
+      const sName = r.supplierName || "Unknown";
+      supplierTotals[sName] = (supplierTotals[sName] || 0) + amount;
+      if (r.month) {
+        monthTotals[r.month] = (monthTotals[r.month] || 0) + amount;
       }
     });
 
-    const avg = chartData.length > 0 ? total / chartData.length : 0;
+    let highestSupplier = "—";
+    let highestVal = 0;
+    Object.entries(supplierTotals).forEach(([name, val]) => {
+      if (val > highestVal) {
+        highestVal = val;
+        highestSupplier = name;
+      }
+    });
 
     let highestMonth = "—";
     let highestMonthVal = 0;
-    chartData.forEach(m => {
-      let monthSum = 0;
-      suppliers.forEach(s => {
-        monthSum += (m[s] || 0) * scaleFactor;
-      });
-      if (monthSum > highestMonthVal) {
-        highestMonthVal = monthSum;
-        highestMonth = m.month;
+    Object.entries(monthTotals).forEach(([month, val]) => {
+      if (val > highestMonthVal) {
+        highestMonthVal = val;
+        highestMonth = month;
       }
     });
 
+    const monthCount = Object.keys(monthTotals).length;
+    const avg = monthCount > 0 ? total / monthCount : 0;
+    const activeSupplierCount = Object.keys(supplierTotals).filter((s) => s !== "—").length;
+
     return [
-      { label: "Total Purchase Value", value: `₹${total.toFixed(1)}L`, icon: IndianRupee, color: "#ea580c" },
-      { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier.replace("Supplier Name ", "Supplier ") : "—", icon: Award, color: "#3b82f6" },
-      { label: "Highest Month", value: highestMonth !== "—" ? `${highestMonth} 2026` : "—", icon: Calendar, color: "#10b981" },
+      { label: "Total Purchase Value", value: `₹${total.toFixed(2)}L`, icon: IndianRupee, color: "#ea580c" },
+      { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier : "—", icon: Award, color: "#3b82f6" },
+      { label: "Highest Month", value: highestMonth !== "—" ? highestMonth : "—", icon: Calendar, color: "#10b981" },
       { label: "Average Purchase", value: `₹${avg.toFixed(2)}L`, icon: BarChart2, color: "#f59e0b" },
-      { label: "Active Suppliers", value: suppliers.length.toString(), icon: Users, color: "#8b5cf6" }
+      { label: "Active Suppliers", value: activeSupplierCount.toString(), icon: Users, color: "#8b5cf6" }
     ];
-  }, [chartData, filters.supplier, filters.category]);
+  }, [filteredRows]);
+
+  const chartRangeLabel = React.useMemo(() => {
+    if (chartData.length === 0) return "Trend Analysis";
+    if (chartData.length === 1) return `Trend Analysis (${chartData[0].month})`;
+    return `Trend Analysis (${chartData[0].month} – ${chartData[chartData.length - 1].month})`;
+  }, [chartData]);
+
+  const chartRebuildToken = React.useMemo(
+    () => `grn-chart|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.grn_value?.minGrnValueL ?? 100}`,
+    [chartData, filters, targetConfig?.grn_value?.minGrnValueL]
+  );
 
   const setupChart = React.useCallback((canvas) => {
-    const labels = chartData.map(r => r.month);
+    const labels = chartData.map((r) => r.month);
+    const grnTarget = targetConfig?.grn_value?.minGrnValueL ?? 100;
+    const totalData = chartData.map((r) => Number(r.total || 0));
+    const maxVal = Math.max(0, grnTarget, ...totalData);
 
-    let suppliers = ["Supplier Name A", "Supplier Name B", "Supplier Name C"];
-    if (filters.supplier) {
-      suppliers = [filters.supplier];
-    }
+    const grnTargetLinePlugin = {
+      id: "grnValueTargetLine",
+      afterDraw: (chart) => {
+        const yScale = chart.scales.y;
+        const xScale = chart.scales.x;
+        if (!yScale || !xScale) return;
 
-    let scaleFactor = 1.0;
-    if (filters.category) {
-      scaleFactor = filters.category === "Sheet Metal" ? 0.35 : filters.category === "Aluminum Extrusion" ? 0.22 : 0.43;
-    }
+        const targetIndex = chart.data.datasets.findIndex((ds) => ds.label?.startsWith("Target"));
+        if (targetIndex === -1 || !chart.isDatasetVisible(targetIndex)) return;
 
-    const totalData = chartData.map(r => {
-      let sum = 0;
-      suppliers.forEach(s => {
-        sum += (r[s] || 0) * scaleFactor;
-      });
-      return sum;
-    });
+        const yPos = yScale.getPixelForValue(grnTarget);
+        const ctx = chart.ctx;
 
-    const grnTarget = targetConfig?.grn_value?.minGrnValueL ?? null;
-
-    const datasets = [{
-      label: "Total GRN Value",
-      data: totalData,
-      backgroundColor: "rgba(234, 88, 12, 0.85)",
-      borderRadius: 4,
-      order: 2
-    }];
-
-    if (grnTarget !== null) {
-      datasets.push({
-        label: `Target ₹${grnTarget}L`,
-        data: labels.map(() => grnTarget),
-        type: "line",
-        borderColor: "rgba(239, 68, 68, 0.85)",
-        borderDash: [5, 5],
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHitRadius: 20,
-        fill: false,
-        tension: 0,
-        order: 1
-      });
-    }
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.85)";
+        ctx.moveTo(xScale.left, yPos);
+        ctx.lineTo(xScale.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
 
     return new Chart(canvas, {
       type: "bar",
-      data: { labels, datasets },
+      plugins: [grnTargetLinePlugin],
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Total GRN Value",
+            data: totalData,
+            backgroundColor: "rgba(234, 88, 12, 0.85)",
+            borderRadius: 4,
+            borderSkipped: false,
+            order: 2,
+          },
+          {
+            type: "line",
+            label: `Target (₹${grnTarget}L/month)`,
+            data: labels.map(() => grnTarget),
+            borderColor: "rgba(239, 68, 68, 0.85)",
+            borderDash: [5, 5],
+            borderWidth: 0,
+            pointRadius: 0,
+            pointHitRadius: 20,
+            fill: false,
+            tension: 0,
+            order: 1,
+          },
+        ],
+      },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            display: grnTarget !== null,
+            display: true,
             position: "bottom",
-            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 },
           },
           tooltip: {
             backgroundColor: "rgba(15, 23, 42, 0.95)",
             padding: 8,
             callbacks: {
-              label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(1)} L`
-            }
-          }
+              label: (context) => {
+                if (context.dataset.label?.startsWith("Target")) {
+                  return ` Target: ₹${grnTarget}L/month`;
+                }
+                return ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`;
+              },
+            },
+          },
         },
         scales: {
           x: {
             ticks: { color: "#64748b", font: { size: 9, weight: 600 } },
-            grid: { display: false }
+            grid: { display: false },
           },
           y: {
             beginAtZero: true,
+            suggestedMax: (maxVal > 0 ? maxVal : grnTarget) * 1.25,
             ticks: {
               color: "#64748b",
               font: { size: 9 },
-              callback: (val) => `₹${val} L`
+              callback: (val) => `₹${val} L`,
             },
-            grid: { color: "rgba(0, 0, 0, 0.05)" }
-          }
-        }
-      }
+            grid: { color: "rgba(0, 0, 0, 0.05)" },
+          },
+        },
+      },
     });
-  }, [chartData, filters.supplier, filters.category, targetConfig]);
+  }, [chartData, targetConfig]);
 
   const handleReset = () => {
     onFilterChange({
@@ -3928,8 +4045,10 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
-  const categories = ["Sheet Metal", "Aluminum Extrusion", "Stainless Steel Rods", "HR Plates", "CR Coils"];
-  const suppliers = ["Supplier Name A", "Supplier Name B", "Supplier Name C"];
+  const categories = React.useMemo(() => {
+    const dtypes = grnRows.map(r => r.dtype).filter(Boolean);
+    return Array.from(new Set(dtypes)).sort();
+  }, [grnRows]);
 
   return (
     <div className="pp1-action-detail" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -4013,14 +4132,14 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
 
           {/* Category Dropdown */}
           <div className="pp1-filter-group" ref={catRef}>
-            <label className="pp1-filter-label">Material Category</label>
+            <label className="pp1-filter-label">GRN Type</label>
             <div className="pp1-custom-select-wrap">
               <button
                 type="button"
                 className={`pp1-custom-select-trigger ${catOpen ? "open" : ""}`}
                 onClick={() => setCatOpen(o => !o)}
               >
-                <span>{filters.category || "All Categories"}</span>
+                <span>{filters.category || "All Types"}</span>
                 <ChevronDown size={12} className="pp1-custom-select-caret" />
               </button>
               {catOpen && (
@@ -4032,7 +4151,7 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
                       setCatOpen(false);
                     }}
                   >
-                    All Categories
+                    All Types
                   </div>
                   {categories.map(c => (
                     <div
@@ -4111,10 +4230,10 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
         {setupChart && (
           <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
             <div className="pp1-dt-card__hd" style={{ marginBottom: "10px" }}>
-              <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>Trend Analysis (April - July 2026)</div>
+              <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>{chartRangeLabel}</div>
             </div>
             <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-              <ChartJsCanvas setup={setupChart} height={220} rebuildToken={`purchase-trend|${JSON.stringify(filters)}|${targetConfig?.grn_value?.minGrnValueL}`} />
+              <ChartJsCanvas setup={setupChart} height={220} rebuildToken={chartRebuildToken} />
             </div>
           </div>
         )}
@@ -4123,185 +4242,151 @@ function PurchaseReportDashboardView({ filters, onFilterChange, onClose, targetC
   );
 }
 
-function PurchaseReportBottomTable({ filters }) {
-  const [activeTab, setActiveTab] = React.useState("monthWise");
+function PurchaseReportBottomTable({ data, loading, filters }) {
+  const grnRows = React.useMemo(
+    () => (Array.isArray(data?.grnValueCompare?.rows) ? data.grnValueCompare.rows : []),
+    [data?.grnValueCompare?.rows]
+  );
 
-  // Process month-wise data
-  const rowsMonthWise = React.useMemo(() => {
-    let list = [
-      ["Supplier Name A", 5, 12, 20, 14],
-      ["Supplier Name B", 9, 8, 4, 12],
-      ["Supplier Name C", 14, 18, 24, 11]
-    ];
-    if (filters.supplier) {
-      list = list.filter(r => r[0] === filters.supplier);
-    }
-    if (filters.partNumber) {
-      const partToSupplier = {
-        "MAT-HR-05": "Supplier Name A",
-        "MAT-CR-12": "Supplier Name B",
-        "MAT-MS-02": "Supplier Name A",
-        "MAT-AL-04": "Supplier Name B",
-        "MAT-SS-10": "Supplier Name C"
-      };
-      const supplier = partToSupplier[filters.partNumber];
-      list = list.filter(r => r[0] === supplier);
-    }
-    return list;
-  }, [filters.supplier, filters.partNumber]);
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
 
-  // Process detailed orders summary
-  const rowsOrders = React.useMemo(() => {
-    let list = [
-      ["Steel Authority of India", "Jan-26", "PO-2026-901", "2026-01-15", "MAT-MS-02", "MS Sheet Metal 2mm", "1,500 kg", "₹300/kg", "₹4,50,000", "Sheet Metal"],
-      ["Hindalco Industries", "Feb-26", "PO-2026-902", "2026-02-12", "MAT-AL-04", "Aluminum Extrusion", "800 kg", "₹475/kg", "₹3,80,000", "Aluminum Extrusion"],
-      ["Jindal Stainless", "Mar-26", "PO-2026-903", "2026-03-05", "MAT-SS-10", "SS Rods 10mm", "1,200 kg", "₹516/kg", "₹6,20,000", "Stainless Steel Rods"],
-      ["Tata Steel", "Apr-26", "PO-2026-904", "2026-04-18", "MAT-HR-05", "HR Plate 5mm", "2,000 kg", "₹275/kg", "₹5,50,000", "HR Plates"],
-      ["JSW Steel", "May-26", "PO-2026-905", "2026-05-22", "MAT-CR-12", "CR Coil 1.2mm", "1,000 kg", "₹280/kg", "₹2,80,000", "CR Coils"]
-    ];
+  const filteredRows = React.useMemo(
+    () => filterGrnRows(grnRows, filters, defaultRange.from, defaultRange.to),
+    [grnRows, filters, defaultRange]
+  );
 
-    if (filters.supplier) {
-      const mapping = {
-        "Supplier Name A": "Steel Authority of India",
-        "Supplier Name B": "Hindalco Industries",
-        "Supplier Name C": "Jindal Stainless"
-      };
-      const vendor = mapping[filters.supplier];
-      if (vendor) {
-        list = list.filter(r => r[0] === vendor);
-      } else {
-        list = [];
+  const uniqueMonths = React.useMemo(() => {
+    const monthMinDate = {};
+    filteredRows.forEach(r => {
+      const grnDate = normalizeGrnDate(r.grnDate);
+      if (r.month && grnDate) {
+        if (!monthMinDate[r.month] || grnDate < monthMinDate[r.month]) {
+          monthMinDate[r.month] = grnDate;
+        }
       }
-    }
+    });
+    return Object.keys(monthMinDate).sort((a, b) => monthMinDate[a].localeCompare(monthMinDate[b]));
+  }, [filteredRows]);
 
-    if (filters.category) {
-      list = list.filter(r => r[9] === filters.category);
-    }
+  const rowsMonthWise = React.useMemo(() => {
+    const supplierGroups = {};
+    filteredRows.forEach(r => {
+      const sName = r.supplierName || "Unknown";
+      if (!supplierGroups[sName]) {
+        supplierGroups[sName] = { supplierName: sName };
+        uniqueMonths.forEach(m => { supplierGroups[sName][m] = 0; });
+      }
+      if (r.month && supplierGroups[sName][r.month] !== undefined) {
+        supplierGroups[sName][r.month] += Number(r.amount || 0);
+      }
+    });
 
-    if (filters.partNumber) {
-      list = list.filter(r => r[4].toLowerCase().includes(filters.partNumber.toLowerCase()));
-    }
+    return Object.values(supplierGroups)
+      .map(group => {
+        const row = [group.supplierName];
+        uniqueMonths.forEach(m => {
+          row.push(group[m] || 0);
+        });
+        return row;
+      })
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredRows, uniqueMonths]);
 
-    if (filters.fromDate) {
-      list = list.filter(r => r[3] >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      list = list.filter(r => r[3] <= filters.toDate);
-    }
-
-    return list;
-  }, [filters.supplier, filters.category, filters.fromDate, filters.toDate, filters.partNumber]);
-
-  const columnsMonthWise = ["Supplier Name", "April (Lakhs)", "May (Lakhs)", "June (Lakhs)", "July (Lakhs)", "Total Value (Lakhs)"];
-  const columnsOrders = ["Supplier", "Month", "PO No", "PO Date", "Material Code", "Material Name", "Qty", "Rate", "Purchase Value"];
+  const columnsMonthWise = ["Supplier Name", ...uniqueMonths.map(m => `${m} (Lakhs)`), "Total Value (Lakhs)"];
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
-          <button
-            type="button"
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: activeTab === "monthWise" ? "2.5px solid var(--pp1-blue)" : "none",
-              color: activeTab === "monthWise" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
-              fontWeight: 700,
-              fontSize: "12px",
-              paddingBottom: "6px",
-              cursor: "pointer",
-              transition: "all 0.15s ease"
-            }}
-            onClick={() => setActiveTab("monthWise")}
-          >
-            Purchase Value Month Wise
-          </button>
-          <button
-            type="button"
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: activeTab === "ordersSummary" ? "2.5px solid var(--pp1-blue)" : "none",
-              color: activeTab === "ordersSummary" ? "var(--pp1-blue)" : "var(--pp1-text-3)",
-              fontWeight: 700,
-              fontSize: "12px",
-              paddingBottom: "6px",
-              cursor: "pointer",
-              transition: "all 0.15s ease"
-            }}
-            onClick={() => setActiveTab("ordersSummary")}
-          >
-            Purchase Orders Summary
-          </button>
-        </div>
-      </div>
-
+      <div className="pp1-cc-bot__hd">Purchase Value Month Wise</div>
       <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
-        {activeTab === "monthWise" ? (
-          <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
-            <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {columnsMonthWise.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left" }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rowsMonthWise.length === 0 ? (
-                <tr><td colSpan={columnsMonthWise.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
-              ) : (
-                rowsMonthWise.map((row, ri) => {
-                  const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
-                  return (
-                    <tr key={ri} className="pp1-cc-tbl__tr">
-                      <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[1].toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[2].toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[3].toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[4].toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        ) : (
-          <table className="pp1-cc-tbl" style={{ minWidth: 1000 }}>
-            <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {columnsOrders.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 5 && idx < 9 ? "right" : "left" }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rowsOrders.length === 0 ? (
-                <tr><td colSpan={columnsOrders.length} className="pp1-cc-tbl__empty">No data matches the selected filters.</td></tr>
-              ) : (
-                rowsOrders.map((row, ri) => (
+        <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
+          <thead>
+            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              {columnsMonthWise.map((col, idx) => (
+                <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left" }}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rowsMonthWise.length === 0 ? (
+              <tr><td colSpan={columnsMonthWise.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+            ) : (
+              rowsMonthWise.map((row, ri) => {
+                const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
+                return (
                   <tr key={ri} className="pp1-cc-tbl__tr">
                     <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                    <td className="pp1-cc-tbl__mono">{row[1]}</td>
-                    <td className="pp1-cc-tbl__id">{row[2]}</td>
-                    <td className="pp1-cc-tbl__mono">{row[3]}</td>
-                    <td className="pp1-cc-tbl__bold" style={{ color: "var(--pp1-text-3)" }}>{row[4]}</td>
-                    <td>{row[5]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[6]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[7]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>{row[8]}</td>
+                    {row.slice(1).map((val, vi) => (
+                      <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{val.toFixed(2)} L</td>
+                    ))}
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, targetConfig, trend }) {
+/* ── Sales Analysis helpers (same filter pattern as Customer PO / GRN Value) ── */
+function normalizeSalesDate(d) {
+  if (!d) return "";
+  return String(d).trim().slice(0, 10);
+}
+
+function filterSalesRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const invDate = normalizeSalesDate(r.date);
+    if (!invDate || invDate < activeFrom || invDate > activeTo) return false;
+    if (filters.customer && r.customer !== filters.customer) return false;
+    return true;
+  });
+}
+
+function buildSalesMonthChartData(filteredRows) {
+  const monthGroup = {};
+  filteredRows.forEach((r) => {
+    const key = r.monthName && r.month ? `${r.monthName}|${r.month}` : null;
+    if (!key) return;
+    const invDate = normalizeSalesDate(r.date);
+    if (!monthGroup[key]) {
+      monthGroup[key] = {
+        name: r.monthName,
+        month: r.month,
+        year: r.year,
+        total: 0,
+        minDate: invDate,
+      };
+    }
+    monthGroup[key].total += Number(r.salesValue || 0);
+    if (invDate && (!monthGroup[key].minDate || invDate < monthGroup[key].minDate)) {
+      monthGroup[key].minDate = invDate;
+    }
+  });
+
+  return Object.values(monthGroup).sort((a, b) => {
+    if (!a.minDate) return 1;
+    if (!b.minDate) return -1;
+    return a.minDate.localeCompare(b.minDate);
+  });
+}
+
+function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, trend }) {
   const [custOpen, setCustOpen] = React.useState(false);
   const custRef = React.useRef(null);
 
@@ -4342,159 +4427,164 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
 
 
 
-  const chartMonths = React.useMemo(() => {
-    const months = [
-      { name: "April", date: "2026-04-15" },
-      { name: "May", date: "2026-05-15" },
-      { name: "June", date: "2026-06-15" },
-      { name: "July", date: "2026-07-15" }
-    ];
-    let filtered = months;
-    if (filters.fromDate) {
-      filtered = filtered.filter(m => m.date >= filters.fromDate);
-    }
-    if (filters.toDate) {
-      filtered = filtered.filter(m => m.date <= filters.toDate);
-    }
-    return filtered;
-  }, [filters.fromDate, filters.toDate]);
+  const salesRows = React.useMemo(
+    () => (Array.isArray(data?.salesAnalysisCompare?.rows) ? data.salesAnalysisCompare.rows : []),
+    [data?.salesAnalysisCompare?.rows]
+  );
 
-  const chartDatasets = React.useMemo(() => {
-    const allDatasets = [
-      { label: "Customer A", data: [30, 120, 80, 95], backgroundColor: "#10b981", borderRadius: 4 },
-      { label: "Customer B", data: [25, 60, 50, 70], backgroundColor: "#3b82f6", borderRadius: 4 },
-      { label: "Customer C", data: [60, 10, 70, 50], backgroundColor: "#f59e0b", borderRadius: 4 }
-    ];
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
 
-    if (filters.customer) {
-      let matchLabel = filters.customer;
-      if (filters.customer === "Tata Motors") matchLabel = "Customer A";
-      if (filters.customer === "Mahindra & Mahindra") matchLabel = "Customer B";
-      if (filters.customer === "Maruti Suzuki" || filters.customer === "Ashok Leyland") matchLabel = "Customer C";
+  const filteredRows = React.useMemo(
+    () => filterSalesRows(salesRows, filters, defaultRange.from, defaultRange.to),
+    [salesRows, filters, defaultRange]
+  );
 
-      return allDatasets.filter(ds => ds.label === matchLabel);
-    }
-    return allDatasets;
-  }, [filters.customer]);
+  const customers = React.useMemo(() => {
+    const names = salesRows.map(r => r.customer).filter(c => c && c !== "—");
+    return Array.from(new Set(names)).sort();
+  }, [salesRows]);
 
-  const datasets = React.useMemo(() => {
-    const monthsDataIndices = chartMonths.map(cm => {
-      if (cm.name === "April") return 0;
-      if (cm.name === "May") return 1;
-      if (cm.name === "June") return 2;
-      if (cm.name === "July") return 3;
-      return -1;
-    });
+  const chartMonths = React.useMemo(
+    () => buildSalesMonthChartData(filteredRows),
+    [filteredRows]
+  );
 
-    return chartDatasets.map(ds => {
-      const filteredData = monthsDataIndices.map(idx => ds.data[idx]);
-      return {
-        ...ds,
-        data: filteredData
-      };
-    });
-  }, [chartMonths, chartDatasets]);
-
-  // Dynamically calculate KPIs based on filtered datasets
   const kpis = React.useMemo(() => {
-    let totalSalesVal = 0;
-    let maxCustName = "—";
-    let maxCustVal = 0;
+    let total = 0;
+    const custTotals = {};
+    const monthTotals = {};
 
-    // Total turnover per customer in filtered range
-    const custSums = { "Customer A": 0, "Customer B": 0, "Customer C": 0 };
-    datasets.forEach(ds => {
-      const sum = ds.data.reduce((acc, curr) => acc + (curr || 0), 0);
-      custSums[ds.label] = sum;
-      totalSalesVal += sum;
-    });
-
-    // Determine highest customer
-    let highestCustLabel = "—";
-    Object.keys(custSums).forEach(k => {
-      if (custSums[k] > maxCustVal) {
-        maxCustVal = custSums[k];
-        highestCustLabel = k;
+    filteredRows.forEach((r) => {
+      const val = Number(r.salesValue || 0);
+      total += val;
+      const cust = r.customer || "Unknown";
+      custTotals[cust] = (custTotals[cust] || 0) + val;
+      if (r.monthName) {
+        monthTotals[r.monthName] = (monthTotals[r.monthName] || 0) + val;
       }
     });
 
-    if (highestCustLabel === "Customer A") maxCustName = "Tata Motors";
-    else if (highestCustLabel === "Customer B") maxCustName = "Mahindra & Mahindra";
-    else if (highestCustLabel === "Customer C") maxCustName = "Maruti Suzuki";
-
-    // Determine highest month
-    let maxMonthName = "—";
-    let maxMonthVal = 0;
-    chartMonths.forEach((m, idx) => {
-      let monthSum = 0;
-      datasets.forEach(ds => {
-        monthSum += (ds.data[idx] || 0);
-      });
-      if (monthSum > maxMonthVal) {
-        maxMonthVal = monthSum;
-        maxMonthName = m.name;
+    let highestCustomer = "—";
+    let highestCustVal = 0;
+    Object.entries(custTotals).forEach(([name, val]) => {
+      if (val > highestCustVal) {
+        highestCustVal = val;
+        highestCustomer = name;
       }
     });
 
-    const activeCustCount = filters.customer ? 1 : 4;
-    const avgSalesVal = chartMonths.length > 0 ? totalSalesVal / chartMonths.length : 0;
+    let highestMonth = "—";
+    let highestMonthVal = 0;
+    Object.entries(monthTotals).forEach(([month, val]) => {
+      if (val > highestMonthVal) {
+        highestMonthVal = val;
+        highestMonth = month;
+      }
+    });
+
+    const monthCount = chartMonths.length;
+    const avg = monthCount > 0 ? total / monthCount : 0;
+    const activeCustomers = Object.keys(custTotals).filter((c) => c !== "—").length;
 
     return [
-      { label: "Total Sales", value: `₹${totalSalesVal.toFixed(1)}L`, icon: IndianRupee, color: "#10b981" },
-      { label: "Highest Customer", value: maxCustVal > 0 ? maxCustName : "—", icon: Award, color: "#3b82f6" },
-      { label: "Highest Month", value: maxMonthName !== "—" ? `${maxMonthName} 2026` : "—", icon: Calendar, color: "#8b5cf6" },
-      { label: "Average Sales", value: `₹${avgSalesVal.toFixed(1)}L`, icon: BarChart2, color: "#f59e0b" },
-      { label: "Active Customers", value: activeCustCount.toString(), icon: Users, color: "#ec4899" }
+      { label: "Total Sales", value: loading ? "…" : `₹${total.toFixed(2)}L`, icon: IndianRupee, color: "#10b981" },
+      { label: "Highest Customer", value: highestCustVal > 0 ? highestCustomer : "—", icon: Award, color: "#3b82f6" },
+      { label: "Highest Month", value: highestMonth !== "—" ? highestMonth : "—", icon: Calendar, color: "#8b5cf6" },
+      { label: "Average Sales", value: loading ? "…" : `₹${avg.toFixed(2)}L`, icon: BarChart2, color: "#f59e0b" },
+      { label: "Active Customers", value: loading ? "…" : activeCustomers.toString(), icon: Users, color: "#ec4899" }
     ];
-  }, [datasets, chartMonths, filters.customer]);
+  }, [filteredRows, chartMonths.length, loading]);
 
-  // Aggregate total sales per month across all customers/datasets
   const monthTotalsDataset = React.useMemo(() => {
-    const totals = chartMonths.map((_, idx) => {
-      return datasets.reduce((sum, ds) => sum + (ds.data[idx] || 0), 0);
-    });
+    const totals = chartMonths.map((m) => Number(m.total || 0));
+    const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4"];
     return [{
       label: "Total Sales",
       data: totals,
-      backgroundColor: chartMonths.map((_, i) => {
-        const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b"];
-        return palette[i % palette.length] + "cc";
-      }),
-      borderColor: chartMonths.map((_, i) => {
-        const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b"];
-        return palette[i % palette.length];
-      }),
+      backgroundColor: chartMonths.map((_, i) => palette[i % palette.length] + "cc"),
+      borderColor: chartMonths.map((_, i) => palette[i % palette.length]),
       borderWidth: 1.5,
       borderRadius: 6,
       borderSkipped: false,
     }];
-  }, [chartMonths, datasets]);
+  }, [chartMonths]);
+
+  const chartRebuildToken = React.useMemo(
+    () => `sales-chart|${chartMonths.length}|${JSON.stringify(chartMonths)}|${JSON.stringify(filters)}|${targetConfig?.sales_analysis?.monthlyTarget ?? 150}`,
+    [chartMonths, filters, targetConfig?.sales_analysis?.monthlyTarget]
+  );
 
   const setupChart = React.useCallback((canvas) => {
-    const maxVal = Math.max(...monthTotalsDataset[0].data, 0);
+    const labels = chartMonths.map((m) => m.name);
+    const totalData = chartMonths.map((m) => Number(m.total || 0));
     const monthlyTarget = targetConfig?.sales_analysis?.monthlyTarget ?? 150;
-    const targetVal = monthlyTarget; // per-month target line
+    const targetVal = monthlyTarget;
+    const maxVal = Math.max(0, targetVal, ...totalData);
+
+    const salesTargetLinePlugin = {
+      id: "salesAnalysisTargetLine",
+      afterDraw: (chart) => {
+        const yScale = chart.scales.y;
+        const xScale = chart.scales.x;
+        if (!yScale || !xScale) return;
+
+        const targetIndex = chart.data.datasets.findIndex((ds) => ds.label?.startsWith("Target"));
+        if (targetIndex === -1 || !chart.isDatasetVisible(targetIndex)) return;
+
+        const yPos = yScale.getPixelForValue(targetVal);
+        const ctx = chart.ctx;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ef4444";
+        ctx.moveTo(xScale.left, yPos);
+        ctx.lineTo(xScale.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+
     return new Chart(canvas, {
       type: "bar",
+      plugins: [salesTargetLinePlugin],
       data: {
-        labels: chartMonths.map(m => m.name),
+        labels,
         datasets: [
-          ...monthTotalsDataset,
-          // Invisible line dataset to draw the target
+          {
+            label: "Total Sales",
+            data: totalData,
+            backgroundColor: monthTotalsDataset[0]?.backgroundColor || "rgba(16, 185, 129, 0.85)",
+            borderColor: monthTotalsDataset[0]?.borderColor || "#10b981",
+            borderWidth: 1.5,
+            borderRadius: 6,
+            borderSkipped: false,
+            order: 2,
+          },
           {
             type: "line",
             label: `Target (₹${targetVal}L/month)`,
-            data: chartMonths.map(() => targetVal),
+            data: labels.map(() => targetVal),
             borderColor: "#ef4444",
-            borderWidth: 2,
+            borderWidth: 0,
             borderDash: [6, 4],
             pointRadius: 0,
-            pointHoverRadius: 0,
+            pointHitRadius: 20,
             fill: false,
             tension: 0,
-            order: 0,
-          }
-        ]
+            order: 1,
+          },
+        ],
       },
       options: {
         responsive: true,
@@ -4518,11 +4608,10 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
             callbacks: {
               label: (ctx) => {
                 if (ctx.dataset.label?.startsWith("Target")) return ` Target: ₹${targetVal}L/month`;
-                return ` ₹${ctx.raw}L  (Total Sales)`;
+                return ` ₹${Number(ctx.raw).toFixed(2)}L  (Total Sales)`;
               }
             }
           },
-          datalabels: false
         },
         scales: {
           x: {
@@ -4531,7 +4620,7 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
           },
           y: {
             beginAtZero: true,
-            suggestedMax: Math.max(maxVal, targetVal) * 1.25 || 100,
+            suggestedMax: (maxVal > 0 ? maxVal : targetVal) * 1.25,
             grid: { color: "rgba(0,0,0,0.05)" },
             title: { display: true, text: "Total Sales Value (Lakhs)", font: { size: 10, weight: 600 }, color: "#64748b" },
             ticks: { color: "#64748b", callback: (val) => `₹${val}L` }
@@ -4542,7 +4631,7 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
   }, [chartMonths, monthTotalsDataset, targetConfig]);
 
   return (
-    <PremiumDashboardView title="Sales Analysis" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Total Sales" onClose={onClose} rebuildToken={`${JSON.stringify(monthTotalsDataset)}|${targetConfig?.sales_analysis?.monthlyTarget}`}>
+    <PremiumDashboardView title="Sales Analysis" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Total Sales" onClose={onClose} rebuildToken={chartRebuildToken}>
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
         <div className="pp1-filter-group pp1-filter-group--date-range">
@@ -4574,7 +4663,7 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
                 >
                   All Customers
                 </div>
-                {["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"].map(c => (
+                {customers.map(c => (
                   <div
                     key={c}
                     className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
@@ -4602,61 +4691,84 @@ function SalesAnalysisReportDashboardView({ filters, onFilterChange, onClose, ta
   );
 }
 
-function SalesAnalysisReportBottomTable({ filters }) {
-  const [activeTab, setActiveTab] = React.useState("turnover"); // "turnover" | "invoiceRegister"
+function SalesAnalysisReportBottomTable({ data, loading, filters }) {
+  const [activeTab, setActiveTab] = React.useState("turnover");
 
-  const columnsTurnover = ["Customer Name", "April (Lakhs)", "May (Lakhs)", "June (Lakhs)", "July (Lakhs)", "Total Value (Lakhs)"];
+  const salesRows = React.useMemo(
+    () => (Array.isArray(data?.salesAnalysisCompare?.rows) ? data.salesAnalysisCompare.rows : []),
+    [data?.salesAnalysisCompare?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterSalesRows(salesRows, filters, defaultRange.from, defaultRange.to),
+    [salesRows, filters, defaultRange]
+  );
+
+  const uniqueMonths = React.useMemo(() => {
+    const monthMinDate = {};
+    filteredRows.forEach((r) => {
+      const invDate = normalizeSalesDate(r.date);
+      const label = r.monthName || r.month;
+      if (label && invDate) {
+        if (!monthMinDate[label] || invDate < monthMinDate[label]) {
+          monthMinDate[label] = invDate;
+        }
+      }
+    });
+    return Object.keys(monthMinDate).sort((a, b) => monthMinDate[a].localeCompare(monthMinDate[b]));
+  }, [filteredRows]);
+
+  const columnsTurnover = ["Customer Name", ...uniqueMonths.map((m) => `${m} (Lakhs)`), "Total Value (Lakhs)"];
+
   const rowsTurnover = React.useMemo(() => {
-    let list = [
-      ["Customer A", 30, 120, 80, 95],
-      ["Customer B", 25, 60, 50, 70],
-      ["Customer C", 60, 10, 70, 50]
-    ];
-    if (filters?.customer) {
-      let match = filters.customer;
-      if (filters.customer === "Tata Motors") match = "Customer A";
-      if (filters.customer === "Mahindra & Mahindra") match = "Customer B";
-      if (filters.customer === "Maruti Suzuki" || filters.customer === "Ashok Leyland") match = "Customer C";
+    const custGroups = {};
+    filteredRows.forEach((r) => {
+      const cust = r.customer || "Unknown";
+      const monthLabel = r.monthName || r.month || "—";
+      if (!custGroups[cust]) {
+        custGroups[cust] = { customer: cust };
+        uniqueMonths.forEach((m) => { custGroups[cust][m] = 0; });
+      }
+      if (custGroups[cust][monthLabel] !== undefined) {
+        custGroups[cust][monthLabel] += Number(r.salesValue || 0);
+      }
+    });
 
-      list = list.filter(r => r[0] === match);
-    }
-    return list;
-  }, [filters?.customer]);
+    return Object.values(custGroups)
+      .map((group) => {
+        const row = [group.customer];
+        uniqueMonths.forEach((m) => row.push(group[m] || 0));
+        return row;
+      })
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredRows, uniqueMonths]);
 
   const columnsInvoice = ["Month", "Customer", "Invoice No", "Invoice Date", "Sales Value", "Dispatch Value", "Collection Status"];
+
   const rowsInvoice = React.useMemo(() => {
-    let list = [
-      ["Jan-26", "Tata Motors", "INV-2026-001", "12-Jan-2026", "₹9,00,000", "₹9,00,000", "Paid", "South"],
-      ["Feb-26", "Mahindra & Mahindra", "INV-2026-002", "18-Feb-2026", "₹12,00,000", "₹12,00,000", "Paid", "South"],
-      ["Mar-26", "Maruti Suzuki", "INV-2026-003", "05-Mar-2026", "₹4,50,000", "₹4,50,000", "Pending", "North"],
-      ["Apr-26", "Ashok Leyland", "INV-2026-004", "22-Apr-2026", "₹18,50,000", "₹18,50,000", "Paid", "South"],
-      ["May-26", "Tata Motors", "INV-2026-005", "10-May-2026", "₹11,50,000", "₹11,00,000", "Partially Paid", "South"],
-      ["Jun-26", "Mahindra & Mahindra", "INV-2026-006", "14-Jun-2026", "₹9,70,000", "₹9,70,000", "Unpaid", "South"]
-    ];
-
-    if (filters?.customer) {
-      list = list.filter(r => r[1] === filters.customer || (filters.customer === "Customer A" && r[1] === "Tata Motors") || (filters.customer === "Customer B" && r[1] === "Mahindra & Mahindra") || (filters.customer === "Customer C" && (r[1] === "Maruti Suzuki" || r[1] === "Ashok Leyland")));
-    }
-    if (filters?.region) {
-      list = list.filter(r => r[7] === filters.region);
-    }
-    if (filters?.fromDate) {
-      list = list.filter(r => {
-        const d = r[3].split("-");
-        const formatted = `2026-${d[1] === "Jan" ? "01" : d[1] === "Feb" ? "02" : d[1] === "Mar" ? "03" : d[1] === "Apr" ? "04" : d[1] === "May" ? "05" : "06"}-${d[0]}`;
-        return formatted >= filters.fromDate;
-      });
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => {
-        const d = r[3].split("-");
-        const formatted = `2026-${d[1] === "Jan" ? "01" : d[1] === "Feb" ? "02" : d[1] === "Mar" ? "03" : d[1] === "Apr" ? "04" : d[1] === "May" ? "05" : "06"}-${d[0]}`;
-        return formatted <= filters.toDate;
-      });
-    }
-
-    return list;
-  }, [filters?.customer, filters?.region, filters?.fromDate, filters?.toDate]);
+    return filteredRows
+      .map((r) => [
+        r.month || "—",
+        r.customer || "—",
+        r.invoiceNo || "—",
+        r.date || "—",
+        r.salesValue > 0 ? `₹${Number(r.salesValue).toFixed(2)} L` : "—",
+        r.dispatchValue > 0 ? `₹${Number(r.dispatchValue).toFixed(2)} L` : "—",
+        r.collectionStatus || "—",
+      ])
+      .sort((a, b) => (a[3] || "").localeCompare(b[3] || ""));
+  }, [filteredRows]);
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -4710,19 +4822,22 @@ function SalesAnalysisReportBottomTable({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {rowsTurnover.map((row, ri) => {
-                const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
-                return (
-                  <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[1]} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[2]} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[3]} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{row[4]} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal} L</td>
-                  </tr>
-                );
-              })}
+              {rowsTurnover.length === 0 ? (
+                <tr><td colSpan={columnsTurnover.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                rowsTurnover.map((row, ri) => {
+                  const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
+                  return (
+                    <tr key={ri} className="pp1-cc-tbl__tr">
+                      <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
+                      {row.slice(1).map((val, vi) => (
+                        <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(val).toFixed(2)} L</td>
+                      ))}
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         ) : (
@@ -4735,7 +4850,10 @@ function SalesAnalysisReportBottomTable({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {rowsInvoice.map((row, ri) => (
+              {rowsInvoice.length === 0 ? (
+                <tr><td colSpan={columnsInvoice.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                rowsInvoice.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
                   <td style={{ fontWeight: 600 }}>{row[1]}</td>
@@ -4748,7 +4866,8 @@ function SalesAnalysisReportBottomTable({ filters }) {
                     color: row[6] === "Paid" ? "var(--pp1-green)" : row[6] === "Unpaid" ? "var(--pp1-rose)" : row[6] === "Pending" ? "var(--pp1-amber)" : "var(--pp1-blue)"
                   }}>{row[6]}</td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         )}
@@ -10229,6 +10348,13 @@ function CustomerComplaintReportBottomTable() {
 
 
 export default function PlantPerformance1() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  const defaultFrom = `${year}-${month}-01`;
+  const defaultTo = `${year}-${month}-${day}`;
+
   const [selKpi, setSelKpi] = useState(0);
   const [selAction, setSelAction] = useState("customer_po_vs_sales_analysis");
   const [centerKey, setCenterKey] = useState(0);
@@ -10237,9 +10363,12 @@ export default function PlantPerformance1() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [data, setData] = useState({});
+
+
+
   const [poFilters, setPoFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     customer: "",
     poNumber: "",
     partNumber: "",
@@ -10248,37 +10377,37 @@ export default function PlantPerformance1() {
   const [poActiveSlide, setPoActiveSlide] = useState(0);
   const [poShowTargetOnly, setPoShowTargetOnly] = useState(false);
   const [purFilters, setPurFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     supplier: "",
     category: "",
     partNumber: "",
   });
   const [salesFilters, setSalesFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     customer: "",
     region: "",
   });
   const [prodFilters, setProdFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     team: "",
     machine: "",
     operator: "",
     customer: "",
   });
   const [idleFilters, setIdleFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     machine: "",
     operator: "",
     idleReason: "",
   });
   const [idleActiveTab, setIdleActiveTab] = useState("chart1");
   const [nonAccFilters, setNonAccFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     machine: "",
     team: "",
     reason: "",
@@ -10296,8 +10425,8 @@ export default function PlantPerformance1() {
   const [rejActiveTab, setRejActiveTab] = useState("machine_wise_rejection");
   const [rewActiveTab, setRewActiveTab] = useState("machine_wise_rework");
   const [oeeCompFilters, setOeeCompFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     month: "",
     year: "",
     week: "",
@@ -10305,8 +10434,8 @@ export default function PlantPerformance1() {
     machine: "",
   });
   const [effFilters, setEffFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     month: "",
     year: "",
     week: "",
@@ -10316,16 +10445,16 @@ export default function PlantPerformance1() {
     operatorName: "",
   });
   const [rejFilters, setRejFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     month: "",
     week: "",
     machine: "",
     operatorName: "",
   });
   const [rewFilters, setRewFilters] = useState({
-    fromDate: "",
-    toDate: "",
+    fromDate: defaultFrom,
+    toDate: defaultTo,
     month: "",
     week: "",
     machine: "",
@@ -10424,10 +10553,25 @@ export default function PlantPerformance1() {
   const fetchAll = useCallback(async (from, to, signal) => {
     setLoading(true);
     setFetchError(null);
+    const bundleUrl = buildUrl("/api/plant-performance/bundle/", from, to);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      setData(MOCK_DATA);
+      const res = await fetch(bundleUrl, { credentials: "include", signal });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.data) {
+        setData({});
+        setFetchError(json?.error || json?.detail || `Load failed (${res.status})`);
+        return;
+      }
+      setData(json.data);
+      const errs = json.errors ? Object.entries(json.errors) : [];
+      const hasAny = Object.values(json.data).some((v) => v != null);
+      if (!hasAny && errs.some(([, msg]) => String(msg).includes("Session expired"))) {
+        setFetchError("Session expired — please log in again.");
+      } else if (errs.length) {
+        setFetchError(`Some panels failed: ${errs.slice(0, 2).map(([k, m]) => `${k}: ${m}`).join("; ")}`);
+      }
     } catch (e) {
+      if (e.name === "AbortError") return;
       setFetchError(e.message || "Failed to load data");
       setData({});
     } finally {
@@ -10496,8 +10640,18 @@ export default function PlantPerformance1() {
     const map = {};
 
     // -- actual values (mock / from data) --
-    // Total sales across all customers from chart data
-    const salesVal = [7, 18, 12, 8].reduce((a, b) => a + b, 0); // = 45L total
+    // Calculate live total sales value from database rows
+    let salesVal = 0;
+    const poCompareRows = data?.customerPoCompare?.rows;
+    if (poCompareRows && Array.isArray(poCompareRows)) {
+      const fromStr = poFilters.fromDate || defaultFrom;
+      const toStr = poFilters.toDate || defaultTo;
+      poCompareRows.forEach(r => {
+        if (fromStr && r.date < fromStr) return;
+        if (toStr && r.date > toStr) return;
+        salesVal += Number(r.salesValue || 0);
+      });
+    }
     const salesTarget = targetConfig.customer_po?.salesTarget ?? 25;
     const poOk = salesVal >= salesTarget;
     const poDiff = (((salesVal - salesTarget) / salesTarget) * 100).toFixed(1);
@@ -10505,38 +10659,65 @@ export default function PlantPerformance1() {
       type: poOk ? "up" : "down",
       value: `${poOk ? "+" : ""}${poDiff}%`,
       message: poOk
-        ? `Total Sales (₹${salesVal}L) meets target (₹${salesTarget}L)`
-        : `Total Sales (₹${salesVal}L) is below target (₹${salesTarget}L)`,
-      priority: "medium"
+        ? `Total Sales (₹${salesVal.toFixed(2)}L) meets target (₹${salesTarget}L)`
+        : `Total Sales (₹${salesVal.toFixed(2)}L) is below target (₹${salesTarget}L)`,
+      priority: poOk ? "medium" : "high"
     };
 
-    // Sales Analysis monthly total vs target
-    const salesMonthlyTotal = [115, 190, 200, 215].reduce((a, b) => a + b, 0); // total Lakhs across months
-    const salesMonthlyTarget = (targetConfig.sales_analysis?.monthlyTarget ?? 150) * 4; // 4 months
-    const salesAnaOk = salesMonthlyTotal >= salesMonthlyTarget;
-    const salesAnaDiff = (((salesMonthlyTotal - salesMonthlyTarget) / salesMonthlyTarget) * 100).toFixed(1);
-    map["sales_analysis_report_dashboard"] = {
-      type: salesAnaOk ? "up" : "down",
-      value: `${salesAnaOk ? "+" : ""}${salesAnaDiff}%`,
-      message: salesAnaOk
-        ? `Total Sales (₹${salesMonthlyTotal}L) meets target (₹${salesMonthlyTarget}L)`
-        : `Total Sales (₹${salesMonthlyTotal}L) is below target (₹${salesMonthlyTarget}L)`,
-      priority: salesAnaOk ? "medium" : "high"
-    };
+    // Sales Analysis — live monthly totals vs target
+    const salesMonthlyTotals = {};
+    const salesCompareRows = data?.salesAnalysisCompare?.rows;
+    if (salesCompareRows && Array.isArray(salesCompareRows)) {
+      const filteredForTrend = filterSalesRows(salesCompareRows, salesFilters, defaultFrom, defaultTo);
+      filteredForTrend.forEach((r) => {
+        if (!r.monthName) return;
+        salesMonthlyTotals[r.monthName] = (salesMonthlyTotals[r.monthName] || 0) + Number(r.salesValue || 0);
+      });
+    }
+    const salesMonthVals = Object.values(salesMonthlyTotals);
+    const salesMonthlyTarget = targetConfig.sales_analysis?.monthlyTarget ?? 150;
+    const salesMonthlyTotal = salesMonthVals.reduce((a, b) => a + b, 0);
+    const salesPeriodTarget = salesMonthVals.length > 0 ? salesMonthlyTarget * salesMonthVals.length : salesMonthlyTarget;
+    const salesAnaOk = salesMonthVals.length > 0 && salesMonthVals.every((v) => v >= salesMonthlyTarget);
+    const salesAnaDiff = salesPeriodTarget > 0
+      ? (((salesMonthlyTotal - salesPeriodTarget) / salesPeriodTarget) * 100).toFixed(1)
+      : "0.0";
+    if (salesMonthVals.length > 0) {
+      map["sales_analysis_report_dashboard"] = {
+        type: salesAnaOk ? "up" : "down",
+        value: `${salesAnaOk ? "+" : ""}${salesAnaDiff}%`,
+        message: salesAnaOk
+          ? `All monthly sales meet target (₹${salesMonthlyTarget}L/month)`
+          : `Monthly sales below target (₹${salesMonthlyTarget}L/month)`,
+        priority: salesAnaOk ? "medium" : "high"
+      };
+    }
 
-    // GRN Value trend
-    const grnTotal = [28, 38, 48, 37].reduce((a, b) => a + b, 0); // mock total across months = 151L
+    // GRN Value trend — monthly totals vs per-month target
+    const grnMonthlyTotals = {};
+    const grnCompareRows = data?.grnValueCompare?.rows;
+    if (grnCompareRows && Array.isArray(grnCompareRows)) {
+      const filteredForTrend = filterGrnRows(grnCompareRows, purFilters, defaultFrom, defaultTo);
+      filteredForTrend.forEach((r) => {
+        if (!r.month) return;
+        grnMonthlyTotals[r.month] = (grnMonthlyTotals[r.month] || 0) + Number(r.amount || 0);
+      });
+    }
+    const grnMonthVals = Object.values(grnMonthlyTotals);
     const grnTarget = targetConfig.grn_value?.minGrnValueL ?? 100;
-    const grnOk = grnTotal >= grnTarget;
-    const grnDiff = (((grnTotal - grnTarget) / grnTarget) * 100).toFixed(1);
-    map["purchase_report_dashboard"] = {
-      type: grnOk ? "up" : "down",
-      value: `${grnOk ? "+" : ""}${grnDiff}%`,
-      message: grnOk
-        ? `Total GRN Value (₹${grnTotal}L) meets target (₹${grnTarget}L)`
-        : `Total GRN Value (₹${grnTotal}L) is below target (₹${grnTarget}L)`,
-      priority: "medium"
-    };
+    if (grnMonthVals.length > 0) {
+      const grnMinMonthly = Math.min(...grnMonthVals);
+      const grnOk = grnMonthVals.every(v => v >= grnTarget);
+      const grnDiff = grnTarget > 0 ? (((grnMinMonthly - grnTarget) / grnTarget) * 100).toFixed(1) : "0.0";
+      map["purchase_report_dashboard"] = {
+        type: grnOk ? "up" : "down",
+        value: `${grnOk ? "+" : ""}${grnDiff}%`,
+        message: grnOk
+          ? `All monthly GRN values meet target (₹${grnTarget}L/month)`
+          : `Monthly GRN value (₹${grnMinMonthly.toFixed(2)}L) is below target (₹${grnTarget}L/month)`,
+        priority: grnOk ? "medium" : "high"
+      };
+    }
 
     const totalIdle = 17.3;
     const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
@@ -10596,7 +10777,7 @@ export default function PlantPerformance1() {
     };
 
     return map;
-  }, [targetConfig, data]);
+  }, [targetConfig, data, poFilters, purFilters, salesFilters]);
 
   // actionItems = only cards whose computed trend is "down" (needs action)
   const actionItems = useMemo(() => {
@@ -11042,6 +11223,8 @@ export default function PlantPerformance1() {
                   />
                 ) : selectionId === "purchase_report_dashboard" ? (
                   <PurchaseReportDashboardView
+                    data={data}
+                    loading={loading}
                     filters={purFilters}
                     onFilterChange={setPurFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
@@ -11050,6 +11233,8 @@ export default function PlantPerformance1() {
                   />
                 ) : selectionId === "sales_analysis_report_dashboard" ? (
                   <SalesAnalysisReportDashboardView
+                    data={data}
+                    loading={loading}
                     filters={salesFilters}
                     onFilterChange={setSalesFilters}
                     onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
@@ -11242,9 +11427,9 @@ export default function PlantPerformance1() {
             targetConfig={targetConfig}
           />
         ) : selectionId === "purchase_report_dashboard" ? (
-          <PurchaseReportBottomTable filters={purFilters} />
+          <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
         ) : selectionId === "sales_analysis_report_dashboard" ? (
-          <SalesAnalysisReportBottomTable filters={salesFilters} />
+          <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
         ) : selectionId === "production_analysis_report_dashboard" ? (
           <ProductionAnalysisReportBottomTable filters={prodFilters} />
         ) : selectionId === "idle_hours_report_dashboard" ? (

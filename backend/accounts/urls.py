@@ -20,7 +20,7 @@ from .views_dashboard1 import (
     dashboard1_sales_kpi, dashboard1_purchase_kpi, dashboard1_production_kpi, dashboard1_quality_value_kpi, dashboard1_sales_projections, dashboard1_purchase_projections, dashboard1_oa_efficiency_weekly, dashboard1_quality_rejections_weekly,
 )
 from .views_plantperformance import (
-    plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories,
+    plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories, plant_performance_grn_value, plant_performance_sales_analysis,
 )
 from .views_eapproval import (
     eapproval_list, eapproval_stats, eapproval_detail, eapproval_approve, eapproval_modify,
@@ -130,6 +130,8 @@ urlpatterns = [
     path('plant-performance/inter-inspection/', plant_performance_inter_inspection, name='plant_performance_inter_inspection'),
     path('plant-performance/final-inspection-org-rej-rwk/', plant_performance_final_inspection_org_rej_rwk, name='plant_performance_final_inspection_org_rej_rwk'),
     path('plant-performance/top-defect-categories/', plant_performance_top_defect_categories, name='plant_performance_top_defect_categories'),
+    path('plant-performance/grn-value/', plant_performance_grn_value, name='plant_performance_grn_value'),
+    path('plant-performance/sales-analysis/', plant_performance_sales_analysis, name='plant_performance_sales_analysis'),
 
     # ── Dashboard1 ────────────────────────────────────────────────────
     path('dashboard1/sales-kpi/', dashboard1_sales_kpi, name='dashboard1_sales_kpi'),

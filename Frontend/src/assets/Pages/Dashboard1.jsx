@@ -405,13 +405,18 @@ function getWeeklyQuantityRange(seriesCollection) {
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-function YearMonthPicker({ value, onChange }) {
+function YearMonthPicker({ value, onChange, disabled }) {
     const [open, setOpen] = useState(false);
     const [yearView, setYearView] = useState(value.year);
     const [animDir, setAnimDir] = useState(null);
     const [panelAlign, setPanelAlign] = useState("right");
     const wrapRef = useRef(null);
     const chipRef = useRef(null);
+
+    // Close panel if picker becomes disabled
+    useEffect(() => {
+        if (disabled) setOpen(false);
+    }, [disabled]);
 
     useEffect(() => {
         if (!open) return;
@@ -423,6 +428,7 @@ function YearMonthPicker({ value, onChange }) {
     }, [open]);
 
     const handleOpen = () => {
+        if (disabled) return;
         if (!open && chipRef.current) {
             const rect = chipRef.current.getBoundingClientRect();
             const spaceRight = window.innerWidth - rect.left;
@@ -452,6 +458,7 @@ function YearMonthPicker({ value, onChange }) {
                 className={`d1-ymp__chip ${open ? "d1-ymp__chip--open" : ""}`}
                 onClick={handleOpen}
                 type="button"
+                disabled={disabled}
             >
                 <span className="d1-ymp__chip-icon">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -1352,8 +1359,8 @@ export default function Dashboard1() {
                     Report showing for <strong>{MONTHS_FULL[period.month]} – {period.year}</strong>
                 </span>
                 <div className="d1-subhd__ctrl">
-                    <YearMonthPicker value={period} onChange={setPeriod} />
-                    <button className="d1-ref-btn" onClick={handleRefresh}>
+                    <YearMonthPicker value={period} onChange={setPeriod} disabled={loading || spinning} />
+                    <button className="d1-ref-btn" onClick={handleRefresh} disabled={loading || spinning}>
                         <RefreshIcon spinning={spinning} />
                         <span className="d1-ref-btn__text">Refresh</span>
                     </button>

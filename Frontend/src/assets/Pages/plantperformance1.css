@@ -612,6 +612,7 @@
 
 .pp1-target-slider {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     height: 4px;
     border-radius: 2px;
@@ -693,11 +694,13 @@
 .pp1-target-input::-webkit-outer-spin-button,
 .pp1-target-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
+    appearance: none;
     margin: 0;
 }
 
 .pp1-target-input[type=number] {
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .pp1-target-step-btn {
@@ -5045,6 +5048,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    max-height: 250px;
+    overflow-y: auto;
     animation: pp1-select-pop 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes pp1-select-pop {
