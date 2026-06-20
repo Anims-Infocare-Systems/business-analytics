@@ -561,7 +561,6 @@ export default function EApproval() {
     const _savedEap = readFilterSession("ba_filter_eapproval", { from: today, to: today, search: "" });
     const [search, setSearch] = useState(_savedEap.search || "");
     const [cards, setCards] = useState([]);
-    const [stats, setStats] = useState(DEFAULT_STATS);
     const [selected, setSelected] = useState(null);
     const [approved, setApproved] = useState([]);
     const [dateRange, setDateRange] = useState({ from: _savedEap.from, to: _savedEap.to });
@@ -570,6 +569,40 @@ export default function EApproval() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(null); // { pono, type }
     const [toasts, setToasts] = useState([]);
+
+    // Compute KPI stats dynamically from cards so they update instantly on approval/revert
+    const stats = useMemo(() => {
+        if (isLoading && cards.length === 0) {
+            return [
+                { label: "Total PO's", value: "—", change: "Fetching POs..." },
+                { label: "Approved", value: "—", change: "Fetching stats..." },
+                { label: "Pending", value: "—", change: "Fetching stats..." },
+            ];
+        }
+        const total = cards.length;
+        const approvedCount = cards.filter(c => c.status === "Approved" || approved.includes(c.id)).length;
+        const pendingCount = total - approvedCount;
+        const approvalRate = total > 0 ? (approvedCount / total * 100).toFixed(1) : "0.0";
+        const remainingRate = total > 0 ? (100 - parseFloat(approvalRate)).toFixed(1) : "0.0";
+
+        return [
+            {
+                label: "Total PO's",
+                value: String(total),
+                change: `↑ ${pendingCount} waiting action`,
+            },
+            {
+                label: "Approved",
+                value: String(approvedCount),
+                change: `↑ ${approvalRate}% approval rate`,
+            },
+            {
+                label: "Pending",
+                value: String(pendingCount),
+                change: total > 0 ? `↓ ${remainingRate}% remaining` : "No POs in range",
+            },
+        ];
+    }, [cards, approved, isLoading]);
 
     // Detail cache — key: pono, value: full card object from API
     // Cleared when date range changes (refreshBoard) or on approve/modify
@@ -599,22 +632,13 @@ export default function EApproval() {
         setIsLoading(true);
         try {
             const qsList  = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
-            const qsStats = new URLSearchParams({ from, to });
-            const [resList, resStats] = await Promise.all([
-                fetch(`${API}/eapproval/list/?${qsList}`,  { credentials: "include" }),
-                fetch(`${API}/eapproval/stats/?${qsStats}`, { credentials: "include" }),
-            ]);
+            const resList = await fetch(`${API}/eapproval/list/?${qsList}`,  { credentials: "include" });
             const dataList  = await resList.json();
-            const dataStats = await resStats.json();
             if (resList.ok) setCards(dataList.cards || []);
             else { console.error(dataList.error || resList.statusText); setCards([]); }
-            if (resStats.ok && dataStats.success && Array.isArray(dataStats.stats))
-                setStats(dataStats.stats);
-            else setStats(DEFAULT_STATS);
         } catch (e) {
             console.error(e);
             setCards([]);
-            setStats(DEFAULT_STATS);
         } finally {
             setIsLoading(false);
         }

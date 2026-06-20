@@ -67,6 +67,7 @@ function useCountUp(target, duration = 900) {
 const KPI_CARDS = [
     { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
     { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
+    { icon: CheckCircle, iconColor: "#059669", label: "First Pass Yield", value: "85.1%", sub: "Right first time", trend: "Optimize process", cls: "qa2-t-down" },
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
@@ -76,11 +77,13 @@ const KPI_CARDS = [
     { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "3", sub: "Log complaints", trend: "3 open issues", cls: "qa2-t-down" },
     { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "74,599 PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: "qa2-t-down" },
     { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot", trend: "Action needed", cls: "qa2-t-down" },
+    { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: "2", sub: "Gauges & Instruments", trend: "2 alerts pending", cls: "qa2-t-down" },
 ];
 
 const EMPTY_KPI_CARDS = [
     { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "0", sub: "Selected period", trend: "0 inspection records", cls: "qa2-t-neutral" },
     { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
+    { icon: CheckCircle, iconColor: "#059669", label: "First Pass Yield", value: "0.0%", sub: "Right first time", trend: "—", cls: "qa2-t-neutral" },
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
@@ -90,6 +93,7 @@ const EMPTY_KPI_CARDS = [
     { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "0", sub: "Log complaints", trend: "0 complaints", cls: "qa2-t-up" },
     { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "0 PPM", sub: "Defect PPM level", trend: "Within control", cls: "qa2-t-up" },
     { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
+    { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: "0", sub: "Gauges & Instruments", trend: "All calibrated", cls: "qa2-t-up" },
 ];
 
 const PRODUCT_QUALITY = [
@@ -982,8 +986,15 @@ export default function QualityAnalysis() {
         const totalMachineRej = searchFilteredInspectionRows.reduce((sum, r) => {
             return sum + (parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
         }, 0);
+        const totalReworkQty = searchFilteredInspectionRows.reduce((sum, r) => {
+            return sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0);
+        }, 0);
         const complaintsCount = activeCustomerComplaints.length;
         const ppm = totalInspected > 0 ? Math.round(((totalMaterialRej + totalMachineRej) / totalInspected) * 1000000) : 0;
+        const fpy = totalInspected > 0
+            ? ((totalInspected - (totalMaterialRej + totalMachineRej + totalReworkQty)) / totalInspected) * 100
+            : 0;
+        const fpyVal = totalInspected > 0 ? `${fpy.toFixed(1)}%` : "85.1%";
 
         const insQty = summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN");
         const passRate = summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "87.6%");
@@ -995,6 +1006,7 @@ export default function QualityAnalysis() {
         return [
             { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: insQty, sub: "Selected Period", trend: `${searchFilteredInspectionRows.length} records`, cls: "qa2-t-neutral" },
             { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: passRate, sub: "Inspected units", trend: "↑ 2.1% vs last", cls: "qa2-t-up" },
+            { icon: CheckCircle, iconColor: "#059669", label: "First Pass Yield", value: fpyVal, sub: "Right first time", trend: fpy > 95 ? "Excellent yield" : "Optimize process", cls: fpy > 95 ? "qa2-t-up" : "qa2-t-down" },
             { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: rejRate, sub: "Defective units", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
             { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: reworkRate, sub: "Reworked units", trend: "Within tolerance", cls: "qa2-t-neutral" },
             { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: qualityVal, sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
@@ -1003,9 +1015,10 @@ export default function QualityAnalysis() {
             { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: totalMachineRej.toLocaleString("en-IN"), sub: "Processing defects", trend: totalMachineRej > 0 ? "Under watch" : "All clear", cls: totalMachineRej > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: complaintsCount.toString(), sub: "Log complaints", trend: complaintsCount > 0 ? `${complaintsCount} open issues` : "0 complaints", cls: complaintsCount > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: ppm.toLocaleString("en-IN") + " PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: ppm < 10000 ? "qa2-t-up" : "qa2-t-down" },
-            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" }
+            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" },
+            { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: calibrationAlertCount.toString(), sub: "Gauges & Instruments", trend: calibrationAlertCount > 0 ? `${calibrationAlertCount} alerts pending` : "All calibrated", cls: calibrationAlertCount > 0 ? "qa2-t-down" : "qa2-t-up" }
         ];
-    }, [summaryData, hasNoData, searchFilteredInspectionRows, activeCustomerComplaints]);
+    }, [summaryData, hasNoData, searchFilteredInspectionRows, activeCustomerComplaints, calibrationAlertCount]);
 
     const handleTypeBadgeClick = (label) => {
         const l = String(label).toLowerCase();
@@ -1127,7 +1140,7 @@ export default function QualityAnalysis() {
             {/* ── KPI Cards ── */}
             {summaryLoading ? (
                 <div className="qa2-kpi-grid">
-                    {[1, 2, 3, 4, 5, 6].map(i => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(i => (
                         <div className="qa2-kpi-card qa2-pulse-loader" key={i}>
                             <div className="qa2-kpi-top">
                                 <span className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "24px", height: "24px" }} />

@@ -13,6 +13,13 @@ function formatRupees(rupees) {
     return amount.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function formatInLakhs(rupees) {
+    const amount = Number(rupees);
+    if (!Number.isFinite(amount)) return "0.00";
+    const lakhs = amount / 100000;
+    return lakhs.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function formatMetric(value) {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return "0";
@@ -35,6 +42,44 @@ function setupCanvas(canvas, h) {
     const ctx = canvas.getContext("2d");
     ctx.scale(DPR, DPR);
     return { ctx, w, h };
+}
+
+function drawChartBubble(ctx, text, x, y, accentColor = "#1a56db") {
+    ctx.save();
+    ctx.font = "700 9.5px 'DM Sans',sans-serif";
+    const tw = ctx.measureText(text).width;
+    const pw = tw + 10, ph = 16;
+    const rx = x - pw / 2;
+    const ry = y - ph / 2;
+
+    // Soft shadow
+    ctx.shadowColor = "rgba(15,23,42,0.13)";
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 1.5;
+
+    // Tinted background fill
+    ctx.fillStyle = accentColor + "20";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(rx, ry, pw, ph, 5);
+    else ctx.rect(rx, ry, pw, ph);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Accent border
+    ctx.strokeStyle = accentColor + "70";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(rx, ry, pw, ph, 5);
+    else ctx.rect(rx, ry, pw, ph);
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = accentColor;
+    ctx.font = "700 9.5px 'DM Sans',sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y + 0.5);
 }
 
 function drawSparkline(canvas, data, color) {
@@ -71,91 +116,144 @@ function drawSparkline(canvas, data, color) {
     ctx.stroke();
 }
 
-function drawBarChart(canvas, labels, sets, h = 118) {
+function drawBarChart(canvas, labels, sets, h = 118, formatValFn = null) {
     const s = setupCanvas(canvas, h);
     if (!s || !labels.length || !sets.length) return [];
     const { ctx, w } = s;
-    const pad = { l: 32, r: 6, t: 6, b: 20 };
+    // Top padding increased so bubble labels never clip
+    const pad = { l: 36, r: 8, t: 26, b: 22 };
     const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
     const all = sets.flatMap((d) => d.data).map((v) => Number(v) || 0);
-    const mx = Math.max(1, Math.max(...all, 0) * 1.18);
+    const mx = Math.max(1, Math.max(...all, 0) * 1.15);
+
+    // Grid lines
     for (let i = 0; i <= 4; i++) {
         const y = pad.t + ch - i * (ch / 4);
-        ctx.strokeStyle = "rgba(228,233,242,0.9)";
-        ctx.lineWidth = 0.7;
+        ctx.strokeStyle = i === 0 ? "rgba(148,163,184,0.4)" : "rgba(228,233,242,0.75)";
+        ctx.lineWidth = i === 0 ? 1 : 0.6;
         ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cw, y); ctx.stroke();
         const v = (mx * i) / 4;
         ctx.fillStyle = "#94a3b8";
-        ctx.font = "9px 'DM Sans',sans-serif";
+        ctx.font = "8.5px 'DM Sans',sans-serif";
         ctx.textAlign = "right";
-        ctx.fillText(v >= 100 ? (v / 100).toFixed(0) + "H" : v.toFixed(0), pad.l - 4, y + 3);
+        ctx.textBaseline = "middle";
+        ctx.fillText(v >= 1000 ? (v / 1000).toFixed(0) + "K" : v >= 100 ? v.toFixed(0) : v.toFixed(1), pad.l - 5, y);
     }
-    const ng = labels.length, nb = sets.length, gap = 3;
-    const bw = cw / ng, bW = (bw - gap * (nb + 1)) / nb;
-    // Hit-test data: one entry per (group × series)
+
+    const ng = labels.length, nb = sets.length;
+    const groupGap = 5, barGap = 2;
+    const bw = cw / ng;
+    const bW = (bw - groupGap * 2 - barGap * (nb - 1)) / nb;
     const hitData = [];
+
+    // Two-pass: first draw bars, then draw all labels on top
+    const labelQueue = [];
+
     sets.forEach((ds, di) =>
         ds.data.forEach((val, gi) => {
             const bh = Math.max(0, (Number(val) || 0) / mx * ch);
-            const x = pad.l + gi * bw + gap + di * (bW + gap);
-            const y = pad.t + ch - bh;
-            const g2 = ctx.createLinearGradient(0, y, 0, y + bh);
+            const x = pad.l + gi * bw + groupGap + di * (bW + barGap);
+            const yTop = pad.t + ch - bh;
+            const yBot = pad.t + ch;
+
+            // Gradient bar
+            const g2 = ctx.createLinearGradient(0, yTop, 0, yBot);
             g2.addColorStop(0, ds.color);
-            g2.addColorStop(1, ds.color + "88");
+            g2.addColorStop(1, ds.color + "55");
             ctx.fillStyle = g2;
-            const r = Math.min(4, bW / 2);
+            const r = Math.min(5, bW / 2, bh / 2);
             ctx.beginPath();
-            ctx.moveTo(x + r, y); ctx.lineTo(x + bW - r, y);
-            ctx.quadraticCurveTo(x + bW, y, x + bW, y + r);
-            ctx.lineTo(x + bW, y + bh); ctx.lineTo(x, y + bh); ctx.lineTo(x, y + r);
-            ctx.quadraticCurveTo(x, y, x + r, y);
+            if (bh > 0) {
+                ctx.moveTo(x + r, yTop);
+                ctx.lineTo(x + bW - r, yTop);
+                ctx.quadraticCurveTo(x + bW, yTop, x + bW, yTop + r);
+                ctx.lineTo(x + bW, yBot);
+                ctx.lineTo(x, yBot);
+                ctx.lineTo(x, yTop + r);
+                ctx.quadraticCurveTo(x, yTop, x + r, yTop);
+            }
             ctx.closePath(); ctx.fill();
+
+            // Bright top edge stripe
+            if (bh > 3) {
+                ctx.fillStyle = "rgba(255,255,255,0.22)";
+                ctx.fillRect(x, yTop, bW, Math.min(3, bh));
+            }
+
+            const valNum = Number(val);
+            if (valNum > 0) {
+                const displayVal = formatValFn ? formatValFn(valNum) : valNum.toFixed(1);
+                labelQueue.push({ x: x + bW / 2, y: yTop, label: displayVal, color: ds.color });
+            }
+
             hitData.push({
                 type: "bar",
-                cx: x + bW / 2,
-                cy: y,
-                x1: x, y1: y, x2: x + bW, y2: pad.t + ch,
+                cx: x + bW / 2, cy: yTop,
+                x1: x, y1: yTop, x2: x + bW, y2: yBot,
                 label: labels[gi],
                 seriesLabel: ds.label || "",
                 color: ds.color,
-                value: Number(val) || 0,
+                value: valNum,
             });
         })
     );
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "9px 'DM Sans',sans-serif";
+
+    // Draw bubbles after bars so they appear on top
+    labelQueue.forEach(({ x, y, label, color }) => {
+        // Stem line from bubble bottom edge to bar top
+        ctx.strokeStyle = color + "90";
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(x, y - 2);
+        ctx.lineTo(x, y - 9);
+        ctx.stroke();
+        drawChartBubble(ctx, label, x, y - 17, color);
+    });
+
+    // X-axis labels
+    ctx.fillStyle = "#64748b";
+    ctx.font = "600 9.5px 'DM Sans',sans-serif";
     ctx.textAlign = "center";
-    labels.forEach((l, i) => ctx.fillText(l, pad.l + i * bw + bw / 2, h - 4));
+    ctx.textBaseline = "top";
+    labels.forEach((l, i) => ctx.fillText(l, pad.l + i * bw + bw / 2, h - 16));
     return hitData;
 }
 
-function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
+function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118, formatValFn = null, showStaticLabels = true) {
     const labels = Array.isArray(labelsOrHeight) ? labelsOrHeight : [];
     const chartHeight = typeof labelsOrHeight === "number" ? labelsOrHeight : h;
     const s = setupCanvas(canvas, chartHeight);
     if (!s) return [];
     const { ctx, w } = s;
-    const pad = { l: 32, r: 6, t: 6, b: 20 };
+    // Extra vertical padding so bubbles don't clip
+    const pad = { l: 36, r: 8, t: 22, b: 22 };
     const cw = w - pad.l - pad.r, ch = chartHeight - pad.t - pad.b;
     const [mn, mx] = range;
     const span = mx - mn || 1;
+
+    // Grid
     for (let i = 0; i <= 4; i++) {
         const y = pad.t + ch * (1 - i / 4);
-        ctx.strokeStyle = "rgba(228,233,242,0.9)";
-        ctx.lineWidth = 0.7;
+        ctx.strokeStyle = i === 0 ? "rgba(148,163,184,0.4)" : "rgba(228,233,242,0.75)";
+        ctx.lineWidth = i === 0 ? 1 : 0.6;
         ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cw, y); ctx.stroke();
         const v = mn + (mx - mn) * (i / 4);
         ctx.fillStyle = "#94a3b8";
-        ctx.font = "9px 'DM Sans',sans-serif";
+        ctx.font = "8.5px 'DM Sans',sans-serif";
         ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
         ctx.fillText(
             Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "K" : v.toFixed(0),
-            pad.l - 4, y + 3
+            pad.l - 5, y
         );
     }
 
-    // Hit-test data: one entry per (series × point)
+    // Collect label positions per point per series to resolve collisions
+    const labelQueue = [];
     const hitData = [];
+
+    // First pass: draw areas + lines
     sets.forEach((ds) => {
         const n = ds.data.length;
         if (n < 1) return;
@@ -165,39 +263,67 @@ function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
         const py = (v) => pad.t + ch * (1 - (v - mn) / span);
 
         if (n >= 2) {
+            // Area fill
             const g3 = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
-            g3.addColorStop(0, ds.color + "2a");
+            g3.addColorStop(0, ds.color + "28");
             g3.addColorStop(1, ds.color + "00");
             ctx.beginPath();
             ctx.moveTo(pxFn(0), py(ds.data[0]));
             for (let i = 1; i < n; i++) {
-                const cx = (pxFn(i - 1) + pxFn(i)) / 2;
-                ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), pxFn(i), py(ds.data[i]));
+                const cx2 = (pxFn(i - 1) + pxFn(i)) / 2;
+                ctx.bezierCurveTo(cx2, py(ds.data[i - 1]), cx2, py(ds.data[i]), pxFn(i), py(ds.data[i]));
             }
             ctx.lineTo(pxFn(n - 1), pad.t + ch);
             ctx.lineTo(pxFn(0), pad.t + ch);
             ctx.closePath();
             ctx.fillStyle = g3; ctx.fill();
+
+            // Line stroke
             ctx.beginPath();
             ctx.moveTo(pxFn(0), py(ds.data[0]));
             for (let i = 1; i < n; i++) {
-                const cx = (pxFn(i - 1) + pxFn(i)) / 2;
-                ctx.bezierCurveTo(cx, py(ds.data[i - 1]), cx, py(ds.data[i]), pxFn(i), py(ds.data[i]));
+                const cx2 = (pxFn(i - 1) + pxFn(i)) / 2;
+                ctx.bezierCurveTo(cx2, py(ds.data[i - 1]), cx2, py(ds.data[i]), pxFn(i), py(ds.data[i]));
             }
             ctx.strokeStyle = ds.color; ctx.lineWidth = 2.2; ctx.stroke();
         }
+    });
+
+    // Second pass: draw dots and queue labels
+    sets.forEach((ds, dsIdx) => {
+        const n = ds.data.length;
+        if (n < 1) return;
+        const pxFn = n <= 1
+            ? () => pad.l + cw / 2
+            : (i) => pad.l + i * (cw / (n - 1));
+        const py = (v) => pad.t + ch * (1 - (v - mn) / span);
 
         for (let i = 0; i < n; i++) {
             const dotX = pxFn(i);
             const dotY = py(ds.data[i]);
+
+            // Outer glow ring
             ctx.beginPath();
-            ctx.arc(dotX, dotY, 2.8, 0, Math.PI * 2);
+            ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = ds.color + "22";
+            ctx.fill();
+
+            // Dot
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 3.2, 0, Math.PI * 2);
             ctx.fillStyle = "#fff"; ctx.fill();
-            ctx.strokeStyle = ds.color; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = ds.color; ctx.lineWidth = 2.2; ctx.stroke();
+
+            const valNum = Number(ds.data[i]);
+            if (Number.isFinite(valNum) && valNum > 0) {
+                // Register label for this point (grouped by pointIdx for collision resolution)
+                if (!labelQueue[i]) labelQueue[i] = [];
+                labelQueue[i].push({ x: dotX, y: dotY, val: valNum, color: ds.color, dsIdx });
+            }
+
             hitData.push({
                 type: "point",
-                cx: dotX,
-                cy: dotY,
+                cx: dotX, cy: dotY,
                 label: labels[i] || `P${i + 1}`,
                 seriesLabel: ds.label || "",
                 color: ds.color,
@@ -206,16 +332,43 @@ function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118) {
         }
     });
 
+    // Collision-resolved label drawing
+    if (showStaticLabels) {
+        labelQueue.forEach((group) => {
+            if (!group) return;
+            // Sort by value desc: highest gets above, others go below
+            const sorted = [...group].sort((a, b) => b.val - a.val);
+            sorted.forEach((item, rank) => {
+                const displayVal = formatValFn ? formatValFn(item.val) : item.val.toFixed(0);
+                // First (highest) → above dot, rest → below
+                const offset = rank === 0 ? -14 : 14 + (rank - 1) * 20;
+                // Stem: from dot edge to bubble edge
+                const stemY1 = item.y + (rank === 0 ? -5 : 5);
+                const stemY2 = item.y + (rank === 0 ? -9 : 9);
+                ctx.strokeStyle = item.color + "90";
+                ctx.lineWidth = 1.2;
+                ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(item.x, stemY1);
+                ctx.lineTo(item.x, stemY2);
+                ctx.stroke();
+                drawChartBubble(ctx, displayVal, item.x, item.y + offset, item.color);
+            });
+        });
+    }
+
+    // X-axis labels
     if (labels.length) {
         const pxLabel = (i) => (
             labels.length <= 1
                 ? pad.l + cw / 2
                 : pad.l + i * (cw / (labels.length - 1))
         );
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "9px 'DM Sans',sans-serif";
+        ctx.fillStyle = "#64748b";
+        ctx.font = "600 9.5px 'DM Sans',sans-serif";
         ctx.textAlign = "center";
-        labels.forEach((label, i) => ctx.fillText(label, pxLabel(i), chartHeight - 8));
+        ctx.textBaseline = "top";
+        labels.forEach((label, i) => ctx.fillText(label, pxLabel(i), chartHeight - 14));
     }
     return hitData;
 }
@@ -870,7 +1023,7 @@ export default function Dashboard1() {
     const getSalesAnalysisCell = (periodKey, metricKey) => {
         const value = getSalesAnalysisValue(periodKey, metricKey);
         return {
-            val: value ? formatRupees(value) : "—",
+            val: value ? formatInLakhs(value) : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -883,7 +1036,7 @@ export default function Dashboard1() {
     const getPurchaseAnalysisCell = (periodKey, metricKey) => {
         const value = getPurchaseAnalysisValue(periodKey, metricKey);
         return {
-            val: value ? formatRupees(value) : "—",
+            val: value ? formatInLakhs(value) : "—",
             cls: value ? "d1-td-num" : "d1-td-zero",
         };
     };
@@ -972,7 +1125,9 @@ export default function Dashboard1() {
                 [
                     { data: salesProjectionsData?.sales ?? [], color: "#1a56db", label: "Sales" },
                     { data: salesProjectionsData?.po ?? [], color: "#f59e0b", label: "Projections" },
-                ]
+                ],
+                118,
+                (v) => v.toFixed(1) + "L"
             ),
             deps: [salesProjectionsData, period],
             formatValue: (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}L`,
@@ -996,7 +1151,9 @@ export default function Dashboard1() {
                 [
                     { data: purchaseProjectionsData?.po ?? [], color: "#1a56db", label: "PO" },
                     { data: purchaseProjectionsData?.grn ?? [], color: "#f59e0b", label: "GRN" },
-                ]
+                ],
+                118,
+                (v) => v.toFixed(1) + "L"
             ),
             deps: [purchaseProjectionsData, period],
             formatValue: (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}L`,
@@ -1026,7 +1183,8 @@ export default function Dashboard1() {
                     [{ data: oaWeeklySeries, color: "#10b981", label: "OA %" }],
                     getOaWeeklyRange(oaWeeklySeries),
                     oaWeeklyLabels,
-                    86
+                    86,
+                    (v) => v.toFixed(1) + "%"
                 );
             },
             deps: [oaEfficiencyWeeklyData, period],
@@ -1063,7 +1221,9 @@ export default function Dashboard1() {
                     ],
                     getWeeklyQuantityRange([machineSeries, materialSeries]),
                     qualityWeeklyLabels,
-                    74
+                    74,
+                    (v) => v >= 1000 ? (v / 1000).toFixed(1) + "K" : Math.round(v),
+                    false
                 );
             },
             deps: [qualityRejectionsWeeklyData, period],
@@ -1088,28 +1248,71 @@ export default function Dashboard1() {
         },
     ];
 
+    // ── Trend helpers ──────────────────────────────────────────────────────
+    // Compute % change: (cur - prev) / |prev| * 100
+    const calcTrend = (cur, prev) => {
+        if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return NaN;
+        return ((cur - prev) / Math.abs(prev)) * 100;
+    };
+
+    const getSalesTrend = (pk, ppk, mk) =>
+        calcTrend(getSalesAnalysisValue(pk, mk), getSalesAnalysisValue(ppk, mk));
+
+    const getPurchaseTrend = (pk, ppk, mk) =>
+        calcTrend(getPurchaseAnalysisValue(pk, mk), getPurchaseAnalysisValue(ppk, mk));
+
+    const getProductionTrend = (pk, ppk) =>
+        calcTrend(getProductionAnalysisValue(pk), getProductionAnalysisValue(ppk));
+
+    const getQualityTrend = (pk, ppk, mk) =>
+        calcTrend(getQualityRejectionAnalysisValue(pk, mk), getQualityRejectionAnalysisValue(ppk, mk));
+
+    // Wrap an existing cell object with an inline trend pill (matches KPI delta style)
+    // Produces: "0.49  [↓ 61.5%]" — pill shape like KPI card
+    const withTrend = (cell, trendPct) => {
+        const isUp = trendPct >= 0;
+        const abs = Math.abs(trendPct);
+        const hasTrend = Number.isFinite(trendPct);
+        const trendLabel = hasTrend
+            ? `${isUp ? "↑" : "↓"} ${abs >= 100 ? abs.toFixed(0) : abs.toFixed(1)}%`
+            : "";
+        return {
+            val: (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" }}>
+                    <span>{cell.val}</span>
+                    {hasTrend && (
+                        <span className={`d1-itrd ${isUp ? "d1-itrd--up" : "d1-itrd--dn"}`}>
+                            {trendLabel}
+                        </span>
+                    )}
+                </span>
+            ),
+            cls: cell.cls,
+        };
+    };
+
     const tables = [
         {
-            title: "Sales Analysis", sub: "in ₹",
+            title: "Sales Analysis", sub: "in Lakhs",
             badgeLabel: "Sales", badgeBg: "#eff4ff", badgeColor: "#1a56db",
             headers: ["Desc", "Sales", "LAB", "Exp", "Total"],
             rows: [
-                { cells: [{ val: "Today" }, getSalesAnalysisCell("today", "sales"), getSalesAnalysisCell("today", "lab"), getSalesAnalysisCell("today", "exp"), getSalesAnalysisCell("today", "total")] },
-                { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), getSalesAnalysisCell("yesterday", "total")] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), getSalesAnalysisCell("month", "total")] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), getSalesAnalysisCell("quarter", "total")] },
+                { cells: [{ val: "Today" }, getSalesAnalysisCell("today", "sales"), getSalesAnalysisCell("today", "lab"), getSalesAnalysisCell("today", "exp"), withTrend(getSalesAnalysisCell("today", "total"), getSalesTrend("today", "yesterday", "total"))] },
+                { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), withTrend(getSalesAnalysisCell("yesterday", "total"), getSalesTrend("yesterday", "month", "total"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), withTrend(getSalesAnalysisCell("month", "total"), getSalesTrend("month", "quarter", "total"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), withTrend(getSalesAnalysisCell("quarter", "total"), getSalesTrend("quarter", "financial_year", "total"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getSalesAnalysisCell("financial_year", "sales"), getSalesAnalysisCell("financial_year", "lab"), getSalesAnalysisCell("financial_year", "exp"), getSalesAnalysisCell("financial_year", "total")] },
             ],
         },
         {
-            title: "Purchase Analysis", sub: "in ₹",
+            title: "Purchase Analysis", sub: "in Lakhs",
             badgeLabel: "Purchase", badgeBg: "#fffbeb", badgeColor: "#b45309",
             headers: ["Description", "PO", "GRN"],
             rows: [
-                { cells: [{ val: "Today" }, getPurchaseAnalysisCell("today", "po"), getPurchaseAnalysisCell("today", "grn")] },
-                { cells: [{ val: "YDA" }, getPurchaseAnalysisCell("yesterday", "po"), getPurchaseAnalysisCell("yesterday", "grn")] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getPurchaseAnalysisCell("month", "po"), getPurchaseAnalysisCell("month", "grn")] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getPurchaseAnalysisCell("quarter", "po"), getPurchaseAnalysisCell("quarter", "grn")] },
+                { cells: [{ val: "Today" }, withTrend(getPurchaseAnalysisCell("today", "po"), getPurchaseTrend("today", "yesterday", "po")), withTrend(getPurchaseAnalysisCell("today", "grn"), getPurchaseTrend("today", "yesterday", "grn"))] },
+                { cells: [{ val: "YDA" }, withTrend(getPurchaseAnalysisCell("yesterday", "po"), getPurchaseTrend("yesterday", "month", "po")), withTrend(getPurchaseAnalysisCell("yesterday", "grn"), getPurchaseTrend("yesterday", "month", "grn"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getPurchaseAnalysisCell("month", "po"), getPurchaseTrend("month", "quarter", "po")), withTrend(getPurchaseAnalysisCell("month", "grn"), getPurchaseTrend("month", "quarter", "grn"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getPurchaseAnalysisCell("quarter", "po"), getPurchaseTrend("quarter", "financial_year", "po")), withTrend(getPurchaseAnalysisCell("quarter", "grn"), getPurchaseTrend("quarter", "financial_year", "grn"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getPurchaseAnalysisCell("financial_year", "po"), getPurchaseAnalysisCell("financial_year", "grn")] },
             ],
         },
@@ -1118,10 +1321,10 @@ export default function Dashboard1() {
             badgeLabel: "OA %", badgeBg: "#ecfdf5", badgeColor: "#059669",
             headers: ["Description", "%"],
             rows: [
-                { cells: [{ val: "Todays OA Eff %" }, getProductionAnalysisCell("today")] },
-                { cells: [{ val: "Yesterdays OA Eff %" }, getProductionAnalysisCell("yesterday")] },
-                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, getProductionAnalysisCell("month")] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, getProductionAnalysisCell("quarter")] },
+                { cells: [{ val: "Todays OA Eff %" }, withTrend(getProductionAnalysisCell("today"), getProductionTrend("today", "yesterday"))] },
+                { cells: [{ val: "Yesterdays OA Eff %" }, withTrend(getProductionAnalysisCell("yesterday"), getProductionTrend("yesterday", "month"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, withTrend(getProductionAnalysisCell("month"), getProductionTrend("month", "quarter"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, withTrend(getProductionAnalysisCell("quarter"), getProductionTrend("quarter", "financial_year"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin OA Eff %" }, getProductionAnalysisCell("financial_year")] },
             ],
         },
@@ -1133,10 +1336,10 @@ export default function Dashboard1() {
             badgeLabel: "Nos", badgeBg: "#f5f3ff", badgeColor: "#7c3aed",
             headers: ["Description", "Mat Rej", "Mac Rej"],
             rows: [
-                { cells: [{ val: "Today" }, getQualityRejectionAnalysisCell("today", "material"), getQualityRejectionAnalysisCell("today", "machine")] },
-                { cells: [{ val: "YDA" }, getQualityRejectionAnalysisCell("yesterday", "material"), getQualityRejectionAnalysisCell("yesterday", "machine")] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getQualityRejectionAnalysisCell("month", "material"), getQualityRejectionAnalysisCell("month", "machine")] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getQualityRejectionAnalysisCell("quarter", "material"), getQualityRejectionAnalysisCell("quarter", "machine")] },
+                { cells: [{ val: "Today" }, withTrend(getQualityRejectionAnalysisCell("today", "material"), getQualityTrend("today", "yesterday", "material")), withTrend(getQualityRejectionAnalysisCell("today", "machine"), getQualityTrend("today", "yesterday", "machine"))] },
+                { cells: [{ val: "YDA" }, withTrend(getQualityRejectionAnalysisCell("yesterday", "material"), getQualityTrend("yesterday", "month", "material")), withTrend(getQualityRejectionAnalysisCell("yesterday", "machine"), getQualityTrend("yesterday", "month", "machine"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getQualityRejectionAnalysisCell("month", "material"), getQualityTrend("month", "quarter", "material")), withTrend(getQualityRejectionAnalysisCell("month", "machine"), getQualityTrend("month", "quarter", "machine"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getQualityRejectionAnalysisCell("quarter", "material"), getQualityTrend("quarter", "financial_year", "material")), withTrend(getQualityRejectionAnalysisCell("quarter", "machine"), getQualityTrend("quarter", "financial_year", "machine"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getQualityRejectionAnalysisCell("financial_year", "material"), getQualityRejectionAnalysisCell("financial_year", "machine")] },
             ],
         },

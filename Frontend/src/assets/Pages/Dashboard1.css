@@ -182,7 +182,7 @@
 
     --d1-kpi-h: 168px;
     --d1-kpi-col-h: 60px;
-    --d1-chart-h: 190px;
+    --d1-chart-h: 210px;
     --d1-chart-col-h: 56px;
     --d1-table-h: 220px;
     --d1-table-col-h: 56px;
@@ -1043,9 +1043,7 @@
    TABLE CARDS
    ════════════════════════════════════════════════════════════ */
 .d1-tc {
-    height: var(--d1-table-h);
-    min-height: var(--d1-table-h);
-    max-height: var(--d1-table-h);
+    height: auto;
     background: var(--d1-white);
     border: 1px solid var(--d1-border);
     border-radius: var(--d1-r);
@@ -1053,7 +1051,7 @@
     box-shadow: var(--d1-shadow);
     animation: d1-up .5s .08s cubic-bezier(.34, 1.3, .64, 1) both;
     transition: box-shadow var(--d1-tr), transform var(--d1-tr),
-        height .3s cubic-bezier(.4, 0, .2, 1), min-height .3s, max-height .3s;
+        height .3s cubic-bezier(.4, 0, .2, 1);
     display: flex;
     flex-direction: column;
 }
@@ -1064,9 +1062,9 @@
 }
 
 .d1-tc--collapsed {
-    height: var(--d1-table-col-h);
-    min-height: var(--d1-table-col-h);
-    max-height: var(--d1-table-col-h);
+    height: var(--d1-table-col-h) !important;
+    min-height: var(--d1-table-col-h) !important;
+    max-height: var(--d1-table-col-h) !important;
 }
 
 .d1-tc__hd {
@@ -1114,7 +1112,7 @@
 .d1-tc__body {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    overflow-y: visible;
     transition: opacity .25s ease;
 }
 
@@ -1153,6 +1151,37 @@
     position: sticky;
     top: 0;
     z-index: 1;
+}
+
+.d1-td-trend {
+    text-align: center !important;
+    vertical-align: middle;
+    padding: 4px 3px !important;
+    white-space: nowrap;
+}
+
+/* ── Inline Trend pill  — matches KPI card delta style ── */
+.d1-itrd {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 100px;
+    white-space: nowrap;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+
+.d1-itrd--up {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.d1-itrd--dn {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .d1-table tbody tr {
@@ -1214,7 +1243,7 @@
 @media (min-width: 1440px) {
     .d1-root {
         --d1-kpi-h: 180px;
-        --d1-chart-h: 205px;
+        --d1-chart-h: 226px;
         --d1-table-h: 240px;
     }
 
@@ -1235,7 +1264,7 @@
 @media (max-width: 1199px) {
     .d1-root {
         --d1-kpi-h: 158px;
-        --d1-chart-h: 178px;
+        --d1-chart-h: 198px;
         --d1-table-h: 210px;
     }
 
@@ -1272,7 +1301,7 @@
 
     .d1-root {
         --d1-kpi-h: 172px;
-        --d1-chart-h: 190px;
+        --d1-chart-h: 212px;
         --d1-table-h: 225px;
         gap: 10px;
     }
