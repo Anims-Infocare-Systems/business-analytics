@@ -273,7 +273,7 @@ def _fmt_hms(total_seconds):
 
 
 def _fmt_hms_decimal(hours):
-    secs = int(round(float(hours or 0) * 3600))
+    secs = round(float(hours or 0) * 3600)
     return _fmt_hms(secs)
 
 
@@ -430,7 +430,7 @@ def _fetch_top_idle_reasons(cursor, date_params, outer_sql, outer_params, limit=
     rows = cursor.fetchall() or []
     labels = [(str(r[0]).strip() if r[0] is not None else "") or "(blank)" for r in rows]
     data = [float(r[1] or 0) for r in rows]
-    seconds = [int(round(h * 3600)) for h in data]
+    seconds = [round(h * 3600) for h in data]
     hours_display = [_fmt_hms(s) for s in seconds]
     colors = [
         _TOP_REASON_CHART_COLORS[i % len(_TOP_REASON_CHART_COLORS)]
@@ -539,7 +539,7 @@ def _fetch_top_machines_idle_cost(cursor, date_params, outer_sql, outer_params, 
         labels.append(mac_label)
         hours.append(round(hrs_f, 2))
         cost_k.append(round(float(cost or 0), 2))
-        secs = int(round(hrs_f * 3600))
+        secs = round(hrs_f * 3600)
         seconds.append(secs)
         hours_display.append(_fmt_hms(secs))
 

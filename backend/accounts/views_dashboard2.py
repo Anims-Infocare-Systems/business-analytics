@@ -639,6 +639,8 @@ def dashboard2_otd(request):
     trend_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT YEAR(j.dc_date) AS y, MONTH(j.dc_date) AS m, COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty FROM joined j GROUP BY YEAR(j.dc_date), MONTH(j.dc_date) ORDER BY YEAR(j.dc_date), MONTH(j.dc_date)"""
     try:
         cursor.execute(main_sql, union_params); row = cursor.fetchone()
+        if not row:
+            row = (0, 0, 0, 0)
         on_time_qty = float(row[0] or 0); total_qty = float(row[1] or 0); delayed_lines = int(row[2] or 0); rating_num = float(row[3] or 0)
         cursor.execute(trend_sql, union_params); trend_rows = cursor.fetchall()
     except Exception as e: cursor.close(); conn.close(); return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -673,6 +675,8 @@ def dashboard2_final_inspection_kpi(request):
         params = [start_date, end_date]
         if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
         cursor.execute(sql, params); row = cursor.fetchone(); cursor.close(); conn.close()
+        if not row:
+            row = (0, 0, 0, 0, 0)
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
     total_ok_qty = float(row[0] or 0); total_rej_qty = float(row[1] or 0); total_mat_rej_qty = float(row[2] or 0)
     total_qty = float(row[3] or 0); inspection_count = int(row[4] or 0)
