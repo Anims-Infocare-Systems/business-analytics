@@ -33,7 +33,7 @@ def _canonical_invoice_type(btype_raw: str) -> Optional[str]:
     t = (btype_raw or "").strip().lower()
     if "credit" in t and "note" in t:
         return None
-    if "labour" in t:
+    if "General Labour" in t:
         return "Invoice - General Labour"
     if "scrap" in t:
         return "Invoice - Scrap"
@@ -47,7 +47,7 @@ def _canonical_invoice_type(btype_raw: str) -> Optional[str]:
 _CANON_INVOICE_TYPE_SQL = """
     CASE
         WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%credit%note%' THEN NULL
-        WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%labour%'  THEN N'Invoice - General Labour'
+        WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%General Labour%'  THEN N'Invoice - General Labour'
         WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%scrap%'   THEN N'Invoice - Scrap'
         WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%debit%'   THEN N'Invoice - Debit Note'
         WHEN LOWER(LTRIM(RTRIM(ISNULL(B.btype, N'')))) LIKE N'%general%'
@@ -115,13 +115,12 @@ _DC_DTYPE_EXPR = "LOWER(LTRIM(RTRIM(ISNULL(D.dtype, N''))))"
 
 _CANON_DC_TYPE_SQL = f"""
     CASE
-        WHEN {_DC_DTYPE_EXPR} LIKE N'%labour%'
+        WHEN {_DC_DTYPE_EXPR} LIKE N'%General Labour%'
           THEN N'DC - General Labour'
-        WHEN {_DC_DTYPE_EXPR} LIKE N'%customer%rework%'
+        WHEN {_DC_DTYPE_EXPR} LIKE N'%Customer Rework%'
           OR {_DC_DTYPE_EXPR} LIKE N'%customer rework%'
           THEN N'DC - Customer Rework'
         WHEN {_DC_DTYPE_EXPR} LIKE N'%general%'
-          AND {_DC_DTYPE_EXPR} NOT LIKE N'%labour%'
           THEN N'DC - General'
         ELSE NULL
     END
@@ -131,11 +130,11 @@ _CANON_DC_TYPE_SQL = f"""
 def _canonical_dc_type(dtype_raw: str) -> Optional[str]:
     """Map DC_Mas.dtype → canonical DC bucket; None if not one of the 3 allowed types."""
     t = (dtype_raw or "").strip().lower()
-    if "labour" in t:
+    if "General Labour" in t:
         return "DC - General Labour"
-    if "customer" in t and "rework" in t:
+    if "Customer Rework" in t and "rework" in t:
         return "DC - Customer Rework"
-    if "general" in t and "labour" not in t:
+    if "general" in t :
         return "DC - General"
     return None
 

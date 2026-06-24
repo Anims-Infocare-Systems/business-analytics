@@ -257,21 +257,23 @@ def get_quarter_months(month):
 
 
 PURCHASE_MONTHWISE_SQL = """
-    SELECT MONTH(podate) AS month_num, SUM(ISNULL(totamt, 0)) AS total_amount
-    FROM POMas
-    WHERE deleted = 0
-      AND CAST(podate AS DATE) BETWEEN ? AND ?
-      AND ISNULL(dtype, '') <> 'Job Order'
-    GROUP BY MONTH(podate)
+    SELECT MONTH(GM.grndate) AS month_num, SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+    FROM grn_mas GM
+    INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
+    WHERE GM.deleted = 0
+      AND GRD.deleted = 0
+      AND CAST(GM.grndate AS DATE) BETWEEN ? AND ?
+    GROUP BY MONTH(GM.grndate)
     ORDER BY month_num
 """
 
 PURCHASE_TOTAL_SQL = """
-    SELECT SUM(ISNULL(totamt, 0)) AS total_amount
-    FROM POMas
-    WHERE deleted = 0
-      AND CAST(podate AS DATE) BETWEEN ? AND ?
-      AND ISNULL(dtype, '') <> 'Job Order'
+    SELECT SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+    FROM grn_mas GM
+    INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
+    WHERE GM.deleted = 0
+      AND GRD.deleted = 0
+      AND CAST(GM.grndate AS DATE) BETWEEN ? AND ?
 """
 
 
@@ -362,7 +364,7 @@ def fetch_purchase_analysis_bucket(cursor, start_date, end_date):
 
 @api_view(["GET"])
 def dashboard1_purchase_kpi(request):
-    """Dashboard1 - Purchase Value KPI using purchase report monthwise logic."""
+    """Dashboard1 - Purchase Value KPI using GRN value (same logic as purchase projections)."""
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:

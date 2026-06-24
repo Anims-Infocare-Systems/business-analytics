@@ -577,6 +577,7 @@ export default function EApproval() {
                 { label: "Total PO's", value: "—", change: "Fetching POs..." },
                 { label: "Approved", value: "—", change: "Fetching stats..." },
                 { label: "Pending", value: "—", change: "Fetching stats..." },
+                { label: "Total Value", value: "—", change: "Fetching amounts..." },
             ];
         }
         const total = cards.length;
@@ -584,6 +585,7 @@ export default function EApproval() {
         const pendingCount = total - approvedCount;
         const approvalRate = total > 0 ? (approvedCount / total * 100).toFixed(1) : "0.0";
         const remainingRate = total > 0 ? (100 - parseFloat(approvalRate)).toFixed(1) : "0.0";
+        const totalValue = cards.reduce((sum, c) => sum + (Number(c.countVal) || 0), 0);
 
         return [
             {
@@ -600,6 +602,11 @@ export default function EApproval() {
                 label: "Pending",
                 value: String(pendingCount),
                 change: total > 0 ? `↓ ${remainingRate}% remaining` : "No POs in range",
+            },
+            {
+                label: "Total Value",
+                value: `₹ ${(totalValue / 100000).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L`,
+                change: total > 0 ? `↑ ${total} purchase orders` : "No POs in range",
             },
         ];
     }, [cards, approved, isLoading]);
