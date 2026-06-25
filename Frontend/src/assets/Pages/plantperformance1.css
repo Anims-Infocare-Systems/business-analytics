@@ -2822,108 +2822,89 @@
     overflow-x: auto;
     overflow-y: auto;
     max-height: 280px;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
     background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    box-shadow:
+        0 0 0 1px rgba(15,23,42,0.04),
+        0 4px 20px rgba(15,23,42,0.07);
 }
 
 .pp1-cc-tbl {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 11px;
+    font-size: 12px;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 .pp1-cc-tbl thead tr {
-    background: #f8fafc;
+    background: transparent;
 }
 
+/* ── Gradient header matching Plant Performance Dashboard banner ── */
 .pp1-cc-tbl th {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: #f8fafc;
-    padding: 10px 14px;
+    background: linear-gradient(135deg, #2563eb 0%, #1a54d4 55%, #1448b8 100%);
+    padding: 10px 16px;
     text-align: left;
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 700;
-    color: var(--pp1-text-3);
+    color: rgba(255, 255, 255, 0.82);
     text-transform: uppercase;
-    letter-spacing: .5px;
-    border-bottom: 1px solid #e2e8f0;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     white-space: nowrap;
     vertical-align: middle;
+    box-shadow: 0 2px 8px rgba(26, 84, 212, 0.25);
 }
 
+/* ── Body rows ── */
 .pp1-cc-tbl__tr {
-    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
-    transition: background 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    animation: pp1-table-row-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+    animation: pp1-table-row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pp1-cc-tbl__tr:nth-child(even) {
+    background: #fafbfd;
+}
+
+.pp1-cc-tbl__tr:nth-child(odd) {
+    background: #ffffff;
 }
 
 .pp1-cc-tbl__tr:hover {
-    background: rgba(37, 99, 235, 0.02) !important;
+    background: #f0f4ff !important;
+    box-shadow: inset 3px 0 0 #6366f1;
 }
 
-/* Staggered animation delays for the first 10 rows */
-.pp1-cc-tbl__tr:nth-child(1) {
-    animation-delay: 0.02s;
-}
-
-.pp1-cc-tbl__tr:nth-child(2) {
-    animation-delay: 0.04s;
-}
-
-.pp1-cc-tbl__tr:nth-child(3) {
-    animation-delay: 0.06s;
-}
-
-.pp1-cc-tbl__tr:nth-child(4) {
-    animation-delay: 0.08s;
-}
-
-.pp1-cc-tbl__tr:nth-child(5) {
-    animation-delay: 0.10s;
-}
-
-.pp1-cc-tbl__tr:nth-child(6) {
-    animation-delay: 0.12s;
-}
-
-.pp1-cc-tbl__tr:nth-child(7) {
-    animation-delay: 0.14s;
-}
-
-.pp1-cc-tbl__tr:nth-child(8) {
-    animation-delay: 0.16s;
-}
-
-.pp1-cc-tbl__tr:nth-child(9) {
-    animation-delay: 0.18s;
-}
-
-.pp1-cc-tbl__tr:nth-child(n+10) {
-    animation-delay: 0.20s;
-}
+/* Staggered entrance animation */
+.pp1-cc-tbl__tr:nth-child(1)    { animation-delay: 0.03s; }
+.pp1-cc-tbl__tr:nth-child(2)    { animation-delay: 0.06s; }
+.pp1-cc-tbl__tr:nth-child(3)    { animation-delay: 0.09s; }
+.pp1-cc-tbl__tr:nth-child(4)    { animation-delay: 0.12s; }
+.pp1-cc-tbl__tr:nth-child(5)    { animation-delay: 0.15s; }
+.pp1-cc-tbl__tr:nth-child(6)    { animation-delay: 0.18s; }
+.pp1-cc-tbl__tr:nth-child(7)    { animation-delay: 0.21s; }
+.pp1-cc-tbl__tr:nth-child(8)    { animation-delay: 0.24s; }
+.pp1-cc-tbl__tr:nth-child(9)    { animation-delay: 0.27s; }
+.pp1-cc-tbl__tr:nth-child(n+10) { animation-delay: 0.30s; }
 
 @keyframes pp1-table-row-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(7px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .pp1-cc-tbl td {
-    padding: 10px 14px;
-    color: var(--pp1-text-2);
+    padding: 10px 16px;
+    color: #334155;
     vertical-align: middle;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.4);
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12px;
+
 }
 
 .pp1-cc-tbl__id {
@@ -6724,4 +6705,24 @@
 
 .pp1-multiselect-option--selected .pp1-multiselect-checkbox-icon {
     transform: scale(1);
+}
+
+/* Table Sorting and Row Animation Styles */
+.pp1-tbl-th-sortable:hover {
+    background: rgba(37, 99, 235, 0.08);
+}
+
+@keyframes pp1-table-row-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pp1-table-row-animate {
+    animation: pp1-table-row-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

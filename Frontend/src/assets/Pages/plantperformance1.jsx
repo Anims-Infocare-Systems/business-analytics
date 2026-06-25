@@ -237,7 +237,7 @@ const CURRENT_STATE_CARDS = [
 
 const ACTION_CARDS = [
   { id: "customer_po_vs_sales_analysis", title: "Customer PO vs Sales Value", icon: Scale, color: "#2d6de8", priority: "medium", trend: { value: "+5.8% Up", type: "up" } },
-  { id: "purchase_report_dashboard", title: "GRN Value", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
+  { id: "purchase_report_dashboard", title: "GRN Value", icon: Truck, color: "#ea580c", priority: "medium" },
   { id: "purchase_value_report_dashboard", title: "Purchase Value", icon: ShoppingCart, color: "#ea580c", priority: "medium" },
   { id: "sales_analysis_report_dashboard", title: "Sales Analysis", icon: TrendingUp, color: "#10b981", priority: "medium" },
   { id: "production_analysis_report_dashboard", title: "Production Value Vs Actual Value", icon: Factory, color: "#8b5cf6", priority: "medium" },
@@ -4069,7 +4069,105 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
   );
 }
 
+const parseSortValue = (val) => {
+  if (val === undefined || val === null) return "";
+  const s = String(val).trim();
+  // Currency with lakhs suffix: e.g., ₹1.500 L
+  if (s.includes("₹") && s.endsWith(" L")) {
+    const numStr = s.replace(/[₹\sL,]/g, "");
+    const num = parseFloat(numStr);
+    if (!isNaN(num)) return num * 100000;
+  }
+  // Currency: e.g., ₹5,00,000
+  if (s.includes("₹")) {
+    const numStr = s.replace(/[₹\s,]/g, "");
+    const num = parseFloat(numStr);
+    if (!isNaN(num)) return num;
+  }
+  // Percentage: e.g., 92.5%
+  if (s.endsWith("%")) {
+    const numStr = s.replace(/[%]/g, "");
+    const num = parseFloat(numStr);
+    if (!isNaN(num)) return num;
+  }
+  // Hours: e.g., 250 h
+  if (s.endsWith(" h")) {
+    const numStr = s.replace(/[\sh]/g, "");
+    const num = parseFloat(numStr);
+    if (!isNaN(num)) return num;
+  }
+  // Regular numbers with commas: e.g., 5,000
+  const cleanNumStr = s.replace(/,/g, "");
+  if (/^-?\d+(\.\d+)?$/.test(cleanNumStr)) {
+    const num = parseFloat(cleanNumStr);
+    if (!isNaN(num)) return num;
+  }
+  // Dates: e.g., 2026-06-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return s;
+  }
+  return s.toLowerCase();
+};
+
+const SortIcon = ({ active, direction }) => {
+  return (
+    <span style={{
+      display: "inline-flex",
+      fontSize: "8px",
+      color: active ? "#ffffff" : "rgba(255, 255, 255, 0.3)",
+      transition: "all 0.15s ease",
+      transform: active && direction === "desc" ? "rotate(180deg)" : "none",
+      marginLeft: "5px",
+      verticalAlign: "middle",
+      flexShrink: 0
+    }}>
+      ▲
+    </span>
+  );
+};
+
 function PremiumDashboardBottomTable({ title, columns, rows }) {
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedRows = React.useMemo(() => {
+    if (sortIndex === null) return rows;
+
+    const sorted = [...rows].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    const firstColLower = columns[0].toLowerCase();
+    if (firstColLower.includes("sl.no") || firstColLower.includes("sl.no.")) {
+      return sorted.map((row, idx) => {
+        const newRow = [...row];
+        newRow[0] = String(idx + 1);
+        return newRow;
+      });
+    }
+
+    return sorted;
+  }, [rows, sortIndex, sortDirection, columns]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd">{title}</div>
@@ -4077,27 +4175,44 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-              {columns.map((col, idx) => (
-                <th
-                  key={idx}
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    backgroundColor: "#f2f6fe",
-                    zIndex: 10,
-                    textAlign: idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("hour") || col.toLowerCase().includes("rate") || col.toLowerCase().includes("ratio") || col.toLowerCase().includes("%") || col.toLowerCase().includes("day") || col.toLowerCase().includes("month") || col.toLowerCase().includes("loss") || col.toLowerCase().includes("price")) ? "right" : "left"
-                  }}
-                >
-                  {col}
-                </th>
-              ))}
+              {columns.map((col, idx) => {
+                const isRightAligned = idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("hour") || col.toLowerCase().includes("rate") || col.toLowerCase().includes("ratio") || col.toLowerCase().includes("%") || col.toLowerCase().includes("day") || col.toLowerCase().includes("month") || col.toLowerCase().includes("loss") || col.toLowerCase().includes("price"));
+                const isHovered = hoveredHeader === idx;
+                const isSorted = sortIndex === idx;
+                const isSlNo = idx === 0;
+
+                return (
+                  <th
+                    key={idx}
+                    onClick={() => !isSlNo && handleSort(idx)}
+                    onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                    onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left",
+                      cursor: isSlNo ? "default" : "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                      <span>{col}</span>
+                      {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr><td colSpan={columns.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
             ) : (
-              rows.map((row, ri) => (
+              sortedRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("hour") || columns[ci].toLowerCase().includes("rate") || columns[ci].toLowerCase().includes("ratio") || columns[ci].toLowerCase().includes("%") || columns[ci].toLowerCase().includes("day") || columns[ci].toLowerCase().includes("month") || columns[ci].toLowerCase().includes("loss") || columns[ci].toLowerCase().includes("price"));
@@ -4471,7 +4586,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
     <div className="pp1-action-detail" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-action-detail__header" style={{ "--act-color": "#ea580c", padding: "10px 14px", gap: "10px" }}>
         <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <ShoppingCart size={16} style={{ color: "#fff" }} />
+          <Truck size={16} style={{ color: "#fff" }} />
         </div>
         <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <p className="pp1-action-detail__title" style={{ fontWeight: 800, margin: 0 }}>GRN Value</p>
@@ -4633,12 +4748,18 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
 
         <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
           {kpis.map((k, i) => (
-            <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, "--chip-delay": `${i * 60}ms`, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20` }}>
-              <span className="pp1-detail__chip-icon" style={{ fontSize: "14px", display: "inline-flex", alignItems: "center" }}>
-                {typeof k.icon === "string" ? k.icon : React.createElement(k.icon, { size: 14 })}
-              </span>
-              <p className="pp1-detail__chip-val" style={{ fontSize: "15px", fontWeight: 700, margin: "2px 0 0 0" }}>{k.value}</p>
-              <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: 0, textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
+            <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, "--chip-delay": `${i * 60}ms`, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                {typeof k.icon === "string" ? (
+                  <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+                ) : k.icon ? (
+                  <span className="pp1-detail__chip-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: k.color + "20" }}>
+                    {React.createElement(k.icon, { size: 13, style: { color: k.color } })}
+                  </span>
+                ) : null}
+                <p className="pp1-detail__chip-val" style={{ fontSize: "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
+              </div>
+              <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
             </div>
           ))}
         </div>
@@ -4660,6 +4781,10 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
 }
 
 function PurchaseReportBottomTable({ data, loading, filters }) {
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
   const grnRows = React.useMemo(
     () => (Array.isArray(data?.grnValueCompare?.rows) ? data.grnValueCompare.rows : []),
     [data?.grnValueCompare?.rows]
@@ -4718,25 +4843,94 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
       .sort((a, b) => a[0].localeCompare(b[0]));
   }, [filteredRows, uniqueMonths]);
 
-  const columnsMonthWise = ["Supplier Name", ...uniqueMonths.map(m => `${m} (Lakhs)`), "Total Value (Lakhs)"];
+  const columnsMonthWise = React.useMemo(() => {
+    return ["Supplier Name", ...uniqueMonths.map(m => `${m} (Lakhs)`), "Total Value (Lakhs)"];
+  }, [uniqueMonths]);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedRowsMonthWise = React.useMemo(() => {
+    if (sortIndex === null) return rowsMonthWise;
+
+    return [...rowsMonthWise].sort((a, b) => {
+      let valA, valB;
+      if (sortIndex === 0) {
+        valA = a[0] || "";
+        valB = b[0] || "";
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      } else if (sortIndex === columnsMonthWise.length - 1) {
+        valA = a.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+        valB = b.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+      } else {
+        valA = Number(a[sortIndex] || 0);
+        valB = Number(b[sortIndex] || 0);
+      }
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [rowsMonthWise, sortIndex, sortDirection, columnsMonthWise]);
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-cc-bot__hd">Purchase Value Month Wise</div>
+      <div className="pp1-cc-bot__hd" style={{ paddingLeft: "16px", marginBottom: "8px" }}>Purchase Value Month Wise</div>
       <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
-            <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-              {columnsMonthWise.map((col, idx) => (
-                <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left" }}>{col}</th>
-              ))}
+            <tr>
+              {columnsMonthWise.map((col, idx) => {
+                const isRightAligned = idx > 0;
+                const isHovered = hoveredHeader === idx;
+                const isSorted = sortIndex === idx;
+
+                return (
+                  <th
+                    key={idx}
+                    onClick={() => handleSort(idx)}
+                    onMouseEnter={() => setHoveredHeader(idx)}
+                    onMouseLeave={() => setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: isHovered ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.1)"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                      <span>{col}</span>
+                      <SortIcon active={isSorted} direction={sortDirection} />
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rowsMonthWise.length === 0 ? (
+            {sortedRowsMonthWise.length === 0 ? (
               <tr><td colSpan={columnsMonthWise.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
             ) : (
-              rowsMonthWise.map((row, ri) => {
+              sortedRowsMonthWise.map((row, ri) => {
                 const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
                 return (
                   <tr key={ri} className="pp1-cc-tbl__tr">
@@ -4744,7 +4938,7 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
                     {row.slice(1).map((val, vi) => (
                       <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{val.toFixed(2)} L</td>
                     ))}
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 700, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
                   </tr>
                 );
               })
@@ -4796,6 +4990,32 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
       partNumber: "",
     });
   };
+
+  const pickerFrom = React.useMemo(() => {
+    if (filters.fromDate) return new Date(filters.fromDate);
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, [filters.fromDate]);
+
+  const pickerTo = React.useMemo(() => {
+    if (filters.toDate) return new Date(filters.toDate);
+    return new Date();
+  }, [filters.toDate]);
+
+  const handlePickerChange = React.useCallback(({ from, to }) => {
+    const formatLocalDate = (d) => {
+      if (!d) return "";
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    onFilterChange(prev => ({
+      ...prev,
+      fromDate: formatLocalDate(from),
+      toDate: formatLocalDate(to)
+    }));
+  }, [onFilterChange]);
 
   const kpis = [
     { label: "Total Purchase Value", value: "₹151.0L", icon: IndianRupee, color: "#ea580c" },
@@ -4880,9 +5100,22 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
 
   const suppliersList = ["Supplier A", "Supplier B", "Supplier C", "Steel Authority of India", "Hindalco Industries", "Jindal Stainless", "Tata Steel"];
   const categoriesList = ["Raw Material", "Consumables", "Machinery Parts", "Electronics"];
-  const partSuggestions = filters.partNumber
-    ? ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05"].filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()))
-    : ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05"];
+  const partsList = ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05"];
+
+  const filteredSuppliers = React.useMemo(() => {
+    if (!filters.supplier) return suppliersList;
+    return suppliersList.filter(s => s.toLowerCase().includes(filters.supplier.toLowerCase()));
+  }, [filters.supplier]);
+
+  const filteredCategories = React.useMemo(() => {
+    if (!filters.category) return categoriesList;
+    return categoriesList.filter(c => c.toLowerCase().includes(filters.category.toLowerCase()));
+  }, [filters.category]);
+
+  const filteredParts = React.useMemo(() => {
+    if (!filters.partNumber) return partsList;
+    return partsList.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
+  }, [filters.partNumber]);
 
   return (
     <PremiumDashboardView
@@ -4897,18 +5130,20 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
       rebuildToken={`purchase-value-ui|${targetConfig?.purchase_value?.minPurchaseValueL}`}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
-        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ maxWidth: "210px" }}>
+        {/* Date Range Picker - exactly like Customer PO vs Sales Value */}
+        <div className="pp1-filter-group pp1-filter-group--date-range">
           <label className="pp1-filter-label">Date Range</label>
-          <div className="pp1-filter-input" style={{ fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "space-between", height: "28px", cursor: "pointer" }}>
-            <span>Select date range...</span>
-            <Calendar size={14} style={{ opacity: 0.6 }} />
-          </div>
+          <PlantPerformance1DatePicker
+            from={pickerFrom}
+            to={pickerTo}
+            onChange={handlePickerChange}
+          />
         </div>
 
-        {/* Supplier Autocomplete */}
+        {/* Supplier Autocomplete with modern UI */}
         <div className="pp1-filter-group" ref={suppRef} style={{ maxWidth: "180px" }}>
           <label className="pp1-filter-label">Supplier</label>
-          <div className="pp1-part-autocomplete-wrap">
+          <div className="pp1-part-autocomplete-wrap" style={{ position: "relative" }}>
             <input
               type="text"
               className="pp1-filter-input pp1-part-autocomplete-input"
@@ -4919,22 +5154,24 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
                 setSuppOpen(true);
               }}
               onFocus={() => setSuppOpen(true)}
+              style={{ paddingRight: "24px" }}
             />
-            {suppOpen && (
+            <ChevronDown size={12} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }} />
+            {suppOpen && filteredSuppliers.length > 0 && (
               <div className="pp1-part-suggestions">
                 <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("supplier", ""); setSuppOpen(false); }}>All Suppliers</div>
-                {suppliersList.map(s => (
-                  <div key={s} className="pp1-part-suggestion-item" onClick={() => { handleInputChange("supplier", s); setSuppOpen(false); }}>{s}</div>
+                {filteredSuppliers.map(s => (
+                  <div key={s} className={`pp1-part-suggestion-item ${filters.supplier === s ? "selected" : ""}`} onClick={() => { handleInputChange("supplier", s); setSuppOpen(false); }}>{s}</div>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Material Category Dropdown */}
+        {/* Material Category Dropdown with modern UI */}
         <div className="pp1-filter-group" ref={catRef} style={{ maxWidth: "160px" }}>
           <label className="pp1-filter-label">Material Category</label>
-          <div className="pp1-part-autocomplete-wrap">
+          <div className="pp1-part-autocomplete-wrap" style={{ position: "relative" }}>
             <input
               type="text"
               className="pp1-filter-input pp1-part-autocomplete-input"
@@ -4945,22 +5182,24 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
                 setCatOpen(true);
               }}
               onFocus={() => setCatOpen(true)}
+              style={{ paddingRight: "24px" }}
             />
-            {catOpen && (
+            <ChevronDown size={12} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }} />
+            {catOpen && filteredCategories.length > 0 && (
               <div className="pp1-part-suggestions">
                 <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("category", ""); setCatOpen(false); }}>All Categories</div>
-                {categoriesList.map(c => (
-                  <div key={c} className="pp1-part-suggestion-item" onClick={() => { handleInputChange("category", c); setCatOpen(false); }}>{c}</div>
+                {filteredCategories.map(c => (
+                  <div key={c} className={`pp1-part-suggestion-item ${filters.category === c ? "selected" : ""}`} onClick={() => { handleInputChange("category", c); setCatOpen(false); }}>{c}</div>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Part Number Autocomplete */}
+        {/* Part Number Autocomplete with modern UI */}
         <div className="pp1-filter-group" ref={partRef} style={{ maxWidth: "160px" }}>
           <label className="pp1-filter-label">Part Number</label>
-          <div className="pp1-part-autocomplete-wrap">
+          <div className="pp1-part-autocomplete-wrap" style={{ position: "relative" }}>
             <input
               type="text"
               className="pp1-filter-input pp1-part-autocomplete-input"
@@ -4971,12 +5210,14 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
                 setPartOpen(true);
               }}
               onFocus={() => setPartOpen(true)}
+              style={{ paddingRight: "24px" }}
             />
-            {partOpen && partSuggestions.length > 0 && (
+            <ChevronDown size={12} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }} />
+            {partOpen && filteredParts.length > 0 && (
               <div className="pp1-part-suggestions">
                 <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("partNumber", ""); setPartOpen(false); }}>All Parts</div>
-                {partSuggestions.map(p => (
-                  <div key={p} className="pp1-part-suggestion-item" onClick={() => { handleInputChange("partNumber", p); setPartOpen(false); }}>{p}</div>
+                {filteredParts.map(p => (
+                  <div key={p} className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`} onClick={() => { handleInputChange("partNumber", p); setPartOpen(false); }}>{p}</div>
                 ))}
               </div>
             )}
@@ -4993,6 +5234,16 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
 
 function PurchaseValueBottomTable({ filters }) {
   const [activeTab, setActiveTab] = React.useState("month_wise");
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
+  // Reset sort when changing tabs
+  React.useEffect(() => {
+    setSortIndex(null);
+    setSortDirection("asc");
+    setHoveredHeader(null);
+  }, [activeTab]);
 
   const monthWiseRows = [
     ["Supplier A", "₹10.50 L", "₹12.00 L", "₹15.30 L", "₹8.20 L", "₹46.00 L"],
@@ -5007,18 +5258,71 @@ function PurchaseValueBottomTable({ filters }) {
     { supplier: "Tata Steel", month: "Apr-26", poNo: "PO-2026-904", poDate: "2026-04-10", code: "MAT-HR-05", name: "HR Plate 5mm", qty: "2,000 kg", rate: "₹275/kg", value: "₹5,50,000" }
   ];
 
+  const columns1 = ["Supplier Name", "April (Lakhs)", "May (Lakhs)", "June (Lakhs)", "July (Lakhs)", "Total Value (Lakhs)"];
+  const columns2 = ["Sl.No", "Supplier", "PO No", "PO Date", "Material Code", "Material Name", "Qty", "Rate", "Purchase Value"];
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedMonthWiseRows = React.useMemo(() => {
+    if (sortIndex === null || activeTab !== "month_wise") return monthWiseRows;
+
+    return [...monthWiseRows].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [monthWiseRows, sortIndex, sortDirection, activeTab]);
+
+  const sortedSummaryRows = React.useMemo(() => {
+    if (sortIndex === null || activeTab !== "orders_summary") return purchaseOrdersSummaryRows;
+
+    return [...purchaseOrdersSummaryRows].sort((a, b) => {
+      const getProp = (obj, idx) => {
+        if (idx === 0) return "";
+        if (idx === 1) return obj.supplier;
+        if (idx === 2) return obj.poNo;
+        if (idx === 3) return obj.poDate;
+        if (idx === 4) return obj.code;
+        if (idx === 5) return obj.name;
+        if (idx === 6) return obj.qty;
+        if (idx === 7) return obj.rate;
+        if (idx === 8) return obj.value;
+        return "";
+      };
+      const valA = parseSortValue(getProp(a, sortIndex));
+      const valB = parseSortValue(getProp(b, sortIndex));
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [purchaseOrdersSummaryRows, sortIndex, sortDirection, activeTab]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--pp1-border, #e2e8f0)", gap: "16px", marginBottom: "12px" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--pp1-border, #e2e8f0)", gap: "16px", marginBottom: "12px", paddingLeft: "16px" }}>
         <button
           type="button"
           onClick={() => setActiveTab("month_wise")}
           style={{
             background: "none",
             border: "none",
-            borderBottom: activeTab === "month_wise" ? "2px solid #ea580c" : "2px solid transparent",
-            color: activeTab === "month_wise" ? "#ea580c" : "var(--pp1-text-secondary, #64748b)",
+            borderBottom: activeTab === "month_wise" ? "2px solid var(--pp1-blue)" : "2px solid transparent",
+            color: activeTab === "month_wise" ? "var(--pp1-blue)" : "var(--pp1-text-secondary, #64748b)",
             fontWeight: 700,
             padding: "8px 0",
             fontSize: "13px",
@@ -5033,8 +5337,8 @@ function PurchaseValueBottomTable({ filters }) {
           style={{
             background: "none",
             border: "none",
-            borderBottom: activeTab === "orders_summary" ? "2px solid #ea580c" : "2px solid transparent",
-            color: activeTab === "orders_summary" ? "#ea580c" : "var(--pp1-text-secondary, #64748b)",
+            borderBottom: activeTab === "orders_summary" ? "2px solid var(--pp1-blue)" : "2px solid transparent",
+            color: activeTab === "orders_summary" ? "var(--pp1-blue)" : "var(--pp1-text-secondary, #64748b)",
             fontWeight: 700,
             padding: "8px 0",
             fontSize: "13px",
@@ -5058,24 +5362,49 @@ function PurchaseValueBottomTable({ filters }) {
               <col style={{ width: "14%" }} />
             </colgroup>
             <thead>
-              <tr style={{ background: "#fff7ed" }}>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>Supplier Name</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>April (Lakhs)</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>May (Lakhs)</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>June (Lakhs)</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>July (Lakhs)</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>Total Value (Lakhs)</th>
+              <tr>
+                {columns1.map((col, idx) => {
+                  const isRightAligned = idx > 0;
+                  const isHovered = hoveredHeader === idx;
+                  const isSorted = sortIndex === idx;
+
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => handleSort(idx)}
+                      onMouseEnter={() => setHoveredHeader(idx)}
+                      onMouseLeave={() => setHoveredHeader(null)}
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        backgroundColor: isHovered ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                        zIndex: 10,
+                        textAlign: isRightAligned ? "right" : "left",
+                        cursor: "pointer",
+                        userSelect: "none",
+                        transition: "background-color 0.2s ease",
+                        padding: "12px 16px",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.1)"
+                      }}
+                    >
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span>{col}</span>
+                        <SortIcon active={isSorted} direction={sortDirection} />
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {monthWiseRows.map((row, ri) => (
+              {sortedMonthWiseRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__bold" style={{ fontWeight: 600 }}>{row[0]}</td>
                   <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[1]}</td>
                   <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[2]}</td>
                   <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[3]}</td>
                   <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[4]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: "#ea580c", fontVariantNumeric: "tabular-nums" }}>{row[5]}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--pp1-blue)", fontVariantNumeric: "tabular-nums" }}>{row[5]}</td>
                 </tr>
               ))}
             </tbody>
@@ -5083,34 +5412,57 @@ function PurchaseValueBottomTable({ filters }) {
         ) : (
           <table className="pp1-cc-tbl" style={{ minWidth: "1100px", tableLayout: "fixed" }}>
             <colgroup>
+              <col style={{ width: "6%" }} />
               <col style={{ width: "22%" }} />
-              <col style={{ width: "8%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "12%" }} />
               <col style={{ width: "16%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
-              <tr style={{ background: "#fff7ed" }}>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>SUPPLIER</th>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>MONTH</th>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>PO NO</th>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>PO DATE</th>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>MATERIAL CODE</th>
-                <th style={{ textAlign: "left", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>MATERIAL NAME</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>QTY</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>RATE</th>
-                <th style={{ textAlign: "right", background: "#fff7ed", borderBottom: "1px solid rgba(234, 88, 12, 0.15)" }}>PURCHASE VALUE</th>
+              <tr>
+                {columns2.map((col, idx) => {
+                  const isRightAligned = idx > 5;
+                  const isHovered = hoveredHeader === idx;
+                  const isSorted = sortIndex === idx;
+                  const isSlNo = idx === 0;
+
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => !isSlNo && handleSort(idx)}
+                      onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                      onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        backgroundColor: isHovered && !isSlNo ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                        zIndex: 10,
+                        textAlign: isRightAligned ? "right" : "left",
+                        cursor: isSlNo ? "default" : "pointer",
+                        userSelect: "none",
+                        transition: "background-color 0.2s ease",
+                        padding: "12px 16px",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.1)"
+                      }}
+                    >
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span>{col}</span>
+                        {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {purchaseOrdersSummaryRows.map((row, ri) => (
+              {sortedSummaryRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
+                  <td>{ri + 1}</td>
                   <td className="pp1-cc-tbl__bold" style={{ fontWeight: 600 }}>{row.supplier}</td>
-                  <td>{row.month}</td>
                   <td>
                     <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer" }}>
                       {row.poNo}
@@ -5686,6 +6038,8 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
 
 function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   const [activeTab, setActiveTab] = React.useState("turnover");
+  const [sortField, setSortField] = React.useState("date"); // Default sorting by Date
+  const [sortDirection, setSortDirection] = React.useState("asc");
 
   const salesRows = React.useMemo(
     () => (Array.isArray(data?.salesAnalysisCompare?.rows) ? data.salesAnalysisCompare.rows : []),
@@ -5747,21 +6101,48 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
       .sort((a, b) => a[0].localeCompare(b[0]));
   }, [filteredRows, uniqueMonths]);
 
-  const columnsInvoice = ["Month", "Customer", "Invoice No", "Invoice Date", "Sales Value", "Dispatch Value", "Collection Status"];
+  const sortedInvoiceRows = React.useMemo(() => {
+    const rawRows = filteredRows.map((r) => ({
+      customer: r.customer || "—",
+      invoiceNo: r.invoiceNo || "—",
+      date: r.date || "—",
+      salesValue: Number(r.salesValue || 0)
+    }));
 
-  const rowsInvoice = React.useMemo(() => {
-    return filteredRows
-      .map((r) => [
-        r.month || "—",
-        r.customer || "—",
-        r.invoiceNo || "—",
-        r.date || "—",
-        r.salesValue > 0 ? `₹${Number(r.salesValue).toFixed(2)} L` : "—",
-        r.dispatchValue > 0 ? `₹${Number(r.dispatchValue).toFixed(2)} L` : "—",
-        r.collectionStatus || "—",
-      ])
-      .sort((a, b) => (a[3] || "").localeCompare(b[3] || ""));
-  }, [filteredRows]);
+    return rawRows.sort((a, b) => {
+      const valA = a[sortField];
+      const valB = b[sortField];
+
+      if (sortField === "salesValue") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+
+      // String comparison for customer, invoiceNo, date
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+
+      if (strA < strB) return sortDirection === "asc" ? -1 : 1;
+      if (strA > strB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filteredRows, sortField, sortDirection]);
+
+  const invoiceHeaders = [
+    { label: "Sl.No", field: null, align: "left" },
+    { label: "Customer Name", field: "customer", align: "left" },
+    { label: "Invoice No", field: "invoiceNo", align: "left" },
+    { label: "Invoice Date", field: "date", align: "left" },
+    { label: "Value", field: "salesValue", align: "right" }
+  ];
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -5799,7 +6180,7 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
             }}
             onClick={() => setActiveTab("invoiceRegister")}
           >
-            Sales Invoice Register
+            Invoice Register
           </button>
         </div>
       </div>
@@ -5808,9 +6189,9 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
         {activeTab === "turnover" ? (
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
+              <tr>
                 {columnsTurnover.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left" }}>{col}</th>
+                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left", position: "sticky", top: 0, zIndex: 3 }}>{col}</th>
                 ))}
               </tr>
             </thead>
@@ -5836,28 +6217,112 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
         ) : (
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
-              <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {columnsInvoice.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx >= 4 && idx <= 5 ? "right" : "left" }}>{col}</th>
-                ))}
+              <tr>
+                {invoiceHeaders.map((h, idx) => {
+                  const isSortable = h.field !== null;
+                  const isActive = sortField === h.field;
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => isSortable && handleSort(h.field)}
+                      style={{
+                        textAlign: h.align,
+                        cursor: isSortable ? "pointer" : "default",
+                        userSelect: "none",
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 3,
+                        transition: "color 0.15s ease"
+                      }}
+                      className={isSortable ? "pp1-tbl-th-sortable" : ""}
+                    >
+                      <div style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        justifyContent: h.align === "right" ? "flex-end" : "flex-start",
+                        width: "100%"
+                      }}>
+                        <span>{h.label}</span>
+                        {isSortable && (
+                          <span style={{
+                            display: "inline-flex",
+                            fontSize: "8px",
+                            color: isActive ? "#a5b4fc" : "rgba(255,255,255,0.2)",
+                            transition: "all 0.15s ease",
+                            transform: isActive && sortDirection === "desc" ? "rotate(180deg)" : "none"
+                          }}>
+                            ▲
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {rowsInvoice.length === 0 ? (
-                <tr><td colSpan={columnsInvoice.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              {sortedInvoiceRows.length === 0 ? (
+                <tr><td colSpan={invoiceHeaders.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                rowsInvoice.map((row, ri) => (
-                  <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[1]}</td>
-                    <td className="pp1-cc-tbl__mono">{row[2]}</td>
-                    <td className="pp1-cc-tbl__mono">{row[3]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[4]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[5]}</td>
-                    <td style={{
-                      fontWeight: 600,
-                      color: row[6] === "Paid" ? "var(--pp1-green)" : row[6] === "Unpaid" ? "var(--pp1-rose)" : row[6] === "Pending" ? "var(--pp1-amber)" : "var(--pp1-blue)"
-                    }}>{row[6]}</td>
+                sortedInvoiceRows.map((row, ri) => (
+                  <tr
+                    key={`${row.invoiceNo}-${ri}`}
+                    className="pp1-cc-tbl__tr pp1-table-row-animate"
+                    style={{ animationDelay: `${Math.min(ri, 20) * 40}ms` }}
+                  >
+                    {/* SL.No — muted slate number chip */}
+                    <td style={{ padding: "10px 16px", width: "52px", textAlign: "center" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "24px", height: "24px", borderRadius: "6px",
+                        background: "#f1f5f9",
+                        color: "#64748b", fontWeight: 700, fontSize: "10px",
+                        border: "1px solid #e2e8f0"
+                      }}>{ri + 1}</span>
+                    </td>
+                    {/* Customer Name — primary text */}
+                    <td style={{ padding: "10px 16px", fontWeight: 600, fontSize: "12.5px", color: "#0f172a", letterSpacing: "-0.1px" }}>
+                      {row.customer}
+                    </td>
+                    {/* Invoice No — matching blue gradient badge */}
+                    <td style={{ padding: "10px 16px" }}>
+                      <span style={{
+                        display: "inline-block",
+                        background: "linear-gradient(135deg, #2563eb 0%, #1a54d4 55%, #1448b8 100%)",
+                        color: "#ffffff",
+                        fontWeight: 700, fontSize: "11px",
+                        letterSpacing: "0.8px",
+                        padding: "3px 10px",
+                        borderRadius: "6px",
+                        fontFamily: "'Courier New', 'Fira Code', monospace",
+                        boxShadow: "0 2px 6px rgba(26, 84, 212, 0.3)",
+                        whiteSpace: "nowrap"
+                      }}>{row.invoiceNo}</span>
+                    </td>
+                    {/* Invoice Date — calendar icon + indigo soft pill */}
+                    <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: "5px",
+                        fontSize: "11.5px", fontWeight: 500, color: "#475569",
+                        fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
+                      }}>
+                        <Calendar size={12} style={{ color: "#94a3b8", flexShrink: 0 }} />
+                        {row.date}
+                      </span>
+                    </td>
+                    {/* Value — emerald right-aligned amount */}
+                    <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                      <span style={{
+                        display: "inline-block",
+                        fontWeight: 700, fontSize: "12.5px",
+                        color: "#059669",
+                        letterSpacing: "-0.2px",
+                        fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
+                      }}>
+                        ₹{row.salesValue > 0 ? Number(row.salesValue).toFixed(2) : "0.00"} L
+                      </span>
+                    </td>
                   </tr>
                 ))
               )}
@@ -7097,6 +7562,9 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
 }
 
 function IdleHoursReportBottomTable({ filters }) {
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
 
   const filteredLogs = React.useMemo(() => {
     let list = MOCK_IDLE_LOGS;
@@ -7109,18 +7577,50 @@ function IdleHoursReportBottomTable({ filters }) {
   }, [filters]);
 
   // Tab 1 Data
-  const columns1 = ["Operator", "Machine", "Idle Reason", "Ideal Hours", "Per Month", "Rate Per Hour", "Production Loss (Lakhs)"];
+  const columns1 = ["Sl.No", "Date", "Machine Name", "Idle Hour", "Rate Per Hour", "Production Loss (Lakhs)"];
   const rows1 = React.useMemo(() => {
-    return filteredLogs.map(r => [
-      r.operator,
+    return filteredLogs.map((r, idx) => [
+      String(idx + 1),
+      r.date,
       r.machine,
-      r.reason,
       `${r.duration} h`,
-      `${(r.duration / 12).toFixed(2)} h`,
       `₹${r.ratePerHour.toLocaleString()}`,
       `₹${((r.duration * r.ratePerHour) / 100000).toFixed(3)} L`
     ]);
   }, [filteredLogs]);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedRows1 = React.useMemo(() => {
+    if (sortIndex === null) return rows1;
+
+    const sorted = [...rows1].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    // Re-index serial number to stay sequential
+    return sorted.map((row, idx) => {
+      const newRow = [...row];
+      newRow[0] = String(idx + 1);
+      return newRow;
+    });
+  }, [rows1, sortIndex, sortDirection]);
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -7139,7 +7639,7 @@ function IdleHoursReportBottomTable({ filters }) {
               cursor: "default"
             }}
           >
-            Idle Hours vs Production Loss Value
+            Idle Hours & Production Loss Value
           </button>
         </div>
       </div>
@@ -7148,42 +7648,59 @@ function IdleHoursReportBottomTable({ filters }) {
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-              {columns1.map((col, idx) => (
-                <th
-                  key={idx}
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    backgroundColor: "#f2f6fe",
-                    zIndex: 10,
-                    textAlign: idx > 2 && (
-                      col.toLowerCase().includes("qty") ||
-                      col.toLowerCase().includes("value") ||
-                      col.toLowerCase().includes("hours") ||
-                      col.toLowerCase().includes("hour") ||
-                      col.toLowerCase().includes("rate") ||
-                      col.toLowerCase().includes("ratio") ||
-                      col.toLowerCase().includes("%") ||
-                      col.toLowerCase().includes("day") ||
-                      col.toLowerCase().includes("month") ||
-                      col.toLowerCase().includes("loss")
-                    ) ? "right" : "left"
-                  }}
-                >
-                  {col}
-                </th>
-              ))}
+              {columns1.map((col, idx) => {
+                const isRightAligned = idx > 2 && (
+                  col.toLowerCase().includes("qty") ||
+                  col.toLowerCase().includes("value") ||
+                  col.toLowerCase().includes("hours") ||
+                  col.toLowerCase().includes("hour") ||
+                  col.toLowerCase().includes("rate") ||
+                  col.toLowerCase().includes("ratio") ||
+                  col.toLowerCase().includes("%") ||
+                  col.toLowerCase().includes("day") ||
+                  col.toLowerCase().includes("month") ||
+                  col.toLowerCase().includes("loss")
+                );
+                const isHovered = hoveredHeader === idx;
+                const isSorted = sortIndex === idx;
+                const isSlNo = idx === 0;
+
+                return (
+                  <th
+                    key={idx}
+                    onClick={() => !isSlNo && handleSort(idx)}
+                    onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                    onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: isRightAligned ? "right" : "left",
+                      cursor: isSlNo ? "default" : "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                      <span>{col}</span>
+                      {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows1.length === 0 ? (
+            {sortedRows1.length === 0 ? (
               <tr>
                 <td colSpan={columns1.length} className="pp1-cc-tbl__empty">
                   No data available.
                 </td>
               </tr>
             ) : (
-              rows1.map((row, ri) => (
+              sortedRows1.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 2 && (
@@ -11605,23 +12122,25 @@ function StoreStockValueReportBottomTable({ filters }) {
 
 function OtdReportBottomTable({ filters }) {
   const allRows = [
-    ["Tata Motors", "PO-2026-8801", "BRK-PAD-M1", "2026-06-10", "2026-06-10", "5,000", "5,000", "On Time", "₹5,00,000"],
-    ["Mahindra & Mahindra", "PO-2026-9042", "ROT-DSC-X4", "2026-06-12", "2026-06-11", "3,000", "3,000", "On Time", "₹3,00,000"],
-    ["Maruti Suzuki", "PO-2026-7719", "GBX-HNG-S2", "2026-06-14", "2026-06-16", "1,500", "1,400", "Delayed", "₹1,40,000"],
-    ["Hyundai India", "PO-2026-6652", "ENG-MNT-H1", "2026-06-15", "2026-06-15", "2,500", "2,500", "On Time", "₹2,50,000"],
-    ["Ashok Leyland", "PO-2026-4401", "TRK-AXL-L9", "2026-06-18", "2026-06-20", "800", "750", "Delayed", "₹7,50,000"],
-    ["Tata Motors", "PO-2026-8802", "BRK-PAD-M2", "2026-06-20", "2026-06-20", "2,000", "2,000", "On Time", "₹2,00,000"],
-    ["Maruti Suzuki", "PO-2026-7720", "GBX-HNG-S3", "2026-06-22", "2026-06-24", "1,200", "1,100", "Delayed", "₹1,10,000"]
+    ["Tata Motors", "PO-2026-8801", "REF-8801-A", "BRK-PAD-M1", "2026-06-10", "2026-06-08", "5,000", "5,000", "On Time", "₹5,00,000"],
+    ["Mahindra & Mahindra", "PO-2026-9042", "REF-9042-B", "ROT-DSC-X4", "2026-06-12", "2026-06-12", "3,000", "3,000", "On Time", "₹3,00,000"],
+    ["Maruti Suzuki", "PO-2026-7719", "REF-7719-A", "GBX-HNG-S2", "2026-06-14", "2026-06-12", "1,500", "1,400", "Delayed", "₹1,40,000"],
+    ["Hyundai India", "PO-2026-6652", "REF-6652-C", "ENG-MNT-H1", "2026-06-15", "2026-06-14", "2,500", "2,500", "On Time", "₹2,50,000"],
+    ["Ashok Leyland", "PO-2026-4401", "REF-4401-A", "TRK-AXL-L9", "2026-06-18", "2026-06-16", "800", "750", "Delayed", "₹7,50,000"],
+    ["Tata Motors", "PO-2026-8802", "REF-8802-B", "BRK-PAD-M2", "2026-06-20", "2026-06-18", "2,000", "2,000", "On Time", "₹2,00,000"],
+    ["Maruti Suzuki", "PO-2026-7720", "REF-7720-B", "GBX-HNG-S3", "2026-06-22", "2026-06-20", "1,200", "1,100", "Delayed", "₹1,10,000"]
   ];
 
   const columns = [
+    "Sl.No.",
     "Customer Name",
     "PO Number",
+    "PO Ref Number",
     "Part Number",
-    "Promised Date",
-    "Actual Dispatch",
-    "Ordered Qty",
-    "Delivered Qty",
+    "Schd Dt",
+    "Req Dt",
+    "Order Qty",
+    "Delivery Qty",
     "Status",
     "Value"
   ];
@@ -11632,7 +12151,7 @@ function OtdReportBottomTable({ filters }) {
       list = list.filter(r => r[0].toLowerCase().includes(filters.customer.toLowerCase()));
     }
     if (filters?.partNumber) {
-      list = list.filter(r => r[2].toLowerCase().includes(filters.partNumber.toLowerCase()));
+      list = list.filter(r => r[3].toLowerCase().includes(filters.partNumber.toLowerCase()));
     }
     if (filters?.fromDate) {
       list = list.filter(r => r[4] >= filters.fromDate);
@@ -11640,7 +12159,8 @@ function OtdReportBottomTable({ filters }) {
     if (filters?.toDate) {
       list = list.filter(r => r[4] <= filters.toDate);
     }
-    return list;
+    // Prepend Serial Number dynamically
+    return list.map((r, idx) => [String(idx + 1), ...r]);
   }, [filters]);
 
   return <PremiumDashboardBottomTable title="OTD Delivery Registry" columns={columns} rows={rows} />;
@@ -16328,7 +16848,7 @@ export default function PlantPerformance1() {
                         {[
                           { id: "production_analysis", label: "Production Value Vs Actual Value", icon: Factory },
                           { id: "customer_po", label: "Customer PO vs Sales Value", icon: ClipboardList },
-                          { id: "grn_value", label: "GRN Value", icon: ShoppingCart },
+                          { id: "grn_value", label: "GRN Value", icon: Truck },
                           { id: "purchase_value", label: "Purchase Value", icon: ShoppingCart },
                           { id: "sales_analysis", label: "Sales Analysis", icon: TrendingUp },
                           { id: "idle_hours", label: "Idle Hours", icon: Clock },
