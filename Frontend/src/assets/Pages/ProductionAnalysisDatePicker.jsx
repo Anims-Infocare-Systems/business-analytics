@@ -39,6 +39,14 @@ const PRESETS = [
     { label: "Q2 2026",      get: () => ({ from: new Date(2026,3,1), to: new Date(2026,5,30) }) },
 ];
 
+const EXTRA_PRESETS = [
+    { label: "Q3 2026",      get: () => ({ from: new Date(2026,6,1), to: new Date(2026,8,30) }) },
+    { label: "Q4 2026",      get: () => ({ from: new Date(2026,9,1), to: new Date(2026,11,31) }) },
+    { label: "Last 3 Months",get: () => { const t=new Date(),s=new Date(); s.setMonth(t.getMonth()-3); return { from: startOf(s), to: startOf(t) }; } },
+    { label: "Last 6 Months",get: () => { const t=new Date(),s=new Date(); s.setMonth(t.getMonth()-6); return { from: startOf(s), to: startOf(t) }; } },
+    { label: "Last Year",    get: () => { const y = new Date().getFullYear()-1; return { from: new Date(y,0,1), to: new Date(y,11,31) }; } },
+];
+
 function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover }) {
     const cells = calDays(year, month);
     return (
@@ -90,6 +98,7 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
     const [selecting,    setSelecting]   = useState(null);
     const [hovered,      setHovered]     = useState(null);
     const [activePreset, setActivePreset]= useState(null);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
     const wrapRef    = useRef(null);
     const triggerRef = useRef(null);
     const rightMonth = addMonths(leftMonth, 1);
@@ -104,6 +113,13 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
     }, [open]);
+
+    useEffect(() => {
+        if (!dropdownOpen) return;
+        const closeDropdown = () => setDropdownOpen(false);
+        document.addEventListener("click", closeDropdown);
+        return () => document.removeEventListener("click", closeDropdown);
+    }, [dropdownOpen]);
 
     useEffect(() => { if (from) setLeft(new Date(from.getFullYear(),from.getMonth(),1)); }, [from]);
 
@@ -125,6 +141,8 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
 
     const label = from && to ? `${FMT(from)}  →  ${FMT(to)}` : from ? `${FMT(from)}  →  Pick end date` : "Select date range";
 
+    const isExtraActive = EXTRA_PRESETS.some(p => p.label === activePreset);
+
     return (
         <div className="padp-wrap" ref={wrapRef}>
             <button ref={triggerRef} className={`padp-trigger ${open?"padp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
@@ -143,6 +161,35 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
                             {PRESETS.map(p => (
                                 <button key={p.label} className={`padp-preset ${activePreset===p.label?"padp-preset--active":""}`} onClick={()=>handlePreset(p)} type="button">{p.label}</button>
                             ))}
+                            <div className="padp-dropdown-container">
+                                <button 
+                                    type="button" 
+                                    className={`padp-preset padp-preset-more ${isExtraActive || dropdownOpen ? "padp-preset--active" : ""}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDropdownOpen(!dropdownOpen);
+                                    }}
+                                >
+                                    More ▾
+                                </button>
+                                {dropdownOpen && (
+                                    <div className="padp-dropdown-menu">
+                                        {EXTRA_PRESETS.map(p => (
+                                            <button
+                                                key={p.label}
+                                                className={`padp-dropdown-item ${activePreset === p.label ? "padp-dropdown-item--active" : ""}`}
+                                                onClick={() => {
+                                                    handlePreset(p);
+                                                    setDropdownOpen(false);
+                                                }}
+                                                type="button"
+                                            >
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="padp-calendars">
                             <div className="padp-month-col">

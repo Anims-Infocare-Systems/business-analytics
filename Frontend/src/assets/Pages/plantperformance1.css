@@ -235,6 +235,7 @@
 .pp1-root {
     width: 100%;
     min-height: 100%;
+    margin-top: -10px;
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -265,7 +266,9 @@
         inset 0 1px 0 rgba(255, 255, 255, .9);
     margin-bottom: 10px;
     flex-shrink: 0;
-    position: relative;
+    position: sticky;
+    top: -10px;
+    z-index: 100;
     overflow: visible;
 }
 
@@ -281,6 +284,19 @@
     background-size: 300% auto;
     animation: pp1-gradient-move 4s ease infinite;
     border-radius: var(--pp1-radius-lg) var(--pp1-radius-lg) 0 0;
+}
+
+/* solid top mask to hide scrolling content behind the sticky filter bar */
+.pp1-fbar::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: -30px;
+    right: -30px;
+    height: 30px;
+    background: var(--pp1-bg);
+    z-index: -1;
+    pointer-events: none;
 }
 
 .pp1-fbar-status {
@@ -971,6 +987,377 @@
     gap: 10px;
     width: 100%;
     align-items: start;
+    transition: grid-template-columns 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* All grid children must respect their column width — essential for Chart.js */
+.pp1-body > * {
+    min-width: 0;
+}
+
+/* Left panel collapsed → shrinks to 44px icon-only rail (matches DL sidebar 72px style) */
+.pp1-body--left-collapsed {
+    grid-template-columns: 44px 1fr 300px;
+}
+
+/* Right panel collapsed */
+.pp1-body--right-collapsed {
+    grid-template-columns: 300px 1fr 44px;
+}
+
+/* Both collapsed */
+.pp1-body--left-collapsed.pp1-body--right-collapsed {
+    grid-template-columns: 44px 1fr 44px;
+}
+
+/* ── Collapsed panel wrapper ─────────────────────────────────── */
+.pp1-panel--dl-collapsed {
+    overflow: visible !important; /* allow tooltip flyout to escape the 44px column */
+    height: var(--pp1-side-h, auto);
+    max-height: var(--pp1-side-h, none);
+    min-height: 0;
+    z-index: 10; /* sit above center panel so tooltip overlaps it */
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DashboardLayout-style ICON-ONLY rail (collapsed state)
+   ══════════════════════════════════════════════════════════════ */
+.pp1-dl-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 14px 0 10px;
+    height: 100%;
+    gap: 8px;
+    overflow: visible; /* must be visible so ::after tooltip can escape */
+}
+
+/* Section icon bubble */
+.pp1-dl-rail__icon-wrap {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    flex-shrink: 0;
+}
+.pp1-dl-rail--left .pp1-dl-rail__icon-wrap {
+    background: rgba(37, 99, 235, 0.08);
+}
+.pp1-dl-rail--right .pp1-dl-rail__icon-wrap {
+    background: rgba(245, 158, 11, 0.08);
+}
+
+/* Expand button — mirrors DL collapse-btn at bottom */
+.pp1-dl-rail__expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(100% - 8px);
+    margin: auto 4px 10px;
+    padding: 8px 0;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.pp1-dl-rail__expand-btn--blue {
+    color: #2563eb;
+    border-color: rgba(37, 99, 235, 0.14);
+    background: rgba(37, 99, 235, 0.05);
+}
+.pp1-dl-rail__expand-btn--blue:hover {
+    background: rgba(37, 99, 235, 0.12);
+    border-color: rgba(37, 99, 235, 0.28);
+    transform: scale(1.06);
+}
+.pp1-dl-rail__expand-btn--amber {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.16);
+    background: rgba(245, 158, 11, 0.05);
+}
+.pp1-dl-rail__expand-btn--amber:hover {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.3);
+    transform: scale(1.06);
+}
+
+/* ── Stacked card icon items in collapsed rail ───────────── */
+.pp1-dl-rail__items {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    overflow: visible; /* tooltip ::after must NOT be clipped */
+    padding: 4px 0;
+    width: 100%;
+}
+.pp1-dl-rail__items::-webkit-scrollbar { display: none; }
+
+.pp1-dl-rail__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--rc, #6366f1);
+    background: color-mix(in srgb, var(--rc, #6366f1) 10%, transparent);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid transparent;
+    position: relative; /* needed for tooltip positioning */
+}
+.pp1-dl-rail__item:hover {
+    background: color-mix(in srgb, var(--rc, #6366f1) 18%, transparent);
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--rc, #6366f1) 25%, transparent);
+}
+.pp1-dl-rail__item--active {
+    background: color-mix(in srgb, var(--rc, #6366f1) 16%, transparent);
+    border-color: color-mix(in srgb, var(--rc, #6366f1) 35%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--rc, #6366f1) 20%, transparent);
+}
+
+/* ── Hover tooltip flyout (DashboardLayout style) ──────────────────
+   Left rail  → flies out to the RIGHT
+   Right rail → flies out to the LEFT
+   ──────────────────────────────────────────────────────────────── */
+
+/* tooltip bubble */
+.pp1-dl-rail__item::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-8px) scale(0.92);
+    transform-origin: left center;
+
+    /* glassmorphism dark pill */
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #f1f5f9;
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: inherit;
+    white-space: nowrap;
+    padding: 6px 11px;
+    border-radius: 8px;
+    border-left: 3px solid var(--rc, #6366f1);
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.28),
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9999;
+    transition:
+        opacity 0.16s ease,
+        transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* arrow pointer (pointing LEFT toward the icon) */
+.pp1-dl-rail__item::before {
+    content: "";
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-8px);
+    border: 5px solid transparent;
+    border-right-color: #0f172a;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9999;
+    transition:
+        opacity 0.16s ease,
+        transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pp1-dl-rail__item:hover::after,
+.pp1-dl-rail__item:hover::before {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0) scale(1);
+}
+
+/* RIGHT rail: tooltip flies LEFT */
+.pp1-dl-rail__item--right::after {
+    left: auto;
+    right: calc(100% + 14px);
+    transform: translateY(-50%) translateX(8px) scale(0.92);
+    transform-origin: right center;
+    border-left: none;
+    border-right: 3px solid var(--rc, #f59e0b);
+    border-radius: 8px;
+}
+.pp1-dl-rail__item--right::before {
+    left: auto;
+    right: calc(100% + 8px);
+    transform: translateY(-50%) translateX(8px);
+    border-right-color: transparent;
+    border-left-color: #0f172a;
+}
+.pp1-dl-rail__item--right:hover::after {
+    transform: translateY(-50%) translateX(0) scale(1);
+}
+.pp1-dl-rail__item--right:hover::before {
+    transform: translateY(-50%) translateX(0);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Collapse button at bottom of expanded panel (DL sidebar style)
+   ══════════════════════════════════════════════════════════════ */
+.pp1-dl-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: calc(100% - 20px);
+    margin: 6px 10px 10px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    background: rgba(248, 250, 252, 0.8);
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.pp1-dl-collapse-btn--left {
+    color: #2563eb;
+}
+.pp1-dl-collapse-btn--right {
+    color: #f59e0b;
+}
+.pp1-dl-collapse-btn:hover {
+    transform: translateY(-1px);
+}
+.pp1-dl-collapse-btn--left:hover {
+    background: rgba(37, 99, 235, 0.06);
+    border-color: rgba(37, 99, 235, 0.2);
+}
+.pp1-dl-collapse-btn--right:hover {
+    background: rgba(245, 158, 11, 0.06);
+    border-color: rgba(245, 158, 11, 0.22);
+}
+.pp1-dl-collapse-btn:active {
+    transform: translateY(0) scale(0.97);
+}
+.pp1-dl-collapse-label {
+    flex: 1;
+    text-align: left;
+    animation: pp1-slide-in-left 0.22s ease both;
+}
+@keyframes pp1-slide-in-left {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RAIL HOVER CARD — rendered via React portal on document.body
+   ══════════════════════════════════════════════════════════════════ */
+.pp1-rail-hover-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px 9px 12px;
+    border-radius: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+    position: relative; /* for arrow pointer positioning */
+
+    /* glassmorphism dark */
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 3px solid var(--hc, #6366f1);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 2px 8px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+
+    animation: pp1-hover-card-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.pp1-rail-hover-card--right {
+    border-left: none;
+    border-right: 3px solid var(--hc, #f59e0b);
+    flex-direction: row-reverse;
+}
+
+@keyframes pp1-hover-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(-10px) scale(0.88);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
+    }
+}
+.pp1-rail-hover-card--right {
+    animation-name: pp1-hover-card-in-right;
+}
+@keyframes pp1-hover-card-in-right {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(10px) scale(0.88);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
+    }
+}
+
+/* Icon bubble */
+.pp1-rail-hover-card__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--hc, #6366f1) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--hc, #6366f1) 30%, transparent);
+}
+
+/* Title text */
+.pp1-rail-hover-card__title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: 0.1px;
+    font-family: inherit;
+}
+
+/* Arrow pointer */
+.pp1-rail-hover-card__arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border: 6px solid transparent;
+}
+.pp1-rail-hover-card__arrow--left {
+    right: 100%;
+    border-right-color: #0f172a;
+}
+.pp1-rail-hover-card__arrow--right {
+    left: 100%;
+    border-left-color: #0f172a;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1025,6 +1412,33 @@
     gap: 8px;
 }
 
+/* ── Small inline collapse icon near panel title ────────── */
+.pp1-panels-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid rgba(99, 102, 241, 0.12);
+    background: rgba(99, 102, 241, 0.05);
+    color: var(--pp1-text-3);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    padding: 0;
+}
+.pp1-panels-collapse-btn:hover {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.28);
+    color: #4f46e5;
+    transform: scale(1.1);
+}
+.pp1-panels-collapse-btn:active {
+    transform: scale(0.95);
+}
+
 .pp1-panel__dot {
     width: 8px;
     height: 8px;
@@ -1065,6 +1479,65 @@
     font-weight: 500;
     margin-top: 2px;
     padding: 0;
+    transition: opacity 0.18s ease, max-height 0.22s ease;
+}
+
+/* ── Collapsible panel head ──────────────────────────────── */
+.pp1-panel__head--collapsible {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+.pp1-panel__head--collapsible:hover {
+    background: linear-gradient(180deg, #f0f4ff 0%, var(--pp1-surface) 100%);
+}
+
+/* Collapse toggle button */
+/* Collapse icon — bare icon on the LEFT of the panel header */
+.pp1-panel__collapse-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    line-height: 1;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease;
+    opacity: 0.55;
+}
+.pp1-panel__collapse-icon:hover {
+    opacity: 1;
+}
+.pp1-panel__collapse-icon--blue {
+    color: #2563eb;
+}
+.pp1-panel__collapse-icon--amber {
+    color: #f59e0b;
+}
+/* Rotated = collapsed, chevron points up */
+.pp1-panel__collapse-icon--rotated {
+    transform: rotate(-180deg);
+}
+
+/* Collapsed panel — shrinks to header only */
+.pp1-panel--collapsed {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+}
+
+/* Panel body (kpi-list / action-list) — smooth slide */
+.pp1-panel__body {
+    overflow: hidden;
+    transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s ease,
+                padding 0.28s ease;
+}
+.pp1-panel__body--hidden {
+    max-height: 0 !important;
+    opacity: 0;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    pointer-events: none;
 }
 
 /* scroll lists */
@@ -1326,7 +1799,8 @@
     position: relative;
     /* align-self:start so the card hugs its own content height */
     align-self: start;
-    overflow: visible;
+    overflow: hidden;
+    min-width: 0;
 }
 
 /* animated gradient top stripe */
@@ -1357,8 +1831,11 @@
 .pp1-center__scroll {
     /* no inner scroll — the KPI section + chart render fully visible;
        only the bottom detail table (outside this container) scrolls */
-    overflow: visible;
+    overflow: hidden;
     padding: 16px 18px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .pp1-detail--empty {
@@ -1366,6 +1843,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Chart canvas must stay within its container */
+.pp1-center canvas,
+.pp1-center__scroll canvas {
+    max-width: 100% !important;
+    display: block;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1415,20 +1899,28 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    animation: pp1-chip-in .3s cubic-bezier(.34, 1.3, .64, 1) both;
+    animation: pp1-chip-in .4s cubic-bezier(.16, 1, 0.3, 1) both;
     animation-delay: var(--chip-delay, 0ms);
-    transition: box-shadow .2s ease, transform .15s ease, background .15s ease;
+    transition: box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--pp1-sh-xs);
 }
 
 .pp1-detail__chip:hover {
-    box-shadow: var(--pp1-sh-sm);
-    background: var(--pp1-surface-3);
-    transform: translateY(-2px);
+    box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 4px 8px -2px rgba(0, 0, 0, 0.02) !important;
+    background: color-mix(in srgb, var(--chip-color, #6366f1) 12%, white) !important;
+    border-color: var(--chip-color, #6366f1) !important;
+    transform: translateY(-3px) !important;
 }
 
 .pp1-detail__chip-icon {
     font-size: 17px;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
+    display: inline-flex;
+}
+
+.pp1-detail__chip:hover .pp1-detail__chip-icon {
+    transform: scale(1.12) rotate(3deg);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
 }
 
 .pp1-detail__chip-val {
@@ -5320,6 +5812,40 @@
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
+/* Hide default spinners for numeric filter inputs to maintain a clean modern UI */
+.pp1-filter-input[type="number"]::-webkit-outer-spin-button,
+.pp1-filter-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+}
+.pp1-filter-input[type="number"] {
+    -moz-appearance: textfield !important;
+}
+
+/* Custom icon integration inside filters to match modern UI design system */
+.pp1-filter-input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.pp1-filter-input-field-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--pp1-text-3);
+    pointer-events: none;
+    transition: color 0.15s ease;
+}
+
+.pp1-filter-input--has-icon {
+    padding-left: 26px !important;
+}
+
+.pp1-filter-input-with-icon:focus-within .pp1-filter-input-field-icon {
+    color: var(--pp1-blue-mid) !important;
+}
+
 .pp1-filter-input--date-range-trigger {
     display: flex;
     align-items: center;
@@ -5339,14 +5865,14 @@
 
 .pp1-filter-group--date-range .pp1dp-trigger {
     height: 28px;
-    padding: 0 8px;
+    padding: 0 5px;
     border-radius: 6px;
     border: 1px solid rgba(226, 232, 240, 0.9);
-    font-size: 11px;
+    font-size: 9.5px;
     font-weight: 500;
     box-shadow: none;
     background: #ffffff;
-    gap: 6px;
+    gap: 4px;
 }
 
 .pp1-filter-group--date-range .pp1dp-trigger:hover,
@@ -5357,22 +5883,21 @@
 }
 
 .pp1-filter-group--date-range .pp1dp-trigger__label {
-    font-size: 11px;
+    font-size: 9.5px;
     font-weight: 500;
     color: var(--pp1-text-1);
 }
 
 .pp1-filter-group--date-range .pp1dp-trigger__icon {
-    width: 13px;
-    height: 13px;
-}
-
-.pp1-filter-group--date-range .pp1dp-trigger__caret {
     width: 11px;
     height: 11px;
 }
 
-/* Custom Dropdown / Select Component Styles */
+.pp1-filter-group--date-range .pp1dp-trigger__caret {
+    width: 9px;
+    height: 9px;
+}
+
 .pp1-custom-select-wrap {
     position: relative;
     width: 100%;
@@ -5619,6 +6144,64 @@
 .pp1-filter-btn--reset:hover {
     background: #fee2e2;
     transform: translateY(-1px);
+}
+
+/* Premium Dropdown Chart Type Control */
+.pp1-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    background: #ffffff;
+    user-select: none;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.pp1-dropdown-trigger:hover {
+    border-color: var(--pp1-blue-mid);
+    background: #fcfdfe;
+}
+
+.pp1-dropdown-trigger-icon {
+    color: #ec4899; /* pink accent icon matching FG Value theme */
+}
+
+.pp1-dropdown-caret {
+    color: var(--pp1-text-3);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom Dropdown Menu Items */
+.pp1-dropdown-menu {
+    min-width: 130px;
+    box-shadow: 0 10px 30px -5px rgba(236, 72, 153, 0.08), 0 8px 16px -6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.pp1-dropdown-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 7px 10px !important;
+    transition: all 0.15s ease !important;
+}
+
+.pp1-dropdown-item svg {
+    color: var(--pp1-text-3);
+    transition: color 0.15s ease;
+}
+
+.pp1-dropdown-item:hover svg {
+    color: #ec4899;
+}
+
+.pp1-dropdown-item.selected {
+    background: #fdf2f8 !important; /* Light pink background */
+    color: #ec4899 !important;      /* Pink text */
+    font-weight: 700 !important;
+}
+
+.pp1-dropdown-item.selected svg {
+    color: #ec4899 !important;      /* Pink icon */
 }
 
 .pp1-chart-carousel {
@@ -5936,4 +6519,209 @@
         flex: 1 1 calc(50% - 4px);
         text-align: center;
     }
+}
+
+/* ==========================================================================
+   PREMIUM MULTI-SELECT DROPDOWN SYSTEM
+   ========================================================================== */
+.pp1-multiselect-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.pp1-multiselect-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 3px 10px;
+    background: var(--pp1-surface, #ffffff);
+    border: 1.5px solid rgba(226, 232, 240, 0.8);
+    border-radius: 8px;
+    font-size: 11.5px;
+    font-family: 'Outfit', 'Inter', sans-serif;
+    color: var(--pp1-text-2, #334155);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    gap: 6px;
+    position: relative;
+}
+
+.pp1-multiselect-trigger:hover {
+    border-color: var(--act-color, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+
+.pp1-multiselect-trigger--open {
+    border-color: var(--act-color, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    background: var(--pp1-surface, #ffffff);
+}
+
+.pp1-multiselect-placeholder {
+    color: #94a3b8;
+    user-select: none;
+    font-weight: 500;
+}
+
+.pp1-multiselect-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex-grow: 1;
+    max-width: calc(100% - 16px);
+}
+
+.pp1-multiselect-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    background: color-mix(in srgb, var(--act-color, #3b82f6) 8%, transparent);
+    color: var(--act-color, #3b82f6);
+    border: 1px solid color-mix(in srgb, var(--act-color, #3b82f6) 20%, transparent);
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.pp1-multiselect-chip:hover {
+    background: color-mix(in srgb, var(--act-color, #3b82f6) 12%, transparent);
+    transform: translateY(-0.5px);
+}
+
+.pp1-multiselect-chip-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    height: 10px;
+    font-size: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--act-color, #3b82f6);
+    opacity: 0.65;
+    transition: all 0.15s ease;
+}
+
+.pp1-multiselect-chip-delete:hover {
+    background: color-mix(in srgb, var(--act-color, #3b82f6) 25%, transparent);
+    opacity: 1;
+}
+
+.pp1-multiselect-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 280px;
+    min-width: 100%;
+    z-index: 1100;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 10px;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 16px -6px rgba(15, 23, 42, 0.04);
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 6px;
+    animation: pp1-multiselect-reveal 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pp1-multiselect-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Custom Scrollbar for Dropdown */
+.pp1-multiselect-menu::-webkit-scrollbar {
+    width: 5px;
+}
+
+.pp1-multiselect-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pp1-multiselect-menu::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+
+.pp1-multiselect-menu::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+/* Options */
+.pp1-multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--pp1-text-2, #334155);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.pp1-multiselect-option:hover {
+    background: color-mix(in srgb, var(--act-color, #3b82f6) 6%, transparent);
+    color: var(--act-color, #3b82f6);
+}
+
+.pp1-multiselect-option--all {
+    border-bottom: 1.5px solid rgba(226, 232, 240, 0.6);
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    font-weight: 600;
+}
+
+/* Checkbox Style */
+.pp1-multiselect-checkbox-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 4px;
+    background: var(--pp1-surface, #ffffff);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    color: #ffffff;
+}
+
+.pp1-multiselect-option:hover .pp1-multiselect-checkbox-box {
+    border-color: var(--act-color, #3b82f6);
+}
+
+.pp1-multiselect-option--selected .pp1-multiselect-checkbox-box {
+    background: var(--act-color, #3b82f6);
+    border-color: var(--act-color, #3b82f6);
+}
+
+.pp1-multiselect-option--selected {
+    background: color-mix(in srgb, var(--act-color, #3b82f6) 8%, transparent);
+    color: var(--act-color, #3b82f6);
+    font-weight: 600;
+}
+
+.pp1-multiselect-checkbox-icon {
+    transform: scale(0.85);
+    transition: transform 0.2s cubic-bezier(0.12, 0.4, 0.29, 1.46);
+}
+
+.pp1-multiselect-option--selected .pp1-multiselect-checkbox-icon {
+    transform: scale(1);
 }

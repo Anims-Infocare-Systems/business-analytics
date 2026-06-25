@@ -124,7 +124,52 @@
 .pp1dp-preset--active {
     background: var(--pp1dp-accent);
     border-color: var(--pp1dp-accent);
-    color: #ffffff;
+    color: #ffffff !important;
+}
+
+/* Dropdown styling */
+.pp1dp-dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+
+.pp1dp-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 130px;
+    background: #ffffff;
+    border: 1.5px solid var(--pp1dp-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(15,23,42,.12);
+    padding: .35rem;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    animation: pp1dp-pop .15s cubic-bezier(.23,1,.32,1) both;
+}
+.pp1dp-dropdown-item {
+    padding: .4rem .55rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pp1dp-sub);
+    font-size: .74rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--pp1dp-tr);
+    width: 100%;
+}
+.pp1dp-dropdown-item:hover {
+    background: var(--pp1dp-accent-lt);
+    color: var(--pp1dp-accent-txt);
+}
+.pp1dp-dropdown-item--active {
+    background: var(--pp1dp-accent);
+    color: #ffffff !important;
 }
 
 /* ── Calendars wrapper ────────────────────────────────────── */

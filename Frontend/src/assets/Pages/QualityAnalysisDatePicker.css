@@ -124,7 +124,51 @@
 .qadp-preset--active {
     background: var(--qadp-accent);
     border-color: var(--qadp-accent);
-    color: #ffffff;
+    color: #ffffff !important;
+}
+
+/* Dropdown styling */
+.qadp-dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+.qadp-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 130px;
+    background: #ffffff;
+    border: 1.5px solid var(--qadp-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(15,23,42,.12);
+    padding: .35rem;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    animation: qadp-pop .15s cubic-bezier(.23,1,.32,1) both;
+}
+.qadp-dropdown-item {
+    padding: .4rem .55rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--qadp-sub);
+    font-size: .74rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--qadp-tr);
+    width: 100%;
+}
+.qadp-dropdown-item:hover {
+    background: var(--qadp-accent-lt);
+    color: var(--qadp-accent-txt);
+}
+.qadp-dropdown-item--active {
+    background: var(--qadp-accent);
+    color: #ffffff !important;
 }
 
 /* ── Calendars wrapper ────────────────────────────────────── */

@@ -1285,14 +1285,16 @@ export default function Dashboard1() {
             : "";
         return {
             val: (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" }}>
-                    <span>{cell.val}</span>
-                    {hasTrend && (
-                        <span className={`d1-itrd ${isUp ? "d1-itrd--up" : "d1-itrd--dn"}`}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "8px" }}>
+                    <span style={{ whiteSpace: "nowrap" }}>{cell.val}</span>
+                    {hasTrend ? (
+                        <span className={`d1-itrd ${isUp ? "d1-itrd--up" : "d1-itrd--dn"}`} style={{ whiteSpace: "nowrap" }}>
                             {trendLabel}
                         </span>
+                    ) : (
+                        <span />
                     )}
-                </span>
+                </div>
             ),
             cls: cell.cls,
         };
