@@ -1012,11 +1012,18 @@
 
 /* ── Collapsed panel wrapper ─────────────────────────────────── */
 .pp1-panel--dl-collapsed {
-    overflow: visible !important; /* allow tooltip flyout to escape the 44px column */
+    /* Clip the panel box itself so it never overflows the 44px column
+       during the first render / before ResizeObserver fires.
+       Tooltip flyout is rendered via React portal on document.body
+       so it is NOT affected by overflow: clip here. */
+    overflow: clip;
+    width: 44px;
     height: var(--pp1-side-h, auto);
     max-height: var(--pp1-side-h, none);
     min-height: 0;
-    z-index: 10; /* sit above center panel so tooltip overlaps it */
+    z-index: 10;
+    border-radius: var(--pp1-radius-lg);
+    padding: 0;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1029,8 +1036,9 @@
     justify-content: flex-start;
     padding: 14px 0 10px;
     height: 100%;
+    width: 44px; /* constrain to match the collapsed grid column */
     gap: 8px;
-    overflow: visible; /* must be visible so ::after tooltip can escape */
+    overflow: visible; /* must be visible so portal tooltip can escape */
 }
 
 /* Section icon bubble */

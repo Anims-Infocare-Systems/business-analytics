@@ -255,6 +255,7 @@ const ACTION_CARDS = [
   { id: "daily_production_report_dashboard", title: "Daily Production", icon: Activity, color: "#0f766e", priority: "medium" },
   { id: "target_vs_actual_report_dashboard", title: "Target Vs Actual", icon: Target, color: "#6366f1", priority: "medium" },
   { id: "operator_efficiency_report_dashboard", title: "Operator Efficiency", icon: Users, color: "#8b5cf6", priority: "medium" },
+  { id: "machine_efficiency_report_dashboard", title: "Machine Efficiency", icon: Cpu, color: "#0ea5e9", priority: "medium" },
   { id: "capa_report_dashboard", title: "Quality Action Plan (CAPA)", icon: ClipboardCheck, color: "#0891b2", priority: "medium" }
 ];
 
@@ -3437,6 +3438,31 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
 function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetOnly, targetConfig }) {
   const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
 
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  // Reset sorting state when switching views or dashboards
+  React.useEffect(() => {
+    setSortIndex(null);
+    setSortDirection("asc");
+    setHoveredHeader(null);
+  }, [showTargetOnly, uid]);
+
   // Process data for Table 1 (Customer PO Value Summary)
   const table1Rows = React.useMemo(() => {
     let list = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
@@ -3481,8 +3507,51 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
       customerGroups[cust].pendingValue += Number(r.pendingValue || 0);
     });
 
-    return Object.values(customerGroups).sort((a, b) => a.customer.localeCompare(b.customer));
+    return Object.values(customerGroups);
   }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, data?.customerPoCompare?.rows]);
+
+  const sortedRows = React.useMemo(() => {
+    if (sortIndex === null) {
+      return [...table1Rows].sort((a, b) => a.customer.localeCompare(b.customer));
+    }
+
+    return [...table1Rows].sort((a, b) => {
+      let valA, valB;
+      if (showTargetOnly) {
+        if (sortIndex === 0) {
+          valA = a.customer;
+          valB = b.customer;
+        } else {
+          valA = salesTarget;
+          valB = salesTarget;
+        }
+      } else {
+        if (sortIndex === 0) {
+          valA = a.customer;
+          valB = b.customer;
+        } else if (sortIndex === 1) {
+          valA = a.orderValue;
+          valB = b.orderValue;
+        } else if (sortIndex === 2) {
+          valA = a.salesValue;
+          valB = b.salesValue;
+        } else {
+          valA = a.pendingValue;
+          valB = b.pendingValue;
+        }
+      }
+
+      if (typeof valA === "string" && typeof valB === "string") {
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      } else {
+        return sortDirection === "asc"
+          ? (valA - valB)
+          : (valB - valA);
+      }
+    });
+  }, [table1Rows, sortIndex, sortDirection, showTargetOnly, salesTarget]);
 
   // Render table content
   return (
@@ -3510,20 +3579,129 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-              <th>Customer</th>
+              {/* Customer Header (idx = 0) */}
+              <th
+                onClick={() => handleSort(0)}
+                onMouseEnter={() => setHoveredHeader(0)}
+                onMouseLeave={() => setHoveredHeader(null)}
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  backgroundColor: hoveredHeader === 0 ? "#eef3fc" : "#f2f6fe",
+                  zIndex: 10,
+                  textAlign: "left",
+                  cursor: "pointer",
+                  userSelect: "none",
+                  transition: "background-color 0.2s ease",
+                  padding: "12px 16px"
+                }}
+              >
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                  <span>Customer</span>
+                  <SortIcon active={sortIndex === 0} direction={sortDirection} />
+                </div>
+              </th>
+
               {showTargetOnly ? (
-                <th style={{ textAlign: "right", color: "#b91c1c" }}>Sales Target (Lakhs)</th>
+                /* Sales Target Header (idx = 1) */
+                <th
+                  onClick={() => handleSort(1)}
+                  onMouseEnter={() => setHoveredHeader(1)}
+                  onMouseLeave={() => setHoveredHeader(null)}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: hoveredHeader === 1 ? "#eef3fc" : "#f2f6fe",
+                    zIndex: 10,
+                    textAlign: "right",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    transition: "background-color 0.2s ease",
+                    color: "#b91c1c",
+                    padding: "12px 16px"
+                  }}
+                >
+                  <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: "5px", width: "100%" }}>
+                    <span>Sales Target (Lakhs)</span>
+                    <SortIcon active={sortIndex === 1} direction={sortDirection} />
+                  </div>
+                </th>
               ) : (
                 <>
-                  <th style={{ textAlign: "right" }}>Order Value (Lakhs)</th>
-                  <th style={{ textAlign: "right" }}>Sales Value (Lakhs)</th>
-                  <th style={{ textAlign: "right" }}>Pending Order Value (Lakhs)</th>
+                  {/* Order Value Header (idx = 1) */}
+                  <th
+                    onClick={() => handleSort(1)}
+                    onMouseEnter={() => setHoveredHeader(1)}
+                    onMouseLeave={() => setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: hoveredHeader === 1 ? "#eef3fc" : "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: "right",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: "5px", width: "100%" }}>
+                      <span>Order Value (Lakhs)</span>
+                      <SortIcon active={sortIndex === 1} direction={sortDirection} />
+                    </div>
+                  </th>
+
+                  {/* Sales Value Header (idx = 2) */}
+                  <th
+                    onClick={() => handleSort(2)}
+                    onMouseEnter={() => setHoveredHeader(2)}
+                    onMouseLeave={() => setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: hoveredHeader === 2 ? "#eef3fc" : "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: "right",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: "5px", width: "100%" }}>
+                      <span>Sales Value (Lakhs)</span>
+                      <SortIcon active={sortIndex === 2} direction={sortDirection} />
+                    </div>
+                  </th>
+
+                  {/* Pending Order Value Header (idx = 3) */}
+                  <th
+                    onClick={() => handleSort(3)}
+                    onMouseEnter={() => setHoveredHeader(3)}
+                    onMouseLeave={() => setHoveredHeader(null)}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: hoveredHeader === 3 ? "#eef3fc" : "#f2f6fe",
+                      zIndex: 10,
+                      textAlign: "right",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
+                    }}
+                  >
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: "5px", width: "100%" }}>
+                      <span>Pending Order Value (Lakhs)</span>
+                      <SortIcon active={sortIndex === 3} direction={sortDirection} />
+                    </div>
+                  </th>
                 </>
               )}
             </tr>
           </thead>
           <tbody>
-            {table1Rows.map((r, idx) => (
+            {sortedRows.map((r, idx) => (
               <tr key={idx} className="pp1-cc-tbl__tr">
                 <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
                 {showTargetOnly ? (
@@ -4216,7 +4394,7 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("hour") || columns[ci].toLowerCase().includes("rate") || columns[ci].toLowerCase().includes("ratio") || columns[ci].toLowerCase().includes("%") || columns[ci].toLowerCase().includes("day") || columns[ci].toLowerCase().includes("month") || columns[ci].toLowerCase().includes("loss") || columns[ci].toLowerCase().includes("price"));
-                    const isStatus = columns[ci].toLowerCase() === "status";
+                    const isStatus = columns[ci].toLowerCase() === "status" || columns[ci].toLowerCase() === "dispatch status" || columns[ci].toLowerCase().includes("status");
                     if (isStatus) {
                       const statusColors = {
                         "Completed": { bg: "#d1fae5", c: "#065f46" },
@@ -4230,9 +4408,14 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                         "Overload": { bg: "#fee2e2", c: "#991b1b" },
                         "In Stock": { bg: "#d1fae5", c: "#065f46" },
                         "Low Stock": { bg: "#fef3c7", c: "#92400e" },
-                        "Out of Stock": { bg: "#fee2e2", c: "#991b1b" }
+                        "Out of Stock": { bg: "#fee2e2", c: "#991b1b" },
+                        "On Track": { bg: "#d1fae5", c: "#065f46" },
+                        "Low Fulfillment": { bg: "#fee2e2", c: "#991b1b" }
                       };
-                      const stcfg = statusColors[cell] || { bg: "#f1f5f9", c: "#475569" };
+                      const statusKey = typeof cell === "string" && cell.includes("(")
+                        ? cell.split("(")[0].trim()
+                        : cell;
+                      const stcfg = statusColors[statusKey] || statusColors[cell] || { bg: "#f1f5f9", c: "#475569" };
                       return (
                         <td key={ci} style={{ textAlign: "center" }}>
                           <span className="pp1-cc-badge" style={{ background: stcfg.bg, color: stcfg.c, padding: "3px 9px", borderRadius: "12px", fontSize: "9.5px", fontWeight: 700 }}>
@@ -4241,6 +4424,150 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                         </td>
                       );
                     }
+                      const colLower = columns[ci].toLowerCase();
+                      const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
+                      const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
+                      const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
+                      const isAgeDays = colLower.includes("age days");
+                      const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
+                      const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
+                      const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
+
+                      if (isAgeDays) {
+                        const pctVal = parseFloat(cell) || 0;
+                        let badgeBg = "rgba(16, 185, 129, 0.1)";
+                        let badgeColor = "#10b981";
+                        let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
+
+                        if (pctVal <= 15) {
+                          badgeBg = "rgba(16, 185, 129, 0.08)";
+                          badgeColor = "#10b981";
+                          badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
+                        } else if (pctVal <= 40) {
+                          badgeBg = "rgba(245, 158, 11, 0.08)";
+                          badgeColor = "#d97706";
+                          badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
+                        } else {
+                          badgeBg = "rgba(239, 68, 68, 0.08)";
+                          badgeColor = "#ef4444";
+                          badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
+                        }
+
+                        const cellStr = String(cell);
+                        const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
+
+                        return (
+                          <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
+                            <span style={{
+                              display: "inline-block",
+                              background: badgeBg,
+                              color: badgeColor,
+                              border: badgeBorder,
+                              padding: "4px 10px",
+                              borderRadius: "12px",
+                              fontSize: "10.5px",
+                              fontWeight: 750,
+                              textAlign: "center",
+                              minWidth: "68px",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
+                              transition: "all 0.2s ease"
+                            }}>
+                              {displayVal}
+                            </span>
+                          </td>
+                        );
+                      }
+
+                      if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
+                        const pctVal = parseFloat(cell) || 0;
+                        let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                        let barWidthPct = 0;
+
+                        if (isRejectionPct) {
+                          barWidthPct = Math.min(100, pctVal * 3.33);
+                          if (pctVal > 12) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                          } else if (pctVal > 5) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
+                          }
+                        } else if (isReworkPct) {
+                          barWidthPct = Math.min(100, pctVal * 5.0);
+                          if (pctVal > 8) {
+                            barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
+                          } else if (pctVal > 1.5) {
+                            barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
+                          } else {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
+                          }
+                        } else if (isOtdPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 95) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
+                          } else if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
+                          }
+                        } else if (isLossPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal > 25) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
+                          } else if (pctVal > 15) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
+                          }
+                        } else if (isOperatorPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 75) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                          }
+                        } else if (isMachinePct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 75) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                          }
+                        }
+
+                      return (
+                        <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", justifyContent: "flex-end", width: "100%" }}>
+                            <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "11px", color: "var(--pp1-text-2)", minWidth: "32px", textAlign: "right" }}>{cell}</span>
+                            <div style={{
+                              width: "80px",
+                              height: "8px",
+                              borderRadius: "4px",
+                              backgroundColor: "rgba(0,0,0,0.06)",
+                              overflow: "hidden",
+                              display: "inline-block"
+                            }}>
+                              <div style={{
+                                width: `${barWidthPct}%`,
+                                height: "100%",
+                                borderRadius: "4px",
+                                background: barGradient,
+                                transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+                              }} />
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    }
+
                     return (
                       <td key={ci} className={ci === 0 ? "pp1-cc-tbl__bold" : ci === 1 ? "pp1-cc-tbl__id" : ""} style={{ textAlign: isRightAligned ? "right" : "left", fontWeight: isRightAligned ? 600 : "normal" }}>
                         {cell}
@@ -6334,7 +6661,17 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   );
 }
 
-function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+const MOCK_PRODUCTION_LOGS = [
+  { date: "2026-06-15", machine: "CNC-01", shift: "A Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 850, rej: 12, team: "Team A", customer: "Tata Motors", value: 170000, profit: 42000 },
+  { date: "2026-06-15", machine: "CNC-02", shift: "A Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 620, rej: 8, team: "Team A", customer: "Mahindra & Mahindra", value: 248000, profit: 62000 },
+  { date: "2026-06-15", machine: "VMC-01", shift: "A Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 410, rej: 5, team: "Team B", customer: "Maruti Suzuki", value: 184500, profit: 36900 },
+  { date: "2026-06-15", machine: "CNC-01", shift: "B Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 820, rej: 15, team: "Team A", customer: "Tata Motors", value: 164000, profit: 41000 },
+  { date: "2026-06-15", machine: "CNC-02", shift: "B Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 600, rej: 10, team: "Team A", customer: "Mahindra & Mahindra", value: 240000, profit: 60000 },
+  { date: "2026-06-15", machine: "VMC-02", shift: "B Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 390, rej: 6, team: "Team B", customer: "Maruti Suzuki", value: 175500, profit: 35100 },
+  { date: "2026-06-15", machine: "Grinding-01", shift: "C Shift", operator: "Senthil.K", part: "TRK-AXL-L9", qty: 150, rej: 3, team: "Team C", customer: "Ashok Leyland", value: 375000, profit: 93750 }
+];
+
+function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig }) {
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [machineOpen, setMachineOpen] = React.useState(false);
   const [operatorOpen, setOperatorOpen] = React.useState(false);
@@ -6342,8 +6679,6 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
   const teamRef = React.useRef(null);
   const machineRef = React.useRef(null);
   const operatorRef = React.useRef(null);
-
-  const [xAxisGroup, setXAxisGroup] = React.useState("Block");
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -6396,18 +6731,8 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
     });
   };
 
-  const mockProdLogs = React.useMemo(() => [
-    { date: "2026-06-15", machine: "CNC-01", shift: "A Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 850, rej: 12, team: "Team A", customer: "Tata Motors", value: 170000, profit: 42000 },
-    { date: "2026-06-15", machine: "CNC-02", shift: "A Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 620, rej: 8, team: "Team A", customer: "Mahindra & Mahindra", value: 248000, profit: 62000 },
-    { date: "2026-06-15", machine: "VMC-01", shift: "A Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 410, rej: 5, team: "Team B", customer: "Maruti Suzuki", value: 184500, profit: 36900 },
-    { date: "2026-06-15", machine: "CNC-01", shift: "B Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 820, rej: 15, team: "Team A", customer: "Tata Motors", value: 164000, profit: 41000 },
-    { date: "2026-06-15", machine: "CNC-02", shift: "B Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 600, rej: 10, team: "Team A", customer: "Mahindra & Mahindra", value: 240000, profit: 60000 },
-    { date: "2026-06-15", machine: "VMC-02", shift: "B Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 390, rej: 6, team: "Team B", customer: "Maruti Suzuki", value: 175500, profit: 35100 },
-    { date: "2026-06-15", machine: "Grinding-01", shift: "C Shift", operator: "Senthil.K", part: "TRK-AXL-L9", qty: 150, rej: 3, team: "Team C", customer: "Ashok Leyland", value: 375000, profit: 93750 }
-  ], []);
-
   const filteredLogs = React.useMemo(() => {
-    let list = mockProdLogs;
+    let list = MOCK_PRODUCTION_LOGS;
     if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
     if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
     if (filters.team) list = list.filter(r => r.team === filters.team);
@@ -6415,7 +6740,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
     if (filters.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters.customer) list = list.filter(r => r.customer === filters.customer);
     return list;
-  }, [filters, mockProdLogs]);
+  }, [filters]);
 
   // Dynamically calculate KPIs
   const kpis = React.useMemo(() => {
@@ -6514,7 +6839,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
       if (targetCust) list = list.filter(r => r.customer === targetCust);
     }
 
-    const groupField = xAxisGroup.toLowerCase() === "block" ? "block" : xAxisGroup.toLowerCase();
+    const groupField = (xAxisGroup.toLowerCase() === "block" || xAxisGroup.toLowerCase() === "team") ? "block" : xAxisGroup.toLowerCase();
     const aggregated = {};
     list.forEach(r => {
       const key = r[groupField];
@@ -6672,21 +6997,19 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
       rangeHint="Production Value Product Rate vs Rate Per Hour"
       onClose={onClose}
       rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`}
-      chartControls={
-        <div className="pp1-chart-toolbar" style={{ padding: "8px 12px", background: "rgba(139, 92, 246, 0.05)", borderRadius: "8px", border: "1px dashed rgba(139, 92, 246, 0.2)", margin: 0 }}>
+      chartHeaderControls={
+        <div className="pp1-chart-xaxis">
           <span className="pp1-chart-xaxis__label">Chart X-Axis:</span>
-          <div className="pp1-chart-xaxis">
-            {["Block", "Machine", "Operator"].map(g => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => setXAxisGroup(g)}
-                className={`pp1-xaxis-btn${xAxisGroup === g ? " pp1-xaxis-btn--active" : ""}`}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
+          {["Machine", "Operator", "Team"].map(g => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setXAxisGroup(g)}
+              className={`pp1-xaxis-btn${xAxisGroup === g ? " pp1-xaxis-btn--active" : ""}`}
+            >
+              {g}
+            </button>
+          ))}
         </div>
       }
     >
@@ -6817,71 +7140,87 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, onClos
   );
 }
 
-function ProductionAnalysisReportBottomTable({ filters }) {
+function ProductionAnalysisReportBottomTable({ filters, xAxisGroup = "Machine" }) {
   const [activeTab, setActiveTab] = React.useState("rateVsHour"); // "rateVsHour" | "dailyLog"
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
 
-  // Tab 1 columns & rows (Sample Data)
-  const columnsRateVsHour = ["Block", "Type", "Machine", "Operator", "Customer", "Rate Per Hour", "Production Value", "Profit %"];
+  // Reset sorting state when switching tabs
+  React.useEffect(() => {
+    setSortIndex(null);
+    setSortDirection("asc");
+    setHoveredHeader(null);
+  }, [activeTab]);
 
+  // Tab 1 columns dynamically based on xAxisGroup
+  const columnsRateVsHour = React.useMemo(() => {
+    if (xAxisGroup === "Machine") {
+      return ["Sl.No", "Month", "Machine Name", "Production Value", "Actual Value", "Actual %"];
+    } else if (xAxisGroup === "Operator") {
+      return ["Sl.No", "Month", "Operator Name", "Production Value", "Actual Value", "Actual %"];
+    } else {
+      return ["Sl.No", "Month", "Team", "Production Value", "Actual Value", "Actual %"];
+    }
+  }, [xAxisGroup]);
+
+  // Tab 1 rows dynamically based on xAxisGroup
   const rowsRateVsHour = React.useMemo(() => {
-    let list = [
-      { block: "Team A", type: "CNC", machine: "CNC1", operator: "Kumar", customer: "Customer A", rate: 180, value: 210, profitPct: 1.17, filterDate: "2026-06-15" },
-      { block: "Team A", type: "CNC", machine: "CNC2", operator: "Ravi", customer: "Customer B", rate: 130, value: 150, profitPct: 1.15, filterDate: "2026-06-15" },
-      { block: "Team B", type: "CNC", machine: "VMC1", operator: "Mani", customer: "Customer C", rate: 140, value: 90, profitPct: 0.64, filterDate: "2026-06-15" },
-      { block: "Team C", type: "Conv Cutting", machine: "Cutting", operator: "Moorthy", customer: "Customer D", rate: 70, value: 50, profitPct: 0.71, filterDate: "2026-06-15" },
-      { block: "Team D", type: "Conv", machine: "Drilling", operator: "Sankar", customer: "Customer A", rate: 20, value: 60, profitPct: 3.00, filterDate: "2026-06-15" }
-    ];
+    const groupField = xAxisGroup === "Machine" ? "machine" : xAxisGroup === "Operator" ? "operator" : "team";
 
-    // Apply filters from parent filters state (mapped to sample dataset)
-    if (filters?.team) {
-      list = list.filter(r => r.block === filters.team);
-    }
-    if (filters?.machine) {
-      const machMap = {
-        "CNC-01": "CNC1",
-        "CNC-02": "CNC2",
-        "VMC-01": "VMC1",
-        "VMC-02": "VMC1",
-        "Grinding-01": "Cutting"
-      };
-      const targetMach = machMap[filters.machine];
-      if (targetMach) list = list.filter(r => r.machine === targetMach);
-    }
-    if (filters?.operator) {
-      const opMap = {
-        "Balamurugan.P": "Kumar",
-        "Gopikrishnan.R": "Ravi",
-        "Karthi.S": "Mani",
-        "Senthil.K": "Moorthy"
-      };
-      const targetOp = opMap[filters.operator];
-      if (targetOp) list = list.filter(r => r.operator === targetOp);
-    }
-    if (filters?.customer) {
-      const custMap = {
-        "Tata Motors": "Customer A",
-        "Mahindra & Mahindra": "Customer B",
-        "Maruti Suzuki": "Customer C",
-        "Ashok Leyland": "Customer D"
-      };
-      const targetCust = custMap[filters.customer];
-      if (targetCust) list = list.filter(r => r.customer === targetCust);
-    }
+    let list = MOCK_PRODUCTION_LOGS;
+    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
+    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
+    if (filters?.team) list = list.filter(r => r.team === filters.team);
+    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
+    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
+    if (filters?.customer) list = list.filter(r => r.customer === filters.customer);
 
-    return list.map(r => [
-      r.block,
-      r.type,
-      r.machine,
-      r.operator,
-      r.customer,
-      `₹${fmtNum(r.rate)}`,
-      `₹${fmtNum(r.value)}`,
-      `${r.profitPct.toFixed(2)}%`
-    ]);
-  }, [filters]);
+    const groups = {};
+    list.forEach(r => {
+      const key = r[groupField];
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          valueSum: 0,
+          profitSum: 0,
+          date: r.date
+        };
+      }
+      groups[key].valueSum += r.value;
+      groups[key].profitSum += r.profit;
+    });
 
-  // Tab 2 columns & rows (Daily Production Log)
-  const columnsDailyLog = ["Date", "Team", "Machine", "Operator", "Customer", "Production Qty", "Production Value", "Rate Per Hour", "Profit Ratio"];
+    const formatMonth = (dateStr) => {
+      if (!dateStr) return "Jun-2026";
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        const year = parts[0];
+        const monthNum = parseInt(parts[1], 10);
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${months[monthNum - 1]}-${year}`;
+      }
+      return "Jun-2026";
+    };
+
+    return Object.values(groups).map((g, idx) => {
+      const actualVal = g.valueSum;
+      const targetVal = actualVal * 1.10; // Planned/Target Production Value
+      const profitPct = actualVal > 0 ? (g.profitSum / actualVal) * 100 : 0;
+
+      return [
+        String(idx + 1), // Sl.No
+        formatMonth(g.date), // Month
+        g.key, // Group name
+        `₹${(targetVal / 100000).toFixed(2)} L`, // Production Value (Target)
+        `₹${(actualVal / 100000).toFixed(2)} L`, // Actual Value
+        `${profitPct.toFixed(1)}%` // Profit %
+      ];
+    });
+  }, [filters, xAxisGroup]);
+
+  // Tab 2 columns & rows (Daily Production Log) - original implementation
+  const columnsDailyLog = ["Sl.No", "Date", "Team", "Machine", "Operator", "Production Qty", "Production Value", "Actual Value", "Actual Ratio"];
 
   const rowsDailyLog = React.useMemo(() => {
     let list = [
@@ -6901,18 +7240,68 @@ function ProductionAnalysisReportBottomTable({ filters }) {
     if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters?.customer) list = list.filter(r => r.customer === filters.customer);
 
-    return list.map(r => [
+    return list.map((r, idx) => [
+      String(idx + 1),
       r.date,
       r.team,
       r.machine,
       r.operator,
-      r.customer,
       fmtNum(r.qty),
       `₹${fmtNum(r.value)}`,
       `₹${fmtNum(r.ratePerHour)}`,
       r.profitRatio
     ]);
   }, [filters]);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedRowsRateVsHour = React.useMemo(() => {
+    if (sortIndex === null || activeTab !== "rateVsHour") return rowsRateVsHour;
+
+    const sorted = [...rowsRateVsHour].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return sorted.map((row, idx) => {
+      const newRow = [...row];
+      newRow[0] = String(idx + 1);
+      return newRow;
+    });
+  }, [rowsRateVsHour, sortIndex, sortDirection, activeTab]);
+
+  const sortedRowsDailyLog = React.useMemo(() => {
+    if (sortIndex === null || activeTab !== "dailyLog") return rowsDailyLog;
+
+    const sorted = [...rowsDailyLog].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return sorted.map((row, idx) => {
+      const newRow = [...row];
+      newRow[0] = String(idx + 1);
+      return newRow;
+    });
+  }, [rowsDailyLog, sortIndex, sortDirection, activeTab]);
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
@@ -6933,7 +7322,7 @@ function ProductionAnalysisReportBottomTable({ filters }) {
             }}
             onClick={() => setActiveTab("rateVsHour")}
           >
-            Production Value Product Rate vs Rate Per Hour
+            Production Value Product Rate vs Actual Value ({xAxisGroup} Wise)
           </button>
           <button
             type="button"
@@ -6960,25 +7349,82 @@ function ProductionAnalysisReportBottomTable({ filters }) {
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
               <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {columnsRateVsHour.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 4 ? "right" : "left" }}>{col}</th>
-                ))}
+                {columnsRateVsHour.map((col, idx) => {
+                  const isRightAligned = idx >= 3;
+                  const isHovered = hoveredHeader === idx;
+                  const isSorted = sortIndex === idx;
+                  const isSlNo = idx === 0;
+
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => !isSlNo && handleSort(idx)}
+                      onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                      onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "rgba(37, 99, 235, 0.05)",
+                        zIndex: 10,
+                        textAlign: isRightAligned ? "right" : "left",
+                        cursor: isSlNo ? "default" : "pointer",
+                        userSelect: "none",
+                        transition: "background-color 0.2s ease",
+                        padding: "12px 16px"
+                      }}
+                    >
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span>{col}</span>
+                        {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {rowsRateVsHour.length === 0 ? (
+              {sortedRowsRateVsHour.length === 0 ? (
                 <tr><td colSpan={columnsRateVsHour.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                rowsRateVsHour.map((row, ri) => (
+                sortedRowsRateVsHour.map((row, ri) => (
                   <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[1]}</td>
-                    <td className="pp1-cc-tbl__id">{row[2]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[3]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[4]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[5]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[6]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>{row[7]}</td>
+                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700, padding: "10px 16px" }}>{row[0]}</td>
+                    <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[1]}</td>
+                    <td className="pp1-cc-tbl__id" style={{ padding: "10px 16px" }}>{row[2]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, padding: "10px 16px", color: "var(--pp1-blue)" }}>{row[3]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700, padding: "10px 16px", color: "#059669" }}>{row[4]}</td>
+                    <td style={{ padding: "10px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px" }}>
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          backgroundColor: "rgba(245, 158, 11, 0.12)",
+                          color: "#d97706",
+                          border: "1px solid rgba(245, 158, 11, 0.2)",
+                          fontFamily: "'Inter', sans-serif"
+                        }}>
+                          {row[5]}
+                        </span>
+                        <div style={{
+                          width: "50px",
+                          height: "6px",
+                          backgroundColor: "rgba(0, 0, 0, 0.06)",
+                          borderRadius: "3px",
+                          overflow: "hidden"
+                        }}>
+                          <div style={{
+                            width: row[5],
+                            height: "100%",
+                            backgroundColor: "#f59e0b",
+                            borderRadius: "3px"
+                          }} />
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -6988,26 +7434,85 @@ function ProductionAnalysisReportBottomTable({ filters }) {
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
               <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
-                {columnsDailyLog.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 4 ? "right" : "left" }}>{col}</th>
-                ))}
+                {columnsDailyLog.map((col, idx) => {
+                  const isRightAligned = idx >= 5;
+                  const isHovered = hoveredHeader === idx;
+                  const isSorted = sortIndex === idx;
+                  const isSlNo = idx === 0;
+
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => !isSlNo && handleSort(idx)}
+                      onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                      onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "rgba(37, 99, 235, 0.05)",
+                        zIndex: 10,
+                        textAlign: isRightAligned ? "right" : "left",
+                        cursor: isSlNo ? "default" : "pointer",
+                        userSelect: "none",
+                        transition: "background-color 0.2s ease",
+                        padding: "12px 16px"
+                      }}
+                    >
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span>{col}</span>
+                        {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {rowsDailyLog.length === 0 ? (
+              {sortedRowsDailyLog.length === 0 ? (
                 <tr><td colSpan={columnsDailyLog.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                rowsDailyLog.map((row, ri) => (
+                sortedRowsDailyLog.map((row, ri) => (
                   <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[1]}</td>
-                    <td className="pp1-cc-tbl__id">{row[2]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[3]}</td>
-                    <td style={{ fontWeight: 600 }}>{row[4]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[5]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[6]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{row[7]}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>{row[8]}</td>
+                    <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700, padding: "10px 16px" }}>{row[0]}</td>
+                    <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[1]}</td>
+                    <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[2]}</td>
+                    <td className="pp1-cc-tbl__id" style={{ padding: "10px 16px" }}>{row[3]}</td>
+                    <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[4]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, padding: "10px 16px" }}>{row[5]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, padding: "10px 16px" }}>{row[6]}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, padding: "10px 16px" }}>{row[7]}</td>
+                    <td style={{ padding: "10px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px" }}>
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          backgroundColor: "rgba(37, 99, 235, 0.1)",
+                          color: "var(--pp1-blue)",
+                          border: "1px solid rgba(37, 99, 235, 0.18)",
+                          fontFamily: "'Inter', sans-serif"
+                        }}>
+                          {row[8]}
+                        </span>
+                        <div style={{
+                          width: "50px",
+                          height: "6px",
+                          backgroundColor: "rgba(0, 0, 0, 0.06)",
+                          borderRadius: "3px",
+                          overflow: "hidden"
+                        }}>
+                          <div style={{
+                            width: row[8],
+                            height: "100%",
+                            backgroundColor: "var(--pp1-blue)",
+                            borderRadius: "3px"
+                          }} />
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -8261,7 +8766,7 @@ function IdleHoursNonAcceptedReasonLossReportBottomTable({ filters }) {
               activeRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
-                    const isRightAligned = ci > 0 && (
+                    const isRightAligned = ci > 0 && activeColumns[ci] && (
                       activeColumns[ci].toLowerCase().includes("qty") ||
                       activeColumns[ci].toLowerCase().includes("value") ||
                       activeColumns[ci].toLowerCase().includes("hours") ||
@@ -8992,7 +9497,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
     });
 
     let labels = [];
-    if (xAxisGroup === "Month Wise") {
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       labels = months;
       if (activeMachines.length > 0) {
         const avgData = months.map((_, idx) => {
@@ -9000,7 +9505,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
           activeMachines.forEach(m => {
             sum += (baseData[m][idx] + offset);
           });
-          return Math.min(100, Math.max(0, Math.round(sum / activeMachines.length)));
+          return Math.min(100, Math.max(0, activeMachines.length > 0 ? Math.round(sum / activeMachines.length) : 0));
         });
         datasets.push({
           label: "Overall OEE %",
@@ -9019,7 +9524,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
           activeMachines.forEach(m => {
             sum += (dayWiseBaseData[m][idx] + offset);
           });
-          return Math.min(100, Math.max(0, Math.round(sum / activeMachines.length)));
+          return Math.min(100, Math.max(0, activeMachines.length > 0 ? Math.round(sum / activeMachines.length) : 0));
         });
         datasets.push({
           label: "Overall OEE %",
@@ -9079,7 +9584,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
 
   const setupChart1 = React.useCallback((canvas) => {
     let minUtilization = 75;
-    if (xAxisGroup === "Month Wise") {
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       minUtilization = targetConfig?.oee_comparison?.monthWiseTarget ?? targetConfig?.oee_comparison?.minUtilization ?? 75;
     } else if (xAxisGroup === "Day Wise") {
       minUtilization = targetConfig?.oee_comparison?.dayWiseTarget ?? targetConfig?.oee_comparison?.minUtilization ?? 75;
@@ -9089,7 +9594,10 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
       minUtilization = targetConfig?.oee_comparison?.teamWiseTarget ?? targetConfig?.oee_comparison?.minUtilization ?? 75;
     }
     const datasetsWithTarget = [
-      ...(chart1Data.datasets || []),
+      ...(chart1Data.datasets || []).map(ds => ({
+        ...ds,
+        type: "bar"
+      })),
       {
         type: "line",
         label: "Min Utilization Target",
@@ -9135,14 +9643,14 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
     <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
       <div className="pp1-chart-toolbar">
         <div className="pp1-chart-toolbar__title">
-          {xAxisGroup === "Month Wise" && "Month Wise Overall OEE %"}
+          {(xAxisGroup === "Overall" || xAxisGroup === "Month Wise") && "Overall Month Wise OEE %"}
           {xAxisGroup === "Day Wise" && "Day Wise Overall OEE %"}
           {xAxisGroup === "Mac Wise" && "Machine Wise Overall OEE %"}
           {xAxisGroup === "Team Wise" && "Team Wise Overall OEE %"}
         </div>
         <div className="pp1-chart-xaxis">
           <span className="pp1-chart-xaxis__label">Chart X-Axis:</span>
-          {["Month Wise", "Day Wise", "Mac Wise", "Team Wise"].map(g => (
+          {["Overall", "Day Wise", "Mac Wise", "Team Wise"].map(g => (
             <button
               key={g}
               type="button"
@@ -9272,6 +9780,31 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
 }
 
 function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) {
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
+  // Reset sorting state when switching tabs
+  React.useEffect(() => {
+    setSortIndex(null);
+    setSortDirection("asc");
+    setHoveredHeader(null);
+  }, [xAxisGroup]);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
   const baseMachines = [
     { type: "CNC", name: "CNC1", baseVal: 67, monthly: [85, 96, 70, 69, 67, 66, 65, 75, 85, 96, 61] },
     { type: "CNC", name: "CNC2", baseVal: 80, monthly: [70, 84, 94, 87, 80, 73, 66, 59, 52, 45, 97] },
@@ -9314,27 +9847,24 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
   }, [filters]);
 
   const activeColumns = React.useMemo(() => {
-    if (xAxisGroup === "Month Wise") {
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       return [
-        "Machine No",
+        "Sl.No",
         "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
       ];
     } else if (xAxisGroup === "Day Wise") {
-      return [
-        "Machine No",
-        "01-Jun", "02-Jun", "03-Jun", "04-Jun", "05-Jun", "06-Jun", "07-Jun", "08-Jun", "09-Jun", "10-Jun", "11-Jun", "12-Jun"
-      ];
+      return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
-      return ["Machine No", "Overall OEE %", "Availability %", "Performance %", "Quality %"];
+      return ["Sl.No", "Machine No", "OEE%"];
     } else {
-      return ["Team Name", "Overall OEE %", "Availability %", "Performance %", "Quality %"];
+      return ["Sl.No", "Team Name", "OEE%"];
     }
   }, [xAxisGroup]);
 
   const activeRows = React.useMemo(() => {
-    if (xAxisGroup === "Month Wise") {
-      const list = processedData.map(m => [
-        m.name,
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+      const list = processedData.map((m, idx) => [
+        String(idx + 1), // Sl.No instead of Machine Name
         ...m.monthlyVals.map(v => `${v}%`)
       ]);
 
@@ -9348,43 +9878,40 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
           });
           overallAvg.push(`${Math.round(sum / processedData.length)}%`);
         }
-        list.push(["Overall OEE %", ...overallAvg]);
+        list.push(["-", ...overallAvg]);
       }
       return list;
     } else if (xAxisGroup === "Day Wise") {
-      const list = processedData.map(m => [
-        m.name,
-        ...m.dayWiseVals.map(v => `${v}%`)
-      ]);
+      const dayLabels = ["01-Jun", "02-Jun", "03-Jun", "04-Jun", "05-Jun", "06-Jun", "07-Jun", "08-Jun", "09-Jun", "10-Jun", "11-Jun", "12-Jun"];
+      if (processedData.length === 0) return [];
 
-      if (processedData.length > 0) {
-        const numDays = processedData[0].dayWiseVals.length;
-        const overallAvg = [];
-        for (let idx = 0; idx < numDays; idx++) {
-          let sum = 0;
-          processedData.forEach(m => {
-            sum += m.dayWiseVals[idx];
-          });
-          overallAvg.push(`${Math.round(sum / processedData.length)}%`);
-        }
-        list.push(["Overall OEE %", ...overallAvg]);
+      const numDays = processedData[0].dayWiseVals.length;
+      const list = [];
+      for (let idx = 0; idx < numDays; idx++) {
+        let sum = 0;
+        processedData.forEach(m => {
+          sum += m.dayWiseVals[idx];
+        });
+        const dayAvg = Math.round(sum / processedData.length);
+        list.push([
+          String(idx + 1),
+          dayLabels[idx] || `Day ${idx + 1}`,
+          `${dayAvg}%`
+        ]);
       }
       return list;
     } else if (xAxisGroup === "Mac Wise") {
-      const list = processedData.map(m => {
-        const oeeVal = m.val;
-        const avail = Math.min(100, oeeVal + 5);
-        const perf = Math.min(100, oeeVal + 8);
-        const qual = Math.min(100, oeeVal + 12);
-        return [m.name, `${oeeVal}%`, `${avail}%`, `${perf}%`, `${qual}%`];
+      const list = processedData.map((m, idx) => {
+        return [
+          String(idx + 1),
+          m.name,
+          `${m.val}%`
+        ];
       });
 
       if (processedData.length > 0) {
         const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.val, 0) / processedData.length);
-        const avgAvail = Math.min(100, avgOee + 5);
-        const avgPerf = Math.min(100, avgOee + 8);
-        const avgQual = Math.min(100, avgOee + 12);
-        list.push(["Overall Average", `${avgOee}%`, `${avgAvail}%`, `${avgPerf}%`, `${avgQual}%`]);
+        list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
     } else {
@@ -9393,10 +9920,10 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
         "Team B": ["DRL1"],
         "Team C": ["LATHE1"]
       };
-      const list = ["Team A", "Team B", "Team C"].map(team => {
+      const list = ["Team A", "Team B", "Team C"].map((team, idx) => {
         const teamMachines = teamData[team].filter(t => processedData.some(p => p.name === t));
         if (teamMachines.length === 0) {
-          return [team, "0%", "0%", "0%", "0%"];
+          return [String(idx + 1), team, "0%"];
         }
         let oeeSum = 0;
         teamMachines.forEach(t => {
@@ -9404,25 +9931,69 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
           if (mObj) oeeSum += mObj.val;
         });
         const teamOee = Math.round(oeeSum / teamMachines.length);
-        const teamAvail = Math.min(100, teamOee + 5);
-        const teamPerf = Math.min(100, teamOee + 8);
-        const teamQual = Math.min(100, teamOee + 12);
-        return [team, `${teamOee}%`, `${teamAvail}%`, `${teamPerf}%`, `${teamQual}%`];
+        return [
+          String(idx + 1),
+          team,
+          `${teamOee}%`
+        ];
       });
 
       if (processedData.length > 0) {
         const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.val, 0) / processedData.length);
-        const avgAvail = Math.min(100, avgOee + 5);
-        const avgPerf = Math.min(100, avgOee + 8);
-        const avgQual = Math.min(100, avgOee + 12);
-        list.push(["Overall Average", `${avgOee}%`, `${avgAvail}%`, `${avgPerf}%`, `${avgQual}%`]);
+        list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
     }
   }, [processedData, xAxisGroup]);
 
+  const sortedRows = React.useMemo(() => {
+    if (sortIndex === null) return activeRows;
+
+    const dataRows = [];
+    const summaryRows = [];
+
+    activeRows.forEach(row => {
+      const firstCell = String(row[0]);
+      const isSummary = firstCell === "-" || firstCell.toLowerCase().includes("overall") || firstCell.toLowerCase().includes("average");
+      if (isSummary) {
+        summaryRows.push(row);
+      } else {
+        dataRows.push(row);
+      }
+    });
+
+    const sorted = [...dataRows].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    const reindexed = sorted.map((row, idx) => {
+      const newRow = [...row];
+      newRow[0] = String(idx + 1);
+      return newRow;
+    });
+
+    return [...reindexed, ...summaryRows];
+  }, [activeRows, sortIndex, sortDirection]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "6px" }}>
+          <span style={{
+            color: "var(--pp1-blue)",
+            fontWeight: 700,
+            fontSize: "12px",
+            paddingBottom: "6px",
+            borderBottom: "2.5px solid var(--pp1-blue)"
+          }}>
+            OEE Comparison Summary ({xAxisGroup})
+          </span>
+        </div>
+      </div>
       <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
@@ -9442,35 +10013,49 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
                   col.includes("-2") ||
                   col.toLowerCase().includes("oee")
                 );
+                const isHovered = hoveredHeader === idx;
+                const isSorted = sortIndex === idx;
+                const isSlNo = idx === 0;
+
                 return (
                   <th
                     key={idx}
+                    onClick={() => !isSlNo && handleSort(idx)}
+                    onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                    onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
                     style={{
                       position: "sticky",
                       top: 0,
-                      backgroundColor: "#f2f6fe",
+                      backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "#f2f6fe",
                       zIndex: 10,
-                      textAlign: isRightAligned ? "right" : "left"
+                      textAlign: isRightAligned ? "right" : "left",
+                      cursor: isSlNo ? "default" : "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
+                      padding: "12px 16px"
                     }}
                   >
-                    {col}
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                      <span>{col}</span>
+                      {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                    </div>
                   </th>
                 );
               })}
             </tr>
           </thead>
           <tbody>
-            {activeRows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={activeColumns.length} style={{ textAlign: "center", padding: "20px", color: "var(--pp1-text-4)" }}>
                   No data available.
                 </td>
               </tr>
             ) : (
-              activeRows.map((row, ri) => (
+              sortedRows.map((row, ri) => (
                 <tr key={ri}>
                   {row.map((cell, ci) => {
-                    const isRightAligned = ci > 0 && (
+                    const isRightAligned = ci > 0 && activeColumns[ci] && (
                       activeColumns[ci].toLowerCase().includes("qty") ||
                       activeColumns[ci].toLowerCase().includes("value") ||
                       activeColumns[ci].toLowerCase().includes("hours") ||
@@ -9484,7 +10069,7 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
                       activeColumns[ci].includes("-2") ||
                       activeColumns[ci].toLowerCase().includes("oee")
                     );
-                    const isOverallRow = row[0] === "Overall OEE %" || row[0] === "Overall Average";
+                    const isOverallRow = row[0] === "-" || row[0] === "Overall OEE %" || row[0] === "Overall Average";
                     return (
                       <td
                         key={ci}
@@ -9633,7 +10218,7 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
     const datasets = [];
     let labels = [];
 
-    if (xAxisGroup === "Month Wise") {
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       labels = months;
       if (activeOperators.length > 0) {
         const avgData = months.map((_, idx) => {
@@ -9729,7 +10314,7 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
 
   const setupChart1 = React.useCallback((canvas) => {
     let targetVal = 80;
-    if (xAxisGroup === "Month Wise") {
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       targetVal = targetConfig?.efficiency?.monthWiseTarget ?? 80;
     } else if (xAxisGroup === "Day Wise") {
       targetVal = targetConfig?.efficiency?.dayWiseTarget ?? 80;
@@ -10018,14 +10603,14 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
     <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
       <div className="pp1-chart-toolbar">
         <div className="pp1-chart-toolbar__title">
-          {xAxisGroup === "Month Wise" && "Month Wise Overall Efficiency %"}
+          {(xAxisGroup === "Overall" || xAxisGroup === "Month Wise") && "Overall Month Wise Efficiency %"}
           {xAxisGroup === "Day Wise" && "Day Wise Overall Efficiency %"}
           {xAxisGroup === "Mac Wise" && "Machine Wise Overall Efficiency %"}
           {xAxisGroup === "Team Wise" && "Team Wise Overall Efficiency %"}
         </div>
         <div className="pp1-chart-xaxis">
           <span className="pp1-chart-xaxis__label">Chart X-Axis:</span>
-          {["Month Wise", "Day Wise", "Mac Wise", "Team Wise"].map(g => (
+          {["Overall", "Day Wise", "Mac Wise", "Team Wise"].map(g => (
             <button
               key={g}
               type="button"
@@ -10283,6 +10868,31 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
 }
 
 function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) {
+  const [sortIndex, setSortIndex] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
+  const [hoveredHeader, setHoveredHeader] = React.useState(null);
+
+  const handleSort = (idx) => {
+    if (sortIndex === idx) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortIndex(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortIndex(idx);
+      setSortDirection("asc");
+    }
+  };
+
+  // Reset sorting state when switching tabs
+  React.useEffect(() => {
+    setSortIndex(null);
+    setSortDirection("asc");
+    setHoveredHeader(null);
+  }, [xAxisGroup]);
+
   const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"];
   const baseTab1Rows = [
     { name: "Mani", team: "Team A", type: "CNC", machine: "CNC1", monthly: [85, 90, 78, 82, 79, 81, 84, 86, 88, 90, 85], daily: [85, 96, 70, 69, 67, 66, 65, 75, 85] },
@@ -10330,21 +10940,24 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
   }, [processedData, filters]);
 
   const activeColumns = React.useMemo(() => {
-    if (xAxisGroup === "Month Wise") {
-      return ["Operator Name", ...months];
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+      return [
+        "Sl.No",
+        "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
+      ];
     } else if (xAxisGroup === "Day Wise") {
-      return ["Operator Name", "Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9"];
+      return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
-      return ["Machine No", "Average Efficiency %", "Operator Name", "Team Name"];
+      return ["Sl.No", "Machine No", "Eff%"];
     } else {
-      return ["Team Name", "Average Efficiency %", "Machines Connected"];
+      return ["Sl.No", "Team Name", "Eff%"];
     }
   }, [xAxisGroup]);
 
   const activeRows = React.useMemo(() => {
-    if (xAxisGroup === "Month Wise") {
-      const list = filteredData.map(row => [
-        row.name,
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+      const list = filteredData.map((row, idx) => [
+        String(idx + 1), // Sl.No instead of Machine Name
         ...row.monthlyVals.map(v => `${v}%`)
       ]);
       if (filteredData.length > 0) {
@@ -10357,56 +10970,89 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
           });
           overallAvg.push(`${Math.round(sum / filteredData.length)}%`);
         }
-        list.push(["Overall Average", ...overallAvg]);
+        list.push(["-", ...overallAvg]);
       }
       return list;
     } else if (xAxisGroup === "Day Wise") {
-      const list = filteredData.map(row => [
-        row.name,
-        ...row.dailyVals.map(v => `${v}%`)
-      ]);
-      if (filteredData.length > 0) {
-        const numDays = filteredData[0].dailyVals.length;
-        const overallAvg = [];
-        for (let idx = 0; idx < numDays; idx++) {
-          let sum = 0;
-          filteredData.forEach(row => {
-            sum += row.dailyVals[idx];
-          });
-          overallAvg.push(`${Math.round(sum / filteredData.length)}%`);
-        }
-        list.push(["Overall Average", ...overallAvg]);
+      const dayLabels = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9"];
+      if (filteredData.length === 0) return [];
+
+      const numDays = filteredData[0].dailyVals.length;
+      const list = [];
+      for (let idx = 0; idx < numDays; idx++) {
+        let sum = 0;
+        filteredData.forEach(row => {
+          sum += row.dailyVals[idx];
+        });
+        const dayAvg = Math.round(sum / filteredData.length);
+        list.push([
+          String(idx + 1),
+          dayLabels[idx] || `Day ${idx + 1}`,
+          `${dayAvg}%`
+        ]);
       }
       return list;
     } else if (xAxisGroup === "Mac Wise") {
-      const list = filteredData.map(row => [
+      const list = filteredData.map((row, idx) => [
+        String(idx + 1),
         row.machine,
-        `${row.avgVal}%`,
-        row.name,
-        row.team
+        `${row.avgVal}%`
       ]);
       if (filteredData.length > 0) {
         const overallAvg = Math.round(filteredData.reduce((acc, r) => acc + r.avgVal, 0) / filteredData.length);
-        list.push(["Overall Average", `${overallAvg}%`, "-", "-"]);
+        list.push(["-", "Overall Average", `${overallAvg}%`]);
       }
       return list;
     } else {
-      const teams = ["Team A", "Team B", "Team C"];
-      const teamData = {
-        "Team A": ["CNC1", "LATHE1"],
-        "Team B": ["CNC2"],
-        "Team C": ["DRL1"]
-      };
-      const list = teams.map(team => {
+      const teamsList = ["Team A", "Team B", "Team C"];
+      const list = teamsList.map((team, idx) => {
         const teamRows = filteredData.filter(row => row.team === team);
-        if (teamRows.length === 0) return [team, "-", "-"];
+        if (teamRows.length === 0) return [String(idx + 1), team, "-"];
         const avg = Math.round(teamRows.reduce((acc, r) => acc + r.avgVal, 0) / teamRows.length);
-        const machinesStr = teamData[team].join(", ");
-        return [team, `${avg}%`, machinesStr];
+        return [String(idx + 1), team, `${avg}%`];
       });
-      return list.filter(row => row[1] !== "-");
+
+      const validList = list.filter(row => row[2] !== "-");
+      if (validList.length > 0) {
+        const overallAvg = Math.round(filteredData.reduce((acc, r) => acc + r.avgVal, 0) / filteredData.length);
+        validList.push(["-", "Overall Average", `${overallAvg}%`]);
+      }
+      return validList;
     }
   }, [filteredData, xAxisGroup]);
+
+  const sortedRows = React.useMemo(() => {
+    if (sortIndex === null) return activeRows;
+
+    const dataRows = [];
+    const summaryRows = [];
+
+    activeRows.forEach(row => {
+      const firstCell = String(row[0]);
+      const isSummary = firstCell === "-" || firstCell.toLowerCase().includes("overall") || firstCell.toLowerCase().includes("average");
+      if (isSummary) {
+        summaryRows.push(row);
+      } else {
+        dataRows.push(row);
+      }
+    });
+
+    const sorted = [...dataRows].sort((a, b) => {
+      const valA = parseSortValue(a[sortIndex]);
+      const valB = parseSortValue(b[sortIndex]);
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    const reindexed = sorted.map((row, idx) => {
+      const newRow = [...row];
+      newRow[0] = String(idx + 1);
+      return newRow;
+    });
+
+    return [...reindexed, ...summaryRows];
+  }, [activeRows, sortIndex, sortDirection]);
 
   const getColWidth = (colName) => {
     if (xAxisGroup === "Mac Wise") {
@@ -10425,6 +11071,19 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "6px" }}>
+          <span style={{
+            color: "var(--pp1-blue)",
+            fontWeight: 700,
+            fontSize: "12px",
+            paddingBottom: "6px",
+            borderBottom: "2.5px solid var(--pp1-blue)"
+          }}>
+            Efficiency Comparison Summary ({xAxisGroup})
+          </span>
+        </div>
+      </div>
       <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
         <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
           <thead>
@@ -10443,38 +11102,51 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
                   col.toLowerCase().includes("loss") ||
                   col.toLowerCase().includes("efficiency")
                 );
+                const isHovered = hoveredHeader === idx;
+                const isSorted = sortIndex === idx;
+                const isSlNo = idx === 0;
+
                 return (
                   <th
                     key={idx}
+                    onClick={() => !isSlNo && handleSort(idx)}
+                    onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
+                    onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
                     style={{
                       position: "sticky",
                       top: 0,
-                      backgroundColor: "#f2f6fe",
+                      backgroundColor: isHovered && !isSlNo ? "#eef3fc" : "#f2f6fe",
                       zIndex: 10,
                       textAlign: isRightAligned ? "center" : "left",
+                      cursor: isSlNo ? "default" : "pointer",
+                      userSelect: "none",
+                      transition: "background-color 0.2s ease",
                       width: getColWidth(col)
                     }}
                   >
-                    {col}
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "center" : "flex-start", gap: "5px", width: "100%" }}>
+                      <span>{col}</span>
+                      {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
+                    </div>
                   </th>
                 );
               })}
             </tr>
           </thead>
           <tbody>
-            {activeRows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
                   No data matches active filters.
                 </td>
               </tr>
             ) : (
-              activeRows.map((row, ri) => {
-                const isOverallRow = row[0] === "Overall Average" || row[0] === "Overall OEE %" || row[0] === "Overall Total";
+              sortedRows.map((row, ri) => {
+                const isOverallRow = row[0] === "-" || row[0] === "Overall Average" || row[0] === "Overall OEE %" || row[0] === "Overall Total";
                 return (
                   <tr key={ri} className="pp1-cc-tbl__tr">
                     {row.map((cell, ci) => {
-                      const isRightAligned = ci > 0 && (
+                      const isRightAligned = ci > 0 && activeColumns[ci] && (
                         activeColumns[ci].toLowerCase().includes("qty") ||
                         activeColumns[ci].toLowerCase().includes("value") ||
                         activeColumns[ci].toLowerCase().includes("hours") ||
@@ -11165,7 +11837,13 @@ function RejectionReportBottomTable({ filters }) {
     });
   }, [allRows, filters, offset]);
 
-  return <PremiumDashboardBottomTable title={title} columns={columns} rows={rows} />;
+  const finalColumns = ["Sl.No", ...columns.slice(1)];
+  const finalRows = rows.map((row, idx) => [
+    String(idx + 1),
+    ...row.slice(1)
+  ]);
+
+  return <PremiumDashboardBottomTable title={title} columns={finalColumns} rows={finalRows} />;
 }
 
 function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetConfig, xAxisGroup, setXAxisGroup }) {
@@ -11786,7 +12464,13 @@ function ReworkReportBottomTable({ filters, xAxisGroup }) {
     });
   }, [allRows, filters, offset, xAxisGroup]);
 
-  return <PremiumDashboardBottomTable title={title} columns={columns} rows={rows} />;
+  const finalColumns = ["Sl.No", ...columns.slice(1)];
+  const finalRows = rows.map((row, idx) => [
+    String(idx + 1),
+    ...row.slice(1)
+  ]);
+
+  return <PremiumDashboardBottomTable title={title} columns={finalColumns} rows={finalRows} />;
 }
 
 function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
@@ -11833,11 +12517,29 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
+  const toggleGroup = (g) => {
+    const current = filters.category || [];
+    const next = current.includes(g) ? current.filter(x => x !== g) : [...current, g];
+    onFilterChange(prev => ({ ...prev, category: next }));
+  };
+
+  const groupsList = ["Raw Materials", "Consumables", "Finished Goods", "Semi-Finished"];
+  const itemCodesList = ["P-1001", "P-1002", "P-1003", "P-1004", "P-1005", "P-1006", "P-1007", "P-1008", "P-1009", "P-1010"];
+
+  const isAllSelected = (filters.category || []).length === groupsList.length;
+
+  const toggleSelectAll = () => {
+    onFilterChange(prev => ({
+      ...prev,
+      category: isAllSelected ? [] : [...groupsList]
+    }));
+  };
+
   const handleReset = () => {
     onFilterChange({
       fromDate: "",
       toDate: "",
-      category: "",
+      category: [],
       itemCode: "",
       status: "",
     });
@@ -11845,9 +12547,11 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
 
   const chartData = React.useMemo(() => {
     let offset = 0;
-    if (filters?.category) {
-      const hash = filters.category.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 6) - 3;
+    if (filters?.category && filters.category.length > 0) {
+      const totalHash = filters.category.reduce((acc, cat) => {
+        return acc + cat.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      }, 0);
+      offset += (totalHash % 6) - 3;
     }
     if (filters?.itemCode) {
       offset += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 4 : -4;
@@ -11915,7 +12619,7 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
             }
           },
           tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.9)",
+            backgroundColor: "rgba(15, 23, 42, 0.95)",
             titleFont: { family: "'Inter', sans-serif", size: 11, weight: "bold" },
             bodyFont: { family: "'Inter', sans-serif", size: 11 },
             padding: 8,
@@ -11954,9 +12658,6 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     });
   }, [chartData, targetConfig]);
 
-  const groupsList = ["Raw Materials", "Consumables", "Finished Goods", "Semi-Finished"];
-  const itemCodesList = ["P-1001", "P-1002", "P-1003", "P-1004", "P-1005", "P-1006", "P-1007", "P-1008", "P-1009", "P-1010"];
-
   return (
     <PremiumDashboardView
       title="Store Stock Value"
@@ -11978,35 +12679,61 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
           />
         </div>
 
-        {/* Group Dropdown */}
-        <div className="pp1-filter-group" ref={categoryRef}>
+        {/* Group Multi-Select Dropdown */}
+        <div className="pp1-filter-group" ref={categoryRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#059669' }}>
           <label className="pp1-filter-label">Group</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${categoryOpen ? "open" : ""}`}
-              onClick={() => setCategoryOpen(o => !o)}
+          <div className="pp1-multiselect-wrap">
+            <div
+              className={`pp1-multiselect-trigger ${(filters.category || []).length > 0 ? 'pp1-multiselect-trigger--active' : ''} ${categoryOpen ? 'pp1-multiselect-trigger--open' : ''}`}
+              onClick={() => setCategoryOpen(!categoryOpen)}
             >
-              <span>{filters?.category || "All Groups"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
+              <div className="pp1-multiselect-value" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "calc(100% - 16px)", fontWeight: "500" }}>
+                {(filters.category || []).length === 0 ? (
+                  <span className="pp1-multiselect-placeholder">All Groups</span>
+                ) : (
+                  (filters.category || []).join(", ")
+                )}
+              </div>
+              <ChevronDown size={11} className="pp1-dropdown-caret" style={{ transform: categoryOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+            </div>
+
             {categoryOpen && (
-              <div className="pp1-custom-select-options">
+              <div className="pp1-multiselect-menu">
+                {/* Select All Option */}
                 <div
-                  className={`pp1-custom-select-option ${!filters?.category ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("category", ""); setCategoryOpen(false); }}
+                  className={`pp1-multiselect-option pp1-multiselect-option--all ${isAllSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                  onClick={toggleSelectAll}
                 >
-                  All Groups
-                </div>
-                {groupsList.map(g => (
-                  <div
-                    key={g}
-                    className={`pp1-custom-select-option ${filters?.category === g ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("category", g); setCategoryOpen(false); }}
-                  >
-                    {g}
+                  <div className="pp1-multiselect-checkbox-box">
+                    {isAllSelected && (
+                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                        <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                      </svg>
+                    )}
                   </div>
-                ))}
+                  <span>Select All ({groupsList.length})</span>
+                </div>
+
+                {/* Individual Options */}
+                {groupsList.map(g => {
+                  const isSelected = (filters.category || []).includes(g);
+                  return (
+                    <div
+                      key={g}
+                      className={`pp1-multiselect-option ${isSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                      onClick={() => toggleGroup(g)}
+                    >
+                      <div className="pp1-multiselect-checkbox-box">
+                        {isSelected && (
+                          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                            <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                          </svg>
+                        )}
+                      </div>
+                      <span>{g}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -12063,9 +12790,11 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
 function StoreStockValueReportBottomTable({ filters }) {
   const offset = React.useMemo(() => {
     let off = 0;
-    if (filters?.category) {
-      const hash = filters.category.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      off += (hash % 6) - 3;
+    if (filters?.category && filters.category.length > 0) {
+      const totalHash = filters.category.reduce((acc, cat) => {
+        return acc + cat.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      }, 0);
+      off += (totalHash % 6) - 3;
     }
     if (filters?.itemCode) {
       off += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 1 : -1;
@@ -12090,32 +12819,41 @@ function StoreStockValueReportBottomTable({ filters }) {
 
   const rows = React.useMemo(() => {
     let list = allRows;
-    if (filters?.category) {
-      list = list.filter(r => r.group === filters.category);
+    if (filters?.category && filters.category.length > 0) {
+      list = list.filter(r => filters.category.includes(r.group));
     }
     if (filters?.itemCode) {
       list = list.filter(r => r.partNum === filters.itemCode);
     }
 
-    return list.map(row => {
+    const grouped = {};
+    list.forEach(row => {
       const baseQty = parseInt(row.qty.replace(/,/g, ""), 10);
       const unitPriceVal = parseInt(row.price.replace(/[₹,]/g, ""), 10);
 
       const newQty = Math.max(0, baseQty + Math.round(offset * (baseQty > 100 ? 20 : 2)));
       const newValue = newQty * unitPriceVal;
 
-      return [
-        row.month,
-        row.group,
-        `${row.partNum} - ${row.desc}`,
-        newQty.toLocaleString(),
-        `₹${unitPriceVal.toLocaleString()}`,
-        `₹${newValue.toLocaleString()}`
-      ];
+      const key = `${row.month} | ${row.group}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          month: row.month,
+          group: row.group,
+          totalValue: 0
+        };
+      }
+      grouped[key].totalValue += newValue;
     });
+
+    return Object.values(grouped).map((g, idx) => [
+      String(idx + 1),
+      g.month,
+      g.group,
+      `₹${g.totalValue.toLocaleString()}`
+    ]);
   }, [filters, offset]);
 
-  const columns = ["Month", "Group", "Pattno-Desc", "Qty In Stock", "Unit Price", "Total Value"];
+  const columns = ["Sl.No", "Month", "Group", "Total Value"];
 
   return <PremiumDashboardBottomTable title="Store Stock Registry" columns={columns} rows={rows} />;
 }
@@ -12695,6 +13433,7 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
 
 function SupplierRatingBottomTable({ filters }) {
   const columns = [
+    "Sl.No",
     "Supplier Name",
     "Category",
     "Total Orders",
@@ -12726,7 +13465,10 @@ function SupplierRatingBottomTable({ filters }) {
     if (filters?.toDate) {
       list = list.filter(r => r.date <= filters.toDate);
     }
-    return list.map(r => r.cols);
+    return list.map((r, idx) => [
+      String(idx + 1),
+      ...r.cols
+    ]);
   }, [filters]);
 
   return <PremiumDashboardBottomTable title="Supplier Rating Registry" columns={columns} rows={rows} />;
@@ -13261,6 +14003,7 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
 
 function VendorRatingBottomTable({ filters }) {
   const columns = [
+    "Sl.No",
     "Vendor Name",
     "Category",
     "Total Orders",
@@ -13292,7 +14035,10 @@ function VendorRatingBottomTable({ filters }) {
     if (filters?.toDate) {
       list = list.filter(r => r.date <= filters.toDate);
     }
-    return list.map(r => r.cols);
+    return list.map((r, idx) => [
+      String(idx + 1),
+      ...r.cols
+    ]);
   }, [filters]);
 
   return <PremiumDashboardBottomTable title="Vendor Rating Registry" columns={columns} rows={rows} />;
@@ -13946,7 +14692,7 @@ function FgValueReportBottomTable({ filters }) {
       }
     }
 
-    return list.map(row => {
+    return list.map((row, idx) => {
       const baseQty = parseInt(row.qty.replace(/,/g, ""), 10);
       const unitPriceVal = parseInt(row.price.replace(/[₹,]/g, ""), 10);
 
@@ -13954,6 +14700,7 @@ function FgValueReportBottomTable({ filters }) {
       const newValue = newQty * unitPriceVal;
 
       return [
+        String(idx + 1),
         row.date,
         row.customer,
         `${row.partNum} - ${row.desc}`,
@@ -13965,7 +14712,7 @@ function FgValueReportBottomTable({ filters }) {
     });
   }, [filters, offset]);
 
-  const columns = ["Date", "Customer Name", "Part-Description", "Qty In Stock", "Unit Price", "Total Value", "Age Days"];
+  const columns = ["Sl.No", "Date", "Customer Name", "Part-Description", "Qty In Stock", "Unit Price", "Total Value", "Age Days"];
 
   return <PremiumDashboardBottomTable title="Finished Goods (FG) Registry" columns={columns} rows={rows} />;
 }
@@ -14222,10 +14969,10 @@ function DailyProductionBottomTable({ filters, targetConfig }) {
   const maxAllowedHrs = targetConfig?.daily_production?.maxBalanceHours ?? 4.0;
 
   const rawData = [
-    { sl: 1, machine: "CNC1", rate: 210, planned: 22, balance: 2, loss: 420 },
-    { sl: 2, machine: "CNC2", rate: 180, planned: 18, balance: 6, loss: 1080 },
-    { sl: 3, machine: "VMC1", rate: 150, planned: 20, balance: 4, loss: 600 },
-    { sl: 4, machine: "HMC1", rate: 190, planned: 21, balance: 3, loss: 570 }
+    { sl: 1, date: "2026-06-25", machine: "CNC1", rate: 210, planned: 22, balance: 2, loss: 420 },
+    { sl: 2, date: "2026-06-25", machine: "CNC2", rate: 180, planned: 18, balance: 6, loss: 1080 },
+    { sl: 3, date: "2026-06-26", machine: "VMC1", rate: 150, planned: 20, balance: 4, loss: 600 },
+    { sl: 4, date: "2026-06-26", machine: "HMC1", rate: 190, planned: 21, balance: 3, loss: 570 }
   ];
 
   const rows = React.useMemo(() => {
@@ -14233,28 +14980,29 @@ function DailyProductionBottomTable({ filters, targetConfig }) {
     if (filters?.machineNo) {
       list = list.filter(r => r.machine.toLowerCase().includes(filters.machineNo.toLowerCase()));
     }
+    if (filters?.fromDate) {
+      list = list.filter(r => r.date >= filters.fromDate);
+    }
+    if (filters?.toDate) {
+      list = list.filter(r => r.date <= filters.toDate);
+    }
 
-    return list.map(row => {
-      const isExceeded = row.balance > maxAllowedHrs;
-      const statusElement = (
-        <span className={`pp1-badge ${isExceeded ? "pp1-badge--danger" : "pp1-badge--success"}`}>
-          {isExceeded ? "Exceeds Limit" : "Normal"}
-        </span>
-      );
-
+    return list.map((row, idx) => {
+      const lossPct = ((row.balance / row.planned) * 100).toFixed(1);
       return [
-        String(row.sl),
+        String(idx + 1),
+        row.date,
         row.machine,
         `₹${row.rate}`,
         `${row.planned} Hrs`,
         `${row.balance} Hrs`,
         `₹${row.loss.toLocaleString()}`,
-        statusElement
+        `${lossPct}%`
       ];
     });
   }, [filters, maxAllowedHrs]);
 
-  const columns = ["Sl. No", "Machine No", "Rate Per Hrs", "Production Planned Hrs", "Balance Hrs", "Production Loss", "Status"];
+  const columns = ["Sl. No", "Date", "Machine No", "Rate Per Hrs", "Production Planned Hrs", "Balance Hrs", "Production Loss", "Production Loss %"];
 
   return <PremiumDashboardBottomTable title="Machine Capacity Registry" columns={columns} rows={rows} />;
 }
@@ -14307,11 +15055,11 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
   };
 
   const rawData = [
-    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, status: "Pending" },
-    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, status: "Pending" },
-    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, status: "Pending" },
-    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, status: "Pending" },
-    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, status: "Completed" }
+    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, dispatchQty: 300, status: "Pending", date: "2026-06-25" },
+    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, dispatchQty: 1080, status: "Pending", date: "2026-06-25" },
+    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, dispatchQty: 560, status: "Pending", date: "2026-06-26" },
+    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, dispatchQty: 210, status: "Pending", date: "2026-06-26" },
+    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, dispatchQty: 150, status: "Completed", date: "2026-06-26" }
   ];
 
   const customersList = ["Star Logistics", "Anims Parts Ltd", "Virrudheeswara Eng", "Srinivasa Castings", "Royal Packaging"];
@@ -14322,9 +15070,18 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
   }, [filters.customer]);
 
   const filteredData = React.useMemo(() => {
-    if (!filters.customer) return rawData;
-    return rawData.filter(d => d.customer.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer]);
+    let list = rawData;
+    if (filters?.customer) {
+      list = list.filter(d => d.customer.toLowerCase().includes(filters.customer.toLowerCase()));
+    }
+    if (filters?.fromDate) {
+      list = list.filter(d => d.date >= filters.fromDate);
+    }
+    if (filters?.toDate) {
+      list = list.filter(d => d.date <= filters.toDate);
+    }
+    return list;
+  }, [filters?.customer, filters?.fromDate, filters?.toDate]);
 
   const totalPlan = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.planQty, 0), [filteredData]);
   const totalAvailable = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.availableQty, 0), [filteredData]);
@@ -14474,11 +15231,11 @@ function TargetVsActualBottomTable({ filters, targetConfig }) {
   const minFulfillment = targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0;
 
   const rawData = [
-    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, status: "Pending" },
-    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, status: "Pending" },
-    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, status: "Pending" },
-    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, status: "Pending" },
-    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, status: "Completed" }
+    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, dispatchQty: 300, status: "Pending", date: "2026-06-25" },
+    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, dispatchQty: 1080, status: "Pending", date: "2026-06-25" },
+    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, dispatchQty: 560, status: "Pending", date: "2026-06-26" },
+    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, dispatchQty: 210, status: "Pending", date: "2026-06-26" },
+    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, dispatchQty: 150, status: "Completed", date: "2026-06-26" }
   ];
 
   const rows = React.useMemo(() => {
@@ -14486,41 +15243,40 @@ function TargetVsActualBottomTable({ filters, targetConfig }) {
     if (filters?.customer) {
       list = list.filter(r => r.customer.toLowerCase().includes(filters.customer.toLowerCase()));
     }
+    if (filters?.fromDate) {
+      list = list.filter(r => r.date >= filters.fromDate);
+    }
+    if (filters?.toDate) {
+      list = list.filter(r => r.date <= filters.toDate);
+    }
 
-    return list.map(row => {
-      const fulfillment = row.planQty > 0 ? (row.availableQty / row.planQty) * 100 : 0;
-      const isLowFulfillment = fulfillment < minFulfillment;
+    return list.map((row, idx) => {
+      const dispatchPct = row.planQty > 0 ? (row.dispatchQty / row.planQty) * 100 : 0;
+      const isLowDispatch = dispatchPct < minFulfillment;
 
-      const badgeStyle = row.status === "Completed"
-        ? "pp1-badge--success"
-        : isLowFulfillment
-          ? "pp1-badge--danger"
-          : "pp1-badge--success";
-
-      const badgeText = row.status === "Completed"
+      const statusBaseText = row.status === "Completed" || dispatchPct >= 100
         ? "Completed"
-        : isLowFulfillment
+        : isLowDispatch
           ? "Low Fulfillment"
           : "On Track";
 
-      const statusElement = (
-        <span className={`pp1-badge ${badgeStyle}`}>
-          {badgeText}
-        </span>
-      );
+      const badgeText = `${statusBaseText} (${dispatchPct.toFixed(0)}%)`;
 
       return [
+        String(idx + 1),
+        row.date,
         row.customer,
         `${row.partNo} - ${row.desc}`,
         row.planQty.toLocaleString(),
         row.availableQty.toLocaleString(),
         row.planReqQty.toLocaleString(),
-        statusElement
+        row.dispatchQty.toLocaleString(),
+        badgeText
       ];
     });
   }, [filters, minFulfillment]);
 
-  const columns = ["Customer Name", "PartNo - Description", "Plan Qty", "Available Qty", "Plan Req Qty", "Dispatch Status"];
+  const columns = ["Sl.No", "Date", "Customer Name", "PartNo - Description", "Plan Qty", "Available Qty", "Plan Req Qty", "Dispatch Qty", "Dispatch Status"];
 
   return <PremiumDashboardBottomTable title="Target Vs Actual Registry" columns={columns} rows={rows} />;
 }
@@ -14599,8 +15355,31 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
       list = list.filter(d => d.operator.toLowerCase().includes(filters.operator.toLowerCase()));
     }
     if (filters.effLimit) {
-      const threshold = parseFloat(filters.effLimit);
-      list = list.filter(d => d.operatorPct < threshold);
+      const filterStr = filters.effLimit.trim();
+      if (filterStr) {
+        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
+        if (match) {
+          const op = match[1] || "<";
+          const val = parseFloat(match[2]);
+          if (!isNaN(val)) {
+            list = list.filter(d => {
+              switch (op) {
+                case ">": return d.operatorPct > val;
+                case ">=": return d.operatorPct >= val;
+                case "<": return d.operatorPct < val;
+                case "<=": return d.operatorPct <= val;
+                case "=": return d.operatorPct === val;
+                default: return true;
+              }
+            });
+          }
+        } else {
+          const num = parseFloat(filterStr);
+          if (!isNaN(num)) {
+            list = list.filter(d => d.operatorPct < num);
+          }
+        }
+      }
     }
     return list;
   }, [filters.operator, filters.effLimit]);
@@ -14775,27 +15554,38 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
           </div>
         </div>
 
-        {/* Efficiency Limit Custom Dropdown */}
-        <div className="pp1-filter-group" ref={effLimitRef} style={{ maxWidth: "160px" }}>
+        {/* Efficiency Limit Custom Text Input & Dropdown */}
+        <div className="pp1-filter-group" ref={effLimitRef} style={{ maxWidth: "180px" }}>
           <label className="pp1-filter-label">Efficiency Limit</label>
           <div className="pp1-part-autocomplete-wrap">
-            <div
+            <input
+              type="text"
               className="pp1-filter-input pp1-part-autocomplete-input"
-              onClick={() => setEffLimitOpen(!effLimitOpen)}
+              placeholder="e.g. >50 or <30..."
+              value={filters.effLimit || ""}
+              onChange={e => {
+                handleInputChange("effLimit", e.target.value);
+                setEffLimitOpen(true);
+              }}
+              onFocus={() => setEffLimitOpen(true)}
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                padding: "0 8px",
+                paddingRight: "24px",
                 height: "28px"
               }}
-            >
-              <span style={{ fontSize: "12px", color: "var(--pp1-text-primary, #1e293b)" }}>
-                {filters.effLimit ? `Eff < ${filters.effLimit}%` : "All Efficiencies"}
-              </span>
-              <ChevronDown size={14} style={{ opacity: 0.6, transform: effLimitOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
-            </div>
+            />
+            <ChevronDown 
+              size={14} 
+              onClick={() => setEffLimitOpen(!effLimitOpen)}
+              style={{ 
+                position: "absolute", 
+                right: "8px", 
+                top: "50%", 
+                transform: "translateY(-50%)", 
+                opacity: 0.6, 
+                cursor: "pointer",
+                pointerEvents: "auto"
+              }} 
+            />
 
             {effLimitOpen && (
               <div className="pp1-part-suggestions" style={{ width: "100%", top: "32px" }}>
@@ -14808,16 +15598,21 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
                 >
                   All Efficiencies
                 </div>
-                {["90", "80", "70", "60", "50", "40"].map(limit => (
+                {[
+                  { label: "Eff < 90%", val: "<90" },
+                  { label: "Eff < 80%", val: "<80" },
+                  { label: "Eff > 90%", val: ">90" },
+                  { label: "Eff < 70%", val: "<70" }
+                ].map(item => (
                   <div
-                    key={limit}
-                    className={`pp1-part-suggestion-item ${filters.effLimit === limit ? "selected" : ""}`}
+                    key={item.val}
+                    className={`pp1-part-suggestion-item ${filters.effLimit === item.val ? "selected" : ""}`}
                     onClick={() => {
-                      handleInputChange("effLimit", limit);
+                      handleInputChange("effLimit", item.val);
                       setEffLimitOpen(false);
                     }}
                   >
-                    Eff &lt; {limit}%
+                    {item.label}
                   </div>
                 ))}
               </div>
@@ -14855,17 +15650,40 @@ function OperatorEfficiencyBottomTable({ filters, targetConfig }) {
       list = list.filter(r => r.operator.toLowerCase().includes(filters.operator.toLowerCase()));
     }
     if (filters?.effLimit) {
-      const threshold = parseFloat(filters.effLimit);
-      list = list.filter(r => r.operatorPct < threshold);
+      const filterStr = filters.effLimit.trim();
+      if (filterStr) {
+        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
+        if (match) {
+          const op = match[1] || "<";
+          const val = parseFloat(match[2]);
+          if (!isNaN(val)) {
+            list = list.filter(r => {
+              switch (op) {
+                case ">": return r.operatorPct > val;
+                case ">=": return r.operatorPct >= val;
+                case "<": return r.operatorPct < val;
+                case "<=": return r.operatorPct <= val;
+                case "=": return r.operatorPct === val;
+                default: return true;
+              }
+            });
+          }
+        } else {
+          const num = parseFloat(filterStr);
+          if (!isNaN(num)) {
+            list = list.filter(r => r.operatorPct < num);
+          }
+        }
+      }
     }
 
-    return list.map(row => {
+    return list.map((row, idx) => {
       const isBelowTarget = row.operatorPct < minEfficiency;
 
       return [
+        String(idx + 1),
         row.date,
         row.operator,
-        row.macno,
         `${row.oaEff}%`,
         `${row.operatorPct}%`,
         `${row.qfEff}%`,
@@ -14875,9 +15693,426 @@ function OperatorEfficiencyBottomTable({ filters, targetConfig }) {
     });
   }, [filters, minEfficiency]);
 
-  const columns = ["Date", "Operator", "macno", "OA EFF%", "Operator %", "QF Eff%", "Idle %", "Rank"];
+  const columns = ["Sl.No", "Date", "Operator", "OA EFF%", "Operator %", "QF Eff%", "Idle %", "Rank"];
 
   return <PremiumDashboardBottomTable title="Operator Efficiency Registry" columns={columns} rows={rows} />;
+}
+
+/* ── Machine Efficiency Dashboard View ───────────────────────────────────── */
+function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+  const [machineOpen, setMachineOpen] = React.useState(false);
+  const machineRef = React.useRef(null);
+  const [effLimitOpen, setEffLimitOpen] = React.useState(false);
+  const effLimitRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (machineRef.current && !machineRef.current.contains(event.target)) {
+        setMachineOpen(false);
+      }
+      if (effLimitRef.current && !effLimitRef.current.contains(event.target)) {
+        setEffLimitOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const pickerFrom = React.useMemo(() => filters?.fromDate ? new Date(filters.fromDate) : null, [filters?.fromDate]);
+  const pickerTo = React.useMemo(() => filters?.toDate ? new Date(filters.toDate) : null, [filters?.toDate]);
+
+  const handlePickerChange = ({ from, to }) => {
+    const formatDate = (d) => {
+      if (!d) return "";
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    onFilterChange(prev => ({
+      ...prev,
+      fromDate: formatDate(from),
+      toDate: formatDate(to)
+    }));
+  };
+
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleReset = () => {
+    onFilterChange({
+      fromDate: "",
+      toDate: "",
+      machine: "",
+      effLimit: ""
+    });
+  };
+
+  const rawData = [
+    { date: "22-06-2026", machine: "CNC2", type: "CNC", oaEff: 96.0, machinePct: 97.0, qfEff: 98.0, idle: 2.0, rank: 1, plannedQty: 1200, producedQty: 1164, rejectionQty: 8 },
+    { date: "22-06-2026", machine: "CNC1", type: "CNC", oaEff: 92.0, machinePct: 94.0, qfEff: 95.0, idle: 4.0, rank: 2, plannedQty: 1000, producedQty: 940, rejectionQty: 12 },
+    { date: "22-06-2026", machine: "VMC1", type: "VMC", oaEff: 89.0, machinePct: 90.0, qfEff: 92.0, idle: 5.0, rank: 3, plannedQty: 1500, producedQty: 1350, rejectionQty: 20 },
+    { date: "22-06-2026", machine: "DRL1", type: "Conventional", oaEff: 81.0, machinePct: 83.0, qfEff: 84.0, idle: 9.0, rank: 4, plannedQty: 700, producedQty: 581, rejectionQty: 11 },
+    { date: "22-06-2026", machine: "LATHE1", type: "Conventional", oaEff: 74.0, machinePct: 75.0, qfEff: 77.0, idle: 16.0, rank: 5, plannedQty: 800, producedQty: 592, rejectionQty: 6 }
+  ];
+
+  const machinesList = ["CNC1", "CNC2", "VMC1", "DRL1", "LATHE1"];
+
+  const macSuggestions = React.useMemo(() => {
+    if (!filters.machine) return machinesList;
+    return machinesList.filter(o => o.toLowerCase().includes(filters.machine.toLowerCase()));
+  }, [filters.machine]);
+
+  const filteredData = React.useMemo(() => {
+    let list = rawData;
+    if (filters.machine) {
+      list = list.filter(d => d.machine.toLowerCase().includes(filters.machine.toLowerCase()));
+    }
+    if (filters.effLimit) {
+      const filterStr = filters.effLimit.trim();
+      if (filterStr) {
+        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
+        if (match) {
+          const op = match[1] || "<";
+          const val = parseFloat(match[2]);
+          if (!isNaN(val)) {
+            list = list.filter(d => {
+              switch (op) {
+                case ">": return d.machinePct > val;
+                case ">=": return d.machinePct >= val;
+                case "<": return d.machinePct < val;
+                case "<=": return d.machinePct <= val;
+                case "=": return d.machinePct === val;
+                default: return true;
+              }
+            });
+          }
+        } else {
+          const num = parseFloat(filterStr);
+          if (!isNaN(num)) {
+            list = list.filter(d => d.machinePct < num);
+          }
+        }
+      }
+    }
+    return list;
+  }, [filters.machine, filters.effLimit]);
+
+  const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.plannedQty, 0), [filteredData]);
+  const totalProduced = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.producedQty, 0), [filteredData]);
+  const totalRejections = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.rejectionQty, 0), [filteredData]);
+
+  const avgEfficiency = React.useMemo(() => {
+    if (filteredData.length === 0) return 0;
+    const sum = filteredData.reduce((acc, r) => acc + r.machinePct, 0);
+    return (sum / filteredData.length).toFixed(1);
+  }, [filteredData]);
+
+  const months = ["Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"];
+
+  const monthwiseData = React.useMemo(() => {
+    const activeMacs = filteredData.map(r => r.machine.toLowerCase());
+
+    const CNC2 = [95, 96, 94, 97, 95, 96, 95, 97, 96, 98, 95, 97];
+    const CNC1 = [91, 93, 92, 94, 91, 93, 92, 94, 93, 95, 91, 94];
+    const VMC1 = [88, 90, 89, 91, 87, 89, 88, 90, 89, 91, 87, 90];
+    const DRL1 = [80, 82, 81, 83, 79, 81, 80, 82, 81, 84, 80, 83];
+    const LATHE1 = [73, 75, 74, 76, 72, 74, 73, 75, 74, 77, 72, 75];
+
+    const macDataMap = {
+      "cnc2": CNC2,
+      "cnc1": CNC1,
+      "vmc1": VMC1,
+      "drl1": DRL1,
+      "lathe1": LATHE1
+    };
+
+    if (activeMacs.length === 0) {
+      return Array(12).fill(0);
+    }
+
+    const sumArray = Array(12).fill(0);
+    activeMacs.forEach(m => {
+      const data = macDataMap[m] || CNC1;
+      for (let i = 0; i < 12; i++) {
+        sumArray[i] += data[i];
+      }
+    });
+
+    return sumArray.map(val => Number((val / activeMacs.length).toFixed(1)));
+  }, [filteredData]);
+
+  const setupChart = React.useCallback(
+    (canvas) => {
+      const targetVal = targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0;
+      return new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: months,
+          datasets: [
+            {
+              label: filters.machine ? `${filters.machine} Efficiency %` : "Avg Machine Efficiency %",
+              data: monthwiseData,
+              borderColor: "#0ea5e9",
+              backgroundColor: "rgba(14, 165, 233, 0.1)",
+              borderWidth: 2.5,
+              tension: 0.3,
+              fill: true,
+              pointBackgroundColor: "#0ea5e9",
+              pointHoverRadius: 6,
+              order: 2
+            },
+            {
+              type: "line",
+              label: `Target Limit ${targetVal}%`,
+              data: Array(months.length).fill(targetVal),
+              borderColor: "#ef4444",
+              borderDash: [5, 5],
+              pointRadius: 0,
+              fill: false,
+              order: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: { display: true, text: "Efficiency %", font: { size: 10 } }
+            }
+          }
+        }
+      });
+    },
+    [monthwiseData, filters.machine, targetConfig?.machine_efficiency?.minEfficiencyPct]
+  );
+
+  const kpis = [
+    { label: "Total Planned Qty", value: totalPlanned.toLocaleString(), icon: ClipboardList, color: "#4f46e5" },
+    { label: "Total Produced Qty", value: totalProduced.toLocaleString(), icon: CheckCircle2, color: "#10b981" },
+    { label: "Total Rejections", value: totalRejections.toLocaleString(), icon: AlertTriangle, color: "#ef4444" },
+    { label: "Avg Efficiency", value: `${avgEfficiency}%`, icon: Cpu, color: "#0ea5e9" }
+  ];
+
+  const rebuildToken = `machine-efficiency-chart|${targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${filters.machine}`;
+
+  return (
+    <PremiumDashboardView
+      title="Machine Efficiency"
+      icon={Cpu}
+      color="#0ea5e9"
+      kpis={kpis}
+      setupChart={setupChart}
+      chartHeight={260}
+      rangeHint="Machine Performance - Produced vs Target"
+      onClose={onClose}
+      rebuildToken={rebuildToken}
+    >
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ maxWidth: "230px" }}>
+          <label className="pp1-filter-label">Date Range</label>
+          <PlantPerformance1DatePicker
+            from={pickerFrom}
+            to={pickerTo}
+            onChange={handlePickerChange}
+          />
+        </div>
+
+        {/* Machine No Autocomplete */}
+        <div className="pp1-filter-group" ref={machineRef} style={{ maxWidth: "260px" }}>
+          <label className="pp1-filter-label">Machine No</label>
+          <div className="pp1-part-autocomplete-wrap">
+            <input
+              type="text"
+              className="pp1-filter-input pp1-part-autocomplete-input"
+              placeholder="Machine No..."
+              value={filters.machine || ""}
+              onChange={e => {
+                handleInputChange("machine", e.target.value);
+                setMachineOpen(true);
+              }}
+              onFocus={() => setMachineOpen(true)}
+            />
+            {machineOpen && macSuggestions.length > 0 && (
+              <div className="pp1-part-suggestions">
+                <div
+                  className={`pp1-part-suggestion-item ${!filters.machine ? "selected" : ""}`}
+                  onClick={() => {
+                    handleInputChange("machine", "");
+                    setMachineOpen(false);
+                  }}
+                >
+                  All Machines
+                </div>
+                {macSuggestions.map(m => (
+                  <div
+                    key={m}
+                    className={`pp1-part-suggestion-item ${filters.machine === m ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("machine", m);
+                      setMachineOpen(false);
+                    }}
+                  >
+                    {m}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Efficiency Limit Custom Text Input & Dropdown */}
+        <div className="pp1-filter-group" ref={effLimitRef} style={{ maxWidth: "180px" }}>
+          <label className="pp1-filter-label">Efficiency Limit</label>
+          <div className="pp1-part-autocomplete-wrap">
+            <input
+              type="text"
+              className="pp1-filter-input pp1-part-autocomplete-input"
+              placeholder="e.g. >50 or <30..."
+              value={filters.effLimit || ""}
+              onChange={e => {
+                handleInputChange("effLimit", e.target.value);
+                setEffLimitOpen(true);
+              }}
+              onFocus={() => setEffLimitOpen(true)}
+              style={{
+                paddingRight: "24px",
+                height: "28px"
+              }}
+            />
+            <ChevronDown 
+              size={14} 
+              onClick={() => setEffLimitOpen(!effLimitOpen)}
+              style={{ 
+                position: "absolute", 
+                right: "8px", 
+                top: "50%", 
+                transform: "translateY(-50%)", 
+                opacity: 0.6, 
+                cursor: "pointer",
+                pointerEvents: "auto"
+              }} 
+            />
+
+            {effLimitOpen && (
+              <div className="pp1-part-suggestions" style={{ width: "100%", top: "32px" }}>
+                <div
+                  className={`pp1-part-suggestion-item ${!filters.effLimit ? "selected" : ""}`}
+                  onClick={() => {
+                    handleInputChange("effLimit", "");
+                    setEffLimitOpen(false);
+                  }}
+                >
+                  All Efficiencies
+                </div>
+                {[
+                  { label: "Eff < 90%", val: "<90" },
+                  { label: "Eff < 80%", val: "<80" },
+                  { label: "Eff > 90%", val: ">90" },
+                  { label: "Eff < 70%", val: "<70" }
+                ].map(item => (
+                  <div
+                    key={item.val}
+                    className={`pp1-part-suggestion-item ${filters.effLimit === item.val ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("effLimit", item.val);
+                      setEffLimitOpen(false);
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
+    </PremiumDashboardView>
+  );
+}
+
+/* ── Machine Efficiency Bottom Table ─────────────────────────────────────── */
+function MachineEfficiencyBottomTable({ filters, targetConfig }) {
+  const minEfficiency = targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0;
+
+  const rawData = [
+    { date: "22-06-2026", machine: "CNC2", type: "CNC", oaEff: 96.0, machinePct: 97.0, qfEff: 98.0, idle: 2.0, rank: 1 },
+    { date: "22-06-2026", machine: "CNC1", type: "CNC", oaEff: 92.0, machinePct: 94.0, qfEff: 95.0, idle: 4.0, rank: 2 },
+    { date: "22-06-2026", machine: "VMC1", type: "VMC", oaEff: 89.0, machinePct: 90.0, qfEff: 92.0, idle: 5.0, rank: 3 },
+    { date: "22-06-2026", machine: "DRL1", type: "Conventional", oaEff: 81.0, machinePct: 83.0, qfEff: 84.0, idle: 9.0, rank: 4 },
+    { date: "22-06-2026", machine: "LATHE1", type: "Conventional", oaEff: 74.0, machinePct: 75.0, qfEff: 77.0, idle: 16.0, rank: 5 }
+  ];
+
+  const rows = React.useMemo(() => {
+    let list = rawData;
+    if (filters?.machine) {
+      list = list.filter(r => r.machine.toLowerCase().includes(filters.machine.toLowerCase()));
+    }
+    if (filters?.effLimit) {
+      const filterStr = filters.effLimit.trim();
+      if (filterStr) {
+        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
+        if (match) {
+          const op = match[1] || "<";
+          const val = parseFloat(match[2]);
+          if (!isNaN(val)) {
+            list = list.filter(r => {
+              switch (op) {
+                case ">": return r.machinePct > val;
+                case ">=": return r.machinePct >= val;
+                case "<": return r.machinePct < val;
+                case "<=": return r.machinePct <= val;
+                case "=": return r.machinePct === val;
+                default: return true;
+              }
+            });
+          }
+        } else {
+          const num = parseFloat(filterStr);
+          if (!isNaN(num)) {
+            list = list.filter(r => r.machinePct < num);
+          }
+        }
+      }
+    }
+
+    return list.map((row, idx) => {
+      return [
+        String(idx + 1),
+        row.date,
+        row.machine,
+        row.type,
+        `${row.oaEff}%`,
+        `${row.machinePct}%`,
+        `${row.qfEff}%`,
+        `${row.idle}%`,
+        `# ${row.rank}`
+      ];
+    });
+  }, [filters, minEfficiency]);
+
+  const columns = ["Sl.No", "Date", "Machine No", "Machine Type", "OA EFF%", "Machine %", "QF Eff%", "Idle %", "Rank"];
+
+  return <PremiumDashboardBottomTable title="Machine Efficiency Registry" columns={columns} rows={rows} />;
 }
 
 /* ── CAPA Mock Data ──────────────────────────────────────────────────────── */
@@ -15316,7 +16551,7 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
   }, [filters]);
 
   const rows = React.useMemo(() => {
-    return filteredCapa.map(row => {
+    return filteredCapa.map((row, idx) => {
       const isSelected = row.complNo === selectedCapaId;
 
       const complNoElement = (
@@ -15341,6 +16576,7 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
       );
 
       return [
+        String(idx + 1),
         complNoElement,
         row.complDate,
         row.customer,
@@ -15356,6 +16592,7 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
   }, [filteredCapa, selectedCapaId, onSelectCapaId]);
 
   const columns = [
+    "Sl.No",
     "Complaint No",
     "Date",
     "Customer",
@@ -15365,7 +16602,7 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
     "QC Incharge",
     "Status",
     "Age Days",
-    "Action Taken"
+    "Repeated Complaint"
   ];
 
   return <PremiumDashboardBottomTable title="Quality Action Plan (CAPA) Registry" columns={columns} rows={rows} />;
@@ -15788,28 +17025,136 @@ function parseTableDate(dateStr) {
 }
 
 function CustomerComplaintReportBottomTable({ filters }) {
-  const columns = ["Complaint ID", "Customer", "Product", "Complaint Description", "Action Taken", "Date", "Corrective Action", "Permanent Action", "Status"];
+  const columns = ["Sl.No", "Complaint ID", "Complaint Dt", "Customer Name", "Product", "Complaint Description", "Status", "Age Days"];
   const allRows = [
     ["CC-2026-001", "Tata Motors", "Brake Pads", "Surface scratches", "Polished surfaces", "02-Jun-2026", "Enhanced visual inspection", "Automated QC cameras", "Closed"],
     ["CC-2026-002", "Mahindra & Mahindra", "Disc Rotors", "Thickness variation", "Recalibrated grinder", "05-Jun-2026", "Adjusted grinding head", "CNC alignment checks", "Open"],
     ["CC-2026-003", "Maruti Suzuki", "Gearbox Hanger", "Mounting hole offset", "Re-aligned fixture", "10-Jun-2026", "Added check pin to fixture", "Poka-yoke pin design", "Closed"]
   ];
 
+  const calculateAge = (dateStr) => {
+    if (!dateStr) return "—";
+    const parts = dateStr.split("-");
+    if (parts.length < 3) return "—";
+    const day = parseInt(parts[0], 10);
+    const months = {
+      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+    };
+    const month = months[parts[1]] || 0;
+    const year = parseInt(parts[2], 10);
+    const diff = new Date() - new Date(year, month, day);
+    const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+    return `${days} Days`;
+  };
+
   const filteredRows = React.useMemo(() => {
-    if (!filters) return allRows;
-    return allRows.filter(row => {
-      const parsedDate = parseTableDate(row[5]);
-      if (filters.fromDate && parsedDate && parsedDate < filters.fromDate) return false;
-      if (filters.toDate && parsedDate && parsedDate > filters.toDate) return false;
-      if (filters.customer && row[1] !== filters.customer) return false;
-      if (filters.status && row[8] !== filters.status) return false;
-      return true;
-    });
+    let list = allRows;
+    if (filters) {
+      list = allRows.filter(row => {
+        const parsedDate = parseTableDate(row[5]);
+        if (filters.fromDate && parsedDate && parsedDate < filters.fromDate) return false;
+        if (filters.toDate && parsedDate && parsedDate > filters.toDate) return false;
+        if (filters.customer && row[1] !== filters.customer) return false;
+        if (filters.status && row[8] !== filters.status) return false;
+        return true;
+      });
+    }
+
+    return list.map((row, idx) => [
+      String(idx + 1),
+      row[0], // Complaint ID
+      row[5], // Complaint Dt
+      row[1], // Customer Name
+      row[2], // Product
+      row[3], // Complaint Description
+      row[8], // Status
+      calculateAge(row[5]) // Age Days
+    ]);
   }, [filters]);
 
   return <PremiumDashboardBottomTable title="Customer Complaints Registry" columns={columns} rows={filteredRows} />;
 }
 
+class DashboardErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({
+      hasError: true,
+      error: error,
+      errorInfo: errorInfo
+    });
+    console.error("DashboardErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: "24px",
+          margin: "16px",
+          background: "rgba(239, 68, 68, 0.05)",
+          border: "1px solid rgba(239, 68, 68, 0.2)",
+          borderRadius: "12px",
+          color: "#b91c1c",
+          fontFamily: "'Inter', system-ui, sans-serif",
+          fontSize: "14px",
+          lineHeight: "1.6"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <h3 style={{ margin: 0, color: "#991b1b", fontWeight: 700, fontSize: "16px" }}>
+              Dashboard Component Error
+            </h3>
+          </div>
+          <p style={{ fontWeight: 600, margin: "0 0 12px 0", color: "#7f1d1d" }}>
+            {this.state.error && this.state.error.toString()}
+          </p>
+          <pre style={{
+            margin: 0,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+            background: "#fff",
+            padding: "12px",
+            borderRadius: "6px",
+            border: "1px solid rgba(239, 68, 68, 0.1)",
+            maxHeight: "220px",
+            overflowY: "auto",
+            color: "#450a0a",
+            fontFamily: "monospace",
+            fontSize: "12px"
+          }}>
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </pre>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+            style={{
+              marginTop: "16px",
+              padding: "8px 16px",
+              background: "#ef4444",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "13px",
+              transition: "all 0.15s ease"
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = "#dc2626"}
+            onMouseOut={(e) => e.currentTarget.style.background = "#ef4444"}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function PlantPerformance1() {
   const today = new Date();
@@ -15879,6 +17224,12 @@ export default function PlantPerformance1() {
     operator: "",
     effLimit: "",
   });
+  const [machineEfficiencyFilters, setMachineEfficiencyFilters] = useState({
+    fromDate: defaultFrom,
+    toDate: defaultTo,
+    machine: "",
+    effLimit: "",
+  });
   const [capaFilters, setCapaFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
@@ -15916,6 +17267,7 @@ export default function PlantPerformance1() {
     operator: "",
     customer: "",
   });
+  const [prodXAxisGroup, setProdXAxisGroup] = useState("Machine");
   const [idleFilters, setIdleFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
@@ -15956,8 +17308,8 @@ export default function PlantPerformance1() {
     machineType: "",
     machine: "",
   });
-  const [oeeCompXAxisGroup, setOeeCompXAxisGroup] = useState("Month Wise");
-  const [effXAxisGroup, setEffXAxisGroup] = useState("Month Wise");
+  const [oeeCompXAxisGroup, setOeeCompXAxisGroup] = useState("Overall");
+  const [effXAxisGroup, setEffXAxisGroup] = useState("Overall");
   const [effFilters, setEffFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
@@ -15988,7 +17340,7 @@ export default function PlantPerformance1() {
   const [stockFilters, setStockFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
-    category: "",
+    category: [],
     itemCode: "",
   });
   const fetchAbortRef = useRef(null);
@@ -16608,6 +17960,19 @@ export default function PlantPerformance1() {
       priority: oeOk ? "medium" : "high"
     };
 
+    // Machine Efficiency trend calculation (UI alone)
+    const meVal = 88.0; // Percent
+    const meLimit = targetConfig.machine_efficiency?.minEfficiencyPct ?? 90.0;
+    const meOk = meVal >= meLimit;
+    map["machine_efficiency_report_dashboard"] = {
+      type: meOk ? "up" : "down",
+      value: meOk ? "+1.5%" : "-2.0%",
+      message: meOk
+        ? `Avg Machine Efficiency (${meVal}%) meets target (${meLimit}%)`
+        : `Avg Machine Efficiency (${meVal}%) is below target (${meLimit}%)`,
+      priority: meOk ? "medium" : "high"
+    };
+
     // Quality Action Plan (CAPA) trend calculation (UI alone)
     map["capa_report_dashboard"] = {
       type: "down",
@@ -16729,6 +18094,10 @@ export default function PlantPerformance1() {
       }
       case "operator_efficiency_report_dashboard": {
         const val = targetConfig.operator_efficiency?.minEfficiencyPct ?? 90.0;
+        return `Min: ${val}%`;
+      }
+      case "machine_efficiency_report_dashboard": {
+        const val = targetConfig.machine_efficiency?.minEfficiencyPct ?? 90.0;
         return `Min: ${val}%`;
       }
       case "idle_hours_non_accepted_reason_production_loss_report": {
@@ -16863,7 +18232,8 @@ export default function PlantPerformance1() {
                           { id: "fg_value", label: "FG Value", icon: Package },
                           { id: "daily_production", label: "Daily Production", icon: Activity },
                           { id: "target_vs_actual", label: "Target Vs Actual", icon: Target },
-                          { id: "operator_efficiency", label: "Operator Efficiency", icon: Users }
+                          { id: "operator_efficiency", label: "Operator Efficiency", icon: Users },
+                          { id: "machine_efficiency", label: "Machine Efficiency", icon: Cpu }
                         ].map(cat => (
                           <div
                             key={cat.id}
@@ -17505,6 +18875,28 @@ export default function PlantPerformance1() {
                           </div>
                         </div>
                       )}
+
+                      {activeTargetTab === "machine_efficiency" && (
+                        <div className="pp1-target-settings">
+                          <h4 className="pp1-target-settings__title">Machine Efficiency Target</h4>
+                          <p className="pp1-target-settings__desc">Set the minimum acceptable machine efficiency percentage.</p>
+
+                          <div className="pp1-target-field">
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Min Machine Efficiency (%)</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.5" min="0" max="100"
+                                value={tempConfig.machine_efficiency?.minEfficiencyPct ?? 90.0}
+                                onChange={(e) => handleNestedTempConfigChange("machine_efficiency", "minEfficiencyPct", parseFloat(e.target.value) || 0)}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -17689,252 +19081,263 @@ export default function PlantPerformance1() {
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
               <CenterTransitionWrapper uid={centerKey} loading={loading}>
-                {selectionId === "customer_po_vs_sales_analysis" ? (
-                  <CustomerPoCompareView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
-                    filters={poFilters}
-                    onFilterChange={setPoFilters}
-                    activeSlide={poActiveSlide}
-                    onActiveSlideChange={setPoActiveSlide}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }}
-                    targetConfig={targetConfig}
-                    showTargetOnly={poShowTargetOnly}
-                    setShowTargetOnly={setPoShowTargetOnly}
-                  />
-                ) : selectionId === "purchase_report_dashboard" ? (
-                  <PurchaseReportDashboardView
-                    data={data}
-                    loading={loading}
-                    filters={purFilters}
-                    onFilterChange={setPurFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                    trend={computedCardTrends["purchase_report_dashboard"]}
-                  />
-                ) : selectionId === "purchase_value_report_dashboard" ? (
-                  <PurchaseValueDashboardView
-                    filters={purchaseValueFilters}
-                    onFilterChange={setPurchaseValueFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "sales_analysis_report_dashboard" ? (
-                  <SalesAnalysisReportDashboardView
-                    data={data}
-                    loading={loading}
-                    filters={salesFilters}
-                    onFilterChange={setSalesFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                    trend={computedCardTrends["sales_analysis_report_dashboard"]}
-                  />
-                ) : selectionId === "production_analysis_report_dashboard" ? (
-                  <ProductionAnalysisReportDashboardView
-                    filters={prodFilters}
-                    onFilterChange={setProdFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "idle_hours_report_dashboard" ? (
-                  <IdleHoursReportDashboardView
-                    filters={idleFilters}
-                    onFilterChange={setIdleFilters}
-                    activeTab={idleActiveTab}
-                    onActiveTabChange={setIdleActiveTab}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-                  <IdleHoursNonAcceptedReasonLossReportView
-                    filters={nonAccFilters}
-                    onFilterChange={setNonAccFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "oee_comparison_report_dashboard" ? (
-                  <OeeComparisonReportDashboardView
-                    filters={oeeCompFilters}
-                    onFilterChange={setOeeCompFilters}
-                    activeTab={oeeCompActiveTab}
-                    onActiveTabChange={setOeeCompActiveTab}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                    xAxisGroup={oeeCompXAxisGroup}
-                    setXAxisGroup={setOeeCompXAxisGroup}
-                  />
-                ) : selectionId === "efficiency_eff_report_dashboard" ? (
-                  <EfficiencyEffReportDashboardView
-                    filters={effFilters}
-                    onFilterChange={setEffFilters}
-                    xAxisGroup={effXAxisGroup}
-                    setXAxisGroup={setEffXAxisGroup}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "rejection_report_dashboard" ? (
-                  <RejectionReportDashboardView
-                    filters={rejFilters}
-                    onFilterChange={setRejFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "rework_report_dashboard" ? (
-                  <ReworkReportDashboardView
-                    filters={rewFilters}
-                    onFilterChange={setRewFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                    xAxisGroup={reworkXAxisGroup}
-                    setXAxisGroup={setReworkXAxisGroup}
-                  />
-                ) : selectionId === "store_stock_value_report_dashboard" ? (
-                  <StoreStockValueReportDashboardView
-                    filters={stockFilters}
-                    onFilterChange={setStockFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "otd_report_dashboard" ? (
-                  <OtdTrendView
-                    data={data}
-                    loading={loading}
-                    uid={centerKey}
-                    filters={otdFilters}
-                    onFilterChange={setOtdFilters}
-                    from={dateRange.from}
-                    to={dateRange.to}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "supplier_rating_report_dashboard" ? (
-                  <SupplierRatingReportDashboardView
-                    filters={supplierFilters}
-                    onFilterChange={setSupplierFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "vendor_rating_report_dashboard" ? (
-                  <VendorRatingReportDashboardView
-                    filters={vendorFilters}
-                    onFilterChange={setVendorFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "fg_value_report_dashboard" ? (
-                  <FgValueReportDashboardView
-                    filters={fgFilters}
-                    onFilterChange={setFgFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "daily_production_report_dashboard" ? (
-                  <DailyProductionDashboardView
-                    filters={dailyProductionFilters}
-                    onFilterChange={setDailyProductionFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "target_vs_actual_report_dashboard" ? (
-                  <TargetVsActualDashboardView
-                    filters={targetVsActualFilters}
-                    onFilterChange={setTargetVsActualFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "operator_efficiency_report_dashboard" ? (
-                  <OperatorEfficiencyDashboardView
-                    filters={operatorEfficiencyFilters}
-                    onFilterChange={setOperatorEfficiencyFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    targetConfig={targetConfig}
-                  />
-                ) : selectionId === "capa_report_dashboard" ? (
-                  <CapaDashboardView
-                    filters={capaFilters}
-                    onFilterChange={setCapaFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    selectedCapaId={selectedCapaId}
-                    onSelectCapaId={setSelectedCapaId}
-                  />
-                ) : selectionId === "customer_complaint_report_dashboard" ? (
-                  <CustomerComplaintReportDashboardView
-                    filters={compFilters}
-                    onFilterChange={setCompFilters}
-                    onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                  />
-                ) : (
-                  <div className="pp1-placeholder-container" style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minHeight: "420px",
-                    padding: "40px",
-                    textAlign: "center",
-                    background: "rgba(255, 255, 255, 0.45)",
-                    backdropFilter: "blur(20px)",
-                    borderRadius: "16px",
-                    border: "1px solid rgba(255, 255, 255, 0.6)",
-                    boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.04)"
-                  }}>
-                    <div style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "16px",
-                      background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                <DashboardErrorBoundary>
+                  {selectionId === "customer_po_vs_sales_analysis" ? (
+                    <CustomerPoCompareView
+                      data={data}
+                      loading={loading}
+                      uid={centerKey}
+                      filters={poFilters}
+                      onFilterChange={setPoFilters}
+                      activeSlide={poActiveSlide}
+                      onActiveSlideChange={setPoActiveSlide}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }}
+                      targetConfig={targetConfig}
+                      showTargetOnly={poShowTargetOnly}
+                      setShowTargetOnly={setPoShowTargetOnly}
+                    />
+                  ) : selectionId === "purchase_report_dashboard" ? (
+                    <PurchaseReportDashboardView
+                      data={data}
+                      loading={loading}
+                      filters={purFilters}
+                      onFilterChange={setPurFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                      trend={computedCardTrends["purchase_report_dashboard"]}
+                    />
+                  ) : selectionId === "purchase_value_report_dashboard" ? (
+                    <PurchaseValueDashboardView
+                      filters={purchaseValueFilters}
+                      onFilterChange={setPurchaseValueFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "sales_analysis_report_dashboard" ? (
+                    <SalesAnalysisReportDashboardView
+                      data={data}
+                      loading={loading}
+                      filters={salesFilters}
+                      onFilterChange={setSalesFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                      trend={computedCardTrends["sales_analysis_report_dashboard"]}
+                    />
+                  ) : selectionId === "production_analysis_report_dashboard" ? (
+                    <ProductionAnalysisReportDashboardView
+                      filters={prodFilters}
+                      onFilterChange={setProdFilters}
+                      xAxisGroup={prodXAxisGroup}
+                      setXAxisGroup={setProdXAxisGroup}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "idle_hours_report_dashboard" ? (
+                    <IdleHoursReportDashboardView
+                      filters={idleFilters}
+                      onFilterChange={setIdleFilters}
+                      activeTab={idleActiveTab}
+                      onActiveTabChange={setIdleActiveTab}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+                    <IdleHoursNonAcceptedReasonLossReportView
+                      filters={nonAccFilters}
+                      onFilterChange={setNonAccFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "oee_comparison_report_dashboard" ? (
+                    <OeeComparisonReportDashboardView
+                      filters={oeeCompFilters}
+                      onFilterChange={setOeeCompFilters}
+                      activeTab={oeeCompActiveTab}
+                      onActiveTabChange={setOeeCompActiveTab}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                      xAxisGroup={oeeCompXAxisGroup}
+                      setXAxisGroup={setOeeCompXAxisGroup}
+                    />
+                  ) : selectionId === "efficiency_eff_report_dashboard" ? (
+                    <EfficiencyEffReportDashboardView
+                      filters={effFilters}
+                      onFilterChange={setEffFilters}
+                      xAxisGroup={effXAxisGroup}
+                      setXAxisGroup={setEffXAxisGroup}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "rejection_report_dashboard" ? (
+                    <RejectionReportDashboardView
+                      filters={rejFilters}
+                      onFilterChange={setRejFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "rework_report_dashboard" ? (
+                    <ReworkReportDashboardView
+                      filters={rewFilters}
+                      onFilterChange={setRewFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                      xAxisGroup={reworkXAxisGroup}
+                      setXAxisGroup={setReworkXAxisGroup}
+                    />
+                  ) : selectionId === "store_stock_value_report_dashboard" ? (
+                    <StoreStockValueReportDashboardView
+                      filters={stockFilters}
+                      onFilterChange={setStockFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "otd_report_dashboard" ? (
+                    <OtdTrendView
+                      data={data}
+                      loading={loading}
+                      uid={centerKey}
+                      filters={otdFilters}
+                      onFilterChange={setOtdFilters}
+                      from={dateRange.from}
+                      to={dateRange.to}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "supplier_rating_report_dashboard" ? (
+                    <SupplierRatingReportDashboardView
+                      filters={supplierFilters}
+                      onFilterChange={setSupplierFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "vendor_rating_report_dashboard" ? (
+                    <VendorRatingReportDashboardView
+                      filters={vendorFilters}
+                      onFilterChange={setVendorFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "fg_value_report_dashboard" ? (
+                    <FgValueReportDashboardView
+                      filters={fgFilters}
+                      onFilterChange={setFgFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "daily_production_report_dashboard" ? (
+                    <DailyProductionDashboardView
+                      filters={dailyProductionFilters}
+                      onFilterChange={setDailyProductionFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "target_vs_actual_report_dashboard" ? (
+                    <TargetVsActualDashboardView
+                      filters={targetVsActualFilters}
+                      onFilterChange={setTargetVsActualFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "operator_efficiency_report_dashboard" ? (
+                    <OperatorEfficiencyDashboardView
+                      filters={operatorEfficiencyFilters}
+                      onFilterChange={setOperatorEfficiencyFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "machine_efficiency_report_dashboard" ? (
+                    <MachineEfficiencyDashboardView
+                      filters={machineEfficiencyFilters}
+                      onFilterChange={setMachineEfficiencyFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      targetConfig={targetConfig}
+                    />
+                  ) : selectionId === "capa_report_dashboard" ? (
+                    <CapaDashboardView
+                      filters={capaFilters}
+                      onFilterChange={setCapaFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                      selectedCapaId={selectedCapaId}
+                      onSelectCapaId={setSelectedCapaId}
+                    />
+                  ) : selectionId === "customer_complaint_report_dashboard" ? (
+                    <CustomerComplaintReportDashboardView
+                      filters={compFilters}
+                      onFilterChange={setCompFilters}
+                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
+                    />
+                  ) : (
+                    <div className="pp1-placeholder-container" style={{
                       display: "flex",
+                      flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      marginBottom: "16px",
-                      boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.15)",
-                      border: "1px solid rgba(59, 130, 246, 0.1)"
+                      minHeight: "420px",
+                      padding: "40px",
+                      textAlign: "center",
+                      background: "rgba(255, 255, 255, 0.45)",
+                      backdropFilter: "blur(20px)",
+                      borderRadius: "16px",
+                      border: "1px solid rgba(255, 255, 255, 0.6)",
+                      boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.04)"
                     }}>
-                      <BarChart2 size={28} style={{ color: "#3b82f6" }} />
+                      <div style={{
+                        width: "56px",
+                        height: "56px",
+                        borderRadius: "16px",
+                        background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: "16px",
+                        boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.15)",
+                        border: "1px solid rgba(59, 130, 246, 0.1)"
+                      }}>
+                        <BarChart2 size={28} style={{ color: "#3b82f6" }} />
+                      </div>
+                      <h3 style={{
+                        fontSize: "14.5px",
+                        fontWeight: 800,
+                        color: "#1e3a8a",
+                        margin: "0 0 6px 0",
+                        letterSpacing: "-0.2px"
+                      }}>
+                        Plant Performance Analyzer
+                      </h3>
+                      <p style={{
+                        fontSize: "11.5px",
+                        color: "#64748b",
+                        maxWidth: "320px",
+                        margin: "0 0 20px 0",
+                        lineHeight: "1.6",
+                        fontWeight: 500
+                      }}>
+                        Select any status card on the left panel or action item on the right to load live metrics, trend analysis, and charts.
+                      </p>
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "5px 12px",
+                        borderRadius: "20px",
+                        background: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        fontSize: "10.5px",
+                        fontWeight: 600,
+                        color: "#1e40af"
+                      }}>
+                        <span className="pp1-pulse" style={{
+                          width: "6px",
+                          height: "6px",
+                          borderRadius: "50%",
+                          background: "#2563eb",
+                          display: "inline-block"
+                        }} />
+                        System Operational & Ready
+                      </div>
                     </div>
-                    <h3 style={{
-                      fontSize: "14.5px",
-                      fontWeight: 800,
-                      color: "#1e3a8a",
-                      margin: "0 0 6px 0",
-                      letterSpacing: "-0.2px"
-                    }}>
-                      Plant Performance Analyzer
-                    </h3>
-                    <p style={{
-                      fontSize: "11.5px",
-                      color: "#64748b",
-                      maxWidth: "320px",
-                      margin: "0 0 20px 0",
-                      lineHeight: "1.6",
-                      fontWeight: 500
-                    }}>
-                      Select any status card on the left panel or action item on the right to load live metrics, trend analysis, and charts.
-                    </p>
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      padding: "5px 12px",
-                      borderRadius: "20px",
-                      background: "#eff6ff",
-                      border: "1px solid #bfdbfe",
-                      fontSize: "10.5px",
-                      fontWeight: 600,
-                      color: "#1e40af"
-                    }}>
-                      <span className="pp1-pulse" style={{
-                        width: "6px",
-                        height: "6px",
-                        borderRadius: "50%",
-                        background: "#2563eb",
-                        display: "inline-block"
-                      }} />
-                      System Operational & Ready
-                    </div>
-                  </div>
-                )}
+                  )}
+                </DashboardErrorBoundary>
               </CenterTransitionWrapper>
             </div>
           </section>
@@ -18130,60 +19533,64 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-        {selectionId === "customer_po_vs_sales_analysis" ? (
-          <CustomerPoCompareBottomTable
-            data={data}
-            loading={loading}
-            uid={`bot-pocomp-${centerKey}`}
-            filters={poFilters}
-            showTargetOnly={poShowTargetOnly}
-            targetConfig={targetConfig}
-          />
-        ) : selectionId === "purchase_report_dashboard" ? (
-          <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
-        ) : selectionId === "purchase_value_report_dashboard" ? (
-          <PurchaseValueBottomTable filters={purchaseValueFilters} />
-        ) : selectionId === "sales_analysis_report_dashboard" ? (
-          <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
-        ) : selectionId === "production_analysis_report_dashboard" ? (
-          <ProductionAnalysisReportBottomTable filters={prodFilters} />
-        ) : selectionId === "idle_hours_report_dashboard" ? (
-          <IdleHoursReportBottomTable
-            filters={idleFilters}
-            activeTab={idleActiveTab}
-            setActiveTab={setIdleActiveTab}
-          />
-        ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-          <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
-        ) : selectionId === "oee_comparison_report_dashboard" ? (
-          <OeeComparisonReportBottomTable filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
-        ) : selectionId === "efficiency_eff_report_dashboard" ? (
-          <EfficiencyEffReportBottomTable filters={effFilters} xAxisGroup={effXAxisGroup} />
-        ) : selectionId === "rejection_report_dashboard" ? (
-          <RejectionReportBottomTable filters={rejFilters} />
-        ) : selectionId === "rework_report_dashboard" ? (
-          <ReworkReportBottomTable filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
-        ) : selectionId === "store_stock_value_report_dashboard" ? (
-          <StoreStockValueReportBottomTable filters={stockFilters} />
-        ) : selectionId === "otd_report_dashboard" ? (
-          <OtdReportBottomTable filters={otdFilters} />
-        ) : selectionId === "supplier_rating_report_dashboard" ? (
-          <SupplierRatingBottomTable filters={supplierFilters} />
-        ) : selectionId === "vendor_rating_report_dashboard" ? (
-          <VendorRatingBottomTable filters={vendorFilters} />
-        ) : selectionId === "fg_value_report_dashboard" ? (
-          <FgValueReportBottomTable filters={fgFilters} />
-        ) : selectionId === "daily_production_report_dashboard" ? (
-          <DailyProductionBottomTable filters={dailyProductionFilters} targetConfig={targetConfig} />
-        ) : selectionId === "target_vs_actual_report_dashboard" ? (
-          <TargetVsActualBottomTable filters={targetVsActualFilters} targetConfig={targetConfig} />
-        ) : selectionId === "operator_efficiency_report_dashboard" ? (
-          <OperatorEfficiencyBottomTable filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
-        ) : selectionId === "capa_report_dashboard" ? (
-          <CapaBottomTable filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
-        ) : selectionId === "customer_complaint_report_dashboard" ? (
-          <CustomerComplaintReportBottomTable filters={compFilters} />
-        ) : null}
+        <DashboardErrorBoundary>
+          {selectionId === "customer_po_vs_sales_analysis" ? (
+            <CustomerPoCompareBottomTable
+              data={data}
+              loading={loading}
+              uid={`bot-pocomp-${centerKey}`}
+              filters={poFilters}
+              showTargetOnly={poShowTargetOnly}
+              targetConfig={targetConfig}
+            />
+          ) : selectionId === "purchase_report_dashboard" ? (
+            <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
+          ) : selectionId === "purchase_value_report_dashboard" ? (
+            <PurchaseValueBottomTable filters={purchaseValueFilters} />
+          ) : selectionId === "sales_analysis_report_dashboard" ? (
+            <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
+          ) : selectionId === "production_analysis_report_dashboard" ? (
+            <ProductionAnalysisReportBottomTable filters={prodFilters} xAxisGroup={prodXAxisGroup} />
+          ) : selectionId === "idle_hours_report_dashboard" ? (
+            <IdleHoursReportBottomTable
+              filters={idleFilters}
+              activeTab={idleActiveTab}
+              setActiveTab={setIdleActiveTab}
+            />
+          ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+            <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
+          ) : selectionId === "oee_comparison_report_dashboard" ? (
+            <OeeComparisonReportBottomTable filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
+          ) : selectionId === "efficiency_eff_report_dashboard" ? (
+            <EfficiencyEffReportBottomTable filters={effFilters} xAxisGroup={effXAxisGroup} />
+          ) : selectionId === "rejection_report_dashboard" ? (
+            <RejectionReportBottomTable filters={rejFilters} />
+          ) : selectionId === "rework_report_dashboard" ? (
+            <ReworkReportBottomTable filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
+          ) : selectionId === "store_stock_value_report_dashboard" ? (
+            <StoreStockValueReportBottomTable filters={stockFilters} />
+          ) : selectionId === "otd_report_dashboard" ? (
+            <OtdReportBottomTable filters={otdFilters} />
+          ) : selectionId === "supplier_rating_report_dashboard" ? (
+            <SupplierRatingBottomTable filters={supplierFilters} />
+          ) : selectionId === "vendor_rating_report_dashboard" ? (
+            <VendorRatingBottomTable filters={vendorFilters} />
+          ) : selectionId === "fg_value_report_dashboard" ? (
+            <FgValueReportBottomTable filters={fgFilters} />
+          ) : selectionId === "daily_production_report_dashboard" ? (
+            <DailyProductionBottomTable filters={dailyProductionFilters} targetConfig={targetConfig} />
+          ) : selectionId === "target_vs_actual_report_dashboard" ? (
+            <TargetVsActualBottomTable filters={targetVsActualFilters} targetConfig={targetConfig} />
+          ) : selectionId === "operator_efficiency_report_dashboard" ? (
+            <OperatorEfficiencyBottomTable filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
+          ) : selectionId === "machine_efficiency_report_dashboard" ? (
+            <MachineEfficiencyBottomTable filters={machineEfficiencyFilters} targetConfig={targetConfig} />
+          ) : selectionId === "capa_report_dashboard" ? (
+            <CapaBottomTable filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
+          ) : selectionId === "customer_complaint_report_dashboard" ? (
+            <CustomerComplaintReportBottomTable filters={compFilters} />
+          ) : null}
+        </DashboardErrorBoundary>
       </div>
 
       {toast && (
