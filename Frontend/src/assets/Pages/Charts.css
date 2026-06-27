@@ -1053,6 +1053,130 @@
     }
 }
 
+/* ── Trendy & Modern Modal Loading UI ── */
+.ch-modal__canvas-wrap {
+    position: relative; /* Ensure children overlays position absolute correctly */
+}
+
+.ch-modal__loader-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    gap: 1.2rem;
+    animation: ch-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glassmorphic floating card loader container */
+.ch-modal__loader-card {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1.5px solid rgba(255, 255, 255, 0.65);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08), 
+                0 1px 3px rgba(15, 23, 42, 0.02),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    padding: 2.2rem 3rem;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.1rem;
+    min-width: 280px;
+    transform: translateY(0);
+    animation: ch-float 3s ease-in-out infinite;
+}
+
+@keyframes ch-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+/* Dynamic double-ring glowing gradient spinner */
+.ch-modal__spinner-container {
+    position: relative;
+    width: 50px;
+    height: 50px;
+}
+
+.ch-modal__spinner-outer {
+    position: absolute;
+    inset: 0;
+    border: 3.5px solid transparent;
+    border-top: 3.5px solid #3b82f6;
+    border-left: 3.5px solid #8b5cf6;
+    border-radius: 50%;
+    animation: ch-spin-clockwise 1s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+}
+
+.ch-modal__spinner-inner {
+    position: absolute;
+    inset: 7px;
+    border: 3px solid transparent;
+    border-bottom: 3px solid #10b981;
+    border-right: 3px solid #06b6d4;
+    border-radius: 50%;
+    animation: ch-spin-counter 0.8s linear infinite;
+}
+
+@keyframes ch-spin-clockwise {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes ch-spin-counter {
+    0% { transform: rotate(360deg); }
+    100% { transform: rotate(0deg); }
+}
+
+/* Glowing background behind loader */
+.ch-modal__loader-glow {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.18) 0%, rgba(139, 92, 246, 0.08) 50%, rgba(255, 255, 255, 0) 70%);
+    border-radius: 50%;
+    filter: blur(10px);
+    z-index: -1;
+    pointer-events: none;
+    animation: ch-pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes ch-pulse-glow {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; }
+}
+
+.ch-modal__loader-text {
+    font-family: 'Poppins', sans-serif;
+    font-size: 11.5px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: center;
+}
+
+.ch-modal__error-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 1.5rem;
+    gap: 0.5rem;
+    animation: ch-fade-in 0.22s ease both;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
     .ch-modal,

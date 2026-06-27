@@ -118,6 +118,8 @@
     padding: .9rem 1.1rem .7rem;
     border-bottom: 1px solid var(--drp-border);
     background: var(--drp-surface);
+    overflow: visible;
+    position: relative;
 }
 .drp-preset {
     padding: .32rem .78rem;
@@ -142,6 +144,69 @@
     border-color: var(--drp-accent);
     color: #ffffff;
 }
+
+/* ── More button & sub-dropdown ───────────────────────────── */
+.drp-more-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    overflow: visible;
+}
+
+.drp-preset--more {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.drp-more-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    left: auto;
+    z-index: 99999;
+    background: #ffffff;
+    border: 1.5px solid var(--drp-border);
+    border-radius: 10px;
+    box-shadow:
+        0 12px 32px rgba(15,23,42,.14),
+        0 3px 8px rgba(15,23,42,.08);
+    padding: .3rem;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    min-width: 148px;
+    width: max-content;
+    animation: drp-pop .18s cubic-bezier(.23,1,.32,1) both;
+    overflow: visible;
+}
+
+.drp-more-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: .4rem .75rem;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: .76rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--drp-sub);
+    cursor: pointer;
+    transition: all var(--drp-tr);
+    white-space: nowrap;
+}
+.drp-more-item:hover {
+    background: var(--drp-accent-lt);
+    color: var(--drp-accent-txt);
+}
+.drp-more-item--active {
+    background: var(--drp-accent);
+    color: #ffffff;
+}
+
+
 
 /* ── Calendars wrapper ────────────────────────────────────── */
 .drp-calendars {

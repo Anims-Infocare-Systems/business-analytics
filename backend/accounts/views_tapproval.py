@@ -20,6 +20,39 @@
 #  POST tapproval/approve/ | tapproval/modify/
 # ════════════════════════════════════════════════════════════════
 from datetime import date, datetime
+import threading
+
+def _log_approval_bg(tenant_id, company_code, form_name, transaction_no, doc_date, doc_type, approved_by):
+    try:
+        from django.utils import timezone
+        from .models import TenantApproval
+        TenantApproval.objects.update_or_create(
+            tenantid=tenant_id,
+            companycode=company_code,
+            formname=form_name,
+            transactionno=transaction_no,
+            defaults={
+                "transactiondate": doc_date,
+                "transactiontype": doc_type,
+                "approvedby": approved_by,
+                "datetime": timezone.now(),
+            }
+        )
+    except Exception as ex:
+        print(f"Background log approval error for {transaction_no}:", ex)
+
+def _log_reversion_bg(tenant_id, company_code, form_name, transaction_no):
+    try:
+        from .models import TenantApproval
+        TenantApproval.objects.filter(
+            tenantid=tenant_id,
+            companycode=company_code,
+            formname=form_name,
+            transactionno=transaction_no
+        ).delete()
+    except Exception as ex:
+        print(f"Background log reversion error for {transaction_no}:", ex)
+
 from typing import Optional
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -357,6 +390,21 @@ def tapproval_list(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
+    from django.utils import timezone
+    from .models import TenantApproval
+    approvals_map = {}
+    try:
+        approvals_map = {
+            app.transactionno: app
+            for app in TenantApproval.objects.filter(
+                tenantid=tenant.get("tenant_id"),
+                companycode=tenant.get("company_code"),
+                formname="Tapproval"
+            )
+        }
+    except Exception:
+        pass
+
     total_count = 0
     cards = []
     for row in rows:
@@ -365,6 +413,11 @@ def tapproval_list(request):
             total_count = int(rec.get("_total") or 0)
         status = "Approved" if rec.get("is_approved") else "Pending"
         doc_kind = (rec.get("doc_kind") or "invoice").strip().lower()
+
+        appr_info = approvals_map.get(str(rec["doc_no"]))
+        approved_by = appr_info.approvedby if appr_info else None
+        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if (appr_info and appr_info.datetime) else None
+
         cards.append({
             "id": f"{doc_kind}:{rec['doc_no']}",
             "poNo": str(rec["doc_no"]),
@@ -380,6 +433,8 @@ def tapproval_list(request):
             "countVal": _safe_float(rec["display_amt"]),
             "btypeRaw": rec.get("type_raw") or "",
             "docKind": doc_kind,
+            "approvedBy": approved_by,
+            "approvedDateTime": approved_dt,
         })
 
     return Response({
@@ -806,6 +861,24 @@ def tapproval_detail(request):
         display_amt = grand_total
     status = "Approved" if _is_approved(header.get("is_approve_raw")) else "Pending"
 
+    # Fetch approval info from tenants_approvals
+    from .models import TenantApproval
+    approved_by = None
+    approved_dt = None
+    try:
+        appr_info = TenantApproval.objects.filter(
+            tenantid=tenant.get("tenant_id"),
+            companycode=tenant.get("company_code"),
+            formname="Tapproval",
+            transactionno=str(header[doc_no_key])
+        ).first()
+        if appr_info:
+            approved_by = appr_info.approvedby
+            from django.utils import timezone
+            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if appr_info.datetime else None
+    except Exception:
+        pass
+
     card = {
         "id": f"{resolved_kind}:{header[doc_no_key]}",
         "poNo": str(header[doc_no_key]),
@@ -832,6 +905,8 @@ def tapproval_detail(request):
         "roundOff": financial["roundOff"],
         "cgstPct": 0,
         "sgstPct": 0,
+        "approvedBy": approved_by,
+        "approvedDateTime": approved_dt,
     }
 
     return Response({"success": True, "card": card})
@@ -877,6 +952,32 @@ def tapproval_approve(request):
 
     try:
         cursor = conn.cursor()
+        
+        # Query doc date and type for the approval log
+        doc_date = None
+        doc_type = "General"
+        try:
+            if doc_kind == "dc":
+                cursor.execute("SELECT dcdate, dtype FROM DC_Mas WHERE ISNULL(deleted, 0) = 0 AND dcno = ?", [doc_no])
+                d_row = cursor.fetchone()
+                if d_row:
+                    doc_date = d_row[0]
+                    doc_type = _canonical_dc_type(d_row[1]) or "DC - General"
+            elif doc_kind == "ret_dc":
+                cursor.execute("SELECT retissdt, dtype FROM ReturnableDcIss_Mas WHERE ISNULL(deleted, 0) = 0 AND retissno = ?", [doc_no])
+                d_row = cursor.fetchone()
+                if d_row:
+                    doc_date = d_row[0]
+                    doc_type = "Returnable DC"
+            else:
+                cursor.execute("SELECT invdt, btype FROM Bill_Mas WHERE ISNULL(deleted, 0) = 0 AND invno = ?", [doc_no])
+                d_row = cursor.fetchone()
+                if d_row:
+                    doc_date = d_row[0]
+                    doc_type = _canonical_invoice_type(d_row[1]) or "Invoice - General"
+        except Exception:
+            pass
+
         cursor.execute(update_sql, [doc_no])
         affected = cursor.rowcount
         if affected == 0:
@@ -887,6 +988,20 @@ def tapproval_approve(request):
             conn.commit()
             approved_in_erp = True
             message = f"{doc_label} {doc_no} approved successfully in ERP."
+            
+            # Save to tenants_approvals table in background thread for ultra fast response
+            threading.Thread(
+                target=_log_approval_bg,
+                args=(
+                    tenant.get("tenant_id"),
+                    tenant.get("company_code"),
+                    "Tapproval",
+                    doc_no,
+                    doc_date,
+                    doc_type,
+                    tenant.get("username") or "Admin"
+                )
+            ).start()
         except Exception:
             try:
                 conn.rollback()
@@ -960,6 +1075,17 @@ def tapproval_modify(request):
             conn.commit()
             modified_in_erp = True
             message = f"{doc_label} {doc_no} moved back to Pending in ERP."
+            
+            # Delete from tenants_approvals table in background thread for ultra fast response
+            threading.Thread(
+                target=_log_reversion_bg,
+                args=(
+                    tenant.get("tenant_id"),
+                    tenant.get("company_code"),
+                    "Tapproval",
+                    doc_no
+                )
+            ).start()
         except Exception:
             try:
                 conn.rollback()

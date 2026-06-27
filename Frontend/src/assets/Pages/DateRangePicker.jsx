@@ -37,7 +37,7 @@ function calDays(year, month) {
     return cells;
 }
 
-const PRESETS = [
+const PRIMARY_PRESETS = [
     { label: "Today",        get: () => { const t=new Date(); return { from:startOf(t), to:startOf(t) }; } },
     { label: "Yesterday",    get: () => { const y=new Date(); y.setDate(y.getDate()-1); return { from:startOf(y), to:startOf(y) }; } },
     { label: "Last 7 Days",  get: () => { const t=new Date(),s=new Date(); s.setDate(s.getDate()-6); return { from:startOf(s), to:startOf(t) }; } },
@@ -45,6 +45,10 @@ const PRESETS = [
     { label: "This Month",   get: () => { const t=new Date(); return { from:new Date(t.getFullYear(),t.getMonth(),1), to:startOf(t) }; } },
     { label: "Last Month",   get: () => { const t=new Date(); const s=new Date(t.getFullYear(),t.getMonth()-1,1); const e=new Date(t.getFullYear(),t.getMonth(),0); return { from:s, to:e }; } },
     { label: "This Year",    get: () => { const t=new Date(); return { from:new Date(t.getFullYear(),0,1), to:startOf(t) }; } },
+];
+const EXTRA_PRESETS = [
+    { label: "Last 3 Months", get: () => { const t=new Date(),s=new Date(); s.setMonth(s.getMonth()-3); s.setDate(1); return { from:startOf(s), to:startOf(t) }; } },
+    { label: "Last 6 Months", get: () => { const t=new Date(),s=new Date(); s.setMonth(s.getMonth()-6); s.setDate(1); return { from:startOf(s), to:startOf(t) }; } },
 ];
 
 /* ── Single month calendar ────────────────────────────────── */
@@ -138,6 +142,8 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
     const [selecting,  setSelecting]= useState(null);
     const [hovered,    setHovered]  = useState(null);
     const [activePreset, setActivePreset] = useState(null);
+    const [moreOpen,   setMoreOpen] = useState(false);
+    const moreRef = useRef(null);
 
     const wrapRef    = useRef(null);   // outer wrapper (for outside-click)
     const triggerRef = useRef(null);   // button (for popup positioning)
@@ -153,10 +159,22 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
             if (wrapRef.current && wrapRef.current.contains(e.target)) return;
             if (e.target.closest(".drp-portal-wrap")) return;
             setOpen(false);
+            setMoreOpen(false);
         };
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
     }, [open]);
+
+    // close More dropdown on outside click
+    useEffect(() => {
+        if (!moreOpen) return;
+        const h = e => {
+            if (moreRef.current && moreRef.current.contains(e.target)) return;
+            setMoreOpen(false);
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, [moreOpen]);
 
     const handleDayClick = (day) => {
         if (!selecting) {
@@ -213,7 +231,7 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
 
                         {/* Presets */}
                         <div className="drp-presets">
-                            {PRESETS.map(p => (
+                            {PRIMARY_PRESETS.map(p => (
                                 <button
                                     key={p.label}
                                     className={`drp-preset ${activePreset===p.label ? "drp-preset--active":""}`}
@@ -223,6 +241,36 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
                                     {p.label}
                                 </button>
                             ))}
+                            {/* More button with sub-dropdown for extended presets */}
+                            <div className="drp-more-wrap" ref={moreRef}>
+                                <button
+                                    type="button"
+                                    className={`drp-preset drp-preset--more ${
+                                        EXTRA_PRESETS.some(p => p.label === activePreset) ? "drp-preset--active" : ""
+                                    }`}
+                                    onClick={() => setMoreOpen(o => !o)}
+                                    title="More date ranges"
+                                >
+                                    More
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: "3px", transition: "transform 0.2s", transform: moreOpen ? "rotate(180deg)" : "none" }}>
+                                        <polyline points="6,9 12,15 18,9"/>
+                                    </svg>
+                                </button>
+                                {moreOpen && (
+                                    <div className="drp-more-dropdown">
+                                        {EXTRA_PRESETS.map(p => (
+                                            <button
+                                                key={p.label}
+                                                type="button"
+                                                className={`drp-more-item ${activePreset === p.label ? "drp-more-item--active" : ""}`}
+                                                onClick={() => { handlePreset(p); setMoreOpen(false); }}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Calendars */}

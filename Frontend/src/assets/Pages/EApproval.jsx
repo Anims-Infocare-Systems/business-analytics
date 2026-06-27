@@ -226,6 +226,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
     const items = card.items || [];
+    const approvedBy = card.approvedBy || "—";
+    const approvedDateTime = card.approvedDateTime || "—";
 
     return createPortal(
         <div className="eap-modal eap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -283,6 +285,24 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             Type
                         </span>
                         <span className="eap-prev__meta-val">{card.type}</span>
+                    </div>
+                    <div className="eap-prev__meta-item">
+                        <span className="eap-prev__meta-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Approved By
+                        </span>
+                        <span className={`eap-prev__meta-val-badge eap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
+                            {approvedBy}
+                        </span>
+                    </div>
+                    <div className="eap-prev__meta-item">
+                        <span className="eap-prev__meta-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                            Date-Time
+                        </span>
+                        <span className={`eap-prev__meta-val-badge eap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
+                            {approvedDateTime}
+                        </span>
                     </div>
                 </div>
 
@@ -569,6 +589,11 @@ export default function EApproval() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(null); // { pono, type }
     const [toasts, setToasts] = useState([]);
+    const [typeFilter, setTypeFilter] = useState(null); // null = All
+    const [typeDropOpen, setTypeDropOpen] = useState(false);
+    const [typePanelStyle, setTypePanelStyle] = useState({});
+    const typeDropRef = useRef(null);
+    const typeTriggerRef = useRef(null);
 
     // Compute KPI stats dynamically from cards so they update instantly on approval/revert
     const stats = useMemo(() => {
@@ -626,6 +651,39 @@ export default function EApproval() {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
     }, []);
 
+    // Close type dropdown on outside click
+    useEffect(() => {
+        if (!typeDropOpen) return;
+        const h = e => {
+            if (typeDropRef.current && typeDropRef.current.contains(e.target)) return;
+            if (e.target.closest(".eap-type-dd__panel-portal")) return;
+            setTypeDropOpen(false);
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, [typeDropOpen]);
+
+    // Reposition panel whenever it opens or on scroll/resize
+    useEffect(() => {
+        if (!typeDropOpen || !typeTriggerRef.current) return;
+        const reposition = () => {
+            const rect = typeTriggerRef.current.getBoundingClientRect();
+            setTypePanelStyle({
+                position: "fixed",
+                top: rect.bottom + 6,
+                left: rect.left,
+                zIndex: 999999,
+            });
+        };
+        reposition();
+        window.addEventListener("resize", reposition);
+        window.addEventListener("scroll", reposition, true);
+        return () => {
+            window.removeEventListener("resize", reposition);
+            window.removeEventListener("scroll", reposition, true);
+        };
+    }, [typeDropOpen]);
+
     const toggleGroup = type =>
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
 
@@ -653,16 +711,19 @@ export default function EApproval() {
 
     useEffect(() => { refreshBoard(); }, [refreshBoard]);
 
-    // Only text-search filter — API already scopes by date range
+    // Only text-search + type filter — API already scopes by date range
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
-        if (!q) return cards;
-        return cards.filter(c =>
-            (c.vendor || "").toLowerCase().includes(q) ||
-            (c.poNo   || "").toLowerCase().includes(q) ||
-            (c.type   || "").toLowerCase().includes(q)
-        );
-    }, [cards, search]);
+        return cards.filter(c => {
+            if (typeFilter && c.type !== typeFilter) return false;
+            if (!q) return true;
+            return (
+                (c.vendor || "").toLowerCase().includes(q) ||
+                (c.poNo   || "").toLowerCase().includes(q) ||
+                (c.type   || "").toLowerCase().includes(q)
+            );
+        });
+    }, [cards, search, typeFilter]);
 
     const grouped = useMemo(() => {
         const map = {};
@@ -674,6 +735,15 @@ export default function EApproval() {
         const extras = Object.entries(map).filter(([t]) => !TYPE_ORDER.includes(t));
         return [...ordered, ...extras];
     }, [filtered]);
+
+    // All types present in the current date-filtered dataset (ignores typeFilter)
+    const availableTypes = useMemo(() => {
+        const seen = new Set();
+        cards.forEach(c => { if (c.type) seen.add(c.type); });
+        const ordered = TYPE_ORDER.filter(t => seen.has(t));
+        const extras  = [...seen].filter(t => !TYPE_ORDER.includes(t));
+        return [...ordered, ...extras];
+    }, [cards]);
 
     const openPreview = useCallback(async (listCard) => {
         const pono = listCard.poNo;
@@ -785,14 +855,17 @@ export default function EApproval() {
                 <DateRangePicker
                     from={dateRange.from}
                     to={dateRange.to}
-                    onChange={setDateRange}
+                    onChange={r => { setDateRange(r); setTypeFilter(null); }}
                     theme="indigo"
                 />
                 <div className="eap-filter__search-wrap">
+                    <svg className="eap-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
                     <input
                         className="eap-filter__search"
                         type="text"
-                        placeholder="Search e-approvals…"
+                        placeholder="Search vendor, PO…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
@@ -807,7 +880,100 @@ export default function EApproval() {
                         </button>
                     )}
                 </div>
-                <button type="button" className="eap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
+
+                {/* ── Type Dropdown ── */}
+                <div className="eap-type-dd" ref={typeDropRef}>
+                    <button
+                        ref={typeTriggerRef}
+                        type="button"
+                        className={`eap-type-dd__trigger ${typeFilter ? "eap-type-dd__trigger--active" : ""} ${typeDropOpen ? "eap-type-dd__trigger--open" : ""}`}
+                        onClick={() => setTypeDropOpen(o => !o)}
+                    >
+                        <span className="eap-type-dd__trigger-icon">
+                            {typeFilter ? TYPE_ICONS[typeFilter] : (
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+                                </svg>
+                            )}
+                        </span>
+                        <span className="eap-type-dd__trigger-label">
+                            {typeFilter || "All Types"}
+                        </span>
+                        {typeFilter && (
+                            <span className="eap-type-dd__trigger-count">
+                                {cards.filter(c => c.type === typeFilter).length}
+                            </span>
+                        )}
+                        <svg
+                            className={`eap-type-dd__caret ${typeDropOpen ? "eap-type-dd__caret--up" : ""}`}
+                            width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                        >
+                            <polyline points="6,9 12,15 18,9"/>
+                        </svg>
+                    </button>
+
+                    {/* Panel portalled to body so it renders above everything */}
+                    {typeDropOpen && createPortal(
+                        <div className="eap-type-dd__panel-portal" style={typePanelStyle}>
+                            <div className="eap-type-dd__panel">
+                                <div className="eap-type-dd__header">Filter by Type</div>
+                                {/* All option */}
+                                <button
+                                    type="button"
+                                    className={`eap-type-dd__item ${typeFilter === null ? "eap-type-dd__item--active" : ""}`}
+                                    onClick={() => { setTypeFilter(null); setTypeDropOpen(false); }}
+                                >
+                                    <span className="eap-type-dd__item-icon">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                                            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                                        </svg>
+                                    </span>
+                                    <span className="eap-type-dd__item-label">All Types</span>
+                                    <span className="eap-type-dd__item-badge">{cards.length}</span>
+                                    {typeFilter === null && (
+                                        <svg className="eap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                            <polyline points="20,6 9,17 4,12"/>
+                                        </svg>
+                                    )}
+                                </button>
+
+                                <div className="eap-type-dd__divider"/>
+
+                                {/* Per-type options */}
+                                {availableTypes.map(t => {
+                                    const cnt = cards.filter(c => c.type === t).length;
+                                    const isActive = typeFilter === t;
+                                    return (
+                                        <button
+                                            key={t}
+                                            type="button"
+                                            className={`eap-type-dd__item eap-type-dd__item--${t.toLowerCase().replace(/\s+/g,"-")} ${isActive ? "eap-type-dd__item--active" : ""}`}
+                                            onClick={() => { setTypeFilter(isActive ? null : t); setTypeDropOpen(false); }}
+                                        >
+                                            <span className="eap-type-dd__item-icon">{TYPE_ICONS[t]}</span>
+                                            <span className="eap-type-dd__item-label">{t}</span>
+                                            <span className="eap-type-dd__item-badge">{cnt}</span>
+                                            {isActive && (
+                                                <svg className="eap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                    <polyline points="20,6 9,17 4,12"/>
+                                                </svg>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>,
+                        document.body
+                    )}
+                </div>
+
+                <button type="button" className="eap-filter__btn" onClick={() => refreshBoard()}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    Search
+                </button>
             </div>
 
             {/* ── Grouped Sections / Loader ── */}

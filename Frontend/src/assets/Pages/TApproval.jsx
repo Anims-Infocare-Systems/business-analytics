@@ -319,6 +319,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     const summaryRows = formatSummaryRows(fin, fmt);
     const docNo = card.poNo;
     const labels = docLabels(card);
+    const approvedBy = card.approvedBy || "—";
+    const approvedDateTime = card.approvedDateTime || "—";
 
     return createPortal(
         <div className="tap-modal tap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -356,6 +358,24 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="tap-prev__meta-item">
                         <span className="tap-prev__meta-label">Type</span>
                         <span className="tap-prev__meta-val">{card.type}</span>
+                    </div>
+                    <div className="tap-prev__meta-item">
+                        <span className="tap-prev__meta-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Approved By
+                        </span>
+                        <span className={`tap-prev__meta-val-badge tap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
+                            {approvedBy}
+                        </span>
+                    </div>
+                    <div className="tap-prev__meta-item">
+                        <span className="tap-prev__meta-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                            Date-Time
+                        </span>
+                        <span className={`tap-prev__meta-val-badge tap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
+                            {approvedDateTime}
+                        </span>
                     </div>
                 </div>
 
@@ -599,6 +619,11 @@ export default function TApproval() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(null); // { pono, type } — same shape as E-Approval
     const [toasts, setToasts] = useState([]);
+    const [typeFilter, setTypeFilter] = useState(null);
+    const [typeDropOpen, setTypeDropOpen] = useState(false);
+    const [typePanelStyle, setTypePanelStyle] = useState({});
+    const typeDropRef = useRef(null);
+    const typeTriggerRef = useRef(null);
     // Detail cache — key: list card id (docKind:docNo); cleared on date change / approve / modify
     const detailCache = useRef({});
 
@@ -654,6 +679,34 @@ export default function TApproval() {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
     }, []);
 
+    // Close type dropdown on outside click
+    useEffect(() => {
+        if (!typeDropOpen) return;
+        const h = e => {
+            if (typeDropRef.current && typeDropRef.current.contains(e.target)) return;
+            if (e.target.closest(".tap-type-dd__panel-portal")) return;
+            setTypeDropOpen(false);
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, [typeDropOpen]);
+
+    // Reposition panel on open / scroll / resize
+    useEffect(() => {
+        if (!typeDropOpen || !typeTriggerRef.current) return;
+        const reposition = () => {
+            const rect = typeTriggerRef.current.getBoundingClientRect();
+            setTypePanelStyle({ position: "fixed", top: rect.bottom + 6, left: rect.left, zIndex: 999999 });
+        };
+        reposition();
+        window.addEventListener("resize", reposition);
+        window.addEventListener("scroll", reposition, true);
+        return () => {
+            window.removeEventListener("resize", reposition);
+            window.removeEventListener("scroll", reposition, true);
+        };
+    }, [typeDropOpen]);
+
     const toggleGroup = type =>
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
 
@@ -683,13 +736,16 @@ export default function TApproval() {
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
-        if (!q) return cards;
-        return cards.filter(c =>
-            (c.vendor || "").toLowerCase().includes(q) ||
-            (c.poNo || "").toLowerCase().includes(q) ||
-            (c.type || "").toLowerCase().includes(q)
-        );
-    }, [cards, search]);
+        return cards.filter(c => {
+            if (typeFilter && c.type !== typeFilter) return false;
+            if (!q) return true;
+            return (
+                (c.vendor || "").toLowerCase().includes(q) ||
+                (c.poNo || "").toLowerCase().includes(q) ||
+                (c.type || "").toLowerCase().includes(q)
+            );
+        });
+    }, [cards, search, typeFilter]);
 
     const grouped = useMemo(() => {
         const map = {};
@@ -701,6 +757,15 @@ export default function TApproval() {
         const extras = Object.entries(map).filter(([t]) => !TYPE_ORDER.includes(t));
         return [...ordered, ...extras];
     }, [filtered]);
+
+    // Types present in the current date-filtered data
+    const availableTypes = useMemo(() => {
+        const seen = new Set();
+        cards.forEach(c => { if (c.type) seen.add(c.type); });
+        const ordered = TYPE_ORDER.filter(t => seen.has(t));
+        const extras  = [...seen].filter(t => !TYPE_ORDER.includes(t));
+        return [...ordered, ...extras];
+    }, [cards]);
 
     const openPreview = useCallback(async (listCard) => {
         const invno = listCard.poNo;
@@ -813,8 +878,16 @@ export default function TApproval() {
             </div>
 
             <div className="tap-filter">
-                <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} theme="teal" />
+                <DateRangePicker
+                    from={dateRange.from}
+                    to={dateRange.to}
+                    onChange={r => { setDateRange(r); setTypeFilter(null); }}
+                    theme="teal"
+                />
                 <div className="tap-filter__search-wrap">
+                    <svg className="tap-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
                     <input
                         className="tap-filter__search"
                         type="text"
@@ -833,7 +906,91 @@ export default function TApproval() {
                         </button>
                     )}
                 </div>
-                <button type="button" className="tap-filter__btn" onClick={() => refreshBoard()}>🔍 Search</button>
+
+                {/* ── Type Dropdown ── */}
+                <div className="tap-type-dd" ref={typeDropRef}>
+                    <button
+                        ref={typeTriggerRef}
+                        type="button"
+                        className={`tap-type-dd__trigger ${typeFilter ? "tap-type-dd__trigger--active" : ""} ${typeDropOpen ? "tap-type-dd__trigger--open" : ""}`}
+                        onClick={() => setTypeDropOpen(o => !o)}
+                    >
+                        <span className="tap-type-dd__trigger-icon">
+                            {typeFilter ? TYPE_ICONS[typeFilter] : (
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+                                </svg>
+                            )}
+                        </span>
+                        <span className="tap-type-dd__trigger-label">{typeFilter || "All Types"}</span>
+                        {typeFilter && (
+                            <span className="tap-type-dd__trigger-count">
+                                {cards.filter(c => c.type === typeFilter).length}
+                            </span>
+                        )}
+                        <svg className={`tap-type-dd__caret ${typeDropOpen ? "tap-type-dd__caret--up" : ""}`}
+                            width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="6,9 12,15 18,9"/>
+                        </svg>
+                    </button>
+
+                    {typeDropOpen && createPortal(
+                        <div className="tap-type-dd__panel-portal" style={typePanelStyle}>
+                            <div className="tap-type-dd__panel">
+                                <div className="tap-type-dd__header">Filter by Type</div>
+                                <button
+                                    type="button"
+                                    className={`tap-type-dd__item ${typeFilter === null ? "tap-type-dd__item--active" : ""}`}
+                                    onClick={() => { setTypeFilter(null); setTypeDropOpen(false); }}
+                                >
+                                    <span className="tap-type-dd__item-icon">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                                            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                                        </svg>
+                                    </span>
+                                    <span className="tap-type-dd__item-label">All Types</span>
+                                    <span className="tap-type-dd__item-badge">{cards.length}</span>
+                                    {typeFilter === null && (
+                                        <svg className="tap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                            <polyline points="20,6 9,17 4,12"/>
+                                        </svg>
+                                    )}
+                                </button>
+                                <div className="tap-type-dd__divider"/>
+                                {availableTypes.map(t => {
+                                    const cnt = cards.filter(c => c.type === t).length;
+                                    const isActive = typeFilter === t;
+                                    return (
+                                        <button
+                                            key={t}
+                                            type="button"
+                                            className={`tap-type-dd__item ${isActive ? "tap-type-dd__item--active" : ""}`}
+                                            onClick={() => { setTypeFilter(isActive ? null : t); setTypeDropOpen(false); }}
+                                        >
+                                            <span className="tap-type-dd__item-icon">{TYPE_ICONS[t]}</span>
+                                            <span className="tap-type-dd__item-label">{t}</span>
+                                            <span className="tap-type-dd__item-badge">{cnt}</span>
+                                            {isActive && (
+                                                <svg className="tap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                    <polyline points="20,6 9,17 4,12"/>
+                                                </svg>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>,
+                        document.body
+                    )}
+                </div>
+
+                <button type="button" className="tap-filter__btn" onClick={() => refreshBoard()}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    Search
+                </button>
             </div>
 
             {isLoading ? (
