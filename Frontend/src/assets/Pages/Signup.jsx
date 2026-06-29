@@ -338,7 +338,7 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
 
         const delayDebounce = setTimeout(async () => {
             try {
-                const res = await fetch(`${API}/company/${encodeURIComponent(code)}/`);
+                const res = await fetch(`${API}/company/${encodeURIComponent(code)}/?signup=1`);
                 if (res.ok) {
                     const data = await res.json();
                     setForm(f => ({ ...f, companyName: data.company_name || "" }));

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -7,6 +7,10 @@ import "./Login.css";
 
 const API = resolveApiBase();
 const RIGHTS_CACHE_KEY = "ba_user_rights";
+const COMPANY_DEBOUNCE_MS = 200;
+const COMPANY_MIN_LEN = 2;
+const COMPANY_CACHE_MS = 5 * 60 * 1000;
+const companyLookupCache = new Map();
 
 function writeRightsCache(companyCode, username, rights, isSuperAdmin) {
     try {
@@ -147,59 +151,142 @@ function showLoginToast(variant, title, message) {
     );
 }
 
+function getCachedCompanyLookup(code) {
+    const key = code.trim().toLowerCase();
+    const hit = companyLookupCache.get(key);
+    if (hit && Date.now() - hit.at < COMPANY_CACHE_MS) {
+        return hit.result;
+    }
+    return null;
+}
+
+function cacheCompanyLookup(code, result) {
+    companyLookupCache.set(code.trim().toLowerCase(), { at: Date.now(), result });
+}
+
+async function fetchCompanyLookup(code, signal) {
+    const trimmed = code.trim();
+    const cached = getCachedCompanyLookup(trimmed);
+    if (cached) return cached;
+
+    const res = await fetch(
+        `${API}/company/${encodeURIComponent(trimmed)}/`,
+        { credentials: "include", signal },
+    );
+    const data = await res.json();
+    const result = { res, data };
+    if (res.ok || (res.status === 403 && data.code === "account_inactive")) {
+        cacheCompanyLookup(trimmed, result);
+    }
+    return result;
+}
+
 export default function LoginPage() {
     const navigate = useNavigate();
 
     const [userId, setUserId] = useState("");
     const [companyName, setCompanyName] = useState("");
-    const [companyState, setCompanyState] = useState("idle"); // idle | loading | found | error | network
+    const [companyState, setCompanyState] = useState("idle"); // idle | loading | found | error | inactive | network
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [loginError, setLoginError] = useState("");
     const [loginBusy, setLoginBusy] = useState(false);
+    const inactiveToastKeyRef = useRef("");
+    const companyFetchRef = useRef({ timer: null, controller: null });
 
-    // ── Auto-fetch company name (debounced 600ms, with abort on change) ──
-    useEffect(() => {
+    const showAccountInactiveToast = () => {
+        showLoginToast(
+            "error",
+            "Account Inactive",
+            "This organization is inactive. Please contact Anims ERP Team.",
+        );
+    };
+
+    const applyCompanyLookup = (result, trimmed) => {
+        const { res, data } = result;
+        if (res.ok && data.company_name) {
+            setCompanyName(data.company_name);
+            setCompanyState("found");
+            return;
+        }
+        if (res.status === 403 && data.code === "account_inactive") {
+            setCompanyName(data.company_name || "");
+            setCompanyState("inactive");
+            const toastKey = trimmed.toLowerCase();
+            if (inactiveToastKeyRef.current !== toastKey) {
+                inactiveToastKeyRef.current = toastKey;
+                showAccountInactiveToast();
+            }
+            return;
+        }
         setCompanyName("");
-        setCompanyState("idle");
+        setCompanyState("error");
+    };
 
-        const trimmed = userId.trim();
-        // Don't fetch until at least 3 characters — avoids error on partial typing
-        if (trimmed.length < 3) return;
+    const runCompanyLookup = async (trimmed) => {
+        const cached = getCachedCompanyLookup(trimmed);
+        if (cached) {
+            applyCompanyLookup(cached, trimmed);
+            return;
+        }
 
+        companyFetchRef.current.controller?.abort();
+        const controller = new AbortController();
+        companyFetchRef.current.controller = controller;
         setCompanyState("loading");
 
-        let cancelled = false;
-        const controller = new AbortController();
+        try {
+            const result = await fetchCompanyLookup(trimmed, controller.signal);
+            if (controller.signal.aborted) return;
+            applyCompanyLookup(result, trimmed);
+        } catch (err) {
+            if (err.name === "AbortError") return;
+            console.error("Company fetch failed:", err);
+            setCompanyName("");
+            setCompanyState("network");
+        }
+    };
 
-        const timer = setTimeout(async () => {
-            try {
-                const res = await fetch(
-                    `${API}/company/${encodeURIComponent(trimmed)}/`,
-                    { credentials: "include", signal: controller.signal }
-                );
-                const data = await res.json();
+    const scheduleCompanyLookup = (trimmed) => {
+        clearTimeout(companyFetchRef.current.timer);
+        companyFetchRef.current.controller?.abort();
 
-                if (cancelled) return; // userId changed — discard stale response
+        if (trimmed.length < COMPANY_MIN_LEN) {
+            setCompanyName("");
+            setCompanyState("idle");
+            inactiveToastKeyRef.current = "";
+            return;
+        }
 
-                if (res.ok && data.company_name) {
-                    setCompanyName(data.company_name);
-                    setCompanyState("found");
-                } else {
-                    setCompanyState("error");
-                }
-            } catch (err) {
-                if (cancelled || err.name === "AbortError") return; // ignore aborted/stale
-                console.error("Company fetch failed:", err);
-                setCompanyState("network");
-            }
-        }, 600);
+        const cached = getCachedCompanyLookup(trimmed);
+        if (cached) {
+            applyCompanyLookup(cached, trimmed);
+            return;
+        }
 
+        setCompanyState("loading");
+        companyFetchRef.current.timer = setTimeout(() => {
+            runCompanyLookup(trimmed);
+        }, COMPANY_DEBOUNCE_MS);
+    };
+
+    const handleUserIdBlur = () => {
+        const trimmed = userId.trim();
+        if (trimmed.length < COMPANY_MIN_LEN) return;
+        if (companyState === "found" || companyState === "inactive") return;
+
+        clearTimeout(companyFetchRef.current.timer);
+        runCompanyLookup(trimmed);
+    };
+
+    // ── Auto-fetch company name (debounced, cached, abort on change) ──
+    useEffect(() => {
+        inactiveToastKeyRef.current = "";
+        scheduleCompanyLookup(userId.trim());
         return () => {
-            cancelled = true;       // mark any in-flight fetch as stale
-            controller.abort();     // cancel the fetch if already in progress
-            clearTimeout(timer);    // cancel pending debounce timer
+            clearTimeout(companyFetchRef.current.timer);
+            companyFetchRef.current.controller?.abort();
         };
     }, [userId]);
 
@@ -210,6 +297,7 @@ export default function LoginPage() {
         loading: "Looking up company…",
         found: "",
         error: "⚠ Company not found — check your ID",
+        inactive: "⚠ Account Inactive — contact your administrator",
         network: "⚠ Cannot reach server — is Django running?",
     }[companyState];
 
@@ -217,7 +305,7 @@ export default function LoginPage() {
     const companyClass = [
         "lp__inp lp__inp--ro",
         companyState === "found" ? "lp__inp--ok" : "",
-        companyState === "error" ? "lp__inp--err" : "",
+        companyState === "error" || companyState === "inactive" ? "lp__inp--err" : "",
         companyState === "network" ? "lp__inp--err" : "",
     ].join(" ").trim();
 
@@ -230,6 +318,10 @@ export default function LoginPage() {
         if (!username.trim()) return setLoginError("Please enter your username.");
         if (!password) return setLoginError("Please enter your password.");
         if (companyState === "error") return setLoginError("Invalid company code.");
+        if (companyState === "inactive") {
+            showAccountInactiveToast();
+            return;
+        }
         if (companyState === "network") return setLoginError("Cannot reach server. Is Django running?");
 
         setLoginBusy(true);
@@ -285,6 +377,8 @@ export default function LoginPage() {
                     !!data.isSuperAdmin,
                 );
                 navigate("/AnimsBusinessAnalytics", { replace: true });
+            } else if (res.status === 403 && data.code === "account_inactive") {
+                showAccountInactiveToast();
             } else if (res.status === 503 && data.code === "erp_unavailable") {
                 showLoginToast(
                     "error",
@@ -392,6 +486,7 @@ export default function LoginPage() {
                                             setUserId(e.target.value);
                                             setLoginError("");
                                         }}
+                                        onBlur={handleUserIdBlur}
                                         autoComplete="off"
                                     />
                                 </div>

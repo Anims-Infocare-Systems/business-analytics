@@ -1,6 +1,7 @@
 import pyodbc
 
 ERP_LOGIN_TIMEOUT = 5
+LOGIN_ERP_TIMEOUT = 2
 ERP_UNAVAILABLE_MSG = (
     "ERP Server is unavailable. Please check your network connection."
 )
@@ -30,7 +31,8 @@ def get_connection(server, database, username, password, port, *, login_timeout=
         raise ErpConnectionError(ERP_UNAVAILABLE_MSG) from exc
 
 
-def check_tenant_erp_connection(server, database, username, password, port):
+def check_tenant_erp_connection(server, database, username, password, port, *, login_timeout=None):
     """Open and close ERP connection (used at login). Raises ErpConnectionError on failure."""
-    conn = get_connection(server, database, username, password, port)
+    timeout = LOGIN_ERP_TIMEOUT if login_timeout is None else login_timeout
+    conn = get_connection(server, database, username, password, port, login_timeout=timeout)
     conn.close()

@@ -50,7 +50,7 @@ from .views_signup import signup_view
 from .views_settings import settings_profile, settings_change_password, settings_upgrade_plan
 from .views_adminpannel import (
     admin_login, admin_logout, admin_check_session,
-    admin_list_tenants, admin_create_tenant, admin_update_tenant, admin_delete_tenant,
+    admin_list_tenants, admin_create_tenant, admin_update_tenant, admin_patch_tenant_status, admin_delete_tenant,
     admin_list_tenant_users, admin_delete_tenant_user
 )
 from .views_animsutility import admin_utility_clients, admin_utility_activity
@@ -212,6 +212,7 @@ urlpatterns = [
     path('admin/tenants/', admin_list_tenants, name='admin_list_tenants'),
     path('admin/tenants/create/', admin_create_tenant, name='admin_create_tenant'),
     path('admin/tenants/update/', admin_update_tenant, name='admin_update_tenant'),
+    path('admin/tenants/<int:tenant_id>/status/', admin_patch_tenant_status, name='admin_patch_tenant_status'),
     path('admin/tenants/delete/<int:tenant_id>/', admin_delete_tenant, name='admin_delete_tenant'),
     path('admin/tenants/<str:company_code>/users/', admin_list_tenant_users, name='admin_list_tenant_users'),
     path('admin/tenants/users/<int:user_id>/', admin_delete_tenant_user, name='admin_delete_tenant_user'),

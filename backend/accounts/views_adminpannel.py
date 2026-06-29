@@ -2,6 +2,9 @@
 #  views_adminpannel.py
 #  Admin Panel views — Tenants, Signups, and Database Credentials
 # ════════════════════════════════════════════════════════════════
+import hashlib
+import hmac
+import time
 from datetime import datetime, date
 from django.conf import settings
 from django.db import connection, transaction
@@ -13,12 +16,51 @@ from .models import Tenant
 
 ADMIN_USER = getattr(settings, "ADMIN_PANEL_USER", "admin")
 ADMIN_PASS = getattr(settings, "ADMIN_PANEL_PASSWORD", "admin12345678")
+ADMIN_TOKEN_MAX_AGE = 86400
+
+
+def issue_admin_token():
+    ts = int(time.time())
+    payload = f"admin-panel:{ts}"
+    sig = hmac.new(
+        settings.SECRET_KEY.encode(),
+        payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def verify_admin_token(token):
+    token = (token or "").strip()
+    if not token:
+        return False
+    try:
+        payload, sig = token.rsplit(":", 1)
+        expected = hmac.new(
+            settings.SECRET_KEY.encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        prefix, ts_str = payload.split(":", 1)
+        if prefix != "admin-panel":
+            return False
+        if time.time() - int(ts_str) > ADMIN_TOKEN_MAX_AGE:
+            return False
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _admin_token_from_request(request):
+    return (request.headers.get("X-Admin-Token") or "").strip()
+
 
 def check_admin_auth(request):
-    """Utility function to check if the current session is authenticated as admin."""
-    if not request.session.get("is_admin_pannel_authenticated", False):
+    """Token-only admin auth — never reads or writes Django session."""
+    if not verify_admin_token(_admin_token_from_request(request)):
         raise PermissionError("Access denied. Please authenticate as Admin.")
-    request.session.modified = True
 
 def admin_auth_denied_response(exc):
     return Response(
@@ -37,29 +79,28 @@ def admin_login(request):
     password = (request.data.get("password") or "").strip()
 
     if username == ADMIN_USER and password == ADMIN_PASS:
-        request.session["is_admin_pannel_authenticated"] = True
-        request.session.modified = True
-        request.session.save()
-        return Response({"success": True, "message": "Admin authenticated successfully."})
+        token = issue_admin_token()
+        return Response({
+            "success": True,
+            "message": "Admin authenticated successfully.",
+            "admin_token": token,
+        })
     return Response({"error": "Invalid admin username or password."}, status=401)
 
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def admin_logout(request):
-    request.session["is_admin_pannel_authenticated"] = False
-    request.session.modified = True
-    request.session.save()
     return Response({"success": True, "message": "Admin logged out successfully."})
 
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def admin_check_session(request):
-    is_auth = request.session.get("is_admin_pannel_authenticated", False)
-    if is_auth:
-        request.session.modified = True
-    return Response({"authenticated": is_auth})
+    token = _admin_token_from_request(request)
+    if verify_admin_token(token):
+        return Response({"authenticated": True, "admin_token": token})
+    return Response({"authenticated": False, "admin_token": None})
 
 # ─────────────────────────────────────────────────────────────
 #  TENANTS LIST & MANAGEMENT
@@ -359,6 +400,46 @@ def admin_update_tenant(request):
         return Response({"success": True, "message": "Tenant details updated successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+
+@api_view(["PATCH"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_patch_tenant_status(request, tenant_id):
+    """Fast active/inactive toggle — two SQL updates only, no license sync."""
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    active_status = 1 if bool(request.data.get("active_status", False)) else 0
+
+    try:
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM tenants WHERE id = %s",
+                    [tenant_id],
+                )
+                if not cursor.fetchone():
+                    return Response({"error": "Tenant not found."}, status=404)
+                cursor.execute(
+                    "UPDATE tenants_signup SET active_status = %s WHERE tenant_id = %s",
+                    [active_status, tenant_id],
+                )
+                cursor.execute(
+                    "UPDATE tenants SET status = %s WHERE id = %s",
+                    [active_status, tenant_id],
+                )
+
+        return Response({
+            "success": True,
+            "tenant_id": tenant_id,
+            "active_status": bool(active_status),
+        })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
 
 @api_view(["DELETE"])
 @authentication_classes([])

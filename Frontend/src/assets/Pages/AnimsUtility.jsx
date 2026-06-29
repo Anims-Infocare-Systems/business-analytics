@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import "./AnimsUtility.css";
 import { resolveApiBase } from "../../apiBase";
+import { adminFetch } from "../../adminAuth";
 
 const API = resolveApiBase();
 
@@ -248,10 +249,10 @@ export default function AnimsUtility({ onAuthLost }) {
         setLoading(true);
         setErrorMsg("");
         try {
-            const clientsRes = await fetch(`${API}/admin/utility/clients/`, { credentials: "include" });
+            const clientsRes = await adminFetch(`${API}/admin/utility/clients/`);
             const clientsData = await clientsRes.json();
 
-            const activityRes = await fetch(`${API}/admin/utility/activity/`, { credentials: "include" });
+            const activityRes = await adminFetch(`${API}/admin/utility/activity/`);
             const activityData = await activityRes.json();
 
             if (clientsRes.ok && activityRes.ok) {

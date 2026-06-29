@@ -1,10 +1,84 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { resolveApiBase } from "../../apiBase";
+import { adminFetch, setAdminToken } from "../../adminAuth";
 import "./adminpannel.css";
 import AnimsUtility from "./AnimsUtility";
 
 const API = resolveApiBase();
 const ADMIN_AUTH_CODE = "admin_auth_required";
+
+const IconToastSuccess = () => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+            d="M10 1.667 3.333 4.167v5c0 3.5 2.917 6.775 6.667 7.5 3.75-.725 6.667-4 6.667-7.5v-5L10 1.667Z"
+            stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"
+        />
+        <path d="M7.5 10 9.167 11.667 12.5 8.333" stroke="currentColor" strokeWidth="1.35"
+            strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+);
+
+const IconToastError = () => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.35" />
+        <path d="M10 6.25v4.5M10 13.75h.008" stroke="currentColor" strokeWidth="1.6"
+            strokeLinecap="round" />
+    </svg>
+);
+
+function AdminToastContent({ variant, title, message }) {
+    return (
+        <div className={`ap-toast ap-toast--${variant}`}>
+            <span className="ap-toast__accent" aria-hidden="true" />
+            <span className={`ap-toast__icon-wrap ap-toast__icon-wrap--${variant}`}>
+                {variant === "success" ? <IconToastSuccess /> : <IconToastError />}
+            </span>
+            <div className="ap-toast__content">
+                <p className="ap-toast__title">{title}</p>
+                <p className="ap-toast__message">{message}</p>
+            </div>
+        </div>
+    );
+}
+
+const ADMIN_TOAST_OPTS = {
+    position: "top-right",
+    autoClose: 4500,
+    hideProgressBar: false,
+    closeOnClick: true,
+    pauseOnHover: true,
+    draggable: true,
+    icon: false,
+    className: "ap-toast-item",
+    bodyClassName: "ap-toast-body",
+    progressClassName: "ap-toast-progress",
+};
+
+function showAdminToast(variant, title, message) {
+    toast(
+        <AdminToastContent variant={variant} title={title} message={message} />,
+        {
+            ...ADMIN_TOAST_OPTS,
+            toastId: `admin-${variant}-${title}-${message}`.slice(0, 120),
+            className: `ap-toast-item ap-toast-item--${variant}`,
+            closeButton: ({ closeToast }) => (
+                <button
+                    type="button"
+                    className="ap-toast__close"
+                    onClick={closeToast}
+                    aria-label="Dismiss notification"
+                >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <path d="M3.5 3.5 10.5 10.5M10.5 3.5 3.5 10.5" stroke="currentColor"
+                            strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                </button>
+            ),
+        },
+    );
+}
 
 const formatDate = (val) => {
     if (!val) return "—";
@@ -76,6 +150,7 @@ export default function AdminPanel() {
     const [drawerUsers, setDrawerUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [showPasswordMap, setShowPasswordMap] = useState({}); // { [userId]: boolean }
+    const [togglingIds, setTogglingIds] = useState(() => new Set());
 
     // Delete Confirmation Modal State
     const [deleteConfirm, setDeleteConfirm] = useState({
@@ -98,13 +173,16 @@ export default function AdminPanel() {
     }, [activeTab]);
 
     const handleAdminSessionLost = (message) => {
+        const msg = message || "Admin session expired. Please sign in again.";
+        setAdminToken("");
         setIsAuthenticated(false);
         setTenants([]);
         setShowCreateModal(false);
         setShowEditModal(false);
         setShowUserDrawer(false);
         setDeleteConfirm((prev) => ({ ...prev, show: false }));
-        setLoginError(message || "Admin session expired. Please sign in again.");
+        setLoginError(msg);
+        showAdminToast("error", "Session Expired", msg);
     };
 
     const isAdminAuthFailure = (res, data) =>
@@ -115,9 +193,10 @@ export default function AdminPanel() {
 
     const checkSession = async () => {
         try {
-            const res = await fetch(`${API}/admin/check-session/`, { credentials: "include" });
+            const res = await adminFetch(`${API}/admin/check-session/`);
             const data = await res.json();
             if (data.authenticated) {
+                if (data.admin_token) setAdminToken(data.admin_token);
                 setIsAuthenticated(true);
                 fetchTenants();
             }
@@ -128,32 +207,42 @@ export default function AdminPanel() {
         }
     };
 
-    const fetchTenants = async () => {
-        setLoadingTenants(true);
-        setErrorMsg("");
+    const fetchTenants = useCallback(async ({ silent = false } = {}) => {
+        if (!silent) {
+            setLoadingTenants(true);
+            setErrorMsg("");
+        }
         try {
-            const res = await fetch(`${API}/admin/tenants/`, { credentials: "include" });
+            const res = await adminFetch(`${API}/admin/tenants/`);
             const data = await res.json();
             if (res.ok) {
                 setTenants(data.tenants || []);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
-            } else {
-                setErrorMsg(data.error || "Failed to load tenants.");
+            } else if (!silent) {
+                const msg = data.error || "Failed to load tenants.";
+                setErrorMsg(msg);
+                showAdminToast("error", "Load Failed", msg);
             }
-        } catch (err) {
-            setErrorMsg("Network error. Could not connect to API.");
+        } catch {
+            if (!silent) {
+                const msg = "Network error. Could not connect to API.";
+                setErrorMsg(msg);
+                showAdminToast("error", "Network Error", msg);
+            }
         } finally {
-            setLoadingTenants(false);
+            if (!silent) setLoadingTenants(false);
         }
-    };
+    }, []);
 
     // Authenticate Admin
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoginError("");
         if (!loginUsername || !loginPassword) {
-            setLoginError("Please enter username and password.");
+            const msg = "Please enter username and password.";
+            setLoginError(msg);
+            showAdminToast("error", "Missing Credentials", msg);
             return;
         }
         setLoginBusy(true);
@@ -166,13 +255,19 @@ export default function AdminPanel() {
             });
             const data = await res.json();
             if (res.ok) {
+                setAdminToken(data.admin_token || "");
                 setIsAuthenticated(true);
                 fetchTenants();
+                showAdminToast("success", "Authenticated", "Welcome back. Admin session is active.");
             } else {
-                setLoginError(data.error || "Invalid credentials.");
+                const msg = data.error || "Invalid credentials.";
+                setLoginError(msg);
+                showAdminToast("error", "Login Failed", msg);
             }
         } catch {
-            setLoginError("Network connection failed.");
+            const msg = "Network connection failed.";
+            setLoginError(msg);
+            showAdminToast("error", "Network Error", msg);
         } finally {
             setLoginBusy(false);
         }
@@ -180,60 +275,73 @@ export default function AdminPanel() {
 
     // Logout Admin
     const handleLogout = () => {
+        setAdminToken("");
         setIsAuthenticated(false);
         setTenants([]);
         setLoginUsername("");
         setLoginPassword("");
 
-        fetch(`${API}/admin/logout/`, {
+        adminFetch(`${API}/admin/logout/`, {
             method: "POST",
-            credentials: "include"
         }).catch(() => {});
     };
 
     // Toggle Active Status of Tenant
     const handleToggleStatus = async (tenant, currentVal) => {
         const newVal = !currentVal;
+        const tid = tenant.tenant_id;
+
+        setTenants((prev) =>
+            prev.map((t) =>
+                t.tenant_id === tid
+                    ? { ...t, active_status: newVal, tenant_status: newVal }
+                    : t,
+            ),
+        );
+        setTogglingIds((prev) => new Set(prev).add(tid));
+
         try {
-            const res = await fetch(`${API}/admin/tenants/update/`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    tenant_id: tenant.tenant_id,
-                    company_code: tenant.company_code,
-                    company_name: tenant.company_name,
-                    business_name: tenant.business_name,
-                    business_person_name: tenant.business_person_name,
-                    email_id: tenant.email_id,
-                    phone_number: tenant.phone_number,
-                    gst_number: tenant.gst_number,
-                    no_of_employees: tenant.no_of_employees,
-                    no_of_users: tenant.no_of_users,
-                    plan_id: tenant.plan_id,
-                    plan_name: tenant.plan_name,
-                    end_date: tenant.end_date,
-                    active_status: newVal,
-                    erp_server: tenant.erp_server,
-                    erp_database: tenant.erp_database,
-                    erp_user: tenant.erp_user,
-                    erp_password: tenant.erp_password,
-                    erp_port: tenant.erp_port
-                }),
-                credentials: "include"
+            const res = await adminFetch(`${API}/admin/tenants/${tid}/status/`, {
+                method: "PATCH",
+                body: JSON.stringify({ active_status: newVal }),
             });
-            if (res.ok) {
-                // update local state
-                setTenants(prev => prev.map(t => t.tenant_id === tenant.tenant_id ? { ...t, active_status: newVal, tenant_status: newVal } : t));
-            } else {
+            if (!res.ok) {
                 const data = await res.json();
+                setTenants((prev) =>
+                    prev.map((t) =>
+                        t.tenant_id === tid
+                            ? { ...t, active_status: currentVal, tenant_status: currentVal }
+                            : t,
+                    ),
+                );
                 if (isAdminAuthFailure(res, data)) {
                     handleAdminSessionLost(data.error);
                 } else {
-                    alert(data.error || "Failed to update tenant status.");
+                    const msg = data.error || "Failed to update tenant status.";
+                    showAdminToast("error", "Update Failed", msg);
                 }
+            } else {
+                showAdminToast(
+                    "success",
+                    "Status Updated",
+                    `${tenant.company_name} is now ${newVal ? "active" : "inactive"}.`,
+                );
             }
         } catch {
-            alert("Network error.");
+            setTenants((prev) =>
+                prev.map((t) =>
+                    t.tenant_id === tid
+                        ? { ...t, active_status: currentVal, tenant_status: currentVal }
+                        : t,
+                ),
+            );
+            showAdminToast("error", "Network Error", "Could not update tenant status.");
+        } finally {
+            setTogglingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(tid);
+                return next;
+            });
         }
     };
 
@@ -293,15 +401,16 @@ export default function AdminPanel() {
         e.preventDefault();
         setFormError("");
         if (!compCode || !compName) {
-            setFormError("Company Code and Company Name are required.");
+            const msg = "Company Code and Company Name are required.";
+            setFormError(msg);
+            showAdminToast("error", "Validation Error", msg);
             return;
         }
         setFormBusy(true);
         try {
             const plan_name = planId === "free" ? "Free Plan" : planId === "pro" ? "Pro Plan" : "Max Plan";
-            const res = await fetch(`${API}/admin/tenants/create/`, {
+            const res = await adminFetch(`${API}/admin/tenants/create/`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     company_code: compCode,
                     company_name: compName,
@@ -325,19 +434,23 @@ export default function AdminPanel() {
                     admin_username: adminUser,
                     admin_password: adminPass
                 }),
-                credentials: "include"
             });
             const data = await res.json();
             if (res.ok) {
                 setShowCreateModal(false);
-                fetchTenants();
+                fetchTenants({ silent: true });
+                showAdminToast("success", "Organization Created", `${compName} has been added successfully.`);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
             } else {
-                setFormError(data.error || "Failed to create tenant.");
+                const msg = data.error || "Failed to create tenant.";
+                setFormError(msg);
+                showAdminToast("error", "Create Failed", msg);
             }
         } catch {
-            setFormError("Network error.");
+            const msg = "Network error.";
+            setFormError(msg);
+            showAdminToast("error", "Network Error", msg);
         } finally {
             setFormBusy(false);
         }
@@ -349,9 +462,8 @@ export default function AdminPanel() {
         setFormBusy(true);
         try {
             const plan_name = planId === "free" ? "Free Plan" : planId === "pro" ? "Pro Plan" : "Max Plan";
-            const res = await fetch(`${API}/admin/tenants/update/`, {
+            const res = await adminFetch(`${API}/admin/tenants/update/`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     tenant_id: editTenant.tenant_id,
                     company_code: compCode,
@@ -375,19 +487,23 @@ export default function AdminPanel() {
                     erp_password: erpPassword,
                     erp_port: erpPort
                 }),
-                credentials: "include"
             });
             const data = await res.json();
             if (res.ok) {
                 setShowEditModal(false);
-                fetchTenants();
+                fetchTenants({ silent: true });
+                showAdminToast("success", "Organization Updated", `${compName} settings were saved.`);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
             } else {
-                setFormError(data.error || "Failed to update tenant details.");
+                const msg = data.error || "Failed to update tenant details.";
+                setFormError(msg);
+                showAdminToast("error", "Update Failed", msg);
             }
         } catch {
-            setFormError("Network error.");
+            const msg = "Network error.";
+            setFormError(msg);
+            showAdminToast("error", "Network Error", msg);
         } finally {
             setFormBusy(false);
         }
@@ -413,15 +529,17 @@ export default function AdminPanel() {
         setShowUserDrawer(true);
         setLoadingUsers(true);
         try {
-            const res = await fetch(`${API}/admin/tenants/${tenant.company_code}/users/`, { credentials: "include" });
+            const res = await adminFetch(`${API}/admin/tenants/${tenant.company_code}/users/`);
             const data = await res.json();
             if (res.ok) {
                 setDrawerUsers(data.users || []);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
+            } else {
+                showAdminToast("error", "Load Failed", data.error || "Could not load tenant users.");
             }
         } catch {
-            /* fail quietly in side view */
+            showAdminToast("error", "Network Error", "Could not load tenant users.");
         } finally {
             setLoadingUsers(false);
         }
@@ -451,76 +569,82 @@ export default function AdminPanel() {
         try {
             if (deleteConfirm.type === "tenant") {
                 const tenant = deleteConfirm.target;
-                const res = await fetch(`${API}/admin/tenants/delete/${tenant.tenant_id}/`, {
+                const res = await adminFetch(`${API}/admin/tenants/delete/${tenant.tenant_id}/`, {
                     method: "DELETE",
-                    credentials: "include"
                 });
                 if (res.ok) {
-                    fetchTenants();
-                    setDeleteConfirm(prev => ({ ...prev, show: false }));
+                    setTenants((prev) => prev.filter((t) => t.tenant_id !== tenant.tenant_id));
+                    setDeleteConfirm((prev) => ({ ...prev, show: false }));
+                    showAdminToast("success", "Organization Deleted", `"${tenant.company_name}" was permanently removed.`);
                 } else {
                     const data = await res.json();
                     if (isAdminAuthFailure(res, data)) {
                         handleAdminSessionLost(data.error);
                     } else {
-                        alert(data.error || "Failed to delete tenant.");
+                        showAdminToast("error", "Delete Failed", data.error || "Failed to delete tenant.");
                     }
                 }
             } else if (deleteConfirm.type === "user") {
                 const user = deleteConfirm.target;
-                const res = await fetch(`${API}/admin/tenants/users/${user.id}/`, {
+                const res = await adminFetch(`${API}/admin/tenants/users/${user.id}/`, {
                     method: "DELETE",
-                    credentials: "include"
                 });
                 if (res.ok) {
-                    if (drawerCompany) {
-                        openUserDrawer(drawerCompany);
-                    }
-                    setDeleteConfirm(prev => ({ ...prev, show: false }));
+                    setDrawerUsers((prev) => prev.filter((u) => u.id !== user.id));
+                    setDeleteConfirm((prev) => ({ ...prev, show: false }));
+                    showAdminToast("success", "User Deleted", `"${user.username}" was removed.`);
                 } else {
                     const data = await res.json();
                     if (isAdminAuthFailure(res, data)) {
                         handleAdminSessionLost(data.error);
                     } else {
-                        alert(data.error || "Failed to delete user.");
+                        showAdminToast("error", "Delete Failed", data.error || "Failed to delete user.");
                     }
                 }
             }
         } catch {
-            alert("Network error.");
+            showAdminToast("error", "Network Error", "Delete request failed.");
         } finally {
             setFormBusy(false);
         }
     };
 
-    // Filtering logic
-    const filteredTenants = tenants.filter(t => {
+    const filteredTenants = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
-        const matchesQuery = !query || 
-            t.company_name.toLowerCase().includes(query) || 
-            t.company_code.toLowerCase().includes(query) || 
-            t.business_person_name.toLowerCase().includes(query) ||
-            t.email_id.toLowerCase().includes(query);
+        return tenants.filter((t) => {
+            const matchesQuery = !query ||
+                t.company_name.toLowerCase().includes(query) ||
+                t.company_code.toLowerCase().includes(query) ||
+                t.business_person_name.toLowerCase().includes(query) ||
+                t.email_id.toLowerCase().includes(query);
 
-        const matchesStatus = statusFilter === "all" || 
-            (statusFilter === "active" && t.active_status) || 
-            (statusFilter === "inactive" && !t.active_status);
+            const matchesStatus = statusFilter === "all" ||
+                (statusFilter === "active" && t.active_status) ||
+                (statusFilter === "inactive" && !t.active_status);
 
-        const matchesPlan = planFilter === "all" || 
-            t.plan_id === planFilter || 
-            (planFilter === "max" && t.plan_id === "enterprise") ||
-            (planFilter === "free" && !t.plan_id);
+            const matchesPlan = planFilter === "all" ||
+                t.plan_id === planFilter ||
+                (planFilter === "max" && t.plan_id === "enterprise") ||
+                (planFilter === "free" && !t.plan_id);
 
-        return matchesQuery && matchesStatus && matchesPlan;
-    });
+            return matchesQuery && matchesStatus && matchesPlan;
+        });
+    }, [tenants, searchQuery, statusFilter, planFilter]);
 
-    // KPI Counters
-    const totalTenantsCount = tenants.length;
-    const activeCount = tenants.filter(t => t.active_status).length;
+    const kpiCounts = useMemo(() => ({
+        total: tenants.length,
+        active: tenants.filter((t) => t.active_status).length,
+        pro: tenants.filter((t) => t.plan_id === "pro").length,
+        max: tenants.filter((t) => t.plan_id === "max" || t.plan_id === "enterprise").length,
+        free: tenants.filter((t) => t.plan_id === "free" || !t.plan_id).length,
+    }), [tenants]);
+
+    const totalTenantsCount = kpiCounts.total;
+    const activeCount = kpiCounts.active;
     const inactiveCount = totalTenantsCount - activeCount;
-    const proCount = tenants.filter(t => t.plan_id === "pro").length;
-    const maxCount = tenants.filter(t => t.plan_id === "max" || t.plan_id === "enterprise").length;
-    const freeCount = tenants.filter(t => t.plan_id === "free" || !t.plan_id).length;
+    const proCount = kpiCounts.pro;
+    const maxCount = kpiCounts.max;
+    const freeCount = kpiCounts.free;
 
     if (authLoading) {
         return (
@@ -532,6 +656,12 @@ export default function AdminPanel() {
 
     return (
         <div className="ap-root">
+            <ToastContainer
+                className="ap-toast-container"
+                toastClassName="ap-toast-item"
+                bodyClassName="ap-toast-body"
+                progressClassName="ap-toast-progress"
+            />
             <div className="ap-glow" />
             <div className="ap-glow-alt" />
 
@@ -770,10 +900,11 @@ export default function AdminPanel() {
                                                                 {formatDate(t.signup_date)}
                                                             </td>
                                                             <td className="ap-td">
-                                                                <label className="ap-switch">
+                                                                <label className={`ap-switch${togglingIds.has(t.tenant_id) ? " ap-switch--busy" : ""}`}>
                                                                     <input 
                                                                         type="checkbox" 
                                                                         checked={t.active_status}
+                                                                        disabled={togglingIds.has(t.tenant_id)}
                                                                         onChange={() => handleToggleStatus(t, t.active_status)}
                                                                     />
                                                                     <span className="ap-slider"></span>

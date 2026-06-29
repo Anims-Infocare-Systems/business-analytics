@@ -45,6 +45,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',              # ✅ FIRST — was last before
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'accounts.middleware.AdminSessionGuardMiddleware',
     'django.middleware.common.CommonMiddleware',          # ✅ only once — was duplicated
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -127,6 +128,7 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
     "authorization",
     "x-csrftoken",
     "x-requested-with",
+    "x-admin-token",
 ]
 
 

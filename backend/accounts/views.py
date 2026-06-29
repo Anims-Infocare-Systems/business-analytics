@@ -308,9 +308,16 @@ def login_view(request):
             os_name = 'Browser Client'
         system_name = os_name
     try:
-        tenant = Tenant.objects.get(company_code__iexact=company_code, status=True)
+        tenant = Tenant.objects.get(company_code__iexact=company_code)
     except Tenant.DoesNotExist:  # type: ignore
         return Response({"error": "Invalid company code."}, status=400)
+
+    if not tenant.status:
+        return Response({
+            "error": "Account Inactive.",
+            "code": "account_inactive",
+        }, status=403)
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -373,6 +380,8 @@ def login_view(request):
         "company_name": tenant.company_name,
         "username": username,
     }
+    if request.session.get("is_admin_pannel_authenticated"):
+        request.session["is_admin_pannel_authenticated"] = True
     request.session.modified = True
     request.session.save()
     new_session_key = request.session.session_key
@@ -464,21 +473,36 @@ def get_company(request, code):
     code = (code or "").strip()
     if not code: return Response({"error": "Company code is required."}, status=400)
     try:
-        tenant = Tenant.objects.get(company_code__iexact=code, status=True)
+        tenant = Tenant.objects.only("company_code", "company_name", "status").get(
+            company_code__iexact=code
+        )
+    except Tenant.DoesNotExist:  # type: ignore
+        return Response({"error": "Company not found."}, status=404)
+
+    if not tenant.status:
+        return Response({
+            "error": "Account Inactive.",
+            "code": "account_inactive",
+            "company_name": tenant.company_name,
+            "company_code": tenant.company_code,
+        }, status=403)
+
+    payload = {
+        "company_name": tenant.company_name,
+        "company_code": tenant.company_code,
+    }
+
+    include_signup = (request.GET.get("signup") or "").strip().lower() in ("1", "true", "yes")
+    if include_signup:
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT COUNT(1) FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s) OR UPPER(company_name) = UPPER(%s)",
                 [tenant.company_code, tenant.company_name]
             )
-            already_registered = cursor.fetchone()[0] > 0
-        return Response({
-            "company_name": tenant.company_name, 
-            "company_code": tenant.company_code,
-            "already_registered": already_registered
-        })
-    except Tenant.DoesNotExist:  # type: ignore
-        return Response({"error": "Company not found."}, status=404)
+            payload["already_registered"] = cursor.fetchone()[0] > 0
+
+    return Response(payload)
 
 # ─────────────────────────────────────────────────────────────
 #  CHARTS - SABARISH (Monthwise Charts)
