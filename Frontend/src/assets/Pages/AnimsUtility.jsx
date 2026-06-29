@@ -226,7 +226,7 @@ function ClientDrawer({ client, onClose }) {
 /* ════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ════════════════════════════════════════════════════════════ */
-export default function AnimsUtility() {
+export default function AnimsUtility({ onAuthLost }) {
     useTick(30000); // re-render every 30s to refresh "time ago"
 
     const [clients, setClients] = useState([]);
@@ -259,7 +259,14 @@ export default function AnimsUtility() {
                 setActivityFeed(activityData.activity || []);
                 setLastRefresh(new Date());
             } else {
-                setErrorMsg(clientsData.error || activityData.error || "Failed to load monitor data.");
+                const authLost =
+                    (clientsRes.status === 403 && clientsData?.code === "admin_auth_required") ||
+                    (activityRes.status === 403 && activityData?.code === "admin_auth_required");
+                if (authLost && onAuthLost) {
+                    onAuthLost(clientsData.error || activityData.error);
+                } else {
+                    setErrorMsg(clientsData.error || activityData.error || "Failed to load monitor data.");
+                }
             }
         } catch (err) {
             setErrorMsg("Network error. Could not connect to API.");

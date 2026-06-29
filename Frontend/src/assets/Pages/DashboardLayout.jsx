@@ -424,6 +424,14 @@ export default function DashboardLayout() {
         try { return sessionStorage.getItem("ba_settings_open") === "1"; }
         catch { return false; }
     });
+    const [erpUnavailable, setErpUnavailable] = useState(() => {
+        try {
+            const stored = sessionStorage.getItem("ba_erp_unavailable");
+            return stored || null;
+        } catch {
+            return null;
+        }
+    });
 
     const sidebarRef = useRef(null);
     const contentRef = useRef(null);
@@ -440,6 +448,14 @@ export default function DashboardLayout() {
     useEffect(() => {
         try { sessionStorage.setItem("ba_settings_open", settingsOpen ? "1" : "0"); } catch { }
     }, [settingsOpen]);
+
+    useEffect(() => {
+        const onErpUnavailable = (event) => {
+            setErpUnavailable(event.detail?.message || "ERP database is unavailable.");
+        };
+        window.addEventListener("ba-erp-unavailable", onErpUnavailable);
+        return () => window.removeEventListener("ba-erp-unavailable", onErpUnavailable);
+    }, []);
 
     /* fetch fresh user designation and plan limits dynamically from backend to heal legacy/stale localstorage caches */
     const refreshProfile = useCallback(() => {
@@ -811,6 +827,15 @@ export default function DashboardLayout() {
                         </div>
                     </div>
                 </header>
+
+                {erpUnavailable && (
+                    <div className="dl-erp-banner" role="alert">
+                        <span className="dl-erp-banner__icon" aria-hidden="true">!</span>
+                        <span className="dl-erp-banner__text">
+                            {erpUnavailable} Dashboards cannot load data until the connection is restored.
+                        </span>
+                    </div>
+                )}
 
                 {/* Topbar */}
                 <div className="dl-topbar">

@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from datetime import datetime, timedelta, date
 import hashlib
-from .views_adminpannel import check_admin_auth
+from .views_adminpannel import check_admin_auth, admin_auth_denied_response
 
 # Accent colors list to assign dynamically
 COLORS = ["#3b82f6", "#10b981", "#f97316", "#8b5cf6", "#ec4899", "#06b6d4"]
@@ -37,7 +37,7 @@ def admin_utility_clients(request):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         with connection.cursor() as cursor:
@@ -212,7 +212,7 @@ def admin_utility_activity(request):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         activity = []

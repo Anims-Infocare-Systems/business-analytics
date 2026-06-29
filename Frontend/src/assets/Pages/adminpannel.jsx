@@ -4,6 +4,7 @@ import "./adminpannel.css";
 import AnimsUtility from "./AnimsUtility";
 
 const API = resolveApiBase();
+const ADMIN_AUTH_CODE = "admin_auth_required";
 
 const formatDate = (val) => {
     if (!val) return "—";
@@ -96,6 +97,22 @@ export default function AdminPanel() {
         localStorage.setItem("ap_active_tab", activeTab);
     }, [activeTab]);
 
+    const handleAdminSessionLost = (message) => {
+        setIsAuthenticated(false);
+        setTenants([]);
+        setShowCreateModal(false);
+        setShowEditModal(false);
+        setShowUserDrawer(false);
+        setDeleteConfirm((prev) => ({ ...prev, show: false }));
+        setLoginError(message || "Admin session expired. Please sign in again.");
+    };
+
+    const isAdminAuthFailure = (res, data) =>
+        (res.status === 403 && data?.code === ADMIN_AUTH_CODE) ||
+        (res.status === 401 &&
+            typeof data?.error === "string" &&
+            data.error.toLowerCase().includes("admin"));
+
     const checkSession = async () => {
         try {
             const res = await fetch(`${API}/admin/check-session/`, { credentials: "include" });
@@ -119,6 +136,8 @@ export default function AdminPanel() {
             const data = await res.json();
             if (res.ok) {
                 setTenants(data.tenants || []);
+            } else if (isAdminAuthFailure(res, data)) {
+                handleAdminSessionLost(data.error);
             } else {
                 setErrorMsg(data.error || "Failed to load tenants.");
             }
@@ -207,7 +226,11 @@ export default function AdminPanel() {
                 setTenants(prev => prev.map(t => t.tenant_id === tenant.tenant_id ? { ...t, active_status: newVal, tenant_status: newVal } : t));
             } else {
                 const data = await res.json();
-                alert(data.error || "Failed to update tenant status.");
+                if (isAdminAuthFailure(res, data)) {
+                    handleAdminSessionLost(data.error);
+                } else {
+                    alert(data.error || "Failed to update tenant status.");
+                }
             }
         } catch {
             alert("Network error.");
@@ -308,6 +331,8 @@ export default function AdminPanel() {
             if (res.ok) {
                 setShowCreateModal(false);
                 fetchTenants();
+            } else if (isAdminAuthFailure(res, data)) {
+                handleAdminSessionLost(data.error);
             } else {
                 setFormError(data.error || "Failed to create tenant.");
             }
@@ -356,6 +381,8 @@ export default function AdminPanel() {
             if (res.ok) {
                 setShowEditModal(false);
                 fetchTenants();
+            } else if (isAdminAuthFailure(res, data)) {
+                handleAdminSessionLost(data.error);
             } else {
                 setFormError(data.error || "Failed to update tenant details.");
             }
@@ -390,6 +417,8 @@ export default function AdminPanel() {
             const data = await res.json();
             if (res.ok) {
                 setDrawerUsers(data.users || []);
+            } else if (isAdminAuthFailure(res, data)) {
+                handleAdminSessionLost(data.error);
             }
         } catch {
             /* fail quietly in side view */
@@ -431,7 +460,11 @@ export default function AdminPanel() {
                     setDeleteConfirm(prev => ({ ...prev, show: false }));
                 } else {
                     const data = await res.json();
-                    alert(data.error || "Failed to delete tenant.");
+                    if (isAdminAuthFailure(res, data)) {
+                        handleAdminSessionLost(data.error);
+                    } else {
+                        alert(data.error || "Failed to delete tenant.");
+                    }
                 }
             } else if (deleteConfirm.type === "user") {
                 const user = deleteConfirm.target;
@@ -446,7 +479,11 @@ export default function AdminPanel() {
                     setDeleteConfirm(prev => ({ ...prev, show: false }));
                 } else {
                     const data = await res.json();
-                    alert(data.error || "Failed to delete user.");
+                    if (isAdminAuthFailure(res, data)) {
+                        handleAdminSessionLost(data.error);
+                    } else {
+                        alert(data.error || "Failed to delete user.");
+                    }
                 }
             }
         } catch {
@@ -784,7 +821,7 @@ export default function AdminPanel() {
                             </main>
                         ) : (
                             <main className="ap-main-utility">
-                                <AnimsUtility />
+                                <AnimsUtility onAuthLost={handleAdminSessionLost} />
                             </main>
                         )}
                     </div>

@@ -269,15 +269,45 @@ window.addEventListener("online", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Global fetch interceptor — 401 session expiry
+//  Global fetch interceptor — 401 session expiry, 503 ERP unavailable
 // ══════════════════════════════════════════════════════════════════════════════
-let _redirecting401 = false; // Guard: prevents multiple simultaneous 401 redirects
+let _redirecting401 = false;
+let _erpToastShown = false;
+
+function markErpUnavailable(message) {
+  const text = message || "ERP database is unavailable. Dashboards cannot load data.";
+  try {
+    sessionStorage.setItem("ba_erp_unavailable", text);
+  } catch (e) {
+    console.error("sessionStorage write failed:", e);
+  }
+  window.dispatchEvent(new CustomEvent("ba-erp-unavailable", { detail: { message: text } }));
+  if (!_erpToastShown) {
+    _erpToastShown = true;
+    showToast({ message: text, type: "warning", duration: 8000 });
+  }
+}
+
 const _fetch = window.fetch;
 window.fetch = async (...args) => {
   const res = await _fetch(...args);
+  const url = typeof args[0] === "string" ? args[0] : (args[0]?.url ?? "");
+
+  if (res.status === 503 && url.includes("/api/") && !url.includes("/login/")) {
+    try {
+      const body = await res.clone().json();
+      if (body.code === "erp_unavailable") {
+        markErpUnavailable(body.error);
+      }
+    } catch {
+      /* ignore non-JSON 503 */
+    }
+  }
+
   if (res.status === 401 && !_redirecting401) {
-    const url = typeof args[0] === "string" ? args[0] : (args[0]?.url ?? "");
-    if (!url.includes("/login/") && !url.includes("/forgot-password/")) {
+    const isAdminApi = url.includes("/admin/");
+    const isUserLoginApi = url.includes("/login/") || url.includes("/forgot-password/");
+    if (!isUserLoginApi && !isAdminApi) {
       _redirecting401 = true;
       try {
         localStorage.removeItem("user");

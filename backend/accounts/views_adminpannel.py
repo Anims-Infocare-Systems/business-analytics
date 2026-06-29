@@ -18,6 +18,13 @@ def check_admin_auth(request):
     """Utility function to check if the current session is authenticated as admin."""
     if not request.session.get("is_admin_pannel_authenticated", False):
         raise PermissionError("Access denied. Please authenticate as Admin.")
+    request.session.modified = True
+
+def admin_auth_denied_response(exc):
+    return Response(
+        {"error": str(exc), "code": "admin_auth_required"},
+        status=403,
+    )
 
 # ─────────────────────────────────────────────────────────────
 #  AUTHENTICATION
@@ -50,6 +57,8 @@ def admin_logout(request):
 @permission_classes([AllowAny])
 def admin_check_session(request):
     is_auth = request.session.get("is_admin_pannel_authenticated", False)
+    if is_auth:
+        request.session.modified = True
     return Response({"authenticated": is_auth})
 
 # ─────────────────────────────────────────────────────────────
@@ -62,7 +71,7 @@ def admin_list_tenants(request):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         with connection.cursor() as cursor:
@@ -143,7 +152,7 @@ def admin_create_tenant(request):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     company_code = str(request.data.get("company_code") or "").strip().upper()
     company_name = str(request.data.get("company_name") or "").strip()
@@ -264,7 +273,7 @@ def admin_update_tenant(request):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     tenant_id = request.data.get("tenant_id")
     company_code = str(request.data.get("company_code") or "").strip().upper()
@@ -358,7 +367,7 @@ def admin_delete_tenant(request, tenant_id):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         with transaction.atomic():
@@ -395,7 +404,7 @@ def admin_list_tenant_users(request, company_code):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         with connection.cursor() as cursor:
@@ -447,7 +456,7 @@ def admin_delete_tenant_user(request, user_id):
     try:
         check_admin_auth(request)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=401)
+        return admin_auth_denied_response(e)
 
     try:
         with transaction.atomic():

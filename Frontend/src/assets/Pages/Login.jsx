@@ -249,6 +249,8 @@ export default function LoginPage() {
             const data = await res.json();
 
             if (res.ok) {
+                try { sessionStorage.removeItem("ba_erp_unavailable"); } catch { /* ignore */ }
+
                 if (data.hasAccess === false) {
                     showLoginToast(
                         "access",
@@ -283,6 +285,12 @@ export default function LoginPage() {
                     !!data.isSuperAdmin,
                 );
                 navigate("/AnimsBusinessAnalytics", { replace: true });
+            } else if (res.status === 503 && data.code === "erp_unavailable") {
+                showLoginToast(
+                    "error",
+                    "Server unavailable",
+                    data.error || "Your organization database is currently unavailable. Please try again later or contact IT.",
+                );
             } else {
                 showLoginToast(
                     "error",

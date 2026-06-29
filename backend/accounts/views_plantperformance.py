@@ -521,8 +521,23 @@ def plant_performance_bundle(request):
     Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD
     Response: { from, to, data: { fi, prod, idle, ... }, errors: { key: message } | null }
     """
+    from .views import get_tenant_connection
+    from .utils.db import ErpConnectionError
+
     from_param = (request.GET.get("from") or "").strip()
     to_param = (request.GET.get("to") or "").strip()
+
+    try:
+        conn, _tenant = get_tenant_connection(request)
+        conn.close()
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=401)
+    except ErpConnectionError as exc:
+        return Response(
+            {"error": str(exc), "code": "erp_unavailable"},
+            status=503,
+        )
+
     data_out = {}
     errors_out = {}
 

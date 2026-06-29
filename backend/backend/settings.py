@@ -181,6 +181,11 @@ STATIC_ROOT = os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles")
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ─── Django REST Framework ────────────────────────────────────
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "accounts.exceptions.drf_exception_handler",
+}
+
 # ─── Brevo Email Integration ──────────────────────────────────
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 BREVO_TEMPLATE_ID = int(os.environ.get("BREVO_TEMPLATE_ID", 1))

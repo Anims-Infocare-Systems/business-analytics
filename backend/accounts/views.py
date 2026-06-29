@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from datetime import datetime, date
 from .models import Tenant
-from .utils.db import get_connection
+from .utils.db import ErpConnectionError, check_tenant_erp_connection, get_connection
 
 # ─────────────────────────────────────────────────────────────
 #  HELPERS
@@ -350,6 +350,20 @@ def login_view(request):
             pass
 
     has_access = is_super_admin or any(rights.values())
+
+    try:
+        check_tenant_erp_connection(
+            tenant.erp_server,
+            tenant.erp_database,
+            tenant.erp_user,
+            tenant.erp_password,
+            tenant.erp_port,
+        )
+    except ErpConnectionError as exc:
+        return Response(
+            {"error": str(exc), "code": "erp_unavailable"},
+            status=503,
+        )
 
     request.session["tenant"] = {
         "tenant_id": tenant.id,
@@ -1248,100 +1262,6 @@ def production_value_monthwise(request):
         "actual": [actual_map[m] for m in month_order],
         "target": [target_map[m] for m in month_order],
     })
-
-# ─────────────────────────────────────────────────────────────
-#  DASHBOARD2 - PRANESH (Full Implementation)
-# ─────────────────────────────────────────────────────────────
-# ... [Rest of your existing dashboard2 views remain exactly the same] ...
-def inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_date):
-    company_candidates = ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"]
-    deleted_candidates = ["deleted", "is_deleted", "Deleted", "IsDeleted"]
-    company_code = tenant.get("company_code")
-    grand_rej = 0.0; grand_rwk = 0.0
-    try:
-        mas_tbl = find_first_table(cursor, ["InJob_Mas", "INJOB_MAS", "injob_mas"])
-        det_tbl = find_first_table(cursor, ["InJob_Det", "INJOB_DET", "injob_det"])
-        if mas_tbl and det_tbl:
-            join_candidates = ["inspno", "InspNo", "INSPNO"]
-            date_candidates = ["inspdate", "InspDate", "INSPDATE", "insp_date"]
-            join_m = find_first_column(cursor, mas_tbl, join_candidates)
-            join_d = find_first_column(cursor, det_tbl, join_candidates)
-            mas_date = find_first_column(cursor, mas_tbl, date_candidates)
-            matrej_c = find_first_column(cursor, det_tbl, ["matrej", "MatRej", "MATREJ"])
-            macrej_c = find_first_column(cursor, det_tbl, ["macrej", "MacRej", "MACREJ"])
-            rwqty_c = find_first_column(cursor, det_tbl, ["rwqty", "RwQty", "RWQTY", "rw_qty", "RW_Qty"])
-            rej_parts = []
-            if matrej_c: rej_parts.append(f"COALESCE(CAST(D.[{matrej_c}] AS FLOAT), 0)")
-            if macrej_c: rej_parts.append(f"COALESCE(CAST(D.[{macrej_c}] AS FLOAT), 0)")
-            if join_m and join_d and mas_date and rej_parts:
-                inner_rejection = " + ".join(rej_parts)
-                sql_total_rejection = f"COALESCE(SUM({inner_rejection}), 0)"
-                sql_total_rework = f"COALESCE(SUM(COALESCE(CAST(D.[{rwqty_c}] AS FLOAT), 0)), 0)" if rwqty_c else "CAST(0 AS FLOAT)"
-                mas_del = find_first_column(cursor, mas_tbl, deleted_candidates)
-                det_del = find_first_column(cursor, det_tbl, deleted_candidates)
-                mas_cc = find_first_column(cursor, mas_tbl, company_candidates)
-                where_parts = [f"CAST(M.[{mas_date}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
-                if mas_del: where_parts.append(f"M.[{mas_del}] = 0")
-                if det_del: where_parts.append(f"(D.[{det_del}] IS NULL OR D.[{det_del}] = 0)")
-                if mas_cc and company_code: where_parts.append(f"M.[{mas_cc}] = ?"); params.append(company_code)
-                where_sql = " AND ".join(where_parts)
-                sql = f"SELECT {sql_total_rejection} AS total_rejection, {sql_total_rework} AS total_rework FROM [{mas_tbl}] M INNER JOIN [{det_tbl}] D ON M.[{join_m}] = D.[{join_d}] WHERE {where_sql}"
-                cursor.execute(sql, params); row = cursor.fetchone()
-                if row: grand_rej += float((row[0] if row else 0) or 0); grand_rwk += float((row[1] if row else 0) or 0)
-    except Exception: pass
-    return grand_rej, grand_rwk
-
-@api_view(['GET'])
-def dashboard2_kpis(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
-    from_param = (request.GET.get("from") or "").strip(); to_param = (request.GET.get("to") or "").strip()
-    if from_param and to_param:
-        try: start_date = datetime.strptime(from_param, "%Y-%m-%d").date(); end_date = datetime.strptime(to_param, "%Y-%m-%d").date()
-        except ValueError: today = date.today(); start_date = date(today.year, today.month, 1); end_date = today
-    else: today = date.today(); start_date = date(today.year, today.month, 1); end_date = today
-    production_specs = [("ConvProductionEntryRod", "qty"), ("ConvProductionEntry", "qty"), ("ProductionEntry", "okqty")]
-    date_candidates = ["proddate", "prod_date", "entrydate", "entry_date", "vdate", "date", "finspdate", "inspdate", "rejdate", "jobdate"]
-    company_candidates = ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"]
-    deleted_candidates = ["deleted", "is_deleted", "Deleted", "IsDeleted"]
-    production_output = 0.0; oa_efficiency = 0.0; company_code = tenant.get("company_code")
-    oaeff_table_specs = [("ProductionEntry", ["proddate", "prod_date", "entrydate", "entry_date", "vdate", "date"]), ("ConvProductionEntryRod", ["entrydate", "entry_date", "proddate", "prod_date", "vdate", "date"]), ("ConvProductionEntry", ["entrydate", "entry_date", "proddate", "prod_date", "vdate", "date"])]
-    oaeff_col_candidates = ["OAEFF", "OaEff", "oaeff", "OEENEW"]
-    try:
-        cursor = conn.cursor()
-        for table_name, qty_col in production_specs:
-            if not table_exists(cursor, table_name): continue
-            date_col = find_first_column(cursor, table_name, date_candidates)
-            if not date_col: continue
-            company_col = find_first_column(cursor, table_name, company_candidates)
-            deleted_col = find_first_column(cursor, table_name, deleted_candidates)
-            sql = f"SELECT COALESCE(SUM(CAST([{qty_col}] AS FLOAT)), 0) FROM [{table_name}] WHERE CAST([{date_col}] AS date) BETWEEN ? AND ?"
-            params = [start_date, end_date]
-            if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
-            if deleted_col: sql += f" AND [{deleted_col}] = 0"
-            cursor.execute(sql, params); row = cursor.fetchone()
-            production_output += float((row[0] if row else 0) or 0)
-        rejection_qty, rework_grand_total = inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_date)
-        total_oaeff_sum = 0.0; total_oaeff_rows = 0
-        for table_name, date_prefs in oaeff_table_specs:
-            if not table_exists(cursor, table_name): continue
-            oaeff_col = find_first_column(cursor, table_name, oaeff_col_candidates)
-            if not oaeff_col: continue
-            date_col = find_first_column(cursor, table_name, date_prefs)
-            if not date_col: continue
-            company_col = find_first_column(cursor, table_name, company_candidates)
-            deleted_col = find_first_column(cursor, table_name, deleted_candidates)
-            sql = f"SELECT COALESCE(SUM(COALESCE(CAST([{oaeff_col}] AS FLOAT), 0)), 0), COUNT(*) FROM [{table_name}] WHERE CAST([{date_col}] AS date) BETWEEN ? AND ?"
-            params = [start_date, end_date]
-            if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
-            if deleted_col: sql += f" AND [{deleted_col}] = 0"
-            cursor.execute(sql, params); row = cursor.fetchone()
-            if row: total_oaeff_sum += float((row[0] if row[0] is not None else 0) or 0); total_oaeff_rows += int((row[1] if row[1] is not None else 0) or 0)
-        oa_efficiency = (total_oaeff_sum / total_oaeff_rows) if total_oaeff_rows > 0 else 0.0
-        cursor.close(); conn.close()
-    except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"production_output": round(production_output, 2), "rejection_qty": round(rejection_qty, 2), "rework_grand_total": round(rework_grand_total, 2), "oa_efficiency": round(oa_efficiency, 2)}})
-
 
 # ─────────────────────────────────────────────────────────────
 #  DASHBOARD2 - PRANESH (Full Implementation)
