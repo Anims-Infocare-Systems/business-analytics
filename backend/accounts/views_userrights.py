@@ -58,6 +58,106 @@ def _session_username(tenant: dict) -> str:
     return str(tenant.get("username") or "").strip()
 
 
+def _is_super_admin(designation, issuper) -> bool:
+    desg = (designation or "").strip()
+    return desg.lower() == "admin" or bool(issuper)
+
+
+def _rights_from_input(rights_in: dict) -> dict:
+    return {key: bool(rights_in.get(key, False)) for key in FORM_RIGHTS_KEYS}
+
+
+def _delete_users_rights(cursor, company_code: str, usernames: list[str]) -> None:
+    if not usernames:
+        return
+    upper_names = [u.upper() for u in usernames if u]
+    if not upper_names:
+        return
+    placeholders = ", ".join(["%s"] * len(upper_names))
+    cursor.execute(
+        f"DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) IN ({placeholders})",
+        [company_code, *upper_names],
+    )
+
+
+def _insert_users_rights(cursor, rows: list[tuple]) -> None:
+    if not rows:
+        return
+    cursor.executemany(
+        """
+        INSERT INTO tenants_usersrights (tenant_id, company_code, username, form_name, access)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        rows,
+    )
+
+
+def _rights_rows_for_user(tenant_id, company_code: str, username: str, rights_in: dict) -> list[tuple]:
+    normalized = _rights_from_input(rights_in)
+    return [
+        (tenant_id, company_code, username, key, 1 if normalized[key] else 0)
+        for key in FORM_RIGHTS_KEYS
+    ]
+
+
+def _fetch_existing_rights(cursor, company_code: str, usernames: list[str]) -> dict:
+    if not usernames:
+        return {}
+    upper_names = [u.upper() for u in usernames if u]
+    if not upper_names:
+        return {}
+    placeholders = ", ".join(["%s"] * len(upper_names))
+    cursor.execute(
+        f"""
+        SELECT UPPER(username), form_name, access
+        FROM tenants_usersrights
+        WHERE company_code = %s AND UPPER(username) IN ({placeholders})
+        """,
+        [company_code, *upper_names],
+    )
+    existing = defaultdict(dict)
+    for uname, fname, acc in cursor.fetchall():
+        existing[uname][fname] = 1 if acc else 0
+    return existing
+
+
+def _apply_rights_delta(cursor, pending_updates: list[tuple]) -> int:
+    """
+    Write only changed rights rows (UPDATE + INSERT), skipping unchanged keys.
+    pending_updates: [(tenant_id, company_code, username, rights_in), ...]
+    """
+    if not pending_updates:
+        return 0
+
+    company_code = pending_updates[0][1]
+    usernames = [username for _, _, username, _ in pending_updates]
+    existing = _fetch_existing_rights(cursor, company_code, usernames)
+
+    insert_rows = []
+    update_rows = []
+    for tenant_id, ccode, username, rights_in in pending_updates:
+        normalized = _rights_from_input(rights_in)
+        current = existing.get(username.upper(), {})
+        for key in FORM_RIGHTS_KEYS:
+            new_val = 1 if normalized[key] else 0
+            if key not in current:
+                insert_rows.append((tenant_id, ccode, username, key, new_val))
+            elif current[key] != new_val:
+                update_rows.append((new_val, ccode, username, key))
+
+    if update_rows:
+        cursor.executemany(
+            """
+            UPDATE tenants_usersrights
+            SET access = %s
+            WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND form_name = %s
+            """,
+            update_rows,
+        )
+    _insert_users_rights(cursor, insert_rows)
+    return len(update_rows) + len(insert_rows)
+
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -110,7 +210,7 @@ def user_rights_list(request):
     users = []
     for uid, tid, ccode, uname, desg, issuper in user_rows:
         desg = (desg or "").strip()
-        is_super_admin = (desg.lower() == "admin" or bool(issuper))
+        is_super_admin = _is_super_admin(desg, issuper)
 
         u_rights = {key: False for key in FORM_RIGHTS_KEYS}
         if is_super_admin:
@@ -182,7 +282,7 @@ def user_rights_me(request):
 
     user_id, tenant_id, company_code, uname, desg, issuper = row
     desg = (desg or "").strip()
-    is_super_admin = (desg.lower() == "admin" or bool(issuper))
+    is_super_admin = _is_super_admin(desg, issuper)
 
     rights = {key: False for key in FORM_RIGHTS_KEYS}
     if is_super_admin:
@@ -253,51 +353,29 @@ def user_rights_update(request):
                 if company_code.strip().upper() != company.upper():
                     return Response({"error": "Unauthorized access to update this user's rights."}, status=403)
 
-                desg = (desg or "").strip()
-                is_super_admin = (desg.lower() == "admin" or bool(issuper))
+                if _is_super_admin(desg, issuper):
+                    return Response({
+                        "success": True,
+                        "savedInCloud": False,
+                        "userId": user_id,
+                        "rights": {key: True for key in FORM_RIGHTS_KEYS},
+                        "message": "Superadmin rights are implicit and were not modified.",
+                    })
 
-                # 2. Update rights in DB — use UPPER() to wipe any case-variant duplicates
-                cursor.execute(
-                    "DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
-                    [company_code, username]
-                )
-                for key in FORM_RIGHTS_KEYS:
-                    val = 1 if bool(rights_in.get(key, False)) else 0
-                    cursor.execute(
-                        """
-                        INSERT INTO tenants_usersrights (tenant_id, company_code, username, form_name, access)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        [tenant_id, company_code, username, key, val]
-                    )
+                pending = [(tenant_id, company_code, username, rights_in)]
+                writes = _apply_rights_delta(cursor, pending)
 
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    # Re-fetch rights to return
-    rights = {key: False for key in FORM_RIGHTS_KEYS}
-    if is_super_admin:
-        for key in FORM_RIGHTS_KEYS:
-            rights[key] = True
-    else:
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT form_name, access FROM tenants_usersrights WHERE company_code = %s AND username = %s",
-                    [company, username]
-                )
-                for r_row in cursor.fetchall():
-                    f_name, acc = r_row[0], bool(r_row[1])
-                    if f_name in rights:
-                        rights[f_name] = acc
-        except Exception:
-            pass
+    rights = _rights_from_input(rights_in)
 
     return Response({
         "success": True,
         "savedInCloud": True,
         "userId": user_id,
         "rights": rights,
+        "writes": writes,
         "message": "User rights saved.",
     })
 
@@ -415,7 +493,7 @@ def user_rights_delete(request, user_id):
                     return Response({"error": "Unauthorized access to delete this user."}, status=403)
 
                 desg = (designation or "").strip()
-                is_super_admin = (desg.lower() == "admin" or bool(issuper))
+                is_super_admin = _is_super_admin(desg, issuper)
                 if is_super_admin:
                     return Response({"error": "Superadmin accounts cannot be deleted."}, status=400)
 
@@ -475,45 +553,63 @@ def user_rights_bulk_save(request):
     try:
         with transaction.atomic():
             with connection.cursor() as cursor:
+                user_ids = [item["userId"] for item in valid_items]
+                placeholders = ", ".join(["%s"] * len(user_ids))
+                cursor.execute(
+                    f"""
+                    SELECT id, tenant_id, company_code, username, designation, issuperadmin
+                    FROM tenants_users
+                    WHERE deleted = 0 AND id IN ({placeholders})
+                    """,
+                    user_ids,
+                )
+                db_users = {
+                    row[0]: {
+                        "tenant_id": row[1],
+                        "company_code": row[2],
+                        "username": row[3],
+                        "designation": row[4],
+                        "issuperadmin": row[5],
+                    }
+                    for row in cursor.fetchall()
+                }
+
+                pending_updates = []
                 for item in valid_items:
                     user_id = item["userId"]
                     rights_in = item.get("rights") or {}
-
-                    # 1. Fetch user detail
-                    cursor.execute(
-                        "SELECT tenant_id, company_code, username FROM tenants_users WHERE id = %s AND deleted = 0",
-                        [user_id]
-                    )
-                    row = cursor.fetchone()
-                    if not row:
+                    db_user = db_users.get(user_id)
+                    if not db_user:
                         errors.append({"userId": user_id, "error": "User not found or deleted."})
                         continue
 
-                    tenant_id, company_code, username = row
+                    company_code = db_user["company_code"]
+                    username = db_user["username"]
                     if company_code.strip().upper() != company.upper():
                         errors.append({"userId": user_id, "error": "Unauthorized access."})
                         continue
 
-                    # 2. Update rights — use UPPER() to wipe any case-variant duplicates
-                    cursor.execute(
-                        "DELETE FROM tenants_usersrights WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
-                        [company_code, username]
-                    )
-                    for key in FORM_RIGHTS_KEYS:
-                        val = 1 if bool(rights_in.get(key, False)) else 0
-                        cursor.execute(
-                            """
-                            INSERT INTO tenants_usersrights (tenant_id, company_code, username, form_name, access)
-                            VALUES (%s, %s, %s, %s, %s)
-                            """,
-                            [tenant_id, company_code, username, key, val]
-                        )
+                    if _is_super_admin(db_user["designation"], db_user["issuperadmin"]):
+                        continue
+
+                    pending_updates.append((
+                        db_user["tenant_id"],
+                        company_code,
+                        username,
+                        rights_in,
+                    ))
+
+                if pending_updates:
+                    writes = _apply_rights_delta(cursor, pending_updates)
+                else:
+                    writes = 0
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
     return Response({
         "success": len(errors) == 0,
         "savedInCloud": True,
+        "writes": writes,
         "errors": errors,
         "message": (
             "Saved all user rights."

@@ -244,6 +244,16 @@
     animation: ur-saved-bounce .4s ease both;
 }
 
+.ur-btn--save.ur-btn--pending:not(:disabled) {
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.45);
+    animation: ur-save-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ur-save-pulse {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+}
+
 /* ════════════════════════════════════════════════════════════
    TABLE CARD
    ════════════════════════════════════════════════════════════ */
@@ -801,7 +811,8 @@
 /* ================================================================
    CUSTOM THEMED TOASTIFY NOTIFICATIONS
    ================================================================ */
-.Toastify__toast-container--top-right {
+.Toastify__toast-container--top-right,
+.ur-toast-container.Toastify__toast-container--top-right {
     top: 24px !important;
     right: 24px !important;
     width: min(380px, calc(100vw - 32px)) !important;

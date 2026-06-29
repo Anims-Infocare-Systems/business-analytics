@@ -2,7 +2,7 @@
  * UserRights.jsx  —  User Access Management (ERP Users table)
  * Prefix: ur-
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -74,11 +74,12 @@ const TOAST_OPTS = {
     progressClassName: "ur-toast-progress",
 };
 
-const showToast = (variant, title, message) => {
+const showToast = (variant, title, message, toastId) => {
     toast(
         <UserRightsToastContent variant={variant} title={title} message={message} />,
         {
             ...TOAST_OPTS,
+            toastId: toastId || `ur-${variant}-${title}`,
             className: `ur-toast-item ur-toast-item--${variant}`,
             closeButton: ({ closeToast }) => (
                 <button
@@ -301,15 +302,22 @@ function SubMenuModal({ isOpen, module, userName, currentRights, onApply, onCanc
     );
 }
 
+function rightsSnapshot(rights) {
+    return JSON.stringify(rights || {});
+}
+
 export default function UserRights() {
     const [users, setUsers] = useState([]);
     const [maxUsers, setMaxUsers] = useState(0);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [saveVersion, setSaveVersion] = useState(0);
     const [error, setError] = useState("");
     const saveTimer = useRef(null);
+    const saveInFlightRef = useRef(false);
+    const originalRightsRef = useRef(new Map());
 
     // Sub-menu modal state
     const [subModal, setSubModal] = useState(null); // { userIdx, module, rights }
@@ -324,6 +332,21 @@ export default function UserRights() {
     });
     const [addError, setAddError] = useState("");
     const [adding, setAdding] = useState(false);
+
+    const syncOriginalRights = useCallback((userList) => {
+        originalRightsRef.current = new Map(
+            userList.map((u) => [u.userId, rightsSnapshot(u.rights)]),
+        );
+    }, []);
+
+    const mapApiUsers = useCallback((rawUsers) => assignColors((rawUsers || []).map(u => ({
+        userId: u.userId,
+        name: u.userName,
+        role: u.designation,
+        avatar: u.avatar || (u.userName || "??").slice(0, 2).toUpperCase(),
+        rights: { ...u.rights },
+        isSuperAdmin: !!u.isSuperAdmin,
+    }))), []);
 
     const handleAddUserSubmit = async (e) => {
         e.preventDefault();
@@ -367,8 +390,24 @@ export default function UserRights() {
 
             setShowAddModal(false);
             setAddForm({ userName: "", designation: "", password: "", confirmPassword: "" });
-            loadUsers();
-            showToast("success", "Success", `User "${userName}" added successfully.`);
+
+            const trimmedName = userName.trim();
+            const trimmedRole = designation.trim() || "—";
+            const newUser = {
+                userId: data.userId,
+                name: trimmedName,
+                role: trimmedRole,
+                avatar: trimmedName.slice(0, 2).toUpperCase(),
+                rights: allRightsOn(false),
+                isSuperAdmin: false,
+                color: COLORS[users.length % COLORS.length],
+            };
+            setUsers((prev) => {
+                const next = assignColors([...prev, newUser]);
+                originalRightsRef.current.set(data.userId, rightsSnapshot(newUser.rights));
+                return next;
+            });
+            showToast("success", "Success", `User "${trimmedName}" added successfully.`);
         } catch (err) {
             setAddError(err.message || "Failed to add user.");
         } finally {
@@ -376,8 +415,12 @@ export default function UserRights() {
         }
     };
 
-    const loadUsers = useCallback(async () => {
-        setLoading(true);
+    const loadUsers = useCallback(async ({ silent = false } = {}) => {
+        if (silent) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
         setError("");
         try {
             const res = await fetch(`${API}/user-rights/list/`, { credentials: "include" });
@@ -385,22 +428,22 @@ export default function UserRights() {
             if (!res.ok) {
                 throw new Error(data.error || `Failed to load users (${res.status})`);
             }
-            setUsers(assignColors((data.users || []).map(u => ({
-                userId: u.userId,
-                name: u.userName,
-                role: u.designation,
-                avatar: u.avatar || (u.userName || "??").slice(0, 2).toUpperCase(),
-                rights: { ...u.rights },
-                isSuperAdmin: !!u.isSuperAdmin,
-            }))));
+            const mapped = mapApiUsers(data.users);
+            setUsers(mapped);
+            syncOriginalRights(mapped);
             setMaxUsers(data.stats?.maxUsers || 0);
         } catch (e) {
             showToast("error", "Error", e.message || "Could not load user rights.");
             setUsers([]);
+            originalRightsRef.current = new Map();
         } finally {
-            setLoading(false);
+            if (silent) {
+                setRefreshing(false);
+            } else {
+                setLoading(false);
+            }
         }
-    }, []);
+    }, [mapApiUsers, syncOriginalRights]);
 
     useEffect(() => {
         loadUsers();
@@ -422,13 +465,38 @@ export default function UserRights() {
         };
     }, [showAddModal, deleteConfirm, subModal]);
 
-    const totalUsers = users.length;
-    const activeUsers = users.filter(u => MODULES.some(m => u.rights?.[m.key])).length;
-    const totalGrants = users.reduce((acc, u) =>
-        acc + MODULES.filter(m => u.rights?.[m.key]).length, 0);
-    const avgAccess = totalUsers
-        ? Math.round((totalGrants / (totalUsers * MODULES.length)) * 100)
-        : 0;
+    const dirtyUsers = useMemo(
+        () => users.filter((u) => {
+            if (u.isSuperAdmin) return false;
+            return rightsSnapshot(u.rights) !== originalRightsRef.current.get(u.userId);
+        }),
+        [users, saveVersion],
+    );
+    const hasUnsavedChanges = dirtyUsers.length > 0;
+
+    const stats = useMemo(() => {
+        const totalUsers = users.length;
+        const activeUsers = users.filter(u => MODULES.some(m => u.rights?.[m.key])).length;
+        const totalGrants = users.reduce(
+            (acc, u) => acc + MODULES.filter(m => u.rights?.[m.key]).length,
+            0,
+        );
+        const avgAccess = totalUsers
+            ? Math.round((totalGrants / (totalUsers * MODULES.length)) * 100)
+            : 0;
+        return { totalUsers, activeUsers, totalGrants, avgAccess };
+    }, [users]);
+
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase().trim();
+        return users
+            .map((u, i) => ({ ...u, origIdx: i }))
+            .filter(u =>
+                !q ||
+                u.name.toLowerCase().includes(q) ||
+                (u.role || "").toLowerCase().includes(q),
+            );
+    }, [users, search]);
 
     /* ── Handle toggling parent menus ─────────────────────── */
     const handleToggle = (userIdx, modKey) => {
@@ -501,7 +569,11 @@ export default function UserRights() {
                 throw new Error(data.error || `Failed to delete user (${res.status})`);
             }
 
-            setUsers(prev => prev.filter(u => u.userId !== userId));
+            setUsers(prev => {
+                const next = prev.filter(u => u.userId !== userId);
+                originalRightsRef.current.delete(userId);
+                return next;
+            });
             showToast("success", "Success", `User "${userName}" deleted successfully.`);
         } catch (err) {
             showToast("error", "Error", err.message || "Failed to delete user.");
@@ -514,21 +586,60 @@ export default function UserRights() {
     };
 
     const handleSave = async () => {
-        setSaving(true);
-        setError("");
+        if (!hasUnsavedChanges || saveInFlightRef.current) {
+            if (!hasUnsavedChanges) {
+                showToast("info", "No Changes", "There are no unsaved rights changes.");
+            }
+            return;
+        }
+
+        const toSave = dirtyUsers.map(u => ({
+            userId: u.userId,
+            rights: u.rights,
+        }));
+        const count = toSave.length;
+        const rollbackOrigins = new Map(
+            toSave.map(u => [u.userId, originalRightsRef.current.get(u.userId)]),
+        );
+
+        saveInFlightRef.current = true;
+        toSave.forEach(u => {
+            originalRightsRef.current.set(u.userId, rightsSnapshot(u.rights));
+        });
+        setSaveVersion(v => v + 1);
+        setSaved(true);
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => setSaved(false), 2400);
+        showToast(
+            "success",
+            "Saved",
+            count === 1
+                ? "User rights saved successfully."
+                : `Saved rights for ${count} users.`,
+            "ur-save-success",
+        );
+
         try {
-            const payload = {
-                users: users.map(u => ({
-                    userId: u.userId,
-                    rights: u.rights,
-                })),
-            };
-            const res = await fetch(`${API}/user-rights/bulk-save/`, {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+            let res;
+            if (count === 1) {
+                res = await fetch(`${API}/user-rights/update/`, {
+                    method: "PATCH",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userId: toSave[0].userId,
+                        rights: toSave[0].rights,
+                    }),
+                });
+            } else {
+                res = await fetch(`${API}/user-rights/bulk-save/`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ users: toSave }),
+                });
+            }
+
             const data = await res.json();
             if (!res.ok) {
                 throw new Error(data.error || `Save failed (${res.status})`);
@@ -536,35 +647,29 @@ export default function UserRights() {
             if (data.errors?.length) {
                 throw new Error(data.errors.map(e => e.error || JSON.stringify(e)).join("; "));
             }
-            setSaved(true);
-            clearTimeout(saveTimer.current);
-            saveTimer.current = setTimeout(() => setSaved(false), 2400);
-            showToast("success", "Saved", "User rights saved successfully.");
         } catch (e) {
-            showToast("error", "Error", e.message || "Could not save user rights.");
+            rollbackOrigins.forEach((snap, userId) => {
+                if (snap !== undefined) {
+                    originalRightsRef.current.set(userId, snap);
+                }
+            });
+            setSaveVersion(v => v + 1);
+            setSaved(false);
+            toast.dismiss("ur-save-success");
+            showToast("error", "Save Failed", e.message || "Could not save user rights.", "ur-save-error");
         } finally {
-            setSaving(false);
+            saveInFlightRef.current = false;
         }
     };
-
-    const filtered = users
-        .map((u, i) => ({ ...u, origIdx: i }))
-        .filter(u => {
-            const q = search.toLowerCase();
-            return (
-                u.name.toLowerCase().includes(q) ||
-                (u.role || "").toLowerCase().includes(q)
-            );
-        });
 
     return (
         <div className="ur-root">
 
             <div className="ur-stats">
-                <StatCard label="Total Users" value={loading ? "…" : `${totalUsers}/${maxUsers || "—"}`} icon={Users} color="#3b82f6" delay="0s" />
-                <StatCard label="Active Users" value={loading ? "…" : activeUsers} icon={Lock} color="#10b981" delay=".06s" />
-                <StatCard label="Rights Granted" value={loading ? "…" : totalGrants} icon={CheckSquare} color="#f97316" delay=".12s" />
-                <StatCard label="Avg Access" value={loading ? "…" : `${avgAccess}%`} icon={BarChart3} color="#8b5cf6" delay=".18s" />
+                <StatCard label="Total Users" value={loading ? "…" : `${stats.totalUsers}/${maxUsers || "—"}`} icon={Users} color="#3b82f6" delay="0s" />
+                <StatCard label="Active Users" value={loading ? "…" : stats.activeUsers} icon={Lock} color="#10b981" delay=".06s" />
+                <StatCard label="Rights Granted" value={loading ? "…" : stats.totalGrants} icon={CheckSquare} color="#f97316" delay=".12s" />
+                <StatCard label="Avg Access" value={loading ? "…" : `${stats.avgAccess}%`} icon={BarChart3} color="#8b5cf6" delay=".18s" />
             </div>
 
             <div className="ur-toolbar">
@@ -592,28 +697,29 @@ export default function UserRights() {
                     <button
                         className="ur-btn ur-btn--add"
                         onClick={() => setShowAddModal(true)}
-                        disabled={loading || saving || (maxUsers > 0 && totalUsers >= maxUsers)}
+                        disabled={loading || (maxUsers > 0 && stats.totalUsers >= maxUsers)}
                         type="button"
-                        title={maxUsers > 0 && totalUsers >= maxUsers ? "User limit reached. Cannot add more users." : "Add User"}
+                        title={maxUsers > 0 && stats.totalUsers >= maxUsers ? "User limit reached. Cannot add more users." : "Add User"}
                     >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                         Add User
                     </button>
-                    <button className="ur-btn ur-btn--ghost" onClick={handleReset} disabled={loading || saving} type="button">
+                    <button className="ur-btn ur-btn--ghost" onClick={handleReset} disabled={loading || refreshing} type="button">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <polyline points="1,4 1,10 7,10" /><path d="M3.51 15a9 9 0 1 0 .49-3.5" />
                         </svg>
-                        Reload
+                        {refreshing ? "Reloading…" : "Reload"}
                     </button>
                     <button
-                        className={`ur-btn ur-btn--save ${saved ? "ur-btn--saved" : ""}`}
+                        className={`ur-btn ur-btn--save ${saved ? "ur-btn--saved" : ""} ${hasUnsavedChanges ? "ur-btn--pending" : ""}`}
                         onClick={handleSave}
-                        disabled={loading || saving || !users.length}
+                        disabled={loading || !users.length || !hasUnsavedChanges}
                         type="button"
+                        title={hasUnsavedChanges ? `Save ${dirtyUsers.length} changed user(s)` : "No changes to save"}
                     >
-                        {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
+                        {saved ? "Saved!" : hasUnsavedChanges ? `Save Changes (${dirtyUsers.length})` : "Save Changes"}
                     </button>
                 </div>
             </div>
@@ -775,14 +881,17 @@ export default function UserRights() {
                 <div className="ur-card-footer">
                     <span className="ur-footer-info">
                         Showing <strong>{filtered.length}</strong> of <strong>{users.length}</strong> users
+                        {hasUnsavedChanges && (
+                            <> · <strong>{dirtyUsers.length}</strong> unsaved</>
+                        )}
                     </span>
                     <button
                         type="button"
-                        className={`ur-btn ur-btn--save ${saved ? "ur-btn--saved" : ""}`}
+                        className={`ur-btn ur-btn--save ${saved ? "ur-btn--saved" : ""} ${hasUnsavedChanges ? "ur-btn--pending" : ""}`}
                         onClick={handleSave}
-                        disabled={loading || saving || !users.length}
+                        disabled={loading || !users.length || !hasUnsavedChanges}
                     >
-                        {saving ? "Saving…" : saved ? "Saved!" : "Save Rights"}
+                        {saved ? "Saved!" : hasUnsavedChanges ? `Save Rights (${dirtyUsers.length})` : "Save Rights"}
                     </button>
                 </div>
             </div>
@@ -950,7 +1059,17 @@ export default function UserRights() {
                 document.body
             )}
 
-            <ToastContainer />
+            {createPortal(
+                <ToastContainer
+                    className="ur-toast-container"
+                    toastClassName="ur-toast-item"
+                    bodyClassName="ur-toast-body"
+                    progressClassName="ur-toast-progress"
+                    position="top-right"
+                    newestOnTop
+                />,
+                document.body,
+            )}
         </div>
     );
 }

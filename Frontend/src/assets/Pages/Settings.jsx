@@ -1,8 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import "./Settings.css";
 import { resolveApiBase } from "../../apiBase";
 
 const API = resolveApiBase();
+const PROFILE_CACHE_KEY = "ba_settings_profile";
+
+/** Map DB plan_name / plan_id to Free | Pro | Max tier flags. */
+function resolvePlanTier(planName, planId) {
+    const id = String(planId || "").toLowerCase().trim();
+    if (id === "free") return { isFree: true, isPro: false, isMax: false };
+    if (id === "pro") return { isFree: false, isPro: true, isMax: false };
+    if (id === "enterprise" || id === "max") return { isFree: false, isPro: false, isMax: true };
+
+    const name = String(planName || "").toLowerCase().trim();
+    const isFree = name === "free" || name.startsWith("free ");
+    const isMax = name.includes("enterprise") || name.includes("max");
+    const isPro = !isMax && (name === "pro" || name.startsWith("pro "));
+    return { isFree, isPro, isMax };
+}
 
 /* ── Inline Icons for Settings ──────────────────────────────── */
 const Icons = {
@@ -179,7 +194,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
     const [profile, setProfile] = useState(() => {
         try {
-            const cached = localStorage.getItem("ba_settings_profile");
+            const cached = localStorage.getItem(PROFILE_CACHE_KEY);
             if (cached) {
                 const parsed = JSON.parse(cached);
                 const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -196,39 +211,80 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
         }
     });
     const [loadingProfile, setLoadingProfile] = useState(false);
+    const [refreshingProfile, setRefreshingProfile] = useState(false);
+    const [loadingInvoices, setLoadingInvoices] = useState(false);
+    const profileRef = useRef(profile);
+    profileRef.current = profile;
+
+    const cacheProfile = useCallback((data) => {
+        setProfile(data);
+        try {
+            localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
+        } catch {
+            /* ignore quota errors */
+        }
+    }, []);
+
+    const fetchProfile = useCallback(async ({ includeInvoices = false, silent = false } = {}) => {
+        const hasCache = !!profileRef.current;
+        if (includeInvoices && !silent) {
+            setLoadingInvoices(true);
+        } else if (!silent && !hasCache) {
+            setLoadingProfile(true);
+        } else if (silent) {
+            setRefreshingProfile(true);
+        }
+
+        const qs = includeInvoices ? "?include_invoices=1" : "";
+        try {
+            const res = await fetch(`${API}/settings/profile/${qs}`, { credentials: "include" });
+            if (!res.ok) throw new Error(`Status ${res.status}`);
+            const data = await res.json();
+
+            if (includeInvoices && profileRef.current) {
+                cacheProfile({
+                    ...profileRef.current,
+                    ...data,
+                    invoices: data.invoices || [],
+                    invoicesIncluded: true,
+                });
+            } else {
+                cacheProfile(data);
+            }
+        } catch (err) {
+            console.error("Failed to load profile details", err);
+        } finally {
+            setLoadingProfile(false);
+            setRefreshingProfile(false);
+            setLoadingInvoices(false);
+        }
+    }, [cacheProfile]);
 
     useEffect(() => {
         if (!isOpen) return;
 
-        // Reset profile state if the cached user doesn't match the current logged-in user
         const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
         const currentCompany = currentUser.company_code || currentUser.companyCode;
-        if (profile && (profile?.profile?.username !== currentUser.username ||
-            profile?.profile?.companyCode !== currentCompany)) {
+        if (profile && (
+            profile?.profile?.username !== currentUser.username ||
+            profile?.profile?.companyCode !== currentCompany
+        )) {
             setProfile(null);
+            profileRef.current = null;
         }
 
-        setLoadingProfile(true);
-        fetch(`${API}/settings/profile/`, { credentials: "include" })
-            .then(res => {
-                if (!res.ok) throw new Error(`Status ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                setProfile(data);
-                try {
-                    localStorage.setItem("ba_settings_profile", JSON.stringify(data));
-                } catch (e) {
-                    console.error("Failed to cache settings profile", e);
-                }
-            })
-            .catch(err => {
-                console.error("Failed to load profile details", err);
-            })
-            .finally(() => {
-                setLoadingProfile(false);
-            });
+        const wantInvoices = isExpiredMode || activeTab === "billing";
+        fetchProfile({
+            includeInvoices: wantInvoices && !(profile?.invoicesIncluded),
+            silent: !!profileRef.current,
+        });
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || activeTab !== "billing" || isExpiredMode) return;
+        if (profile?.invoicesIncluded) return;
+        fetchProfile({ includeInvoices: true, silent: !!profile });
+    }, [isOpen, activeTab, profile?.invoicesIncluded, fetchProfile, isExpiredMode]);
 
     const username = profile?.profile?.username || user.username || "—";
     const userEmail = profile?.profile?.email || (loadingProfile && !profile ? "Loading email..." : "—");
@@ -239,10 +295,8 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
     const accountStatus = profile?.profile?.status || (loadingProfile && !profile ? "Loading..." : "—");
 
     const planName = profile?.billing?.planName || (loadingProfile && !profile ? "Loading plan..." : "—");
-    const planNameLower = String(planName).toLowerCase();
-    const isFree = planNameLower === "free";
-    const isPro = planNameLower === "pro";
-    const isMax = planNameLower.includes("enterprise") || planNameLower === "max";
+    const planId = profile?.billing?.planId || "";
+    const { isFree, isPro, isMax } = resolvePlanTier(planName, planId);
     const isRenewal = isExpiredMode && (
         (selectedPlan === "Free" && isFree) ||
         (selectedPlan === "Pro" && isPro) ||
@@ -325,25 +379,33 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
         }
 
         setPwdBusy(true);
+        const prevCur = curPass;
+        const prevNew = newPass;
+        const prevConf = confPass;
+        setPwdSuccess(true);
+        setCurPass("");
+        setNewPass("");
+        setConfPass("");
+
         try {
             const res = await fetch(`${API}/settings/change-password/`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    currentPassword: curPass,
-                    newPassword: newPass
+                    currentPassword: prevCur,
+                    newPassword: prevNew
                 })
             });
             const data = await res.json();
             if (!res.ok) {
                 throw new Error(data.error || `Update failed with status ${res.status}`);
             }
-            setPwdSuccess(true);
-            setCurPass("");
-            setNewPass("");
-            setConfPass("");
         } catch (err) {
+            setPwdSuccess(false);
+            setCurPass(prevCur);
+            setNewPass(prevNew);
+            setConfPass(prevConf);
             setPwdError(err.message || "Failed to update password.");
         } finally {
             setPwdBusy(false);
@@ -367,23 +429,15 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
             }
             setUpgradeOk(data.message || `Successfully upgraded to ${plan}!`);
             setShowConfirmModal(false);
-
-            // Re-fetch profile to refresh settings state dynamically
-            fetch(`${API}/settings/profile/`, { credentials: "include" })
-                .then(r => r.ok && r.json())
-                .then(d => {
-                    if (d) {
-                        setProfile(d);
-                        try { localStorage.setItem("ba_settings_profile", JSON.stringify(d)); } catch { }
-                    }
-                })
-                .catch(() => { });
+            await fetchProfile({ includeInvoices: true, silent: true });
 
             setTimeout(() => {
                 setShowUpgradeModal(false);
                 setUpgradeOk("");
-                window.location.reload();
-            }, 2000);
+                if (isExpiredMode) {
+                    window.location.reload();
+                }
+            }, isExpiredMode ? 2000 : 1200);
         } catch (err) {
             setUpgradeErr(err.message || "Failed to upgrade plan.");
         } finally {
@@ -712,7 +766,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {(!profile && loadingProfile) ? (
+                                        {loadingInvoices ? (
                                             <tr>
                                                 <td colSpan="5" className="text-center" style={{ padding: "1.5rem", color: "#94a3b8" }}>
                                                     Loading invoices...
@@ -875,9 +929,16 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                                 <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--free-outline"
-                                    disabled={true}
+                                    disabled={upgradeBusy || (isFree && !isExpiredMode) || !isFree}
+                                    onClick={() => {
+                                        if (isFree && isExpiredMode) {
+                                            setSelectedPlan("Free");
+                                            setConfirmBillingCycle("6month");
+                                            setShowConfirmModal(true);
+                                        }
+                                    }}
                                 >
-                                    {isFree ? (isExpiredMode ? 'Expired' : 'Current Plan') : 'Use for free'}
+                                    {isFree ? (isExpiredMode ? "Renewal" : "Current Plan") : "Use for free"}
                                 </button>
 
                                 <ul className="st-upgrade-plan-card__features-list">

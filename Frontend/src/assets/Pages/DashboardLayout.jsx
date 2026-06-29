@@ -604,6 +604,22 @@ export default function DashboardLayout() {
         writeNav({ activeItem: parentKey, activeSubItem: sub, openMenu: nextMenu });
     };
 
+    const handleWelcomeNavigate = (target) => {
+        if (target === "Settings") {
+            setSettingsOpen(true);
+            return;
+        }
+        if (target === "Charts") {
+            setActiveItem("Charts");
+            setActiveSubItem(null);
+            setOpenMenu(null);
+            writeNav({ activeItem: "Charts", activeSubItem: null, openMenu: null });
+            if (isMobile) setDrawerOpen(false);
+            return;
+        }
+        handleSubClick(target);
+    };
+
     const handleLogout = () => {
         try {
             sessionStorage.clear();
@@ -850,7 +866,7 @@ export default function DashboardLayout() {
                     <PageContent
                         activeSubItem={activeSubItem}
                         activeItem={activeItem}
-                        onNavigate={handleSubClick}
+                        onNavigate={handleWelcomeNavigate}
                         userName={userName}
                         companyName={companyName}
                         userRights={userRights}
