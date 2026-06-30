@@ -20,6 +20,7 @@ import {
   Megaphone,
   Package,
   ClipboardList,
+  FileText,
   Star,
   Award,
   ListTodo,
@@ -60,170 +61,6 @@ import {
 
 Chart.register(...registerables);
 
-const MOCK_DATA = {
-  fi: {
-    total_ok_qty: 4850,
-    total_qty: 5000,
-    first_pass_yield: 97.0,
-    inspection_count: 15
-  },
-  prod: {
-    kpis: {
-      production_output: 12500,
-      rejection_qty: 120,
-      rework_grand_total: 80,
-      oa_efficiency: 78.5
-    },
-    from: "2026-06-01",
-    to: "2026-06-12"
-  },
-  idle: {
-    summary: {
-      accepted_hours: 12.5,
-      non_accepted_hours: 4.8,
-      total_idle_hours: 17.3,
-      other_hours: 0.0
-    },
-    accepted: [
-      { reason: "Tool change", hours: 5.2 },
-      { reason: "Setting", hours: 4.1 },
-      { reason: "Material waiting", hours: 3.2 }
-    ]
-  },
-  injob: {
-    total_rejection: 45,
-    total_rework: 30,
-    total_qty_basis: 2500,
-    inspection_master_count: 8,
-    rejection_pct: 1.8,
-    rework_pct: 1.2,
-    qty_basis_column: "Total Output Qty"
-  },
-  inter: {
-    total_rejection: 35,
-    total_rework: 25,
-    total_qty_basis: 2200,
-    row_count: 12,
-    rejection_pct: 1.6,
-    rework_pct: 1.1,
-    qty_basis_column: "Intermediate Inspected Qty"
-  },
-  finalOrg: {
-    total_rejection: 40,
-    total_rework: 25
-  },
-  shifts: {
-    shifts: [
-      { shift: "A Shift", qty: 4200 },
-      { shift: "B Shift", qty: 3800 },
-      { shift: "C Shift", qty: 3100 }
-    ]
-  },
-  downtime: {
-    reasons: [
-      { reason: "No Operator", hours: 2.1 },
-      { reason: "Electrical Breakdown", hours: 1.5 },
-      { reason: "Mechanical Breakdown", hours: 1.2 }
-    ]
-  },
-  complaints: {
-    complaints: [
-      {
-        complaint_id: "CC-2026-001",
-        customer_name: "Tata Motors",
-        product: "Brake Pads",
-        complaint_description: "Surface scratches",
-        action_taken: "Polished surfaces",
-        complaint_date: "2026-06-02",
-        corrective_action: "Enhanced visual inspection",
-        permanent_action: "Automated QC cameras",
-        status: "Closed"
-      },
-      {
-        complaint_id: "CC-2026-002",
-        customer_name: "Mahindra & Mahindra",
-        product: "Disc Rotors",
-        complaint_description: "Thickness variation",
-        action_taken: "Recalibrated grinder",
-        complaint_date: "2026-06-05",
-        corrective_action: "Adjusted grinding head",
-        permanent_action: "CNC alignment checks",
-        status: "Open"
-      }
-    ],
-    from: "2026-06-01",
-    to: "2026-06-12"
-  },
-  po: {
-    summary: {
-      total_pos: 18,
-      approved: 15,
-      grn_pending: 3,
-      total_po_value: 1450000
-    },
-    rows: [
-      { po_number: "PO-2026-101", vendor_name: "Steel Authority of India", material: "MS Sheet Metal 2mm", value: 450000 },
-      { po_number: "PO-2026-102", vendor_name: "Hindalco Industries", material: "Aluminum Extrusion", value: 380000 },
-      { po_number: "PO-2026-103", vendor_name: "Jindal Stainless", material: "SS Rods 10mm", value: 620000 }
-    ]
-  },
-  grn: {
-    summary: {
-      total_record_count: 5,
-      total_qty: 1500
-    },
-    rows: [
-      { grnno: "GRN-2026-501", partno: "MS Bolt M8", qty: 800, insp: 0 },
-      { grnno: "GRN-2026-502", partno: "Nylon Bush", qty: 700, insp: 0 }
-    ]
-  },
-  iqc: {
-    summary: {
-      total_record_count: 2,
-      total_rejection_qty: 150
-    },
-    rows: [
-      { grn_insp_no: "IQC-2026-301", grn_insp_date: "2026-06-03", type: "Rejection", vendor_name: "Tata Steel", partno: "HR Plate 5mm", rejection_qty: 100 },
-      { grn_insp_no: "IQC-2026-302", grn_insp_date: "2026-06-07", type: "Rejection", vendor_name: "JSW Steel", partno: "CR Coil 1.2mm", rejection_qty: 50 }
-    ]
-  },
-  topDefects: {
-    rows: [
-      { partno: "Brake Disc #A1", total_rejection_qty: 85, rejection_pct: 35.5 },
-      { partno: "Gear Box Housing", total_rejection_qty: 62, rejection_pct: 25.9 },
-      { partno: "Engine Mount Brkt", total_rejection_qty: 48, rejection_pct: 20.1 }
-    ],
-    total_rejection_qty: 240,
-    from: "2026-06-01",
-    to: "2026-06-12"
-  },
-  otd: {
-    kpis: {
-      on_time_delivery_pct: 88.5,
-      on_time_qty: 11000,
-      total_del_qty: 12430,
-      delayed_lines: 4
-    },
-    trend: [
-      { month: "Jan", on_time_delivery_pct: 82.1 },
-      { month: "Feb", on_time_delivery_pct: 85.4 },
-      { month: "Mar", on_time_delivery_pct: 89.0 },
-      { month: "Apr", on_time_delivery_pct: 87.5 },
-      { month: "May", on_time_delivery_pct: 91.2 },
-    ]
-  },
-  customerPoCompare: {
-    rows: [
-      { customer: "Tata Motors", month: "Jun-26", date: "2026-06-01", orderValue: 50.0, salesValue: 45.0, pendingValue: 5.0, poNumber: "PO-2026-8801", partNumber: "BRK-PAD-M1" },
-      { customer: "Mahindra & Mahindra", month: "Jun-26", date: "2026-06-03", orderValue: 30.0, salesValue: 30.0, pendingValue: 0.0, poNumber: "PO-2026-9042", partNumber: "ROT-DSC-X4" },
-      { customer: "Maruti Suzuki", month: "Jun-26", date: "2026-06-05", orderValue: 15.0, salesValue: 10.0, pendingValue: 5.0, poNumber: "PO-2026-7719", partNumber: "GBX-HNG-S2" },
-      { customer: "Hyundai India", month: "Jun-26", date: "2026-06-08", orderValue: 25.0, salesValue: 0.0, pendingValue: 25.0, poNumber: "PO-2026-6652", partNumber: "ENG-MNT-H1" },
-      { customer: "Ashok Leyland", month: "Jun-26", date: "2026-06-10", orderValue: 8.0, salesValue: 7.5, pendingValue: 0.5, poNumber: "PO-2026-4401", partNumber: "TRK-AXL-L9" }
-    ]
-  }
-};
-
-
 const CURRENT_STATE_CARDS = [
   { id: "production_output", title: "Production Output", icon: Settings, color: "#0ea5e9", colorLight: "#e0f7ff" },
   { id: "final_inspection_ok", title: "Final Inspection OK Qty", icon: CheckCircle2, color: "#10b981", colorLight: "#d1fae5" },
@@ -260,12 +97,178 @@ const ACTION_CARDS = [
 ];
 
 function formatLocalYmd(d) {
+  if (!d) return "";
+  // If already a YYYY-MM-DD string, return it directly
+  if (typeof d === "string") {
+    const s = d.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // Try to parse as date
+    const parsed = new Date(d);
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+    }
+    return s;
+  }
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function buildUrl(base, from, to) {
   if (!from || !to) return base;
   return `${base}?from=${formatLocalYmd(from)}&to=${formatLocalYmd(to)}`;
+}
+
+function currentFinancialYearRange() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth() + 1;
+  const fyStart = m >= 4 ? y : y - 1;
+  return {
+    from: new Date(fyStart, 3, 1),
+    to: new Date(fyStart + 1, 2, 31),
+  };
+}
+
+function buildOtdUrl(from, to, filters) {
+  let url = buildUrl("/api/plant-performance/otd/", from, to);
+  const customer = (filters?.customer || "").trim();
+  const partNumber = (filters?.partNumber || "").trim();
+  if (customer) url += `&customer=${encodeURIComponent(customer)}`;
+  if (partNumber) url += `&partNumber=${encodeURIComponent(partNumber)}`;
+  return url;
+}
+
+function buildEffUrl(from, to, filters) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/efficiency/", from || fy.from, to || fy.to);
+  url += "&full_fy=1";
+  const cnc = filters?.machineType !== "Conventional";
+  const conv = filters?.machineType !== "CNC";
+  url += `&cnc=${cnc ? "1" : "0"}&conv=${conv ? "1" : "0"}`;
+  return url;
+}
+
+function buildOeeUrl(from, to, filters) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/oee/", from || fy.from, to || fy.to);
+  url += "&full_fy=1";
+  const cnc = filters?.machineType !== "Conventional";
+  const conv = filters?.machineType !== "CNC";
+  url += `&cnc=${cnc ? "1" : "0"}&conv=${conv ? "1" : "0"}`;
+  return url;
+}
+
+function buildRejUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/rejection/", from || fy.from, to || fy.to);
+  return `${url}&full_fy=1`;
+}
+
+function buildRewUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/rework/", from || fy.from, to || fy.to);
+  return `${url}&full_fy=1`;
+}
+
+function buildCompUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/customer-complaint/", from || fy.from, to || fy.to);
+  return `${url}&full_fy=1`;
+}
+
+function buildCapaUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/capa/", from || fy.from, to || fy.to);
+  return `${url}&full_fy=1`;
+}
+
+function buildOpEffUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/operator-efficiency/", from || fy.from, to || fy.to);
+  return `${url}&full_fy=1`;
+}
+
+function buildMachEffUrl(from, to, machine, effLimit, fullFy = 0) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/machine-efficiency/", from || fy.from, to || fy.to);
+  url += `&full_fy=${fullFy}`;
+  const m = (machine || "").trim();
+  if (m) url += `&machineNo=${encodeURIComponent(m)}`;
+  const el = (effLimit || "").trim();
+  if (el) url += `&effLimit=${encodeURIComponent(el)}`;
+  return url;
+}
+
+function buildDailyProdUrl(from, to, machineNo) {
+  const fy = currentFinancialYearRange();
+  let url = buildUrl("/api/plant-performance/daily-production/", from || fy.from, to || fy.to);
+  url += "&full_fy=1";
+  const machine = (machineNo || "").trim();
+  if (machine) url += `&machineNo=${encodeURIComponent(machine)}`;
+  return url;
+}
+
+function buildProdValueUrl(from, to, machine) {
+  const fy = currentFinancialYearRange();
+  const fromStr = (typeof from === "string" && from) ? from.slice(0, 10) : formatLocalYmd(from || fy.from);
+  const toStr = (typeof to === "string" && to) ? to.slice(0, 10) : formatLocalYmd(to || fy.to);
+  let url = `/api/plant-performance/production-value/?from=${fromStr}&to=${toStr}&full_fy=1`;
+  const m = (machine || "").trim();
+  if (m) url += `&machineNo=${encodeURIComponent(m)}`;
+  return url;
+}
+
+function filterProdValueDetailRows(rows, filters, defaultFrom, defaultTo) {
+  const activeFrom = (filters?.fromDate || defaultFrom || "").slice(0, 10);
+  const activeTo = (filters?.toDate || defaultTo || "").slice(0, 10);
+  return (Array.isArray(rows) ? rows : []).filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    if (activeFrom && /^\d{4}-\d{2}-\d{2}$/.test(activeFrom) && d < activeFrom) return false;
+    if (activeTo && /^\d{4}-\d{2}-\d{2}$/.test(activeTo) && d > activeTo) return false;
+    if (filters?.team && r.team !== filters.team) return false;
+    if (filters?.machine) {
+      const mac = String(r.machine || "");
+      const name = String(r.machineName || "");
+      if (mac !== filters.machine && name !== filters.machine) return false;
+    }
+    if (filters?.operator) {
+      const op = String(r.operator || "").toLowerCase();
+      if (!op.includes(String(filters.operator).toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+function aggregateProdValueByField(rows, field) {
+  const groups = {};
+  (Array.isArray(rows) ? rows : []).forEach((r) => {
+    const key = String(r[field] || "—").trim() || "—";
+    if (!groups[key]) {
+      groups[key] = { productionValue: 0, actualValue: 0, rateSum: 0, rateCount: 0 };
+    }
+    groups[key].productionValue += Number(r.productionValue || 0);
+    groups[key].actualValue += Number(r.actualValue || 0);
+    groups[key].rateSum += Number(r.ratePerHr || 0);
+    groups[key].rateCount += 1;
+  });
+  return groups;
+}
+
+function formatProdValueMonth(dateStr, fallbackTo) {
+  const ref = dateStr || fallbackTo || "";
+  if (!ref) return "—";
+  const parts = ref.slice(0, 10).split("-");
+  if (parts.length === 3) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthNum = parseInt(parts[1], 10);
+    return `${months[monthNum - 1] || parts[1]}-${parts[0]}`;
+  }
+  return "—";
+}
+
+function formatInrValue(val) {
+  const v = Math.round(Number(val) || 0);
+  return `₹${v.toLocaleString("en-IN")}`;
 }
 
 function fmtNum(n) {
@@ -591,10 +594,6 @@ function buildBottomTable(cardId, panel, data) {
     recs: [{ icon: "💡", text: `Showing live ERP data for ${tableTitle.toLowerCase()}.` }],
   };
 }
-
-const OTD_TARGET_PCT = 90;
-
-/** Chart.js options — same base as Charts.jsx sales-2 (OTD line) */
 const OTD_LINE_CHART_BASE = {
   responsive: true,
   maintainAspectRatio: false,
@@ -1770,28 +1769,64 @@ function OeeEfficiencyView({ data, loading, uid, from, to }) {
 }
 
 /* ── On-Time Delivery Trend — Charts.jsx OTD line chart (embedded) ─ */
-function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, onClose, targetConfig }) {
+function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, onClose, targetConfig, onOtdData }) {
   const [report, setReport] = useState(null);
+  const [otdLive, setOtdLive] = useState(null);
+  const [filterOptionsCache, setFilterOptionsCache] = useState({ customers: [], parts: [] });
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
+  const [debouncedCustomer, setDebouncedCustomer] = useState("");
+  const [debouncedPart, setDebouncedPart] = useState("");
 
   const [custOpen, setCustOpen] = useState(false);
   const custRef = useRef(null);
   const [partOpen, setPartOpen] = useState(false);
   const partRef = useRef(null);
 
-  const allCustomers = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Hyundai India", "Ashok Leyland"];
-  const allParts = ["BRK-PAD-M1", "ROT-DSC-X4", "GBX-HNG-S2", "ENG-MNT-H1", "TRK-AXL-L9", "BRK-PAD-M2", "GBX-HNG-S3"];
+  const otdSource = otdLive || data?.otd;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCustomer((filters.customer || "").trim()), 350);
+    return () => clearTimeout(t);
+  }, [filters.customer]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPart((filters.partNumber || "").trim()), 350);
+    return () => clearTimeout(t);
+  }, [filters.partNumber]);
+
+  const fetchFilters = useMemo(
+    () => ({ ...filters, customer: debouncedCustomer, partNumber: debouncedPart }),
+    [filters, debouncedCustomer, debouncedPart]
+  );
+
+  const allCustomers = React.useMemo(() => {
+    const fromCache = filterOptionsCache.customers;
+    if (Array.isArray(fromCache) && fromCache.length) return fromCache;
+    const fromApi = otdSource?.filterOptions?.customers;
+    if (Array.isArray(fromApi) && fromApi.length) return fromApi;
+    const fromRows = [...new Set((otdSource?.rows || []).map((r) => r.customerName).filter(Boolean))];
+    return fromRows.sort((a, b) => a.localeCompare(b));
+  }, [filterOptionsCache.customers, otdSource?.filterOptions?.customers, otdSource?.rows]);
+
+  const allParts = React.useMemo(() => {
+    const fromCache = filterOptionsCache.parts;
+    if (Array.isArray(fromCache) && fromCache.length) return fromCache;
+    const fromApi = otdSource?.filterOptions?.parts;
+    if (Array.isArray(fromApi) && fromApi.length) return fromApi;
+    const fromRows = [...new Set((otdSource?.rows || []).map((r) => r.partNumber).filter(Boolean))];
+    return fromRows.sort((a, b) => a.localeCompare(b));
+  }, [filterOptionsCache.parts, otdSource?.filterOptions?.parts, otdSource?.rows]);
 
   const custSuggestions = useMemo(() => {
     if (!filters.customer) return allCustomers;
     return allCustomers.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer]);
+  }, [filters.customer, allCustomers]);
 
   const partSuggestions = useMemo(() => {
     if (!filters.partNumber) return allParts;
     return allParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber]);
+  }, [filters.partNumber, allParts]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1808,16 +1843,33 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
     };
   }, []);
 
-  const pickerFrom = useMemo(() => {
+  const fetchFrom = useMemo(() => {
     if (filters.fromDate) return new Date(filters.fromDate);
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   }, [filters.fromDate]);
 
-  const pickerTo = useMemo(() => {
+  const fetchTo = useMemo(() => {
     if (filters.toDate) return new Date(filters.toDate);
     return new Date();
   }, [filters.toDate]);
+
+  useEffect(() => {
+    setFilterOptionsCache({ customers: [], parts: [] });
+  }, [fetchFrom, fetchTo]);
+
+  const pickerFrom = useMemo(() => {
+    if (filters.fromDate) return new Date(filters.fromDate);
+    if (otdSource?.from) return new Date(otdSource.from);
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, [filters.fromDate, otdSource?.from]);
+
+  const pickerTo = useMemo(() => {
+    if (filters.toDate) return new Date(filters.toDate);
+    if (otdSource?.to) return new Date(otdSource.to);
+    return new Date();
+  }, [filters.toDate, otdSource?.to]);
 
   const handlePickerChange = useCallback(({ from, to }) => {
     const formatLocalDate = (d) => {
@@ -1848,28 +1900,62 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
   };
 
   useEffect(() => {
-    if (!from || !to) {
-      setReport(null);
-      return;
-    }
+    const ctrl = new AbortController();
     setChartLoading(true);
     setChartError(null);
-    setReport({
-      labels: ["Jan-26", "Feb-26", "Mar-26", "Apr-26", "May-26", "Jun-26"],
-      data: [82.1, 85.4, 89.0, 87.5, 91.2, 88.5],
-      fy: "FY 2026",
-      from: "2026-01-01",
-      to: "2026-06-30"
-    });
-    setChartLoading(false);
-  }, [from, to]);
+    fetch(buildOtdUrl(fetchFrom, fetchTo, fetchFilters), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) {
+          throw new Error(json?.error || "OTD load failed");
+        }
+        setOtdLive(json);
+        onOtdData?.(json);
+        if (
+          json.filterOptions &&
+          !fetchFilters.customer &&
+          !fetchFilters.partNumber
+        ) {
+          setFilterOptionsCache({
+            customers: json.filterOptions.customers || [],
+            parts: json.filterOptions.parts || [],
+          });
+        }
+        const src = json.report || json;
+        const labels = src.labels || [];
+        const chartValues = src.data || [];
+        if (!labels.length) {
+          setReport(null);
+          return;
+        }
+        setReport({
+          labels,
+          data: chartValues,
+          fy: src.fy || json.fy || "",
+          from: src.from || json.from || "",
+          to: src.to || json.to || "",
+        });
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setChartError(e.message || "Failed to load OTD");
+        setReport(null);
+        setOtdLive(null);
+        onOtdData?.(null);
+      })
+      .finally(() => setChartLoading(false));
+    return () => ctrl.abort();
+  }, [fetchFrom, fetchTo, fetchFilters.customer, fetchFilters.partNumber, uid, onOtdData]);
 
   const chartLabels = report?.labels ?? [];
   const chartData = report?.data ?? [];
   const fy = report?.fy ?? "";
-  const reportFrom = report?.from ?? (from ? formatLocalYmd(from) : "");
-  const reportTo = report?.to ?? (to ? formatLocalYmd(to) : "");
-  const chartTitle = `On-Time Delivery Trend ${fy} (${reportFrom} → ${reportTo})`;
+  const reportFrom = report?.from ?? formatLocalYmd(fetchFrom);
+  const reportTo = report?.to ?? formatLocalYmd(fetchTo);
+  const chartTitle = `On-Time Delivery Trend (${reportFrom} → ${reportTo})`;
   const hasChart = chartLabels.length > 0;
 
   const setupChart = useCallback(
@@ -1941,13 +2027,13 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
   );
 
   const rebuildToken = `${otdReportChartToken(report)}|${targetConfig?.otd?.targetPct ?? 90}`;
-  const otdKpis = data?.otd?.kpis ?? {};
+  const otdKpis = otdSource?.kpis ?? {};
 
   const kpis = [
-    { label: "OTD %", value: fmtPct(otdKpis.on_time_delivery_pct ?? 88.5), icon: Calendar, color: "#7c3aed" },
-    { label: "On-Time Qty", value: fmtNum(otdKpis.on_time_qty ?? 11000), icon: CheckCircle2, color: "#10b981" },
-    { label: "Total Del.", value: fmtNum(otdKpis.total_del_qty ?? 12430), icon: Truck, color: "#2d6de8" },
-    { label: "Delayed Lines", value: fmtNum(otdKpis.delayed_lines ?? 4), icon: AlertTriangle, color: "#ef4444" }
+    { label: "OTD %", value: fmtPct(otdKpis.on_time_delivery_pct), icon: Calendar, color: "#7c3aed" },
+    { label: "On-Time Qty", value: fmtNum(otdKpis.on_time_qty), icon: CheckCircle2, color: "#10b981" },
+    { label: "Total Del.", value: fmtNum(otdKpis.total_del_qty), icon: Truck, color: "#2d6de8" },
+    { label: "Delayed Lines", value: fmtNum(otdKpis.delayed_lines), icon: AlertTriangle, color: "#ef4444" }
   ];
 
   return (
@@ -4163,33 +4249,6 @@ function D3TableLoader({ rows = 5, cols = 4 }) {
   );
 }
 
-/* ── Center panel animated wrapper (zero-latency) ──────────── */
-function CenterTransitionWrapper({ uid, loading, children }) {
-  // Show skeleton only during actual network loading (first fetch).
-  // On card-click (uid change): content renders immediately, CSS
-  // animation replays via React key — NO setTimeout delays.
-  if (loading) {
-    return (
-      <div className="pp1-ct-skeleton">
-        <div className="pp1-ct-skeleton__header">
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--icon" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--title" />
-        </div>
-        <div className="pp1-ct-skeleton__body">
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--display" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--row" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--row pp1-ct-skel-block--row-sm" />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div key={uid} className="pp1-ct-reveal pp1-ct-reveal--in">
-      {children}
-    </div>
-  );
-}
-
 /* ── Generic Premium Dashboard View & Bottom Table Helpers ── */
 function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, chartHeaderControls, extraBottom, children }) {
   return (
@@ -5277,8 +5336,60 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
   );
 }
 
+/* ── Purchase Value helpers (PO data — same filter pattern as GRN Value) ── */
+function normalizePoDate(d) {
+  if (!d) return "";
+  return String(d).trim().slice(0, 10);
+}
+
+function filterPurchaseRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const poDate = normalizePoDate(r.poDate);
+    if (!poDate || poDate < activeFrom || poDate > activeTo) return false;
+    if (filters.supplier && r.supplierName !== filters.supplier) return false;
+    if (filters.partNumber) {
+      const pno = String(r.partNo || "").toLowerCase();
+      if (!pno.includes(String(filters.partNumber).toLowerCase())) return false;
+    }
+    if (filters.category && (r.category || "") !== filters.category) return false;
+    return true;
+  });
+}
+
+function buildPurchaseMonthChartData(filteredRows) {
+  const monthGroup = {};
+  filteredRows.forEach((r) => {
+    const month = r.monthName || r.month;
+    if (!month || month === "—") return;
+    const poDate = normalizePoDate(r.poDate);
+    if (!monthGroup[month]) {
+      monthGroup[month] = { month, total: 0, minDate: poDate };
+    }
+    monthGroup[month].total += Number(r.amount || 0);
+    if (poDate && (!monthGroup[month].minDate || poDate < monthGroup[month].minDate)) {
+      monthGroup[month].minDate = poDate;
+    }
+  });
+
+  return Object.values(monthGroup).sort((a, b) => {
+    if (!a.minDate) return 1;
+    if (!b.minDate) return -1;
+    return a.minDate.localeCompare(b.minDate);
+  });
+}
+
+function formatPurchaseCurrency(valueRaw, amountL) {
+  const v = Number(valueRaw ?? (Number(amountL || 0) * 100000));
+  if (!Number.isFinite(v) || v <= 0) return "—";
+  return `₹${Math.round(v).toLocaleString("en-IN")}`;
+}
+
 /* ── Purchase Value View (UI Alone) ─────────────────────────────────────── */
-function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, targetConfig }) {
   const [suppOpen, setSuppOpen] = React.useState(false);
   const suppRef = React.useRef(null);
   const [catOpen, setCatOpen] = React.useState(false);
@@ -5344,24 +5455,99 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
     }));
   }, [onFilterChange]);
 
-  const kpis = [
-    { label: "Total Purchase Value", value: "₹151.0L", icon: IndianRupee, color: "#ea580c" },
-    { label: "Highest Supplier", value: "Supplier C", icon: Award, color: "#3b82f6" },
-    { label: "Highest Month", value: "June 2026", icon: Calendar, color: "#10b981" },
-    { label: "Average Purchase", value: "₹37.75L", icon: BarChart2, color: "#f59e0b" },
-    { label: "Active Suppliers", value: "3", icon: Users, color: "#8b5cf6" }
-  ];
+  const purchaseRows = React.useMemo(
+    () => (Array.isArray(data?.purchaseValueCompare?.rows) ? data.purchaseValueCompare.rows : []),
+    [data?.purchaseValueCompare?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterPurchaseRows(purchaseRows, filters, defaultRange.from, defaultRange.to),
+    [purchaseRows, filters, defaultRange]
+  );
+
+  const chartData = React.useMemo(
+    () => buildPurchaseMonthChartData(filteredRows),
+    [filteredRows]
+  );
+
+  const kpis = React.useMemo(() => {
+    let total = 0;
+    const supplierTotals = {};
+    const monthTotals = {};
+
+    filteredRows.forEach((r) => {
+      const amount = Number(r.amount || 0);
+      total += amount;
+      const sName = r.supplierName || "Unknown";
+      supplierTotals[sName] = (supplierTotals[sName] || 0) + amount;
+      const mKey = r.monthName || r.month;
+      if (mKey && mKey !== "—") {
+        monthTotals[mKey] = (monthTotals[mKey] || 0) + amount;
+      }
+    });
+
+    let highestSupplier = "—";
+    let highestVal = 0;
+    Object.entries(supplierTotals).forEach(([name, val]) => {
+      if (val > highestVal) {
+        highestVal = val;
+        highestSupplier = name;
+      }
+    });
+
+    let highestMonth = "—";
+    let highestMonthVal = 0;
+    Object.entries(monthTotals).forEach(([month, val]) => {
+      if (val > highestMonthVal) {
+        highestMonthVal = val;
+        highestMonth = month;
+      }
+    });
+
+    const monthCount = Object.keys(monthTotals).length;
+    const avg = monthCount > 0 ? total / monthCount : 0;
+    const activeSupplierCount = Object.keys(supplierTotals).filter((s) => s !== "—").length;
+
+    return [
+      { label: "Total Purchase Value", value: `₹${total.toFixed(2)}L`, icon: IndianRupee, color: "#ea580c" },
+      { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier : "—", icon: Award, color: "#3b82f6" },
+      { label: "Highest Month", value: highestMonth !== "—" ? highestMonth : "—", icon: Calendar, color: "#10b981" },
+      { label: "Average Purchase", value: `₹${avg.toFixed(2)}L`, icon: BarChart2, color: "#f59e0b" },
+      { label: "Active Suppliers", value: activeSupplierCount.toString(), icon: Users, color: "#8b5cf6" }
+    ];
+  }, [filteredRows]);
+
+  const chartRangeLabel = React.useMemo(() => {
+    if (chartData.length === 0) return "Trend Analysis";
+    if (chartData.length === 1) return `Trend Analysis (${chartData[0].month})`;
+    return `Trend Analysis (${chartData[0].month} – ${chartData[chartData.length - 1].month})`;
+  }, [chartData]);
 
   const setupChart = React.useCallback((canvas) => {
     const targetVal = targetConfig?.purchase_value?.minPurchaseValueL ?? 100;
+    const labels = chartData.map((r) => r.month);
+    const totalData = chartData.map((r) => Number(r.total || 0));
+    const maxVal = Math.max(0, targetVal, ...totalData);
+
     return new Chart(canvas, {
       type: "bar",
       data: {
-        labels: ["April 2026", "May 2026", "June 2026", "July 2026"],
+        labels,
         datasets: [
           {
             label: "Purchase Value",
-            data: [35, 42, 51, 23],
+            data: totalData,
             backgroundColor: "rgba(234, 88, 12, 0.85)",
             borderRadius: 4,
             borderSkipped: false,
@@ -5370,7 +5556,7 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
           {
             type: "line",
             label: `Target (₹${targetVal}L/month)`,
-            data: [targetVal, targetVal, targetVal, targetVal],
+            data: labels.map(() => targetVal),
             borderColor: "rgba(239, 68, 68, 0.85)",
             borderDash: [5, 5],
             borderWidth: 1.5,
@@ -5412,7 +5598,7 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
           },
           y: {
             beginAtZero: true,
-            suggestedMax: 120,
+            suggestedMax: (maxVal > 0 ? maxVal : targetVal) * 1.25,
             ticks: {
               color: "#64748b",
               font: { size: 9 },
@@ -5423,26 +5609,42 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
         },
       },
     });
-  }, [targetConfig]);
+  }, [chartData, targetConfig]);
 
-  const suppliersList = ["Supplier A", "Supplier B", "Supplier C", "Steel Authority of India", "Hindalco Industries", "Jindal Stainless", "Tata Steel"];
-  const categoriesList = ["Raw Material", "Consumables", "Machinery Parts", "Electronics"];
-  const partsList = ["MAT-MS-02", "MAT-AL-04", "MAT-SS-10", "MAT-HR-05"];
+  const suppliersList = React.useMemo(() => {
+    const names = purchaseRows.map(r => r.supplierName).filter(s => s && s !== "—");
+    return Array.from(new Set(names)).sort();
+  }, [purchaseRows]);
+
+  const categoriesList = React.useMemo(() => {
+    const cats = purchaseRows.map(r => r.category).filter(Boolean);
+    return Array.from(new Set(cats)).sort();
+  }, [purchaseRows]);
+
+  const partsList = React.useMemo(() => {
+    const parts = purchaseRows.map(r => r.partNo).filter(Boolean);
+    return Array.from(new Set(parts)).sort();
+  }, [purchaseRows]);
 
   const filteredSuppliers = React.useMemo(() => {
     if (!filters.supplier) return suppliersList;
     return suppliersList.filter(s => s.toLowerCase().includes(filters.supplier.toLowerCase()));
-  }, [filters.supplier]);
+  }, [filters.supplier, suppliersList]);
 
   const filteredCategories = React.useMemo(() => {
     if (!filters.category) return categoriesList;
     return categoriesList.filter(c => c.toLowerCase().includes(filters.category.toLowerCase()));
-  }, [filters.category]);
+  }, [filters.category, categoriesList]);
 
   const filteredParts = React.useMemo(() => {
     if (!filters.partNumber) return partsList;
     return partsList.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber]);
+  }, [filters.partNumber, partsList]);
+
+  const chartRebuildToken = React.useMemo(
+    () => `purchase-value|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.purchase_value?.minPurchaseValueL ?? 100}`,
+    [chartData, filters, targetConfig?.purchase_value?.minPurchaseValueL]
+  );
 
   return (
     <PremiumDashboardView
@@ -5452,9 +5654,9 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={180}
-      rangeHint="Trend Analysis (April – July 2026)"
+      rangeHint={chartRangeLabel}
       onClose={onClose}
-      rebuildToken={`purchase-value-ui|${targetConfig?.purchase_value?.minPurchaseValueL}`}
+      rebuildToken={chartRebuildToken}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker - exactly like Customer PO vs Sales Value */}
@@ -5559,34 +5761,98 @@ function PurchaseValueDashboardView({ filters, onFilterChange, onClose, targetCo
   );
 }
 
-function PurchaseValueBottomTable({ filters }) {
+function PurchaseValueBottomTable({ data, filters }) {
   const [activeTab, setActiveTab] = React.useState("month_wise");
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
-  const [hoveredHeader, setHoveredHeader] = React.useState(null);
 
-  // Reset sort when changing tabs
+  const purchaseRows = React.useMemo(
+    () => (Array.isArray(data?.purchaseValueCompare?.rows) ? data.purchaseValueCompare.rows : []),
+    [data?.purchaseValueCompare?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterPurchaseRows(purchaseRows, filters, defaultRange.from, defaultRange.to),
+    [purchaseRows, filters, defaultRange]
+  );
+
+  const uniqueMonths = React.useMemo(() => {
+    const monthMinDate = {};
+    filteredRows.forEach(r => {
+      const poDate = normalizePoDate(r.poDate);
+      const mKey = r.month || r.monthName;
+      if (mKey && mKey !== "—" && poDate) {
+        if (!monthMinDate[mKey] || poDate < monthMinDate[mKey]) {
+          monthMinDate[mKey] = poDate;
+        }
+      }
+    });
+    return Object.keys(monthMinDate).sort((a, b) => monthMinDate[a].localeCompare(monthMinDate[b]));
+  }, [filteredRows]);
+
+  const monthWiseRows = React.useMemo(() => {
+    const supplierGroups = {};
+    filteredRows.forEach(r => {
+      const sName = r.supplierName || "Unknown";
+      const mKey = r.month || r.monthName;
+      if (!supplierGroups[sName]) {
+        supplierGroups[sName] = { supplierName: sName };
+        uniqueMonths.forEach(m => { supplierGroups[sName][m] = 0; });
+      }
+      if (mKey && supplierGroups[sName][mKey] !== undefined) {
+        supplierGroups[sName][mKey] += Number(r.amount || 0);
+      }
+    });
+
+    return Object.values(supplierGroups)
+      .map(group => {
+        const row = [group.supplierName];
+        uniqueMonths.forEach(m => {
+          row.push(group[m] || 0);
+        });
+        const total = uniqueMonths.reduce((s, m) => s + (group[m] || 0), 0);
+        row.push(total);
+        return row;
+      })
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredRows, uniqueMonths]);
+
+  const purchaseOrdersSummaryRows = React.useMemo(
+    () => filteredRows.map(r => ({
+      supplier: r.supplierName || "—",
+      month: r.month || "—",
+      poNo: r.poNumber || "—",
+      poDate: r.poDate || "—",
+      code: r.partNo || "—",
+      name: r.materialName || r.partNo || "—",
+      qty: r.qty || "—",
+      rate: r.rate || "—",
+      value: formatPurchaseCurrency(r.valueRaw, r.amount),
+    })),
+    [filteredRows]
+  );
+
+  const columns1 = React.useMemo(
+    () => ["Supplier Name", ...uniqueMonths.map(m => `${m} (Lakhs)`), "Total Value (Lakhs)"],
+    [uniqueMonths]
+  );
+  const columns2 = ["Sl.No", "Supplier", "PO No", "PO Date", "Material Code", "Material Name", "Qty", "Rate", "Purchase Value"];
+
   React.useEffect(() => {
     setSortIndex(null);
     setSortDirection("asc");
-    setHoveredHeader(null);
   }, [activeTab]);
-
-  const monthWiseRows = [
-    ["Supplier A", "₹10.50 L", "₹12.00 L", "₹15.30 L", "₹8.20 L", "₹46.00 L"],
-    ["Supplier B", "₹15.20 L", "₹18.40 L", "₹22.10 L", "₹9.80 L", "₹65.50 L"],
-    ["Supplier C", "₹9.30 L", "₹11.60 L", "₹13.60 L", "₹5.00 L", "₹39.50 L"]
-  ];
-
-  const purchaseOrdersSummaryRows = [
-    { supplier: "Steel Authority of India", month: "Jan-26", poNo: "PO-2026-901", poDate: "2026-01-15", code: "MAT-MS-02", name: "MS Sheet Metal 2mm", qty: "1,500 kg", rate: "₹300/kg", value: "₹4,50,000" },
-    { supplier: "Hindalco Industries", month: "Feb-26", poNo: "PO-2026-902", poDate: "2026-02-12", code: "MAT-AL-04", name: "Aluminum Extrusion", qty: "800 kg", rate: "₹475/kg", value: "₹3,80,000" },
-    { supplier: "Jindal Stainless", month: "Mar-26", poNo: "PO-2026-903", poDate: "2026-03-05", code: "MAT-SS-10", name: "SS Rods 10mm", qty: "1,200 kg", rate: "₹516/kg", value: "₹6,20,000" },
-    { supplier: "Tata Steel", month: "Apr-26", poNo: "PO-2026-904", poDate: "2026-04-10", code: "MAT-HR-05", name: "HR Plate 5mm", qty: "2,000 kg", rate: "₹275/kg", value: "₹5,50,000" }
-  ];
-
-  const columns1 = ["Supplier Name", "April (Lakhs)", "May (Lakhs)", "June (Lakhs)", "July (Lakhs)", "Total Value (Lakhs)"];
-  const columns2 = ["Sl.No", "Supplier", "PO No", "PO Date", "Material Code", "Material Name", "Qty", "Rate", "Purchase Value"];
 
   const handleSort = (idx) => {
     if (sortIndex === idx) {
@@ -5606,6 +5872,13 @@ function PurchaseValueBottomTable({ filters }) {
     if (sortIndex === null || activeTab !== "month_wise") return monthWiseRows;
 
     return [...monthWiseRows].sort((a, b) => {
+      if (sortIndex === 0) {
+        const valA = a[0] || "";
+        const valB = b[0] || "";
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
       const valA = parseSortValue(a[sortIndex]);
       const valB = parseSortValue(b[sortIndex]);
       if (valA < valB) return sortDirection === "asc" ? -1 : 1;
@@ -5638,10 +5911,40 @@ function PurchaseValueBottomTable({ filters }) {
     });
   }, [purchaseOrdersSummaryRows, sortIndex, sortDirection, activeTab]);
 
+  const monthWiseTableMinWidth = React.useMemo(
+    () => Math.max(720, 220 + Math.max(columns1.length - 1, 1) * 108),
+    [columns1.length]
+  );
+
+  const pvThBase = {
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    cursor: "pointer",
+    userSelect: "none",
+    padding: "12px 16px",
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    overflowWrap: "anywhere",
+    verticalAlign: "top",
+  };
+
+  const pvWrapCell = {
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    overflowWrap: "anywhere",
+    verticalAlign: "top",
+  };
+
+  const pvNoWrapCell = {
+    whiteSpace: "nowrap",
+    verticalAlign: "top",
+  };
+
   return (
-    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
+    <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both", display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--pp1-border, #e2e8f0)", gap: "16px", marginBottom: "12px", paddingLeft: "16px" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--pp1-border, #e2e8f0)", gap: "16px", marginBottom: "12px", paddingLeft: "16px", flexShrink: 0 }}>
         <button
           type="button"
           onClick={() => setActiveTab("month_wise")}
@@ -5677,45 +5980,26 @@ function PurchaseValueBottomTable({ filters }) {
       </div>
 
       {/* Tables Container */}
-      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 320, overflowY: "auto" }}>
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "4px", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
         {activeTab === "month_wise" ? (
-          <table className="pp1-cc-tbl" style={{ minWidth: "720px", tableLayout: "fixed" }}>
-            <colgroup>
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-            </colgroup>
+          <table className="pp1-cc-tbl" style={{ minWidth: monthWiseTableMinWidth, width: "100%" }}>
             <thead>
               <tr>
                 {columns1.map((col, idx) => {
                   const isRightAligned = idx > 0;
-                  const isHovered = hoveredHeader === idx;
                   const isSorted = sortIndex === idx;
 
                   return (
                     <th
                       key={idx}
                       onClick={() => handleSort(idx)}
-                      onMouseEnter={() => setHoveredHeader(idx)}
-                      onMouseLeave={() => setHoveredHeader(null)}
                       style={{
-                        position: "sticky",
-                        top: 0,
-                        backgroundColor: isHovered ? "rgba(255, 255, 255, 0.1)" : "transparent",
-                        zIndex: 10,
+                        ...pvThBase,
                         textAlign: isRightAligned ? "right" : "left",
-                        cursor: "pointer",
-                        userSelect: "none",
-                        transition: "background-color 0.2s ease",
-                        padding: "12px 16px",
-                        borderBottom: "1px solid rgba(255, 255, 255, 0.1)"
                       }}
                     >
-                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
-                        <span>{col}</span>
+                      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{col}</span>
                         <SortIcon active={isSorted} direction={sortDirection} />
                       </div>
                     </th>
@@ -5724,36 +6008,37 @@ function PurchaseValueBottomTable({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {sortedMonthWiseRows.map((row, ri) => (
-                <tr key={ri} className="pp1-cc-tbl__tr">
-                  <td className="pp1-cc-tbl__bold" style={{ fontWeight: 600 }}>{row[0]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[1]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[2]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[3]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row[4]}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--pp1-blue)", fontVariantNumeric: "tabular-nums" }}>{row[5]}</td>
-                </tr>
-              ))}
+              {sortedMonthWiseRows.length === 0 ? (
+                <tr><td colSpan={columns1.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                sortedMonthWiseRows.map((row, ri) => (
+                  <tr key={ri} className="pp1-cc-tbl__tr">
+                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row[0]}</td>
+                    {row.slice(1).map((val, vi, arr) => (
+                      <td
+                        key={vi}
+                        style={{
+                          ...pvWrapCell,
+                          textAlign: "right",
+                          fontWeight: vi === arr.length - 1 ? 700 : 500,
+                          color: vi === arr.length - 1 ? "var(--pp1-blue)" : undefined,
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        ₹{Number(val || 0).toFixed(2)} L
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         ) : (
-          <table className="pp1-cc-tbl" style={{ minWidth: "1100px", tableLayout: "fixed" }}>
-            <colgroup>
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "8%" }} />
-            </colgroup>
+          <table className="pp1-cc-tbl" style={{ minWidth: 1200, width: "100%" }}>
             <thead>
               <tr>
                 {columns2.map((col, idx) => {
                   const isRightAligned = idx > 5;
-                  const isHovered = hoveredHeader === idx;
                   const isSorted = sortIndex === idx;
                   const isSlNo = idx === 0;
 
@@ -5761,23 +6046,15 @@ function PurchaseValueBottomTable({ filters }) {
                     <th
                       key={idx}
                       onClick={() => !isSlNo && handleSort(idx)}
-                      onMouseEnter={() => !isSlNo && setHoveredHeader(idx)}
-                      onMouseLeave={() => !isSlNo && setHoveredHeader(null)}
                       style={{
-                        position: "sticky",
-                        top: 0,
-                        backgroundColor: isHovered && !isSlNo ? "rgba(255, 255, 255, 0.1)" : "transparent",
-                        zIndex: 10,
+                        ...pvThBase,
+                        ...(idx === 2 || idx === 3 ? pvNoWrapCell : {}),
                         textAlign: isRightAligned ? "right" : "left",
                         cursor: isSlNo ? "default" : "pointer",
-                        userSelect: "none",
-                        transition: "background-color 0.2s ease",
-                        padding: "12px 16px",
-                        borderBottom: "1px solid rgba(255, 255, 255, 0.1)"
                       }}
                     >
-                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
-                        <span>{col}</span>
+                      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
+                        <span style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{col}</span>
                         {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
                       </div>
                     </th>
@@ -5786,23 +6063,27 @@ function PurchaseValueBottomTable({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {sortedSummaryRows.map((row, ri) => (
+              {sortedSummaryRows.length === 0 ? (
+                <tr><td colSpan={columns2.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              ) : (
+                sortedSummaryRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
-                  <td>{ri + 1}</td>
-                  <td className="pp1-cc-tbl__bold" style={{ fontWeight: 600 }}>{row.supplier}</td>
-                  <td>
-                    <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer" }}>
+                  <td style={pvWrapCell}>{ri + 1}</td>
+                  <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
+                  <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
+                    <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                       {row.poNo}
                     </span>
                   </td>
-                  <td>{row.poDate}</td>
-                  <td style={{ fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
-                  <td>{row.name}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
-                  <td style={{ textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
+                  <td style={pvNoWrapCell}>{row.poDate}</td>
+                  <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
+                  <td style={pvWrapCell}>{row.name}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         )}
@@ -6661,17 +6942,11 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   );
 }
 
-const MOCK_PRODUCTION_LOGS = [
-  { date: "2026-06-15", machine: "CNC-01", shift: "A Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 850, rej: 12, team: "Team A", customer: "Tata Motors", value: 170000, profit: 42000 },
-  { date: "2026-06-15", machine: "CNC-02", shift: "A Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 620, rej: 8, team: "Team A", customer: "Mahindra & Mahindra", value: 248000, profit: 62000 },
-  { date: "2026-06-15", machine: "VMC-01", shift: "A Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 410, rej: 5, team: "Team B", customer: "Maruti Suzuki", value: 184500, profit: 36900 },
-  { date: "2026-06-15", machine: "CNC-01", shift: "B Shift", operator: "Balamurugan.P", part: "BRK-PAD-M1", qty: 820, rej: 15, team: "Team A", customer: "Tata Motors", value: 164000, profit: 41000 },
-  { date: "2026-06-15", machine: "CNC-02", shift: "B Shift", operator: "Gopikrishnan.R", part: "ROT-DSC-X4", qty: 600, rej: 10, team: "Team A", customer: "Mahindra & Mahindra", value: 240000, profit: 60000 },
-  { date: "2026-06-15", machine: "VMC-02", shift: "B Shift", operator: "Karthi.S", part: "GBX-HNG-S2", qty: 390, rej: 6, team: "Team B", customer: "Maruti Suzuki", value: 175500, profit: 35100 },
-  { date: "2026-06-15", machine: "Grinding-01", shift: "C Shift", operator: "Senthil.K", part: "TRK-AXL-L9", qty: 150, rej: 3, team: "Team C", customer: "Ashok Leyland", value: 375000, profit: 93750 }
-];
+function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig, uid, onProdValueData, defaultFrom, defaultTo }) {
+  const [prodValueLive, setProdValueLive] = React.useState(null);
+  const [prodValueLoading, setProdValueLoading] = React.useState(false);
+  const prodValueSource = prodValueLive;
 
-function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig }) {
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [machineOpen, setMachineOpen] = React.useState(false);
   const [operatorOpen, setOperatorOpen] = React.useState(false);
@@ -6731,133 +7006,179 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
     });
   };
 
-  const filteredLogs = React.useMemo(() => {
-    let list = MOCK_PRODUCTION_LOGS;
-    if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
-    if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
-    if (filters.team) list = list.filter(r => r.team === filters.team);
-    if (filters.machine) list = list.filter(r => r.machine === filters.machine);
-    if (filters.operator) list = list.filter(r => r.operator === filters.operator);
-    if (filters.customer) list = list.filter(r => r.customer === filters.customer);
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setProdValueLoading(true);
+    const activeFrom = (filters?.fromDate || defaultFrom || "").slice(0, 10);
+    const activeTo = (filters?.toDate || defaultTo || "").slice(0, 10);
+    const fy = currentFinancialYearRange();
+    const fromArg = activeFrom || formatLocalYmd(fy.from);
+    const toArg = activeTo || formatLocalYmd(fy.to);
+    fetch(buildProdValueUrl(fromArg, toArg, filters?.machine), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Production Value load failed");
+        setProdValueLive(json);
+        onProdValueData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        const empty = { machineRows: [], detailRows: [], rows: [], filterOptions: {} };
+        setProdValueLive(empty);
+        onProdValueData?.(empty);
+      })
+      .finally(() => setProdValueLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onProdValueData, filters?.machine, filters?.fromDate, filters?.toDate, defaultFrom, defaultTo]);
+
+  const defaultRange = React.useMemo(() => ({
+    from: defaultFrom || filters?.fromDate || "",
+    to: defaultTo || filters?.toDate || "",
+  }), [defaultFrom, defaultTo, filters?.fromDate, filters?.toDate]);
+
+  const detailRows = React.useMemo(
+    () => (Array.isArray(prodValueSource?.detailRows) ? prodValueSource.detailRows : []),
+    [prodValueSource?.detailRows]
+  );
+
+  const machineRows = React.useMemo(
+    () => (Array.isArray(prodValueSource?.machineRows) ? prodValueSource.machineRows : (prodValueSource?.rows || [])),
+    [prodValueSource?.machineRows, prodValueSource?.rows]
+  );
+
+  const filteredDetail = React.useMemo(() => {
+    const activeFrom = filters?.fromDate || defaultRange.from;
+    const activeTo = filters?.toDate || defaultRange.to;
+    let list = filterProdValueDetailRows(detailRows, filters, activeFrom, activeTo);
+    if (filters?.team) list = list.filter((r) => r.team === filters.team);
+    if (filters?.operator) {
+      const op = String(filters.operator).toLowerCase();
+      list = list.filter((r) => String(r.operator || "").toLowerCase().includes(op));
+    }
     return list;
-  }, [filters]);
+  }, [detailRows, filters, defaultRange]);
 
-  // Dynamically calculate KPIs
-  const kpis = React.useMemo(() => {
-    let totalVal = 0;
-    let totalProfitVal = 0;
-
-    const machineVals = {};
-    const machProf = {};
-    const machValsForRatio = {};
-
-    filteredLogs.forEach(r => {
-      totalVal += r.value;
-      totalProfitVal += r.profit;
-      machineVals[r.machine] = (machineVals[r.machine] || 0) + r.value;
-      machProf[r.machine] = (machProf[r.machine] || 0) + r.profit;
-      machValsForRatio[r.machine] = (machValsForRatio[r.machine] || 0) + r.value;
-    });
-
-    // Best Machine
-    let bestMach = "—";
-    let maxMachVal = 0;
-    Object.keys(machineVals).forEach(m => {
-      if (machineVals[m] > maxMachVal) {
-        maxMachVal = machineVals[m];
-        bestMach = m;
-      }
-    });
-
-    // Highest Profitability (highest profitability ratio machine & ratio)
-    let bestMachProf = "—";
-    let maxProfRatio = 0;
-    Object.keys(machProf).forEach(m => {
-      const ratio = machValsForRatio[m] > 0 ? (machProf[m] / machValsForRatio[m]) * 100 : 0;
-      if (ratio > maxProfRatio) {
-        maxProfRatio = ratio;
-        bestMachProf = `${m} (${ratio.toFixed(1)}%)`;
-      }
-    });
-
-    const avgProfitRatio = totalVal > 0 ? (totalProfitVal / totalVal) * 100 : 0;
-
-    return [
-      { label: "Total Production Value", value: `₹${(totalVal / 100000).toFixed(2)}L`, icon: IndianRupee, color: "#8b5cf6" },
-      { label: "Best Machine", value: bestMach, icon: Cpu, color: "#3b82f6" },
-      { label: "Highest Profit", value: `₹${(totalProfitVal / 100000).toFixed(2)}L`, icon: TrendingUp, color: "#10b981" },
-      { label: "Average Profit Ratio", value: `${avgProfitRatio.toFixed(1)}%`, icon: Zap, color: "#f97316" },
-      { label: "Highest Profitability", value: bestMachProf, icon: Trophy, color: "#ec4899" }
-    ];
-  }, [filteredLogs]);
+  const filteredMachineRows = React.useMemo(() => {
+    let list = machineRows;
+    if (filters?.team) {
+      const teamMacs = new Set(
+        filteredDetail.filter((r) => r.team === filters.team).map((r) => r.machine)
+      );
+      if (teamMacs.size) list = list.filter((r) => teamMacs.has(r.machine));
+    }
+    if (filters?.machine) {
+      list = list.filter((r) => r.machine === filters.machine || r.machineName === filters.machine);
+    }
+    if (filters?.operator) {
+      const opMacs = new Set(
+        filteredDetail.filter((r) =>
+          String(r.operator || "").toLowerCase().includes(String(filters.operator).toLowerCase())
+        ).map((r) => r.machine)
+      );
+      if (opMacs.size) list = list.filter((r) => opMacs.has(r.machine));
+    }
+    return list;
+  }, [machineRows, filteredDetail, filters]);
 
   // Aggregate combination chart data dynamically based on selection and filters
   const chartData = React.useMemo(() => {
-    const rawData = [
-      { block: "Team A", type: "CNC", machine: "CNC1", operator: "Kumar", customer: "Customer A", rate: 180, value: 210 },
-      { block: "Team A", type: "CNC", machine: "CNC2", operator: "Ravi", customer: "Customer B", rate: 130, value: 150 },
-      { block: "Team B", type: "CNC", machine: "VMC1", operator: "Mani", customer: "Customer C", rate: 140, value: 90 },
-      { block: "Team C", type: "Conv Cutting", machine: "Cutting", operator: "Moorthy", customer: "Customer D", rate: 70, value: 50 },
-      { block: "Team D", type: "Conv", machine: "Drilling", operator: "Sankar", customer: "Customer A", rate: 20, value: 60 }
-    ];
-
-    let list = rawData;
-
-    // Apply interactive dashboard filters mapped to the sample dataset
-    if (filters.team) {
-      list = list.filter(r => r.block === filters.team);
+    let aggregated = {};
+    if (xAxisGroup === "Machine") {
+      filteredMachineRows.forEach((r) => {
+        const key = r.machine || "—";
+        if (!aggregated[key]) aggregated[key] = { rateSum: 0, rateCount: 0, prodSum: 0, actualSum: 0 };
+        aggregated[key].rateSum += Number(r.ratePerHr || 0);
+        aggregated[key].rateCount += 1;
+        aggregated[key].prodSum += Number(r.productionValue || 0);
+        aggregated[key].actualSum += Number(r.actualValue || 0);
+      });
+    } else if (xAxisGroup === "Operator") {
+      aggregated = aggregateProdValueByField(filteredDetail, "operator");
+      Object.keys(aggregated).forEach((k) => {
+        aggregated[k].prodSum = aggregated[k].productionValue;
+        aggregated[k].actualSum = aggregated[k].actualValue;
+      });
+    } else {
+      aggregated = aggregateProdValueByField(filteredDetail, "team");
+      Object.keys(aggregated).forEach((k) => {
+        aggregated[k].prodSum = aggregated[k].productionValue;
+        aggregated[k].actualSum = aggregated[k].actualValue;
+      });
     }
-    if (filters.machine) {
-      const machMap = {
-        "CNC-01": "CNC1",
-        "CNC-02": "CNC2",
-        "VMC-01": "VMC1",
-        "VMC-02": "VMC1",
-        "Grinding-01": "Cutting"
-      };
-      const targetMach = machMap[filters.machine];
-      if (targetMach) list = list.filter(r => r.machine === targetMach);
-    }
-    if (filters.operator) {
-      const opMap = {
-        "Balamurugan.P": "Kumar",
-        "Gopikrishnan.R": "Ravi",
-        "Karthi.S": "Mani",
-        "Senthil.K": "Moorthy"
-      };
-      const targetOp = opMap[filters.operator];
-      if (targetOp) list = list.filter(r => r.operator === targetOp);
-    }
-    if (filters.customer) {
-      const custMap = {
-        "Tata Motors": "Customer A",
-        "Mahindra & Mahindra": "Customer B",
-        "Maruti Suzuki": "Customer C",
-        "Ashok Leyland": "Customer D"
-      };
-      const targetCust = custMap[filters.customer];
-      if (targetCust) list = list.filter(r => r.customer === targetCust);
-    }
-
-    const groupField = (xAxisGroup.toLowerCase() === "block" || xAxisGroup.toLowerCase() === "team") ? "block" : xAxisGroup.toLowerCase();
-    const aggregated = {};
-    list.forEach(r => {
-      const key = r[groupField];
-      if (!aggregated[key]) {
-        aggregated[key] = { rateSum: 0, valSum: 0 };
-      }
-      aggregated[key].rateSum += r.rate;
-      aggregated[key].valSum += r.value;
-    });
 
     const labels = Object.keys(aggregated);
-    const rates = labels.map(l => aggregated[l].rateSum);
-    const values = labels.map(l => aggregated[l].valSum);
+    const values = labels.map((l) => aggregated[l].prodSum || aggregated[l].productionValue || 0);
+    const actuals = labels.map((l) => aggregated[l].actualSum || aggregated[l].actualValue || 0);
 
-    return { labels, rates, values };
-  }, [filters, xAxisGroup]);
+    return { labels, values, actuals };
+  }, [filteredMachineRows, filteredDetail, xAxisGroup]);
+
+  const chartBusy = loading || prodValueLoading;
+  const hasChartData = chartData.labels.length > 0;
+  const hasRows = filteredMachineRows.length > 0 || filteredDetail.length > 0;
+
+  // Dynamically calculate KPIs
+  const kpis = React.useMemo(() => {
+    if (chartBusy && !hasRows) {
+      return [
+        { label: "Total Production Value", value: "…", icon: IndianRupee, color: "#8b5cf6" },
+        { label: "Best Machine", value: "…", icon: Cpu, color: "#3b82f6" },
+        { label: "Highest Profit", value: "…", icon: TrendingUp, color: "#10b981" },
+        { label: "Average Profit Ratio", value: "…", icon: Zap, color: "#f97316" },
+        { label: "Highest Profitability", value: "…", icon: Trophy, color: "#ec4899" }
+      ];
+    }
+    if (!hasRows) {
+      return [
+        { label: "Total Production Value", value: "—", icon: IndianRupee, color: "#8b5cf6" },
+        { label: "Best Machine", value: "—", icon: Cpu, color: "#3b82f6" },
+        { label: "Highest Profit", value: "—", icon: TrendingUp, color: "#10b981" },
+        { label: "Average Profit Ratio", value: "—", icon: Zap, color: "#f97316" },
+        { label: "Highest Profitability", value: "—", icon: Trophy, color: "#ec4899" }
+      ];
+    }
+
+    const totalProd = filteredMachineRows.reduce((acc, r) => acc + Number(r.productionValue || 0), 0);
+    const totalActual = filteredMachineRows.reduce((acc, r) => acc + Number(r.actualValue || 0), 0);
+
+    let bestMach = "—";
+    let maxActual = 0;
+    filteredMachineRows.forEach((r) => {
+      const av = Number(r.actualValue || 0);
+      if (av > maxActual) {
+        maxActual = av;
+        bestMach = r.machine || "—";
+      }
+    });
+
+    let bestMachProf = "—";
+    let maxProfRatio = 0;
+    filteredMachineRows.forEach((r) => {
+      const ratio = Number(r.actualPct || 0);
+      if (ratio > maxProfRatio) {
+        maxProfRatio = ratio;
+        bestMachProf = `${r.machine || "—"} (${ratio.toFixed(1)}%)`;
+      }
+    });
+
+    const avgProfitRatio = filteredMachineRows.length
+      ? filteredMachineRows.reduce((acc, r) => acc + Number(r.actualPct || 0), 0) / filteredMachineRows.length
+      : 0;
+
+    return [
+      { label: "Total Production Value", value: `₹${(totalProd / 100000).toFixed(2)}L`, icon: IndianRupee, color: "#8b5cf6" },
+      { label: "Best Machine", value: bestMach, icon: Cpu, color: "#3b82f6" },
+      { label: "Highest Profit", value: `₹${(totalActual / 100000).toFixed(2)}L`, icon: TrendingUp, color: "#10b981" },
+      { label: "Average Profit Ratio", value: `${avgProfitRatio.toFixed(1)}%`, icon: Zap, color: "#f97316" },
+      { label: "Highest Profitability", value: bestMachProf, icon: Trophy, color: "#ec4899" }
+    ];
+  }, [filteredMachineRows, chartBusy, hasRows]);
 
   const setupChart = React.useCallback((canvas) => {
+    if (!chartData.labels?.length) return null;
     const ctx = canvas.getContext("2d");
     const targetValLakhs = targetConfig?.production_analysis?.minProductionValue ?? 12.0;
     const targetVal = targetValLakhs * 100000;
@@ -6868,8 +7189,8 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
         datasets: [
           {
             type: "bar",
-            label: "Rate Per Hour",
-            data: chartData.rates,
+            label: "Total Production Value",
+            data: chartData.values,
             yAxisID: "yRate",
             backgroundColor: "rgba(139, 92, 246, 0.75)",
             borderColor: "#8b5cf6",
@@ -6878,8 +7199,8 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
           },
           {
             type: "line",
-            label: "Production Value",
-            data: chartData.values,
+            label: "Actual Value",
+            data: chartData.actuals,
             yAxisID: "yValue",
             borderColor: "#10b981",
             backgroundColor: "#10b981",
@@ -6932,7 +7253,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
               label: (context) => {
                 const label = context.dataset.label || "";
                 const val = context.raw;
-                return ` ${label}: ₹${Number(val).toFixed(2)} L`;
+                return ` ${label}: ₹${Number(val).toLocaleString("en-IN")}`;
               }
             }
           }
@@ -6950,7 +7271,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
             position: "left",
             title: {
               display: true,
-              text: "Rate Per Hour (₹)",
+              text: "Total Production Value (₹)",
               color: "#8b5cf6",
               font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
             },
@@ -6966,7 +7287,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
             position: "right",
             title: {
               display: true,
-              text: "Production Value (₹)",
+              text: "Actual Value (₹)",
               color: "#10b981",
               font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
             },
@@ -6982,10 +7303,58 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
     });
   }, [chartData, targetConfig]);
 
-  const teams = ["Team A", "Team B", "Team C"];
-  const machines = ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"];
-  const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K"];
-  const customers = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"];
+  const teams = React.useMemo(() => {
+    const api = prodValueSource?.filterOptions?.teams;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(detailRows.map((d) => d.team).filter((t) => t && t !== "—"))).sort();
+  }, [prodValueSource?.filterOptions?.teams, detailRows]);
+
+  const machines = React.useMemo(() => {
+    const api = prodValueSource?.filterOptions?.machines;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(machineRows.map((d) => d.machine).filter(Boolean))).sort();
+  }, [prodValueSource?.filterOptions?.machines, machineRows]);
+
+  const operators = React.useMemo(() => {
+    const api = prodValueSource?.filterOptions?.operators;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(detailRows.map((d) => d.operator).filter((o) => o && o !== "—"))).sort();
+  }, [prodValueSource?.filterOptions?.operators, detailRows]);
+
+  const chartHeaderControls = (
+    <div className="pp1-chart-xaxis">
+      <span className="pp1-chart-xaxis__label">Chart X-Axis:</span>
+      {["Machine", "Operator", "Team"].map(g => (
+        <button
+          key={g}
+          type="button"
+          onClick={() => setXAxisGroup(g)}
+          className={`pp1-xaxis-btn${xAxisGroup === g ? " pp1-xaxis-btn--active" : ""}`}
+        >
+          {g}
+        </button>
+      ))}
+    </div>
+  );
+
+  const chartControls = (
+    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+      <div className="pp1-dt-card__hd" style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+        <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>Total Production Value vs Actual Value</div>
+        {chartHeaderControls}
+      </div>
+      {!chartBusy && !hasChartData && (
+        <p className="pp1-dt-card__empty">No Production Value data for this date range.</p>
+      )}
+      {(chartBusy || hasChartData) && (
+        <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative", opacity: chartBusy ? 0.5 : 1, transition: "opacity 0.2s" }}>
+          {hasChartData && (
+            <ChartJsCanvas setup={setupChart} height={220} rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`} />
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <PremiumDashboardView
@@ -6993,25 +7362,10 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
       icon={Factory}
       color="#8b5cf6"
       kpis={kpis}
-      setupChart={setupChart}
-      rangeHint="Production Value Product Rate vs Rate Per Hour"
+      setupChart={null}
+      chartControls={chartControls}
+      rangeHint="Total Production Value vs Actual Value"
       onClose={onClose}
-      rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`}
-      chartHeaderControls={
-        <div className="pp1-chart-xaxis">
-          <span className="pp1-chart-xaxis__label">Chart X-Axis:</span>
-          {["Machine", "Operator", "Team"].map(g => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => setXAxisGroup(g)}
-              className={`pp1-xaxis-btn${xAxisGroup === g ? " pp1-xaxis-btn--active" : ""}`}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      }
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -7140,7 +7494,7 @@ function ProductionAnalysisReportDashboardView({ filters, onFilterChange, xAxisG
   );
 }
 
-function ProductionAnalysisReportBottomTable({ filters, xAxisGroup = "Machine" }) {
+function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Machine", defaultFrom, defaultTo }) {
   const [activeTab, setActiveTab] = React.useState("rateVsHour"); // "rateVsHour" | "dailyLog"
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
@@ -7156,7 +7510,7 @@ function ProductionAnalysisReportBottomTable({ filters, xAxisGroup = "Machine" }
   // Tab 1 columns dynamically based on xAxisGroup
   const columnsRateVsHour = React.useMemo(() => {
     if (xAxisGroup === "Machine") {
-      return ["Sl.No", "Month", "Machine Name", "Production Value", "Actual Value", "Actual %"];
+      return ["Sl.No", "Month", "Mac No", "Production Value", "Actual Value", "Actual %"];
     } else if (xAxisGroup === "Operator") {
       return ["Sl.No", "Month", "Operator Name", "Production Value", "Actual Value", "Actual %"];
     } else {
@@ -7167,91 +7521,103 @@ function ProductionAnalysisReportBottomTable({ filters, xAxisGroup = "Machine" }
   // Tab 1 rows dynamically based on xAxisGroup
   const rowsRateVsHour = React.useMemo(() => {
     const groupField = xAxisGroup === "Machine" ? "machine" : xAxisGroup === "Operator" ? "operator" : "team";
+    const detailRows = Array.isArray(data?.productionValueCompare?.detailRows) ? data.productionValueCompare.detailRows : [];
+    const machineRows = Array.isArray(data?.productionValueCompare?.machineRows)
+      ? data.productionValueCompare.machineRows
+      : (data?.productionValueCompare?.rows || []);
 
-    let list = MOCK_PRODUCTION_LOGS;
-    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
-    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
-    if (filters?.team) list = list.filter(r => r.team === filters.team);
-    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
-    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
-    if (filters?.customer) list = list.filter(r => r.customer === filters.customer);
+    const activeFrom = filters?.fromDate || defaultFrom || "";
+    const activeTo = filters?.toDate || defaultTo || "";
+    const monthRef = activeTo || activeFrom || (detailRows[0]?.date || "");
 
+    let list = filterProdValueDetailRows(detailRows, filters, activeFrom, activeTo);
     const groups = {};
-    list.forEach(r => {
-      const key = r[groupField];
-      if (!groups[key]) {
+
+    if (xAxisGroup === "Machine") {
+      let macList = machineRows;
+      if (filters?.team) {
+        const teamMacs = new Set(list.filter((r) => r.team === filters.team).map((r) => r.machine));
+        macList = macList.filter((r) => teamMacs.has(r.machine));
+      }
+      if (filters?.machine) {
+        macList = macList.filter((r) => r.machine === filters.machine || r.machineName === filters.machine);
+      }
+      if (filters?.operator) {
+        const opMacs = new Set(
+          list.filter((r) =>
+            String(r.operator || "").toLowerCase().includes(String(filters.operator).toLowerCase())
+          ).map((r) => r.machine)
+        );
+        macList = macList.filter((r) => opMacs.has(r.machine));
+      }
+      macList.forEach((r) => {
+        const key = r.machine || "—";
         groups[key] = {
           key,
-          valueSum: 0,
-          profitSum: 0,
-          date: r.date
+          productionValue: Number(r.productionValue || 0),
+          actualValue: Number(r.actualValue || 0),
+          actualPct: Number(r.actualPct || 0),
         };
-      }
-      groups[key].valueSum += r.value;
-      groups[key].profitSum += r.profit;
-    });
-
-    const formatMonth = (dateStr) => {
-      if (!dateStr) return "Jun-2026";
-      const parts = dateStr.split("-");
-      if (parts.length === 3) {
-        const year = parts[0];
-        const monthNum = parseInt(parts[1], 10);
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        return `${months[monthNum - 1]}-${year}`;
-      }
-      return "Jun-2026";
-    };
+      });
+    } else {
+      list.forEach((r) => {
+        const key = String(r[groupField] || "—").trim() || "—";
+        if (!groups[key]) {
+          groups[key] = { key, productionValue: 0, actualValue: 0, actualPctNum: 0, actualPctDen: 0 };
+        }
+        groups[key].productionValue += Number(r.productionValue || 0);
+        groups[key].actualValue += Number(r.actualValue || 0);
+        groups[key].actualPctDen += Number(r.productionValue || 0);
+        groups[key].actualPctNum += Number(r.actualValue || 0);
+      });
+    }
 
     return Object.values(groups).map((g, idx) => {
-      const actualVal = g.valueSum;
-      const targetVal = actualVal * 1.10; // Planned/Target Production Value
-      const profitPct = actualVal > 0 ? (g.profitSum / actualVal) * 100 : 0;
+      const prodVal = g.productionValue;
+      const actualVal = g.actualValue;
+      const actualPct = xAxisGroup === "Machine"
+        ? g.actualPct
+        : (g.actualPctDen > 0 ? (g.actualPctNum / g.actualPctDen) * 100 : 0);
 
       return [
-        String(idx + 1), // Sl.No
-        formatMonth(g.date), // Month
-        g.key, // Group name
-        `₹${(targetVal / 100000).toFixed(2)} L`, // Production Value (Target)
-        `₹${(actualVal / 100000).toFixed(2)} L`, // Actual Value
-        `${profitPct.toFixed(1)}%` // Profit %
+        String(idx + 1),
+        formatProdValueMonth(monthRef),
+        g.key,
+        `₹${(prodVal / 100000).toFixed(2)} L`,
+        `₹${(actualVal / 100000).toFixed(2)} L`,
+        `${Number(actualPct).toFixed(1)}%`
       ];
     });
-  }, [filters, xAxisGroup]);
+  }, [data, filters, xAxisGroup, defaultFrom, defaultTo]);
 
   // Tab 2 columns & rows (Daily Production Log) - original implementation
   const columnsDailyLog = ["Sl.No", "Date", "Team", "Machine", "Operator", "Production Qty", "Production Value", "Actual Value", "Actual Ratio"];
 
   const rowsDailyLog = React.useMemo(() => {
-    let list = [
-      { date: "15-Jun-2026", team: "Team A", machine: "CNC-01", operator: "Balamurugan.P", customer: "Tata Motors", qty: 850, value: 170000, ratePerHour: 21250, profitRatio: "24.7%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team A", machine: "CNC-02", operator: "Gopikrishnan.R", customer: "Mahindra & Mahindra", qty: 620, value: 248000, ratePerHour: 31000, profitRatio: "25.0%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team B", machine: "VMC-01", operator: "Karthi.S", customer: "Maruti Suzuki", qty: 410, value: 184500, ratePerHour: 23063, profitRatio: "20.0%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team A", machine: "CNC-01", operator: "Balamurugan.P", customer: "Tata Motors", qty: 820, value: 164000, ratePerHour: 20500, profitRatio: "25.0%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team A", machine: "CNC-02", operator: "Gopikrishnan.R", customer: "Mahindra & Mahindra", qty: 600, value: 240000, ratePerHour: 30000, profitRatio: "25.0%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team B", machine: "VMC-02", operator: "Karthi.S", customer: "Maruti Suzuki", qty: 390, value: 175500, ratePerHour: 21938, profitRatio: "20.0%", filterDate: "2026-06-15" },
-      { date: "15-Jun-2026", team: "Team C", machine: "Grinding-01", operator: "Senthil.K", customer: "Ashok Leyland", qty: 150, value: 375000, ratePerHour: 46875, profitRatio: "25.0%", filterDate: "2026-06-15" }
-    ];
+    const detailRows = Array.isArray(data?.productionValueCompare?.detailRows) ? data.productionValueCompare.detailRows : [];
+    const activeFrom = filters?.fromDate || defaultFrom || "";
+    const activeTo = filters?.toDate || defaultTo || "";
+    const list = filterProdValueDetailRows(detailRows, filters, activeFrom, activeTo);
 
-    if (filters?.fromDate) list = list.filter(r => r.filterDate >= filters.fromDate);
-    if (filters?.toDate) list = list.filter(r => r.filterDate <= filters.toDate);
-    if (filters?.team) list = list.filter(r => r.team === filters.team);
-    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
-    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
-    if (filters?.customer) list = list.filter(r => r.customer === filters.customer);
+    return list.map((r, idx) => {
+      const dateParts = (r.date || "").slice(0, 10).split("-");
+      const displayDate = dateParts.length === 3
+        ? `${dateParts[2]}-${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][parseInt(dateParts[1], 10) - 1] || dateParts[1]}-${dateParts[0]}`
+        : (r.date || "—");
 
-    return list.map((r, idx) => [
-      String(idx + 1),
-      r.date,
-      r.team,
-      r.machine,
-      r.operator,
-      fmtNum(r.qty),
-      `₹${fmtNum(r.value)}`,
-      `₹${fmtNum(r.ratePerHour)}`,
-      r.profitRatio
-    ]);
-  }, [filters]);
+      return [
+        String(idx + 1),
+        displayDate,
+        r.team || "—",
+        r.machine || "—",
+        r.operator || "—",
+        "—",
+        `₹${fmtNum(r.productionValue)}`,
+        `₹${fmtNum(r.actualValue)}`,
+        `${Number(r.actualPct || 0).toFixed(1)}%`
+      ];
+    });
+  }, [data, filters, defaultFrom, defaultTo]);
 
   const handleSort = (idx) => {
     if (sortIndex === idx) {
@@ -9405,9 +9771,194 @@ function OeeReportBottomTable({ filters, activeTab, setActiveTab }) {
   );
 }
 
-function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, xAxisGroup, setXAxisGroup }) {
+function filterOeeRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (filters.machineType && String(r.machineType || "") !== String(filters.machineType)) return false;
+    if (filters.machine && String(r.machine || "") !== String(filters.machine)) return false;
+    return true;
+  });
+}
+
+function filterOeeRowsByDateOnly(rows, filters, defaultFrom, defaultTo) {
+  return filterOeeRows(
+    rows,
+    {
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
+      machineType: "",
+      machine: "",
+    },
+    defaultFrom,
+    defaultTo
+  );
+}
+
+function buildOeeFilterOptions(allRows, filters, defaultFrom, defaultTo) {
+  const dateScoped = filterOeeRowsByDateOnly(allRows, filters, defaultFrom, defaultTo);
+  const machineTypes = [...new Set(dateScoped.map((r) => r.machineType).filter(Boolean))].sort();
+
+  let typeScoped = dateScoped;
+  if (filters.machineType) typeScoped = typeScoped.filter((r) => r.machineType === filters.machineType);
+
+  const machines = [...new Set(typeScoped.map((r) => r.machine).filter(Boolean))].sort();
+
+  return { machineTypes, machines };
+}
+
+function buildOeeMachineSummaries(filteredRows, monthLabels) {
+  const byKey = {};
+  filteredRows.forEach((r) => {
+    const key = r.machine;
+    if (!byKey[key]) {
+      byKey[key] = {
+        name: r.machine,
+        team: r.team || "—",
+        type: r.machineType || "CNC",
+        monthlySums: {},
+        monthlyCounts: {},
+        dailySums: {},
+        dailyCounts: {},
+      };
+    }
+    const g = byKey[key];
+    const oee = Number(r.overallOee || 0);
+    if (r.month) {
+      g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + oee;
+      g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
+    }
+    const d = (r.date || "").slice(0, 10);
+    if (d) {
+      g.dailySums[d] = (g.dailySums[d] || 0) + oee;
+      g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
+    }
+  });
+
+  const allDates = [...new Set(filteredRows.map((r) => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
+
+  return Object.values(byKey).map((g) => {
+    const monthly = monthLabels.map((mo) => {
+      const c = g.monthlyCounts[mo] || 0;
+      return c ? Math.round(g.monthlySums[mo] / c) : 0;
+    });
+    const daily = allDates.map((d) => {
+      const c = g.dailyCounts[d] || 0;
+      return c ? Math.round(g.dailySums[d] / c) : 0;
+    });
+    const activeDaily = daily.filter((v) => v > 0);
+    const activeMonthly = monthly.filter((v) => v > 0);
+    const avgVal = activeDaily.length
+      ? Math.round(activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length)
+      : activeMonthly.length
+        ? Math.round(activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length)
+        : 0;
+    return {
+      name: g.name,
+      team: g.team,
+      type: g.type,
+      machine: g.name,
+      monthly,
+      daily,
+      dayDates: allDates,
+      avgVal,
+    };
+  });
+}
+
+function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
+  const chartStyle = {
+    backgroundColor: "rgba(14, 165, 233, 0.75)",
+    borderColor: "#0ea5e9",
+    borderWidth: 1.5,
+    borderRadius: 5,
+  };
+
+  let summaries = machineSummaries;
+  if (!summaries.length && Array.isArray(rawRows) && rawRows.length) {
+    summaries = buildOeeMachineSummaries(rawRows, monthLabels);
+  }
+
+  if (!summaries.length) {
+    return { labels: [], datasets: [] };
+  }
+
+  let labels = [];
+  let avgData = [];
+
+  if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+    labels = monthLabels;
+    avgData = monthLabels.map((_, idx) => {
+      let sum = 0;
+      let count = 0;
+      summaries.forEach((m) => {
+        const v = m.monthly[idx];
+        if (v > 0) {
+          sum += v;
+          count += 1;
+        }
+      });
+      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    });
+  } else if (xAxisGroup === "Day Wise") {
+    const dayDates = summaries[0]?.dayDates || [];
+    labels = dayDates.length
+      ? dayDates.map((d) => {
+          const p = d.split("-");
+          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+        })
+      : [];
+    avgData = dayDates.map((_, idx) => {
+      let sum = 0;
+      let count = 0;
+      summaries.forEach((m) => {
+        const v = m.daily[idx];
+        if (v > 0) {
+          sum += v;
+          count += 1;
+        }
+      });
+      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    });
+  } else if (xAxisGroup === "Mac Wise") {
+    labels = summaries.map((m) => m.name).sort();
+    avgData = labels.map((name) => {
+      const row = summaries.find((m) => m.name === name);
+      return row ? Math.min(100, Math.max(0, row.avgVal)) : 0;
+    });
+  } else if (xAxisGroup === "Team Wise") {
+    const teamMap = {};
+    summaries.forEach((m) => {
+      const team = m.team || "—";
+      if (!teamMap[team]) teamMap[team] = [];
+      teamMap[team].push(m.avgVal);
+    });
+    labels = Object.keys(teamMap).sort();
+    avgData = labels.map((t) => {
+      const vals = teamMap[t];
+      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+    });
+  }
+
+  return {
+    labels,
+    datasets: avgData.length
+      ? [{ label: "Overall OEE %", data: avgData, ...chartStyle }]
+      : [],
+  };
+}
+
+function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, xAxisGroup, setXAxisGroup, uid, onOeeData }) {
   const [machineTypeOpen, setMachineTypeOpen] = React.useState(false);
   const [machineOpen, setMachineOpen] = React.useState(false);
+  const [oeeLive, setOeeLive] = React.useState(null);
+  const [oeeLoading, setOeeLoading] = React.useState(false);
+
+  const oeeSource = oeeLive || data?.oeeCompare;
 
   const machineTypeRef = React.useRef(null);
   const machineRef = React.useRef(null);
@@ -9439,7 +9990,13 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
   }, [onFilterChange]);
 
   const handleInputChange = (field, val) => {
-    onFilterChange(prev => ({ ...prev, [field]: val }));
+    onFilterChange(prev => {
+      const next = { ...prev, [field]: val };
+      if (field === "machineType") {
+        next.machine = "";
+      }
+      return next;
+    });
   };
 
   const handleReset = () => {
@@ -9454,133 +10011,109 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
     });
   };
 
-  const chart1Data = React.useMemo(() => {
-    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"];
-    const baseData = {
-      CNC1: [85, 96, 70, 69, 67, 66, 65, 75, 85, 96, 61],
-      CNC2: [70, 84, 94, 87, 80, 73, 66, 59, 52, 45, 97],
-      DRL1: [95, 89, 72, 62, 53, 43, 68, 93, 48, 68, 51],
-      LATHE1: [78, 82, 87, 91, 53, 73, 68, 63, 58, 53, 96]
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setOeeLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildOeeUrl(fy.from, fy.to, filters), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) {
+          throw new Error(json?.error || "OEE load failed");
+        }
+        setOeeLive(json);
+        onOeeData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setOeeLive(null);
+        onOeeData?.(data?.oeeCompare || null);
+      })
+      .finally(() => setOeeLoading(false));
+    return () => ctrl.abort();
+  }, [filters.machineType, uid, onOeeData, data?.oeeCompare]);
+
+  const oeeRows = React.useMemo(
+    () => (Array.isArray(oeeSource?.rows) ? oeeSource.rows : []),
+    [oeeSource?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
     };
+  }, []);
 
-    const dayWiseLabels = ["01-Jun", "02-Jun", "03-Jun", "04-Jun", "05-Jun", "06-Jun", "07-Jun", "08-Jun", "09-Jun", "10-Jun", "11-Jun", "12-Jun"];
-    const dayWiseBaseData = {
-      CNC1: [78, 85, 82, 80, 79, 74, 76, 81, 84, 89, 75, 78],
-      CNC2: [72, 79, 81, 83, 76, 70, 72, 75, 80, 85, 71, 74],
-      DRL1: [85, 91, 89, 87, 83, 78, 80, 83, 87, 92, 81, 85],
-      LATHE1: [80, 86, 84, 82, 81, 76, 78, 81, 85, 90, 78, 81]
-    };
+  const filteredRows = React.useMemo(
+    () => filterOeeRows(oeeRows, filters, defaultRange.from, defaultRange.to),
+    [oeeRows, filters, defaultRange]
+  );
 
-    let offset = 0;
-    if (filters?.month) {
-      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 7) - 3;
-    }
-    if (filters?.year) {
-      offset += filters.year === "2026" ? 1 : -1;
-    }
-    if (filters?.week) {
-      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
-    }
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
+  const oeeFilterOptions = React.useMemo(
+    () => buildOeeFilterOptions(oeeRows, filters, defaultRange.from, defaultRange.to),
+    [oeeRows, filters, defaultRange]
+  );
 
-    const machinesList = ["CNC1", "CNC2", "DRL1", "LATHE1"];
-    const datasets = [];
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(oeeRows, filters, defaultRange.from, defaultRange.to),
+    [oeeRows, filters, defaultRange]
+  );
 
-    const types = { CNC1: "CNC", CNC2: "CNC", DRL1: "Conventional", LATHE1: "Conventional" };
+  const machineSummaries = React.useMemo(
+    () => buildOeeMachineSummaries(filteredRows, monthLabels),
+    [filteredRows, monthLabels]
+  );
 
-    const activeMachines = machinesList.filter(m => {
-      if (filters?.machineType && types[m] !== filters.machineType) return false;
-      if (filters?.machine && m !== filters.machine) return false;
-      return true;
-    });
+  const chart1Data = React.useMemo(
+    () => buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, filteredRows),
+    [machineSummaries, xAxisGroup, monthLabels, filteredRows]
+  );
 
-    let labels = [];
-    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      labels = months;
-      if (activeMachines.length > 0) {
-        const avgData = months.map((_, idx) => {
-          let sum = 0;
-          activeMachines.forEach(m => {
-            sum += (baseData[m][idx] + offset);
-          });
-          return Math.min(100, Math.max(0, activeMachines.length > 0 ? Math.round(sum / activeMachines.length) : 0));
-        });
-        datasets.push({
-          label: "Overall OEE %",
-          data: avgData,
-          backgroundColor: "rgba(14, 165, 233, 0.75)",
-          borderColor: "#0ea5e9",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
+  const computedKpis = React.useMemo(() => {
+    const apiKpis = oeeSource?.kpis;
+    const targetVal = targetConfig?.oee_comparison?.monthWiseTarget
+      ?? targetConfig?.oee_comparison?.minUtilization
+      ?? 75;
+
+    if (!filteredRows.length) {
+      if (apiKpis && apiKpis.rowCount > 0 && !filters?.machineType && !filters?.machine && !filters?.fromDate && !filters?.toDate) {
+        return [
+          { label: "Avg OEE", value: `${Math.round(Number(apiKpis.avgOee || 0))}%`, color: "#0ea5e9", icon: TrendingUp },
+          { label: "Availability", value: `${Math.round(Number(apiKpis.avgAvailability || 0))}%`, color: "#3b82f6", icon: Activity },
+          { label: "Performance", value: `${Math.round(Number(apiKpis.avgPerformance || 0))}%`, color: "#10b981", icon: Zap },
+          { label: "Quality", value: `${Math.round(Number(apiKpis.avgQuality || 0))}%`, color: "#f59e0b", icon: Target },
+        ];
       }
-    } else if (xAxisGroup === "Day Wise") {
-      labels = dayWiseLabels;
-      if (activeMachines.length > 0) {
-        const avgData = dayWiseLabels.map((_, idx) => {
-          let sum = 0;
-          activeMachines.forEach(m => {
-            sum += (dayWiseBaseData[m][idx] + offset);
-          });
-          return Math.min(100, Math.max(0, activeMachines.length > 0 ? Math.round(sum / activeMachines.length) : 0));
-        });
-        datasets.push({
-          label: "Overall OEE %",
-          data: avgData,
-          backgroundColor: "rgba(14, 165, 233, 0.75)",
-          borderColor: "#0ea5e9",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
-      }
-    } else if (xAxisGroup === "Mac Wise") {
-      labels = activeMachines;
-      if (activeMachines.length > 0) {
-        const macOee = activeMachines.map(m => {
-          let sum = baseData[m].reduce((a, b) => a + b, 0);
-          let avg = Math.round(sum / baseData[m].length) + offset;
-          return Math.min(100, Math.max(0, avg));
-        });
-        datasets.push({
-          label: "Overall OEE %",
-          data: macOee,
-          backgroundColor: "rgba(14, 165, 233, 0.75)",
-          borderColor: "#0ea5e9",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
-      }
-    } else if (xAxisGroup === "Team Wise") {
-      labels = ["Team A", "Team B", "Team C"];
-      const teamData = {
-        "Team A": ["CNC1", "CNC2"],
-        "Team B": ["DRL1"],
-        "Team C": ["LATHE1"]
-      };
-      const teamOees = ["Team A", "Team B", "Team C"].map(team => {
-        const teamMachines = teamData[team].filter(m => activeMachines.includes(m));
-        if (teamMachines.length === 0) return 0;
-        let total = 0;
-        teamMachines.forEach(m => {
-          let sum = baseData[m].reduce((a, b) => a + b, 0);
-          total += (sum / baseData[m].length);
-        });
-        return Math.min(100, Math.max(0, Math.round((total / teamMachines.length) + offset)));
-      });
-      datasets.push({
-        label: "Overall OEE %",
-        data: teamOees,
-        backgroundColor: "rgba(14, 165, 233, 0.75)",
-        borderColor: "#0ea5e9",
-        borderWidth: 1.5,
-        borderRadius: 5
-      });
+      return [
+        { label: "Avg OEE", value: loading || oeeLoading ? "…" : "0%", color: "#0ea5e9", icon: TrendingUp },
+        { label: "Availability", value: "0%", color: "#3b82f6", icon: Activity },
+        { label: "Performance", value: "0%", color: "#10b981", icon: Zap },
+        { label: "Quality", value: "0%", color: "#f59e0b", icon: Target },
+      ];
     }
 
-    return { labels, datasets };
-  }, [filters, xAxisGroup]);
+    const n = filteredRows.length;
+    const avgOee = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.overallOee || 0), 0) / n);
+    const avgAvail = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.availability || 0), 0) / n);
+    const avgPerf = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.performance || 0), 0) / n);
+    const avgQual = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.quality || 0), 0) / n);
+    const metPct = avgOee >= targetVal ? 100 : 0;
+
+    return [
+      { label: "Avg OEE", value: `${avgOee}%`, color: "#0ea5e9", icon: TrendingUp },
+      { label: "Availability", value: `${avgAvail}%`, color: "#3b82f6", icon: Activity },
+      { label: "Performance", value: `${avgPerf}%`, color: "#10b981", icon: Zap },
+      { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target },
+    ];
+  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig]);
 
   const setupChart1 = React.useCallback((canvas) => {
     let minUtilization = 75;
@@ -9663,23 +10196,24 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
         </div>
       </div>
       <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`comp1-${xAxisGroup}-${JSON.stringify(filters)}`} />
+        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`oee-comp1-${xAxisGroup}-${filteredRows.length}-${JSON.stringify(filters)}`} />
       </div>
     </div>
   );
 
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const years = ["2025", "2026"];
-  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
-  const machineTypes = ["CNC", "Conventional"];
-  const machines = ["CNC1", "CNC2", "DRL1", "LATHE1"];
+  const machineTypes = oeeFilterOptions.machineTypes.length
+    ? oeeFilterOptions.machineTypes
+    : (oeeSource?.filterOptions?.machineTypes || ["CNC", "Conventional"]);
+  const machines = oeeFilterOptions.machines.length
+    ? oeeFilterOptions.machines
+    : (oeeSource?.filterOptions?.machines || []);
 
   return (
     <PremiumDashboardView
       title="OEE"
       icon={TrendingUp}
       color="#0ea5e9"
-      kpis={null}
+      kpis={computedKpis}
       setupChart={null}
       chartControls={carouselControls}
       rangeHint="OEE Parameters Comparison"
@@ -9779,7 +10313,7 @@ function OeeComparisonReportDashboardView({ filters, onFilterChange, activeTab, 
   );
 }
 
-function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) {
+function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wise" }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
@@ -9805,53 +10339,43 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
     }
   };
 
-  const baseMachines = [
-    { type: "CNC", name: "CNC1", baseVal: 67, monthly: [85, 96, 70, 69, 67, 66, 65, 75, 85, 96, 61] },
-    { type: "CNC", name: "CNC2", baseVal: 80, monthly: [70, 84, 94, 87, 80, 73, 66, 59, 52, 45, 97] },
-    { type: "Conventional", name: "DRL1", baseVal: 53, monthly: [95, 89, 72, 62, 53, 43, 68, 93, 48, 68, 51] },
-    { type: "Conventional", name: "LATHE1", baseVal: 53, monthly: [78, 82, 87, 91, 53, 73, 68, 63, 58, 53, 96] }
-  ];
+  const oeeRows = React.useMemo(
+    () => (Array.isArray(data?.oeeCompare?.rows) ? data.oeeCompare.rows : []),
+    [data?.oeeCompare?.rows]
+  );
 
-  const dayWiseBaseData = {
-    CNC1: [78, 85, 82, 80, 79, 74, 76, 81, 84, 89, 75, 78],
-    CNC2: [72, 79, 81, 83, 76, 70, 72, 75, 80, 85, 71, 74],
-    DRL1: [85, 91, 89, 87, 83, 78, 80, 83, 87, 92, 81, 85],
-    LATHE1: [80, 86, 84, 82, 81, 76, 78, 81, 85, 90, 78, 81]
-  };
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterOeeRows(oeeRows, filters, defaultRange.from, defaultRange.to),
+    [oeeRows, filters, defaultRange]
+  );
+
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(oeeRows, filters, defaultRange.from, defaultRange.to),
+    [oeeRows, filters, defaultRange]
+  );
 
   const processedData = React.useMemo(() => {
-    let offset = 0;
-    if (filters?.month) {
-      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 7) - 3;
-    }
-    if (filters?.year) {
-      offset += filters.year === "2026" ? 1 : -1;
-    }
-    if (filters?.week) {
-      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 2 : -2;
-    }
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
-
-    let filtered = baseMachines;
-    if (filters?.machineType) filtered = filtered.filter(m => m.type === filters.machineType);
-    if (filters?.machine) filtered = filtered.filter(m => m.name === filters.machine);
-
-    return filtered.map(m => ({
-      ...m,
-      val: Math.min(100, Math.max(0, m.baseVal + offset)),
-      monthlyVals: m.monthly.map(v => Math.min(100, Math.max(0, v + offset))),
-      dayWiseVals: (dayWiseBaseData[m.name] || []).map(v => Math.min(100, Math.max(0, v + offset)))
+    return buildOeeMachineSummaries(filteredRows, monthLabels).map((row) => ({
+      ...row,
+      monthlyVals: row.monthly,
+      dayWiseVals: row.daily,
     }));
-  }, [filters]);
+  }, [filteredRows, monthLabels]);
 
   const activeColumns = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      return [
-        "Sl.No",
-        "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
-      ];
+      return ["Sl.No", ...monthLabels];
     } else if (xAxisGroup === "Day Wise") {
       return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
@@ -9859,13 +10383,13 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
     } else {
       return ["Sl.No", "Team Name", "OEE%"];
     }
-  }, [xAxisGroup]);
+  }, [xAxisGroup, monthLabels]);
 
   const activeRows = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       const list = processedData.map((m, idx) => [
-        String(idx + 1), // Sl.No instead of Machine Name
-        ...m.monthlyVals.map(v => `${v}%`)
+        String(idx + 1),
+        ...m.monthlyVals.map(v => (v > 0 ? `${v}%` : "—"))
       ]);
 
       if (processedData.length > 0) {
@@ -9873,73 +10397,67 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
         const overallAvg = [];
         for (let idx = 0; idx < numMonths; idx++) {
           let sum = 0;
+          let count = 0;
           processedData.forEach(m => {
-            sum += m.monthlyVals[idx];
+            if (m.monthlyVals[idx] > 0) {
+              sum += m.monthlyVals[idx];
+              count += 1;
+            }
           });
-          overallAvg.push(`${Math.round(sum / processedData.length)}%`);
+          overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
         }
         list.push(["-", ...overallAvg]);
       }
       return list;
     } else if (xAxisGroup === "Day Wise") {
-      const dayLabels = ["01-Jun", "02-Jun", "03-Jun", "04-Jun", "05-Jun", "06-Jun", "07-Jun", "08-Jun", "09-Jun", "10-Jun", "11-Jun", "12-Jun"];
       if (processedData.length === 0) return [];
 
       const numDays = processedData[0].dayWiseVals.length;
       const list = [];
       for (let idx = 0; idx < numDays; idx++) {
         let sum = 0;
+        let count = 0;
         processedData.forEach(m => {
-          sum += m.dayWiseVals[idx];
+          if (m.dayWiseVals[idx] > 0) {
+            sum += m.dayWiseVals[idx];
+            count += 1;
+          }
         });
-        const dayAvg = Math.round(sum / processedData.length);
+        const dayLabel = processedData[0].dayDates?.[idx]
+          ? processedData[0].dayDates[idx]
+          : `Day ${idx + 1}`;
         list.push([
           String(idx + 1),
-          dayLabels[idx] || `Day ${idx + 1}`,
-          `${dayAvg}%`
+          dayLabel,
+          count ? `${Math.round(sum / count)}%` : "—"
         ]);
       }
       return list;
     } else if (xAxisGroup === "Mac Wise") {
-      const list = processedData.map((m, idx) => {
-        return [
-          String(idx + 1),
-          m.name,
-          `${m.val}%`
-        ];
-      });
+      const list = processedData.map((m, idx) => [
+        String(idx + 1),
+        m.name,
+        `${m.avgVal}%`
+      ]);
 
       if (processedData.length > 0) {
-        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.val, 0) / processedData.length);
+        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.avgVal, 0) / processedData.length);
         list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
     } else {
-      const teamData = {
-        "Team A": ["CNC1", "CNC2"],
-        "Team B": ["DRL1"],
-        "Team C": ["LATHE1"]
-      };
-      const list = ["Team A", "Team B", "Team C"].map((team, idx) => {
-        const teamMachines = teamData[team].filter(t => processedData.some(p => p.name === t));
-        if (teamMachines.length === 0) {
+      const teamsList = [...new Set(processedData.map((m) => m.team).filter((t) => t && t !== "—"))].sort();
+      const list = teamsList.map((team, idx) => {
+        const teamRows = processedData.filter(row => row.team === team);
+        if (teamRows.length === 0) {
           return [String(idx + 1), team, "0%"];
         }
-        let oeeSum = 0;
-        teamMachines.forEach(t => {
-          const mObj = processedData.find(p => p.name === t);
-          if (mObj) oeeSum += mObj.val;
-        });
-        const teamOee = Math.round(oeeSum / teamMachines.length);
-        return [
-          String(idx + 1),
-          team,
-          `${teamOee}%`
-        ];
+        const teamOee = Math.round(teamRows.reduce((acc, r) => acc + r.avgVal, 0) / teamRows.length);
+        return [String(idx + 1), team, `${teamOee}%`];
       });
 
       if (processedData.length > 0) {
-        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.val, 0) / processedData.length);
+        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.avgVal, 0) / processedData.length);
         list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
@@ -10094,13 +10612,252 @@ function OeeComparisonReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
   );
 }
 
-function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig }) {
+function filterEffRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (filters.team && String(r.team || "") !== String(filters.team)) return false;
+    if (filters.machineType && String(r.machineType || "") !== String(filters.machineType)) return false;
+    if (filters.machine && String(r.machine || "") !== String(filters.machine)) return false;
+    if (filters.operatorName && String(r.operator || "") !== String(filters.operatorName)) return false;
+    return true;
+  });
+}
+
+function filterEffRowsByDateOnly(rows, filters, defaultFrom, defaultTo) {
+  return filterEffRows(
+    rows,
+    {
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
+      team: "",
+      machineType: "",
+      machine: "",
+      operatorName: "",
+    },
+    defaultFrom,
+    defaultTo
+  );
+}
+
+function buildEffFilterOptions(allRows, filters, defaultFrom, defaultTo) {
+  const dateScoped = filterEffRowsByDateOnly(allRows, filters, defaultFrom, defaultTo);
+  const teams = [...new Set(dateScoped.map((r) => r.team).filter((t) => t && t !== "—"))].sort();
+
+  let scoped = dateScoped;
+  if (filters.team) scoped = scoped.filter((r) => r.team === filters.team);
+
+  const machineTypes = [...new Set(dateScoped.map((r) => r.machineType).filter(Boolean))].sort();
+
+  let typeScoped = scoped;
+  if (filters.machineType) typeScoped = typeScoped.filter((r) => r.machineType === filters.machineType);
+
+  const machines = [...new Set(typeScoped.map((r) => r.machine).filter(Boolean))].sort();
+
+  let machineScoped = typeScoped;
+  if (filters.machine) machineScoped = machineScoped.filter((r) => r.machine === filters.machine);
+
+  const operators = [...new Set(machineScoped.map((r) => r.operator).filter(Boolean))].sort();
+
+  return { teams, machineTypes, machines, operators };
+}
+
+function buildEffMonthLabels(activeFrom, activeTo, apiMonthLabels) {
+  const abb = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const labels = [];
+  if (activeFrom && activeTo) {
+    const start = new Date(activeFrom);
+    const end = new Date(activeTo);
+    let y = start.getFullYear();
+    let m = start.getMonth();
+    const endY = end.getFullYear();
+    const endM = end.getMonth();
+    while (y < endY || (y === endY && m <= endM)) {
+      labels.push(`${abb[m]}-${String(y).slice(-2)}`);
+      m += 1;
+      if (m > 11) {
+        m = 0;
+        y += 1;
+      }
+    }
+    if (labels.length) return labels;
+  }
+  if (Array.isArray(apiMonthLabels) && apiMonthLabels.length) {
+    return apiMonthLabels;
+  }
+  return labels;
+}
+
+function buildEffMonthLabelsForDisplay(rows, filters, defaultFrom, defaultTo) {
+  return buildEffMonthLabels(
+    filters.fromDate || defaultFrom,
+    filters.toDate || defaultTo,
+    null
+  );
+}
+
+function buildEffOperatorSummaries(filteredRows, monthLabels) {
+  const byKey = {};
+  filteredRows.forEach((r) => {
+    const key = `${r.operator}||${r.machine}`;
+    if (!byKey[key]) {
+      byKey[key] = {
+        name: r.operator,
+        team: r.team || "—",
+        type: r.machineType || "CNC",
+        machine: r.machine,
+        monthlySums: {},
+        monthlyCounts: {},
+        dailySums: {},
+        dailyCounts: {},
+      };
+    }
+    const g = byKey[key];
+    const eff = Number(r.oaeff || 0);
+    if (r.month) {
+      g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + eff;
+      g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
+    }
+    const d = (r.date || "").slice(0, 10);
+    if (d) {
+      g.dailySums[d] = (g.dailySums[d] || 0) + eff;
+      g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
+    }
+  });
+
+  const allDates = [...new Set(filteredRows.map((r) => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
+
+  return Object.values(byKey).map((g) => {
+    const monthly = monthLabels.map((mo) => {
+      const c = g.monthlyCounts[mo] || 0;
+      return c ? Math.round(g.monthlySums[mo] / c) : 0;
+    });
+    const daily = allDates.map((d) => {
+      const c = g.dailyCounts[d] || 0;
+      return c ? Math.round(g.dailySums[d] / c) : 0;
+    });
+    const activeDaily = daily.filter((v) => v > 0);
+    const activeMonthly = monthly.filter((v) => v > 0);
+    const avgVal = activeDaily.length
+      ? Math.round(activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length)
+      : activeMonthly.length
+        ? Math.round(activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length)
+        : 0;
+    return {
+      name: g.name,
+      team: g.team,
+      type: g.type,
+      machine: g.machine,
+      monthly,
+      daily,
+      dayDates: allDates,
+      avgVal,
+    };
+  });
+}
+
+function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) {
+  const chartStyle = {
+    backgroundColor: "rgba(16, 185, 129, 0.75)",
+    borderColor: "#10b981",
+    borderWidth: 1.5,
+    borderRadius: 5,
+  };
+
+  let summaries = operatorSummaries;
+  if (!summaries.length && Array.isArray(rawRows) && rawRows.length) {
+    summaries = buildEffOperatorSummaries(rawRows, monthLabels);
+  }
+
+  if (!summaries.length) {
+    return { labels: [], datasets: [] };
+  }
+
+  let labels = [];
+  let avgData = [];
+
+  if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+    labels = monthLabels;
+    avgData = monthLabels.map((_, idx) => {
+      let sum = 0;
+      let count = 0;
+      summaries.forEach((op) => {
+        const v = op.monthly[idx];
+        if (v > 0) {
+          sum += v;
+          count += 1;
+        }
+      });
+      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    });
+  } else if (xAxisGroup === "Day Wise") {
+    const dayDates = summaries[0]?.dayDates || [];
+    labels = dayDates.length
+      ? dayDates.map((d) => {
+          const p = d.split("-");
+          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+        })
+      : [];
+    avgData = dayDates.map((_, idx) => {
+      let sum = 0;
+      let count = 0;
+      summaries.forEach((op) => {
+        const v = op.daily[idx];
+        if (v > 0) {
+          sum += v;
+          count += 1;
+        }
+      });
+      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    });
+  } else if (xAxisGroup === "Mac Wise") {
+    const macMap = {};
+    summaries.forEach((op) => {
+      if (!macMap[op.machine]) macMap[op.machine] = [];
+      macMap[op.machine].push(op.avgVal);
+    });
+    labels = Object.keys(macMap).sort();
+    avgData = labels.map((m) => {
+      const vals = macMap[m];
+      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+    });
+  } else if (xAxisGroup === "Team Wise") {
+    const teamMap = {};
+    summaries.forEach((op) => {
+      const team = op.team || "—";
+      if (!teamMap[team]) teamMap[team] = [];
+      teamMap[team].push(op.avgVal);
+    });
+    labels = Object.keys(teamMap).sort();
+    avgData = labels.map((t) => {
+      const vals = teamMap[t];
+      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+    });
+  }
+
+  return {
+    labels,
+    datasets: avgData.length
+      ? [{ label: "Overall Efficiency %", data: avgData, ...chartStyle }]
+      : [],
+  };
+}
+
+function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig, uid, onEffData }) {
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [machineTypeOpen, setMachineTypeOpen] = React.useState(false);
   const [machineOpen, setMachineOpen] = React.useState(false);
   const [operatorOpen, setOperatorOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const [effLive, setEffLive] = React.useState(null);
+  const [effLoading, setEffLoading] = React.useState(false);
+
+  const effSource = effLive || data?.efficiencyCompare;
 
   const teamRef = React.useRef(null);
   const machineTypeRef = React.useRef(null);
@@ -10151,7 +10908,19 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
   };
 
   const handleInputChange = (field, val) => {
-    onFilterChange(prev => ({ ...prev, [field]: val }));
+    onFilterChange(prev => {
+      const next = { ...prev, [field]: val };
+      if (field === "team") {
+        next.machine = "";
+        next.operatorName = "";
+      } else if (field === "machineType") {
+        next.machine = "";
+        next.operatorName = "";
+      } else if (field === "machine") {
+        next.operatorName = "";
+      }
+      return next;
+    });
   };
 
   const handleReset = () => {
@@ -10168,149 +10937,71 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
     });
   };
 
-  const chart1Data = React.useMemo(() => {
-    const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"];
-    const operatorsList = ["Mani", "Kavi", "Rajan", "Kumar"];
-    const baseData = {
-      Mani: [85, 96, 70, 69, 67, 66, 65, 75, 85],
-      Kavi: [70, 84, 94, 87, 80, 73, 66, 59, 52],
-      Rajan: [95, 89, 72, 62, 53, 43, 68, 93, 48],
-      Kumar: [78, 82, 87, 91, 53, 73, 68, 63, 58]
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setEffLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildEffUrl(fy.from, fy.to, filters), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) {
+          throw new Error(json?.error || "Efficiency load failed");
+        }
+        setEffLive(json);
+        onEffData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setEffLive(null);
+        onEffData?.(data?.efficiencyCompare || null);
+      })
+      .finally(() => setEffLoading(false));
+    return () => ctrl.abort();
+  }, [filters.machineType, uid, onEffData, data?.efficiencyCompare]);
+
+  const effRows = React.useMemo(
+    () => (Array.isArray(effSource?.rows) ? effSource.rows : []),
+    [effSource?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
     };
+  }, []);
 
-    const monthlyBaseData = {
-      Mani: [85, 90, 78, 82, 79, 81, 84, 86, 88, 90, 85],
-      Kavi: [78, 80, 82, 85, 81, 79, 83, 85, 87, 88, 82],
-      Rajan: [92, 88, 85, 89, 84, 82, 86, 88, 90, 91, 86],
-      Kumar: [80, 83, 81, 84, 82, 80, 83, 85, 86, 87, 83]
-    };
+  const filteredRows = React.useMemo(
+    () => filterEffRows(effRows, filters, defaultRange.from, defaultRange.to),
+    [effRows, filters, defaultRange]
+  );
 
-    let offset = 0;
-    if (filters?.month) {
-      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 5) - 2;
-    }
-    if (filters?.year) {
-      offset += filters.year === "2026" ? 2 : -2;
-    }
-    if (filters?.week) {
-      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
-    }
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
+  const effFilterOptions = React.useMemo(
+    () => buildEffFilterOptions(effRows, filters, defaultRange.from, defaultRange.to),
+    [effRows, filters, defaultRange]
+  );
 
-    const operatorMeta = {
-      Mani: { team: "Team A", type: "CNC", machine: "CNC1" },
-      Kavi: { team: "Team B", type: "CNC", machine: "CNC2" },
-      Rajan: { team: "Team C", type: "Conventional", machine: "DRL1" },
-      Kumar: { team: "Team A", type: "Conventional", machine: "LATHE1" }
-    };
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(effRows, filters, defaultRange.from, defaultRange.to),
+    [effRows, filters, defaultRange]
+  );
 
-    const activeOperators = operatorsList.filter(op => {
-      const meta = operatorMeta[op];
-      if (filters?.team && meta.team !== filters.team) return false;
-      if (filters?.machineType && meta.type !== filters.machineType) return false;
-      if (filters?.machine && meta.machine !== filters.machine) return false;
-      if (filters?.operatorName && op !== filters.operatorName) return false;
-      return true;
-    });
+  const operatorSummaries = React.useMemo(
+    () => buildEffOperatorSummaries(filteredRows, monthLabels),
+    [filteredRows, monthLabels]
+  );
 
-    const datasets = [];
-    let labels = [];
-
-    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      labels = months;
-      if (activeOperators.length > 0) {
-        const avgData = months.map((_, idx) => {
-          let sum = 0;
-          activeOperators.forEach(op => {
-            sum += (monthlyBaseData[op][idx] + offset);
-          });
-          return Math.min(100, Math.max(0, Math.round(sum / activeOperators.length)));
-        });
-        datasets.push({
-          label: "Overall Efficiency %",
-          data: avgData,
-          backgroundColor: "rgba(16, 185, 129, 0.75)",
-          borderColor: "#10b981",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
-      }
-    } else if (xAxisGroup === "Day Wise") {
-      labels = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9"];
-      if (activeOperators.length > 0) {
-        const avgData = labels.map((_, idx) => {
-          let sum = 0;
-          activeOperators.forEach(op => {
-            sum += (baseData[op][idx] + offset);
-          });
-          return Math.min(100, Math.max(0, Math.round(sum / activeOperators.length)));
-        });
-        datasets.push({
-          label: "Overall Efficiency %",
-          data: avgData,
-          backgroundColor: "rgba(16, 185, 129, 0.75)",
-          borderColor: "#10b981",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
-      }
-    } else if (xAxisGroup === "Mac Wise") {
-      const machineNames = ["CNC1", "CNC2", "DRL1", "LATHE1"];
-      const opForMachine = { CNC1: "Mani", CNC2: "Kavi", DRL1: "Rajan", LATHE1: "Kumar" };
-
-      const activeMachines = machineNames.filter(m => {
-        const op = opForMachine[m];
-        return activeOperators.includes(op);
-      });
-
-      labels = activeMachines;
-      if (activeMachines.length > 0) {
-        const avgData = activeMachines.map(m => {
-          const op = opForMachine[m];
-          const sum = baseData[op].reduce((a, b) => a + b, 0);
-          const avg = Math.round(sum / baseData[op].length) + offset;
-          return Math.min(100, Math.max(0, avg));
-        });
-        datasets.push({
-          label: "Overall Efficiency %",
-          data: avgData,
-          backgroundColor: "rgba(16, 185, 129, 0.75)",
-          borderColor: "#10b981",
-          borderWidth: 1.5,
-          borderRadius: 5
-        });
-      }
-    } else if (xAxisGroup === "Team Wise") {
-      labels = ["Team A", "Team B", "Team C"];
-      const teamData = {
-        "Team A": ["Mani", "Kumar"],
-        "Team B": ["Kavi"],
-        "Team C": ["Rajan"]
-      };
-      const teamEffs = labels.map(team => {
-        const teamOps = teamData[team].filter(op => activeOperators.includes(op));
-        if (teamOps.length === 0) return 0;
-        let total = 0;
-        teamOps.forEach(op => {
-          const sum = baseData[op].reduce((a, b) => a + b, 0);
-          total += (sum / baseData[op].length);
-        });
-        return Math.min(100, Math.max(0, Math.round((total / teamOps.length) + offset)));
-      });
-      datasets.push({
-        label: "Overall Efficiency %",
-        data: teamEffs,
-        backgroundColor: "rgba(16, 185, 129, 0.75)",
-        borderColor: "#10b981",
-        borderWidth: 1.5,
-        borderRadius: 5
-      });
-    }
-
-    return { labels, datasets };
-  }, [filters, xAxisGroup]);
+  const chart1Data = React.useMemo(
+    () => buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, filteredRows),
+    [operatorSummaries, xAxisGroup, monthLabels, filteredRows]
+  );
 
   const setupChart1 = React.useCallback((canvas) => {
     let targetVal = 80;
@@ -10479,80 +11170,10 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
   }, [chart1Data, targetConfig, xAxisGroup, chartType]);
 
   const computedKpis = React.useMemo(() => {
-    const operatorsList = ["Mani", "Kavi", "Rajan", "Kumar"];
-    const monthlyBaseData = {
-      Mani: [85, 90, 78, 82, 79, 81, 84, 86, 88, 90, 85],
-      Kavi: [78, 80, 82, 85, 81, 79, 83, 85, 87, 88, 82],
-      Rajan: [92, 88, 85, 89, 84, 82, 86, 88, 90, 91, 86],
-      Kumar: [80, 83, 81, 84, 82, 80, 83, 85, 86, 87, 83]
-    };
-
-    let offset = 0;
-    if (filters?.month) {
-      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 5) - 2;
-    }
-    if (filters?.year) {
-      offset += filters.year === "2026" ? 2 : -2;
-    }
-    if (filters?.week) {
-      offset += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1 : -1;
-    }
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
-
-    const operatorMeta = {
-      Mani: { team: "Team A", type: "CNC", machine: "CNC1" },
-      Kavi: { team: "Team B", type: "CNC", machine: "CNC2" },
-      Rajan: { team: "Team C", type: "Conventional", machine: "DRL1" },
-      Kumar: { team: "Team A", type: "Conventional", machine: "LATHE1" }
-    };
-
-    const activeOps = operatorsList.filter(op => {
-      const meta = operatorMeta[op];
-      if (filters?.team && meta.team !== filters.team) return false;
-      if (filters?.machineType && meta.type !== filters.machineType) return false;
-      if (filters?.machine && meta.machine !== filters.machine) return false;
-      if (filters?.operatorName && op !== filters.operatorName) return false;
-      return true;
-    });
-
-    if (activeOps.length === 0) {
-      return [
-        { label: "Avg Efficiency", value: "0%", color: "#10b981", icon: UserCheck },
-        { label: "Top Performer", value: "N/A", color: "#3b82f6", icon: Award },
-        { label: "Target Status", value: "0% Met", color: "#f59e0b", icon: Target },
-        { label: "Trend", value: "Stable", color: "#a855f7", icon: TrendingUp }
-      ];
-    }
-
-    // KPI 1: Average Efficiency
-    let totalSum = 0;
-    let count = 0;
-    activeOps.forEach(op => {
-      monthlyBaseData[op].forEach(val => {
-        totalSum += (val + offset);
-        count++;
-      });
-    });
-    const avgEff = Math.min(100, Math.max(0, Math.round(totalSum / count)));
-
-    // KPI 2: Top Performer
-    let topOp = "";
-    let topOpAvg = -1;
-    activeOps.forEach(op => {
-      const sum = monthlyBaseData[op].reduce((a, b) => a + b, 0);
-      const avg = (sum / monthlyBaseData[op].length) + offset;
-      if (avg > topOpAvg) {
-        topOpAvg = avg;
-        topOp = op;
-      }
-    });
-    const topPerformerStr = `${topOp} (${Math.min(100, Math.max(0, Math.round(topOpAvg)))}%)`;
-
-    // KPI 3: Target Status
-    let targetVal = 80;
-    if (xAxisGroup === "Month Wise") {
+    const apiKpis = effSource?.kpis;
+    const targetValBase = targetConfig?.efficiency?.monthWiseTarget ?? 80;
+    let targetVal = targetValBase;
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       targetVal = targetConfig?.efficiency?.monthWiseTarget ?? 80;
     } else if (xAxisGroup === "Day Wise") {
       targetVal = targetConfig?.efficiency?.dayWiseTarget ?? 80;
@@ -10562,28 +11183,91 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
       targetVal = targetConfig?.efficiency?.teamWiseTarget ?? 80;
     }
 
+    if (!operatorSummaries.length) {
+      const hasActiveFilter = Boolean(
+        filters?.team || filters?.machineType || filters?.machine || filters?.operatorName
+      );
+      if (apiKpis && apiKpis.rowCount > 0 && !hasActiveFilter && !filters?.fromDate && !filters?.toDate) {
+        const avgEff = Math.round(Number(apiKpis.avgOaeff || 0));
+        const topStr = apiKpis.topPerformer
+          ? `${apiKpis.topPerformer} (${Math.round(Number(apiKpis.topPerformerOaeff || 0))}%)`
+          : "N/A";
+        const metPct = avgEff >= targetVal ? 100 : 0;
+        return [
+          { label: "Avg Efficiency", value: `${avgEff}%`, color: "#10b981", icon: UserCheck },
+          { label: "Top Performer", value: topStr, color: "#3b82f6", icon: Award },
+          { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target },
+          { label: "Trend (MoM)", value: "Stable", color: "#a855f7", icon: TrendingUp }
+        ];
+      }
+      return [
+        { label: "Avg Efficiency", value: loading || effLoading ? "…" : "0%", color: "#10b981", icon: UserCheck },
+        { label: "Top Performer", value: "N/A", color: "#3b82f6", icon: Award },
+        { label: "Target Status", value: "0% Met", color: "#f59e0b", icon: Target },
+        { label: "Trend", value: "Stable", color: "#a855f7", icon: TrendingUp }
+      ];
+    }
+
+    let totalSum = 0;
+    let count = 0;
+    operatorSummaries.forEach((op) => {
+      op.monthly.forEach((val) => {
+        if (val > 0) {
+          totalSum += val;
+          count += 1;
+        }
+      });
+    });
+    const avgEff = count ? Math.min(100, Math.max(0, Math.round(totalSum / count))) : 0;
+
+    let topOp = "";
+    let topOpAvg = -1;
+    operatorSummaries.forEach((op) => {
+      const vals = op.monthly.filter((v) => v > 0);
+      if (!vals.length) return;
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      if (avg > topOpAvg) {
+        topOpAvg = avg;
+        topOp = op.name;
+      }
+    });
+    const topPerformerStr = topOp
+      ? `${topOp} (${Math.min(100, Math.max(0, Math.round(topOpAvg)))}%)`
+      : "N/A";
+
     let metCount = 0;
     let totalMonthsCount = 0;
-    activeOps.forEach(op => {
-      monthlyBaseData[op].forEach(val => {
-        if ((val + offset) >= targetVal) {
-          metCount++;
+    operatorSummaries.forEach((op) => {
+      op.monthly.forEach((val) => {
+        if (val > 0) {
+          if (val >= targetVal) metCount += 1;
+          totalMonthsCount += 1;
         }
-        totalMonthsCount++;
       });
     });
     const metPct = totalMonthsCount > 0 ? Math.round((metCount / totalMonthsCount) * 100) : 0;
     const targetStatusStr = `${metPct}% Met (${metCount}/${totalMonthsCount} Mo)`;
 
-    // KPI 4: Trend
     let firstSum = 0;
     let lastSum = 0;
-    activeOps.forEach(op => {
-      firstSum += (monthlyBaseData[op][0] + offset);
-      lastSum += (monthlyBaseData[op][10] + offset);
-    });
-    const firstAvg = firstSum / activeOps.length;
-    const lastAvg = lastSum / activeOps.length;
+    let firstCount = 0;
+    let lastCount = 0;
+    if (monthLabels.length > 0) {
+      const firstIdx = 0;
+      const lastIdx = monthLabels.length - 1;
+      operatorSummaries.forEach((op) => {
+        if (op.monthly[firstIdx] > 0) {
+          firstSum += op.monthly[firstIdx];
+          firstCount += 1;
+        }
+        if (op.monthly[lastIdx] > 0) {
+          lastSum += op.monthly[lastIdx];
+          lastCount += 1;
+        }
+      });
+    }
+    const firstAvg = firstCount ? firstSum / firstCount : 0;
+    const lastAvg = lastCount ? lastSum / lastCount : 0;
     const trendDiff = lastAvg - firstAvg;
     const trendStr = trendDiff > 0
       ? `+${trendDiff.toFixed(1)}% MoM`
@@ -10597,7 +11281,7 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
       { label: "Target Status", value: targetStatusStr, color: "#f59e0b", icon: Target },
       { label: "Trend (MoM)", value: trendStr, color: "#a855f7", icon: TrendingUp }
     ];
-  }, [filters, targetConfig, xAxisGroup]);
+  }, [operatorSummaries, monthLabels, targetConfig, xAxisGroup, loading, effLoading, effSource?.kpis]);
 
   const carouselControls = (
     <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
@@ -10623,18 +11307,18 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
         </div>
       </div>
       <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`eff1-${xAxisGroup}-${JSON.stringify(filters)}-${chartType}`} />
+        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`eff1-${xAxisGroup}-${JSON.stringify(filters)}-${chartType}-${operatorSummaries.length}`} />
       </div>
     </div>
   );
 
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const years = ["2025", "2026"];
-  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
-  const teams = ["Team A", "Team B", "Team C", "Team D"];
-  const machineTypes = ["CNC", "Conventional"];
-  const machines = ["CNC1", "CNC2", "DRL1", "LATHE1"];
-  const operators = ["Mani", "Kavi", "Rajan", "Kumar"];
+  const filterOptions = effFilterOptions;
+  const teams = filterOptions.teams;
+  const machineTypes = filterOptions.machineTypes.length
+    ? filterOptions.machineTypes
+    : ["CNC", "Conventional"];
+  const machines = filterOptions.machines;
+  const operators = filterOptions.operators;
 
   return (
     <PremiumDashboardView
@@ -10867,7 +11551,7 @@ function EfficiencyEffReportDashboardView({ filters, onFilterChange, xAxisGroup,
   );
 }
 
-function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) {
+function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wise" }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
@@ -10893,58 +11577,45 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
     setHoveredHeader(null);
   }, [xAxisGroup]);
 
-  const months = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"];
-  const baseTab1Rows = [
-    { name: "Mani", team: "Team A", type: "CNC", machine: "CNC1", monthly: [85, 90, 78, 82, 79, 81, 84, 86, 88, 90, 85], daily: [85, 96, 70, 69, 67, 66, 65, 75, 85] },
-    { name: "Kavi", team: "Team B", type: "CNC", machine: "CNC2", monthly: [78, 80, 82, 85, 81, 79, 83, 85, 87, 88, 82], daily: [70, 84, 94, 87, 80, 73, 66, 59, 52] },
-    { name: "Rajan", team: "Team C", type: "Conventional", machine: "DRL1", monthly: [92, 88, 85, 89, 84, 82, 86, 88, 90, 91, 86], daily: [95, 89, 72, 62, 53, 43, 68, 93, 48] },
-    { name: "Kumar", team: "Team A", type: "Conventional", machine: "LATHE1", monthly: [80, 83, 81, 84, 82, 80, 83, 85, 86, 87, 83], daily: [78, 82, 87, 91, 53, 73, 68, 63, 58] }
-  ];
+  const effRows = React.useMemo(
+    () => (Array.isArray(data?.efficiencyCompare?.rows) ? data.efficiencyCompare.rows : []),
+    [data?.efficiencyCompare?.rows]
+  );
 
-  // Compute offset variation based on active filters
-  const offset = React.useMemo(() => {
-    let off = 0;
-    if (filters?.month) {
-      const hash = filters.month.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      off += (hash % 5) - 2;
-    }
-    if (filters?.year) {
-      off += filters.year === "2026" ? 1.5 : -1.5;
-    }
-    if (filters?.week) {
-      off += filters.week.endsWith("2") || filters.week.endsWith("4") ? 1.0 : -1.0;
-    }
-    if (filters?.fromDate) off += 0.5;
-    if (filters?.toDate) off -= 0.5;
-    return off;
-  }, [filters]);
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return {
+      from: `${year}-${month}-01`,
+      to: `${year}-${month}-${day}`,
+    };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterEffRows(effRows, filters, defaultRange.from, defaultRange.to),
+    [effRows, filters, defaultRange]
+  );
+
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(effRows, filters, defaultRange.from, defaultRange.to),
+    [effRows, filters, defaultRange]
+  );
 
   const processedData = React.useMemo(() => {
-    return baseTab1Rows.map(row => ({
+    return buildEffOperatorSummaries(filteredRows, monthLabels).map((row) => ({
       ...row,
-      monthlyVals: row.monthly.map(v => Math.min(100, Math.max(0, v + offset))),
-      dailyVals: row.daily.map(v => Math.min(100, Math.max(0, v + offset))),
-      avgVal: Math.min(100, Math.max(0, Math.round(row.daily.reduce((a, b) => a + b, 0) / row.daily.length) + offset))
+      monthlyVals: row.monthly,
+      dailyVals: row.daily,
     }));
-  }, [offset]);
+  }, [filteredRows, monthLabels]);
 
-  // Filter based on dropdowns (Team, Machine Type, Machine No, Operator Name)
-  const filteredData = React.useMemo(() => {
-    return processedData.filter(row => {
-      if (filters?.team && row.team !== filters.team) return false;
-      if (filters?.machineType && row.type !== filters.machineType) return false;
-      if (filters?.machine && row.machine !== filters.machine) return false;
-      if (filters?.operatorName && row.name !== filters.operatorName) return false;
-      return true;
-    });
-  }, [processedData, filters]);
+  const filteredData = processedData;
 
   const activeColumns = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      return [
-        "Sl.No",
-        "Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25", "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26"
-      ];
+      return ["Sl.No", ...monthLabels];
     } else if (xAxisGroup === "Day Wise") {
       return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
@@ -10952,43 +11623,52 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
     } else {
       return ["Sl.No", "Team Name", "Eff%"];
     }
-  }, [xAxisGroup]);
+  }, [xAxisGroup, monthLabels]);
 
   const activeRows = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
       const list = filteredData.map((row, idx) => [
-        String(idx + 1), // Sl.No instead of Machine Name
-        ...row.monthlyVals.map(v => `${v}%`)
+        String(idx + 1),
+        ...row.monthlyVals.map(v => (v > 0 ? `${v}%` : "—"))
       ]);
       if (filteredData.length > 0) {
         const numMonths = filteredData[0].monthlyVals.length;
         const overallAvg = [];
         for (let idx = 0; idx < numMonths; idx++) {
           let sum = 0;
+          let count = 0;
           filteredData.forEach(row => {
-            sum += row.monthlyVals[idx];
+            if (row.monthlyVals[idx] > 0) {
+              sum += row.monthlyVals[idx];
+              count += 1;
+            }
           });
-          overallAvg.push(`${Math.round(sum / filteredData.length)}%`);
+          overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
         }
         list.push(["-", ...overallAvg]);
       }
       return list;
     } else if (xAxisGroup === "Day Wise") {
-      const dayLabels = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", "Day 8", "Day 9"];
       if (filteredData.length === 0) return [];
 
       const numDays = filteredData[0].dailyVals.length;
       const list = [];
       for (let idx = 0; idx < numDays; idx++) {
         let sum = 0;
+        let count = 0;
         filteredData.forEach(row => {
-          sum += row.dailyVals[idx];
+          if (row.dailyVals[idx] > 0) {
+            sum += row.dailyVals[idx];
+            count += 1;
+          }
         });
-        const dayAvg = Math.round(sum / filteredData.length);
+        const dayLabel = filteredData[0].dayDates?.[idx]
+          ? filteredData[0].dayDates[idx]
+          : `Day ${idx + 1}`;
         list.push([
           String(idx + 1),
-          dayLabels[idx] || `Day ${idx + 1}`,
-          `${dayAvg}%`
+          dayLabel,
+          count ? `${Math.round(sum / count)}%` : "—"
         ]);
       }
       return list;
@@ -11004,7 +11684,7 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
       }
       return list;
     } else {
-      const teamsList = ["Team A", "Team B", "Team C"];
+      const teamsList = [...new Set(filteredData.map((row) => row.team).filter((t) => t && t !== "—"))].sort();
       const list = teamsList.map((team, idx) => {
         const teamRows = filteredData.filter(row => row.team === team);
         if (teamRows.length === 0) return [String(idx + 1), team, "-"];
@@ -11184,11 +11864,265 @@ function EfficiencyEffReportBottomTable({ filters, xAxisGroup = "Month Wise" }) 
   );
 }
 
-function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
+function filterRejRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (Number(r.rejQty || 0) <= 0) return false;
+    if (filters.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters.partNo && String(r.partNo || "") !== String(filters.partNo)) return false;
+    if (filters.rejType && String(r.rejType || "") !== String(filters.rejType)) return false;
+    if (filters.rejReason) {
+      const reason = String(r.reason || "").toLowerCase();
+      if (!reason.includes(String(filters.rejReason).toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+function resolveRejectionLimit(targetConfig, rejType) {
+  const cfg = targetConfig?.rejection || {};
+  if (rejType === "In-house Rej") return cfg.inHouseLimit ?? 1.0;
+  if (rejType === "Vendor Rej") return cfg.vendorLimit ?? 1.2;
+  if (rejType === "Final Insp Rej") return cfg.finalInspLimit ?? 1.5;
+  if (rejType === "Supplier Rej") return cfg.supplierLimit ?? 0.5;
+  return cfg.rejectionLimit ?? 2.0;
+}
+
+function resolveReworkLimit(targetConfig, xAxisGroup) {
+  const cfg = targetConfig?.rework || {};
+  if (xAxisGroup === "In-House") return cfg.inHouseLimit ?? 1.0;
+  if (xAxisGroup === "Vendor") return cfg.jobOrderLimit ?? 1.2;
+  if (xAxisGroup === "Final Insp") return cfg.finalInspLimit ?? 1.5;
+  if (xAxisGroup === "Customer Rework") return cfg.customerReworkLimit ?? 0.5;
+  return cfg.reworkLimit ?? 1.5;
+}
+
+function hasActiveRejDimensionFilters(filters) {
+  return !!(filters?.customer || filters?.partNo || filters?.rejType || filters?.rejReason);
+}
+
+function hasActiveRewDimensionFilters(filters, xAxisGroup) {
+  return !!(filters?.customer || filters?.partNo || filters?.reworkReason || (xAxisGroup && xAxisGroup !== "Overall"));
+}
+
+function filterRewRows(rows, filters, defaultFrom, defaultTo, xAxisGroup) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters.fromDate || defaultFrom;
+  const activeTo = filters.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (Number(r.reworkQty || 0) <= 0) return false;
+    if (filters.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters.partNo && String(r.partNo || "") !== String(filters.partNo)) return false;
+    if (xAxisGroup && xAxisGroup !== "Overall") {
+      if (xAxisGroup === "Customer Rework") {
+        const cust = r.customer && r.customer !== "—";
+        const eligible = cust && (r.inspSource === "Final Insp" || r.inspSource === "Intermediate");
+        if (!eligible) return false;
+      } else if (String(r.reworkGroup || "") !== String(xAxisGroup)) {
+        return false;
+      }
+    }
+    if (filters.reworkReason) {
+      const reason = String(r.reason || "").toLowerCase();
+      if (!reason.includes(String(filters.reworkReason).toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+function buildRejChartData(filteredRows, monthLabels) {
+  const labels = monthLabels.length ? monthLabels : [];
+  const rates = labels.map((mo) => {
+    const monthRows = filteredRows.filter((r) => r.month === mo);
+    if (!monthRows.length) return 0;
+    const totalRej = monthRows.reduce((acc, r) => acc + Number(r.rejQty || 0), 0);
+    const totalInsp = monthRows.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+    return totalInsp > 0 ? Math.min(100, Math.max(0, Math.round((totalRej / totalInsp) * 100))) : 0;
+  });
+  const qtys = labels.map((mo) => {
+    const monthRows = filteredRows.filter((r) => r.month === mo);
+    return monthRows.reduce((acc, r) => acc + Number(r.rejQty || 0), 0);
+  });
+  return { labels, rates, qtys };
+}
+
+function buildRewChartData(filteredRows, monthLabels) {
+  const labels = monthLabels.length ? monthLabels : [];
+  const rates = labels.map((mo) => {
+    const monthRows = filteredRows.filter((r) => r.month === mo);
+    if (!monthRows.length) return 0;
+    const totalRwk = monthRows.reduce((acc, r) => acc + Number(r.reworkQty || 0), 0);
+    const totalInsp = monthRows.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+    return totalInsp > 0 ? Math.min(100, Math.max(0, Math.round((totalRwk / totalInsp) * 100))) : 0;
+  });
+  const qtys = labels.map((mo) => {
+    const monthRows = filteredRows.filter((r) => r.month === mo);
+    return monthRows.reduce((acc, r) => acc + Number(r.reworkQty || 0), 0);
+  });
+  return { labels, rates, qtys };
+}
+
+function buildRejTablePayload(filteredRows, rejType) {
+  const type = rejType || "";
+  if (type === "In-house Rej") {
+    return {
+      title: "In-House Rejection Registry",
+      columns: ["Process/Line", "Month", "Operator", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        r.process || "—",
+        r.month || "—",
+        r.operator || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
+  if (type === "Vendor Rej") {
+    return {
+      title: "Vendor Rejection Registry",
+      columns: ["Vendor Name", "Month", "Part Name", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        r.vendor || r.customer || "—",
+        r.month || "—",
+        r.partName || r.partNo || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
+  if (type === "Final Insp Rej") {
+    return {
+      title: "Final Inspection Rejection Registry",
+      columns: ["Inspection Point", "Month", "Inspector", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        (r.reason || r.process || "—").split(",")[0].trim() || "—",
+        r.month || "—",
+        r.inspector || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
+  if (type === "Supplier Rej") {
+    return {
+      title: "Supplier Rejection Registry",
+      columns: ["Supplier Name", "Month", "Material", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        r.supplier || r.vendor || "—",
+        r.month || "—",
+        r.partName || r.partNo || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
+  return {
+    title: "Rejection Registry",
+    columns: ["Customer Name", "Month", "Rej Insp", "Rej %", "Rej Qty", "Rej Value"],
+    rows: filteredRows.map((r) => [
+      r.customer || "—",
+      r.month || "—",
+      r.inspLabel || "—",
+      `${Math.round(Number(r.rejPct || 0))}%`,
+      String(Math.round(Number(r.rejQty || 0))),
+      formatInrValue(r.rejValue),
+    ]),
+  };
+}
+
+function buildRewTablePayload(filteredRows, xAxisGroup) {
+  const group = xAxisGroup || "Overall";
+  if (group === "In-House") {
+    return {
+      title: "In-House Rework Registry",
+      columns: ["Process/Line", "Month", "Operator", "Rework %", "Rework Qty", "Rework Value"],
+      rows: filteredRows.map((r) => [
+        r.process || "—",
+        r.month || "—",
+        r.operator || "—",
+        `${Math.round(Number(r.reworkPct || 0))}%`,
+        String(Math.round(Number(r.reworkQty || 0))),
+        formatInrValue(r.reworkValue),
+      ]),
+    };
+  }
+  if (group === "Vendor") {
+    return {
+      title: "Vendor Rework Registry",
+      columns: ["Vendor Name", "Month", "Part Name", "Rework %", "Rework Qty", "Rework Value"],
+      rows: filteredRows.map((r) => [
+        r.vendor || r.customer || "—",
+        r.month || "—",
+        r.partName || r.partNo || "—",
+        `${Math.round(Number(r.reworkPct || 0))}%`,
+        String(Math.round(Number(r.reworkQty || 0))),
+        formatInrValue(r.reworkValue),
+      ]),
+    };
+  }
+  if (group === "Final Insp") {
+    return {
+      title: "Final Inspection Rework Registry",
+      columns: ["Inspection Point", "Month", "Inspector", "Rework %", "Rework Qty", "Rework Value"],
+      rows: filteredRows.map((r) => [
+        (r.reason || r.process || "—").split(",")[0].trim() || "—",
+        r.month || "—",
+        r.inspector || "—",
+        `${Math.round(Number(r.reworkPct || 0))}%`,
+        String(Math.round(Number(r.reworkQty || 0))),
+        formatInrValue(r.reworkValue),
+      ]),
+    };
+  }
+  if (group === "Customer Rework") {
+    return {
+      title: "Customer Return & Rework Registry",
+      columns: ["Customer Name", "Month", "Complaint Ref", "Rework %", "Rework Qty", "Rework Value"],
+      rows: filteredRows.map((r) => [
+        r.customer || "—",
+        r.month || "—",
+        r.inspNo || "—",
+        `${Math.round(Number(r.reworkPct || 0))}%`,
+        String(Math.round(Number(r.reworkQty || 0))),
+        formatInrValue(r.reworkValue),
+      ]),
+    };
+  }
+  return {
+    title: "Rework Registry",
+    columns: ["Customer Name", "Month", "Rework Insp", "Rework %", "Rework Qty", "Rework Value"],
+    rows: filteredRows.map((r) => [
+      r.customer || "—",
+      r.month || "—",
+      r.inspLabel || "—",
+      `${Math.round(Number(r.reworkPct || 0))}%`,
+      String(Math.round(Number(r.reworkQty || 0))),
+      formatInrValue(r.reworkValue),
+    ]),
+  };
+}
+
+function RejectionReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, uid, onRejData }) {
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const [rejTypeOpen, setRejTypeOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("combo");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const [rejLive, setRejLive] = React.useState(null);
+  const [rejLoading, setRejLoading] = React.useState(false);
+
+  const rejSource = rejLive || data?.rejectionCompare;
 
   const customerRef = React.useRef(null);
   const rejTypeRef = React.useRef(null);
@@ -11245,59 +12179,56 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
   };
 
-  const operatorToMachine = {
-    Kumar: "CNC1",
-    Siva: "VMC1",
-    Ravi: "HMC1",
-    Sakthi: "CNC1",
-    Rangaraj: "CNC2"
-  };
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setRejLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildRejUrl(fy.from, fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Rejection load failed");
+        setRejLive(json);
+        onRejData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setRejLive(null);
+        onRejData?.(data?.rejectionCompare || null);
+      })
+      .finally(() => setRejLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onRejData, data?.rejectionCompare]);
 
-  const chart1Data = React.useMemo(() => {
-    let offset = 0;
-    if (filters?.customer) {
-      const hash = filters.customer.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 5) - 2;
-    }
-    if (filters?.partNo) {
-      offset += filters.partNo.endsWith("2") || filters.partNo.endsWith("4") ? 3 : -3;
-    }
-    if (filters?.rejType) offset += 2;
-    if (filters?.rejReason) offset -= 2;
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
+  const rejRows = React.useMemo(
+    () => (Array.isArray(rejSource?.rows) ? rejSource.rows : []),
+    [rejSource?.rows]
+  );
 
-    const baseMonths = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
-    let baseValues = [];
-    let baseQtys = [];
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
-    if (filters?.rejType === "In-house Rej") {
-      baseValues = [8, 7, 4, 6, 3];
-      baseQtys = [48, 42, 24, 36, 18];
-    } else if (filters?.rejType === "Vendor Rej") {
-      baseValues = [5, 4, 3, 4, 2];
-      baseQtys = [30, 24, 18, 24, 12];
-    } else if (filters?.rejType === "Final Insp Rej") {
-      baseValues = [4, 5, 2, 3, 2];
-      baseQtys = [24, 30, 12, 18, 12];
-    } else if (filters?.rejType === "Supplier Rej") {
-      baseValues = [3, 3, 2, 2, 1];
-      baseQtys = [18, 18, 12, 12, 6];
-    } else {
-      // Default / "Overall Rej"
-      baseValues = [20, 19, 11, 15, 8];
-      baseQtys = [120, 110, 65, 90, 48];
-    }
+  const filteredRows = React.useMemo(
+    () => filterRejRows(rejRows, filters, defaultRange.from, defaultRange.to),
+    [rejRows, filters, defaultRange]
+  );
 
-    const data = baseValues.map(v => Math.max(0, Math.min(100, v + offset)));
-    const qtys = baseQtys.map(q => Math.max(0, q + Math.round(offset * 10)));
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(rejRows, filters, defaultRange.from, defaultRange.to),
+    [rejRows, filters, defaultRange]
+  );
 
-    return {
-      labels: baseMonths,
-      rates: data,
-      qtys: qtys
-    };
-  }, [filters]);
+  const chart1Data = React.useMemo(
+    () => buildRejChartData(filteredRows, monthLabels),
+    [filteredRows, monthLabels]
+  );
 
   const setupChart1 = React.useCallback((canvas) => {
     let rejectionLimit = targetConfig?.rejection?.rejectionLimit ?? 2.0;
@@ -11534,19 +12465,46 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
   }, [chart1Data, targetConfig, chartType]);
 
-  const customersList = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"];
+  const customersList = rejSource?.filterOptions?.customers?.length
+    ? rejSource.filterOptions.customers
+    : [...new Set(rejRows.map((r) => r.customer).filter((c) => c && c !== "—"))].sort();
   const rejTypesList = ["In-house Rej", "Vendor Rej", "Final Insp Rej", "Supplier Rej"];
+
+  const computedKpis = React.useMemo(() => {
+    if (!filteredRows.length) {
+      const api = rejSource?.kpis;
+      if (api?.rowCount > 0) {
+        return [
+          { label: "Avg Rejection", value: `${Number(api.avgRejPct || 0).toFixed(1)}%`, color: "#f59e0b", icon: AlertTriangle },
+          { label: "Rejection Qty", value: String(Math.round(Number(api.totalRejQty || 0))), color: "#3b82f6", icon: Package },
+          { label: "Rejection Value", value: formatInrValue(api.totalRejValue), color: "#10b981", icon: TrendingUp },
+          { label: "Records", value: String(api.rowCount || 0), color: "#a855f7", icon: FileText },
+        ];
+      }
+      return null;
+    }
+    const totalRej = filteredRows.reduce((acc, r) => acc + Number(r.rejQty || 0), 0);
+    const totalInsp = filteredRows.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+    const totalVal = filteredRows.reduce((acc, r) => acc + Number(r.rejValue || 0), 0);
+    const avgPct = totalInsp > 0 ? ((totalRej / totalInsp) * 100).toFixed(1) : "0.0";
+    return [
+      { label: "Avg Rejection", value: `${avgPct}%`, color: "#f59e0b", icon: AlertTriangle },
+      { label: "Rejection Qty", value: String(Math.round(totalRej)), color: "#3b82f6", icon: Package },
+      { label: "Rejection Value", value: formatInrValue(totalVal), color: "#10b981", icon: TrendingUp },
+      { label: "Records", value: String(filteredRows.length), color: "#a855f7", icon: FileText },
+    ];
+  }, [filteredRows, rejSource?.kpis]);
 
   return (
     <PremiumDashboardView
       title="Rejection"
       icon={AlertTriangle}
       color="#f59e0b"
-      kpis={null}
+      kpis={computedKpis}
       setupChart={setupChart1}
       rangeHint="Month Wise Rejection"
       onClose={onClose}
-      rebuildToken={`rejection-${JSON.stringify(filters)}-${JSON.stringify(targetConfig?.rejection)}-${chartType}`}
+      rebuildToken={`rejection-${filteredRows.length}-${JSON.stringify(filters)}-${JSON.stringify(targetConfig?.rejection)}-${chartType}`}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -11701,155 +12659,44 @@ function RejectionReportDashboardView({ filters, onFilterChange, activeTab, onAc
   );
 }
 
-function RejectionReportBottomTable({ filters }) {
-  const offset = React.useMemo(() => {
-    let off = 0;
-    if (filters?.customer) {
-      const hash = filters.customer.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      off += (hash % 5) - 2; // -2 to +2
-    }
-    if (filters?.partNo) {
-      off += filters.partNo.endsWith("2") || filters.partNo.endsWith("4") ? 1 : -1;
-    }
-    if (filters?.rejType) off += 1;
-    if (filters?.rejReason) off -= 1;
-    if (filters?.fromDate) off += 1;
-    if (filters?.toDate) off -= 1;
-    return off;
-  }, [filters]);
+function RejectionReportBottomTable({ data, filters }) {
+  const rejRows = React.useMemo(
+    () => (Array.isArray(data?.rejectionCompare?.rows) ? data.rejectionCompare.rows : []),
+    [data?.rejectionCompare?.rows]
+  );
 
-  const { title, columns, allRows } = React.useMemo(() => {
-    if (filters?.rejType === "In-house Rej") {
-      return {
-        title: "In-House Rejection Registry",
-        columns: ["Process/Line", "Month", "Operator", "Rejection %", "Rejection Qty", "Rejection Value"],
-        allRows: [
-          ["Machining", "Apr-25", "Karthik R.", "10%", "50", "₹5,000"],
-          ["Welding", "Apr-25", "Suresh Kumar", "16%", "80", "₹8,000"],
-          ["Assembly", "May-25", "Manoj P.", "4%", "20", "₹2,000"],
-          ["Stamping", "May-25", "Ramesh K.", "8%", "40", "₹4,000"],
-          ["Casting", "Jun-25", "Vijay S.", "12%", "60", "₹6,000"],
-          ["Machining", "Jun-25", "Karthik R.", "7%", "35", "₹3,500"],
-          ["Welding", "Jul-25", "Suresh Kumar", "11%", "55", "₹5,500"],
-          ["Assembly", "Jul-25", "Manoj P.", "5%", "25", "₹2,500"],
-          ["Stamping", "Aug-25", "Ramesh K.", "6%", "30", "₹3,000"],
-          ["Casting", "Aug-25", "Vijay S.", "8%", "40", "₹4,000"]
-        ]
-      };
-    } else if (filters?.rejType === "Vendor Rej") {
-      return {
-        title: "Vendor Rejection Registry",
-        columns: ["Vendor Name", "Month", "Part Name", "Rejection %", "Rejection Qty", "Rejection Value"],
-        allRows: [
-          ["Vendor A", "Apr-25", "Brackets", "8%", "40", "₹4,000"],
-          ["Vendor B", "Apr-25", "Housings", "6%", "30", "₹3,000"],
-          ["Vendor C", "May-25", "Shafts", "14%", "70", "₹7,000"],
-          ["Vendor D", "May-25", "Flanges", "8%", "40", "₹4,000"],
-          ["Vendor E", "Jun-25", "Pins", "3%", "15", "₹1,500"],
-          ["Vendor A", "Jun-25", "Brackets", "7%", "35", "₹3,500"],
-          ["Vendor B", "Jul-25", "Housings", "5%", "25", "₹2,500"],
-          ["Vendor C", "Jul-25", "Shafts", "12%", "60", "₹6,000"],
-          ["Vendor D", "Aug-25", "Flanges", "6%", "30", "₹3,000"],
-          ["Vendor E", "Aug-25", "Pins", "2%", "10", "₹1,000"]
-        ]
-      };
-    } else if (filters?.rejType === "Final Insp Rej") {
-      return {
-        title: "Final Inspection Rejection Registry",
-        columns: ["Inspection Point", "Month", "Inspector", "Rejection %", "Rejection Qty", "Rejection Value"],
-        allRows: [
-          ["Visual Defect", "Apr-25", "John Doe", "6%", "30", "₹3,000"],
-          ["Dimensional", "Apr-25", "Sarah J.", "12%", "60", "₹6,000"],
-          ["Functional", "May-25", "David M.", "5%", "25", "₹2,500"],
-          ["Surface Finish", "May-25", "Alice W.", "9%", "45", "₹4,500"],
-          ["Packaging", "Jun-25", "Robert L.", "4%", "20", "₹2,000"],
-          ["Visual Defect", "Jun-25", "John Doe", "5%", "25", "₹2,500"],
-          ["Dimensional", "Jul-25", "Sarah J.", "10%", "50", "₹5,000"],
-          ["Functional", "Jul-25", "David M.", "4%", "20", "₹2,000"],
-          ["Surface Finish", "Aug-25", "Alice W.", "7%", "35", "₹3,500"],
-          ["Packaging", "Aug-25", "Robert L.", "3%", "15", "₹1,500"]
-        ]
-      };
-    } else if (filters?.rejType === "Supplier Rej") {
-      return {
-        title: "Supplier Rejection Registry",
-        columns: ["Supplier Name", "Month", "Material", "Rejection %", "Rejection Qty", "Rejection Value"],
-        allRows: [
-          ["Supplier X", "Apr-25", "Steel Rods", "4%", "20", "₹2,000"],
-          ["Supplier Y", "Apr-25", "Alloy Sheets", "5%", "25", "₹2,500"],
-          ["Supplier Z", "May-25", "Coils", "3%", "15", "₹1,500"],
-          ["Supplier X", "May-25", "Steel Rods", "3%", "15", "₹1,500"],
-          ["Supplier Y", "Jun-25", "Alloy Sheets", "4%", "20", "₹2,000"],
-          ["Supplier Z", "Jun-25", "Coils", "2%", "10", "₹1,000"],
-          ["Supplier X", "Jul-25", "Steel Rods", "3%", "15", "₹1,500"],
-          ["Supplier Y", "Jul-25", "Alloy Sheets", "3%", "15", "₹1,500"],
-          ["Supplier Z", "Aug-25", "Coils", "2%", "10", "₹1,000"],
-          ["Supplier X", "Aug-25", "Steel Rods", "2%", "10", "₹1,000"]
-        ]
-      };
-    } else {
-      return {
-        title: "Rejection Registry",
-        columns: ["Customer Name", "Month", "Rej Insp", "Rej %", "Rej Qty", "Rej Value"],
-        allRows: [
-          ["Tata Motors", "Apr-25", "Intermediate", "27%", "120", "₹12,000"],
-          ["Mahindra & Mahindra", "Apr-25", "Final Insp", "30%", "150", "₹18,000"],
-          ["Maruti Suzuki", "May-25", "Job order", "9%", "45", "₹3,600"],
-          ["Ashok Leyland", "May-25", "Intermediate", "14%", "70", "₹8,400"],
-          ["Tata Motors", "Jun-25", "Final Insp", "14%", "56", "₹5,600"],
-          ["Mahindra & Mahindra", "Jun-25", "Job order", "5%", "25", "₹2,500"],
-          ["Maruti Suzuki", "Jul-25", "Intermediate", "21%", "95", "₹10,500"],
-          ["Ashok Leyland", "Jul-25", "Final Insp", "12%", "60", "₹7,200"],
-          ["Tata Motors", "Aug-25", "Job order", "13%", "52", "₹5,200"],
-          ["Mahindra & Mahindra", "Aug-25", "Intermediate", "10%", "48", "₹4,800"]
-        ]
-      };
-    }
-  }, [filters?.rejType]);
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
-  const rows = React.useMemo(() => {
-    let list = allRows;
-    if (filters?.customer && (!filters?.rejType || filters?.rejType === "Overall Rej" || filters?.rejType === "Supplier Rej")) {
-      list = list.filter(r => r[0] === filters.customer);
-    }
+  const filteredRows = React.useMemo(
+    () => filterRejRows(rejRows, filters, defaultRange.from, defaultRange.to),
+    [rejRows, filters, defaultRange]
+  );
 
-    return list.map(row => {
-      const col0 = row[0];
-      const month = row[1];
-      const col2 = row[2];
-
-      const basePct = parseFloat(row[3]);
-      const newPct = Math.max(0, Math.min(100, basePct + offset));
-
-      const baseQty = parseInt(row[4], 10);
-      const newQty = Math.max(0, baseQty + Math.round(offset * 5));
-
-      const newValue = newQty * 100;
-
-      return [
-        col0,
-        month,
-        col2,
-        `${newPct.toFixed(0)}%`,
-        newQty.toLocaleString(),
-        `₹${newValue.toLocaleString()}`
-      ];
-    });
-  }, [allRows, filters, offset]);
+  const { title, columns, rows } = React.useMemo(
+    () => buildRejTablePayload(filteredRows, filters?.rejType),
+    [filteredRows, filters?.rejType]
+  );
 
   const finalColumns = ["Sl.No", ...columns.slice(1)];
-  const finalRows = rows.map((row, idx) => [
-    String(idx + 1),
-    ...row.slice(1)
-  ]);
+  const finalRows = rows.map((row, idx) => [String(idx + 1), ...row.slice(1)]);
 
   return <PremiumDashboardBottomTable title={title} columns={finalColumns} rows={finalRows} />;
 }
 
-function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetConfig, xAxisGroup, setXAxisGroup }) {
+function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, xAxisGroup, setXAxisGroup, uid, onRewData }) {
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("combo");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const [rewLive, setRewLive] = React.useState(null);
+  const [rewLoading, setRewLoading] = React.useState(false);
+
+  const rewSource = rewLive || data?.reworkCompare;
 
   const customerRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
@@ -11901,50 +12748,56 @@ function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetCon
     });
   };
 
-  const chart1Data = React.useMemo(() => {
-    let offset = 0;
-    if (filters?.customer) {
-      const hash = filters.customer.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      offset += (hash % 5) - 2;
-    }
-    if (filters?.partNo) {
-      offset += filters.partNo.endsWith("2") || filters.partNo.endsWith("4") ? 2 : -2;
-    }
-    if (filters?.reworkReason) offset += 1;
-    if (filters?.fromDate) offset += 1;
-    if (filters?.toDate) offset -= 1;
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setRewLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildRewUrl(fy.from, fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Rework load failed");
+        setRewLive(json);
+        onRewData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setRewLive(null);
+        onRewData?.(data?.reworkCompare || null);
+      })
+      .finally(() => setRewLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onRewData, data?.reworkCompare]);
 
-    const labels = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
-    let baseValues = [];
-    let baseQtys = [];
+  const rewRows = React.useMemo(
+    () => (Array.isArray(rewSource?.rows) ? rewSource.rows : []),
+    [rewSource?.rows]
+  );
 
-    if (xAxisGroup === "In-House") {
-      baseValues = [6, 5, 3, 4, 2];
-      baseQtys = [36, 30, 18, 24, 12];
-    } else if (xAxisGroup === "Vendor") {
-      baseValues = [4, 3, 2, 3, 2];
-      baseQtys = [24, 18, 12, 18, 12];
-    } else if (xAxisGroup === "Final Insp") {
-      baseValues = [3, 2, 2, 2, 1];
-      baseQtys = [18, 12, 12, 12, 6];
-    } else if (xAxisGroup === "Customer Rework") {
-      baseValues = [2, 2, 1, 1, 1];
-      baseQtys = [12, 12, 6, 6, 5];
-    } else {
-      // Default / "Overall"
-      baseValues = [15, 12, 8, 10, 6];
-      baseQtys = [90, 75, 48, 60, 35];
-    }
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
-    const data = baseValues.map(v => Math.max(0, Math.min(100, v + offset)));
-    const qtys = baseQtys.map(q => Math.max(0, q + Math.round(offset * 5)));
+  const filteredRows = React.useMemo(
+    () => filterRewRows(rewRows, filters, defaultRange.from, defaultRange.to, xAxisGroup),
+    [rewRows, filters, defaultRange, xAxisGroup]
+  );
 
-    return {
-      labels: labels,
-      rates: data,
-      qtys: qtys
-    };
-  }, [filters, xAxisGroup]);
+  const monthLabels = React.useMemo(
+    () => buildEffMonthLabelsForDisplay(rewRows, filters, defaultRange.from, defaultRange.to),
+    [rewRows, filters, defaultRange]
+  );
+
+  const chart1Data = React.useMemo(
+    () => buildRewChartData(filteredRows, monthLabels),
+    [filteredRows, monthLabels]
+  );
 
   const setupChart1 = React.useCallback((canvas) => {
     let reworkLimit = targetConfig?.rework?.reworkLimit ?? 1.5;
@@ -12181,7 +13034,34 @@ function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetCon
     });
   }, [chart1Data, targetConfig, chartType]);
 
-  const customersList = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki", "Ashok Leyland"];
+  const customersList = rewSource?.filterOptions?.customers?.length
+    ? rewSource.filterOptions.customers
+    : [...new Set(rewRows.map((r) => r.customer).filter((c) => c && c !== "—"))].sort();
+
+  const computedKpis = React.useMemo(() => {
+    if (!filteredRows.length) {
+      const api = rewSource?.kpis;
+      if (api?.rowCount > 0) {
+        return [
+          { label: "Avg Rework", value: `${Number(api.avgReworkPct || 0).toFixed(1)}%`, color: "#a855f7", icon: PackageCheck },
+          { label: "Rework Qty", value: String(Math.round(Number(api.totalReworkQty || 0))), color: "#3b82f6", icon: Package },
+          { label: "Rework Value", value: formatInrValue(api.totalReworkValue), color: "#10b981", icon: TrendingUp },
+          { label: "Records", value: String(api.rowCount || 0), color: "#f59e0b", icon: FileText },
+        ];
+      }
+      return null;
+    }
+    const totalRwk = filteredRows.reduce((acc, r) => acc + Number(r.reworkQty || 0), 0);
+    const totalInsp = filteredRows.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+    const totalVal = filteredRows.reduce((acc, r) => acc + Number(r.reworkValue || 0), 0);
+    const avgPct = totalInsp > 0 ? ((totalRwk / totalInsp) * 100).toFixed(1) : "0.0";
+    return [
+      { label: "Avg Rework", value: `${avgPct}%`, color: "#a855f7", icon: PackageCheck },
+      { label: "Rework Qty", value: String(Math.round(totalRwk)), color: "#3b82f6", icon: Package },
+      { label: "Rework Value", value: formatInrValue(totalVal), color: "#10b981", icon: TrendingUp },
+      { label: "Records", value: String(filteredRows.length), color: "#f59e0b", icon: FileText },
+    ];
+  }, [filteredRows, rewSource?.kpis]);
 
   const chartHeaderControls = (
     <div className="pp1-chart-xaxis">
@@ -12204,11 +13084,11 @@ function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetCon
       title="Rework"
       icon={PackageCheck}
       color="#a855f7"
-      kpis={null}
+      kpis={computedKpis}
       setupChart={setupChart1}
       rangeHint={xAxisGroup === "Overall" ? "Month Wise Rework" : `${xAxisGroup} Rework`}
       onClose={onClose}
-      rebuildToken={`rework-${xAxisGroup}-${chartType}-${JSON.stringify(filters)}`}
+      rebuildToken={`rework-${xAxisGroup}-${filteredRows.length}-${chartType}-${JSON.stringify(filters)}`}
       chartHeaderControls={chartHeaderControls}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
@@ -12329,146 +13209,32 @@ function ReworkReportDashboardView({ filters, onFilterChange, onClose, targetCon
   );
 }
 
-function ReworkReportBottomTable({ filters, xAxisGroup }) {
-  const offset = React.useMemo(() => {
-    let off = 0;
-    if (filters?.customer) {
-      const hash = filters.customer.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      off += (hash % 5) - 2; // -2 to +2
-    }
-    if (filters?.partNo) {
-      off += filters.partNo.endsWith("2") || filters.partNo.endsWith("4") ? 1 : -1;
-    }
-    if (filters?.reworkReason) off += 1;
-    if (filters?.fromDate) off += 1;
-    if (filters?.toDate) off -= 1;
-    return off;
-  }, [filters]);
+function ReworkReportBottomTable({ data, filters, xAxisGroup }) {
+  const rewRows = React.useMemo(
+    () => (Array.isArray(data?.reworkCompare?.rows) ? data.reworkCompare.rows : []),
+    [data?.reworkCompare?.rows]
+  );
 
-  const { title, columns, allRows } = React.useMemo(() => {
-    if (xAxisGroup === "In-House") {
-      return {
-        title: "In-House Rework Registry",
-        columns: ["Process/Line", "Month", "Operator", "Rework %", "Rework Qty", "Rework Value"],
-        allRows: [
-          ["Machining", "Apr-25", "Karthik R.", "8%", "40", "₹4,000"],
-          ["Welding", "Apr-25", "Suresh Kumar", "14%", "70", "₹7,000"],
-          ["Assembly", "May-25", "Manoj P.", "5%", "25", "₹2,500"],
-          ["Stamping", "May-25", "Ramesh K.", "9%", "45", "₹4,500"],
-          ["Casting", "Jun-25", "Vijay S.", "12%", "60", "₹6,000"],
-          ["Machining", "Jun-25", "Karthik R.", "6%", "30", "₹3,000"],
-          ["Welding", "Jul-25", "Suresh Kumar", "12%", "60", "₹6,000"],
-          ["Assembly", "Jul-25", "Manoj P.", "4%", "20", "₹2,000"],
-          ["Stamping", "Aug-25", "Ramesh K.", "7%", "35", "₹3,500"],
-          ["Casting", "Aug-25", "Vijay S.", "10%", "50", "₹5,000"]
-        ]
-      };
-    } else if (xAxisGroup === "Vendor") {
-      return {
-        title: "Vendor Rework Registry",
-        columns: ["Vendor Name", "Month", "Part Name", "Rework %", "Rework Qty", "Rework Value"],
-        allRows: [
-          ["Vendor A", "Apr-25", "Brackets", "12%", "60", "₹6,000"],
-          ["Vendor B", "Apr-25", "Housings", "6%", "30", "₹3,000"],
-          ["Vendor C", "May-25", "Shafts", "18%", "90", "₹9,000"],
-          ["Vendor D", "May-25", "Flanges", "9%", "45", "₹4,500"],
-          ["Vendor E", "Jun-25", "Pins", "4%", "20", "₹2,000"],
-          ["Vendor A", "Jun-25", "Brackets", "10%", "50", "₹5,000"],
-          ["Vendor B", "Jul-25", "Housings", "5%", "25", "₹2,500"],
-          ["Vendor C", "Jul-25", "Shafts", "15%", "75", "₹7,500"],
-          ["Vendor D", "Aug-25", "Flanges", "7%", "35", "₹3,500"],
-          ["Vendor E", "Aug-25", "Pins", "3%", "15", "₹1,500"]
-        ]
-      };
-    } else if (xAxisGroup === "Final Insp") {
-      return {
-        title: "Final Inspection Rework Registry",
-        columns: ["Inspection Point", "Month", "Inspector", "Rework %", "Rework Qty", "Rework Value"],
-        allRows: [
-          ["Visual Defect", "Apr-25", "John Doe", "10%", "50", "₹5,000"],
-          ["Dimensional", "Apr-25", "Sarah J.", "16%", "80", "₹8,000"],
-          ["Functional", "May-25", "David M.", "7%", "35", "₹3,500"],
-          ["Surface Finish", "May-25", "Alice W.", "11%", "55", "₹5,500"],
-          ["Packaging", "Jun-25", "Robert L.", "5%", "25", "₹2,500"],
-          ["Visual Defect", "Jun-25", "John Doe", "8%", "40", "₹4,000"],
-          ["Dimensional", "Jul-25", "Sarah J.", "14%", "70", "₹7,000"],
-          ["Functional", "Jul-25", "David M.", "6%", "30", "₹3,000"],
-          ["Surface Finish", "Aug-25", "Alice W.", "9%", "45", "₹4,500"],
-          ["Packaging", "Aug-25", "Robert L.", "4%", "20", "₹2,000"]
-        ]
-      };
-    } else if (xAxisGroup === "Customer Rework") {
-      return {
-        title: "Customer Return & Rework Registry",
-        columns: ["Customer Name", "Month", "Complaint Ref", "Rework %", "Rework Qty", "Rework Value"],
-        allRows: [
-          ["Tata Motors", "Apr-25", "CR-2025-001", "6%", "30", "₹3,000"],
-          ["Mahindra & Mahindra", "Apr-25", "CR-2025-002", "11%", "55", "₹5,500"],
-          ["Maruti Suzuki", "May-25", "CR-2025-003", "5%", "25", "₹2,500"],
-          ["Ashok Leyland", "May-25", "CR-2025-004", "8%", "40", "₹4,000"],
-          ["Tata Motors", "Jun-25", "CR-2025-005", "5%", "25", "₹2,500"],
-          ["Mahindra & Mahindra", "Jun-25", "CR-2025-006", "9%", "45", "₹4,500"],
-          ["Maruti Suzuki", "Jul-25", "CR-2025-007", "4%", "20", "₹2,000"],
-          ["Ashok Leyland", "Jul-25", "CR-2025-008", "7%", "35", "₹3,500"],
-          ["Tata Motors", "Aug-25", "CR-2025-009", "4%", "20", "₹2,000"],
-          ["Mahindra & Mahindra", "Aug-25", "CR-2025-010", "7%", "35", "₹3,500"]
-        ]
-      };
-    } else {
-      return {
-        title: "Rework Registry",
-        columns: ["Customer Name", "Month", "Rework Insp", "Rework %", "Rework Qty", "Rework Value"],
-        allRows: [
-          ["Tata Motors", "Apr-25", "Intermediate", "18%", "90", "₹9,000"],
-          ["Mahindra & Mahindra", "Apr-25", "Final Insp", "20%", "100", "₹12,000"],
-          ["Maruti Suzuki", "May-25", "Job order", "8%", "40", "₹3,200"],
-          ["Ashok Leyland", "May-25", "Intermediate", "10%", "50", "₹5,000"],
-          ["Tata Motors", "Jun-25", "Final Insp", "10%", "45", "₹4,500"],
-          ["Mahindra & Mahindra", "Jun-25", "Job order", "4%", "20", "₹2,000"],
-          ["Maruti Suzuki", "Jul-25", "Intermediate", "15%", "70", "₹7,700"],
-          ["Ashok Leyland", "Jul-25", "Final Insp", "9%", "45", "₹4,950"],
-          ["Tata Motors", "Aug-25", "Job order", "9%", "36", "₹3,600"],
-          ["Mahindra & Mahindra", "Aug-25", "Intermediate", "7%", "35", "₹3,500"]
-        ]
-      };
-    }
-  }, [xAxisGroup]);
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
-  const rows = React.useMemo(() => {
-    let list = allRows;
-    if (filters?.customer && (xAxisGroup === "Overall" || xAxisGroup === "Customer Rework")) {
-      list = list.filter(r => r[0] === filters.customer);
-    }
+  const filteredRows = React.useMemo(
+    () => filterRewRows(rewRows, filters, defaultRange.from, defaultRange.to, xAxisGroup),
+    [rewRows, filters, defaultRange, xAxisGroup]
+  );
 
-    return list.map(row => {
-      const col0 = row[0];
-      const month = row[1];
-      const col2 = row[2];
-
-      const basePct = parseFloat(row[3]);
-      const newPct = Math.max(0, Math.min(100, basePct + offset));
-
-      const baseQty = parseInt(row[4], 10);
-      const newQty = Math.max(0, baseQty + Math.round(offset * 4));
-
-      const newValue = newQty * 100;
-
-      return [
-        col0,
-        month,
-        col2,
-        `${newPct.toFixed(0)}%`,
-        newQty.toLocaleString(),
-        `₹${newValue.toLocaleString()}`
-      ];
-    });
-  }, [allRows, filters, offset, xAxisGroup]);
+  const { title, columns, rows } = React.useMemo(
+    () => buildRewTablePayload(filteredRows, xAxisGroup),
+    [filteredRows, xAxisGroup]
+  );
 
   const finalColumns = ["Sl.No", ...columns.slice(1)];
-  const finalRows = rows.map((row, idx) => [
-    String(idx + 1),
-    ...row.slice(1)
-  ]);
+  const finalRows = rows.map((row, idx) => [String(idx + 1), ...row.slice(1)]);
 
   return <PremiumDashboardBottomTable title={title} columns={finalColumns} rows={finalRows} />;
 }
@@ -12858,16 +13624,11 @@ function StoreStockValueReportBottomTable({ filters }) {
   return <PremiumDashboardBottomTable title="Store Stock Registry" columns={columns} rows={rows} />;
 }
 
-function OtdReportBottomTable({ filters }) {
-  const allRows = [
-    ["Tata Motors", "PO-2026-8801", "REF-8801-A", "BRK-PAD-M1", "2026-06-10", "2026-06-08", "5,000", "5,000", "On Time", "₹5,00,000"],
-    ["Mahindra & Mahindra", "PO-2026-9042", "REF-9042-B", "ROT-DSC-X4", "2026-06-12", "2026-06-12", "3,000", "3,000", "On Time", "₹3,00,000"],
-    ["Maruti Suzuki", "PO-2026-7719", "REF-7719-A", "GBX-HNG-S2", "2026-06-14", "2026-06-12", "1,500", "1,400", "Delayed", "₹1,40,000"],
-    ["Hyundai India", "PO-2026-6652", "REF-6652-C", "ENG-MNT-H1", "2026-06-15", "2026-06-14", "2,500", "2,500", "On Time", "₹2,50,000"],
-    ["Ashok Leyland", "PO-2026-4401", "REF-4401-A", "TRK-AXL-L9", "2026-06-18", "2026-06-16", "800", "750", "Delayed", "₹7,50,000"],
-    ["Tata Motors", "PO-2026-8802", "REF-8802-B", "BRK-PAD-M2", "2026-06-20", "2026-06-18", "2,000", "2,000", "On Time", "₹2,00,000"],
-    ["Maruti Suzuki", "PO-2026-7720", "REF-7720-B", "GBX-HNG-S3", "2026-06-22", "2026-06-20", "1,200", "1,100", "Delayed", "₹1,10,000"]
-  ];
+function OtdReportBottomTable({ data, filters }) {
+  const sourceRows = React.useMemo(
+    () => (Array.isArray(data?.otd?.rows) ? data.otd.rows : []),
+    [data?.otd?.rows]
+  );
 
   const columns = [
     "Sl.No.",
@@ -12883,23 +13644,22 @@ function OtdReportBottomTable({ filters }) {
     "Value"
   ];
 
-  const rows = React.useMemo(() => {
-    let list = allRows;
-    if (filters?.customer) {
-      list = list.filter(r => r[0].toLowerCase().includes(filters.customer.toLowerCase()));
-    }
-    if (filters?.partNumber) {
-      list = list.filter(r => r[3].toLowerCase().includes(filters.partNumber.toLowerCase()));
-    }
-    if (filters?.fromDate) {
-      list = list.filter(r => r[4] >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => r[4] <= filters.toDate);
-    }
-    // Prepend Serial Number dynamically
-    return list.map((r, idx) => [String(idx + 1), ...r]);
-  }, [filters]);
+  const rows = React.useMemo(
+    () => sourceRows.map((r, idx) => [
+      String(idx + 1),
+      r.customerName || "—",
+      r.poNumber || "—",
+      r.poRefNumber || "—",
+      r.partNumber || "—",
+      r.schdDate || "—",
+      r.reqDate || "—",
+      fmtNum(r.orderQty),
+      fmtNum(r.deliveryQty),
+      r.status || "—",
+      r.value != null ? `₹${Number(r.value).toLocaleString("en-IN")}` : "—",
+    ]),
+    [sourceRows]
+  );
 
   return <PremiumDashboardBottomTable title="OTD Delivery Registry" columns={columns} rows={rows} />;
 }
@@ -14718,7 +15478,30 @@ function FgValueReportBottomTable({ filters }) {
 }
 
 /* ── Daily Production View (UI Alone) ────────────────────────────────── */
-function DailyProductionDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+/* ── Daily Production View ──────────────────────────────────────────────── */
+function filterDailyProdRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters?.fromDate || defaultFrom;
+  const activeTo = filters?.toDate || defaultTo;
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    if (d < activeFrom || d > activeTo) return false;
+    if (filters?.machineNo) {
+      const m = String(filters.machineNo).toLowerCase();
+      const mac = String(r.machine || "").toLowerCase();
+      const name = String(r.machineName || "").toLowerCase();
+      if (!mac.includes(m) && !name.includes(m)) return false;
+    }
+    return true;
+  });
+}
+
+function DailyProductionDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onDailyProdData }) {
+  const [dailyProdLive, setDailyProdLive] = React.useState(null);
+  const [dailyProdLoading, setDailyProdLoading] = React.useState(false);
+  const dailyProdSource = dailyProdLive || data?.dailyProductionCompare;
+
   const [machineOpen, setMachineOpen] = React.useState(false);
   const machineRef = React.useRef(null);
 
@@ -14764,39 +15547,105 @@ function DailyProductionDashboardView({ filters, onFilterChange, onClose, target
     });
   };
 
-  const machines = ["CNC1", "CNC2", "VMC1", "HMC1"];
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setDailyProdLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildDailyProdUrl(fy.from, fy.to, filters?.machineNo), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Daily Production load failed");
+        setDailyProdLive(json);
+        onDailyProdData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setDailyProdLive(null);
+        onDailyProdData?.(data?.dailyProductionCompare || null);
+      })
+      .finally(() => setDailyProdLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onDailyProdData, data?.dailyProductionCompare, filters?.machineNo]);
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const dailyProdRows = React.useMemo(
+    () => (Array.isArray(dailyProdSource?.rows) ? dailyProdSource.rows : []),
+    [dailyProdSource?.rows]
+  );
+
+  const filteredRows = React.useMemo(
+    () => filterDailyProdRows(dailyProdRows, filters, defaultRange.from, defaultRange.to),
+    [dailyProdRows, filters, defaultRange]
+  );
+
+  const machineSummary = React.useMemo(() => {
+    const byMac = {};
+    filteredRows.forEach((r) => {
+      const mac = r.machine || "—";
+      if (!byMac[mac]) byMac[mac] = { machine: mac, rateSum: 0, rateCount: 0, planned: 0, balance: 0, loss: 0 };
+      byMac[mac].planned += Number(r.planned || 0);
+      byMac[mac].balance += Number(r.balance || 0);
+      byMac[mac].loss += Number(r.loss || 0);
+      byMac[mac].rateSum += Number(r.rate || 0);
+      byMac[mac].rateCount += 1;
+    });
+    return Object.keys(byMac).sort().map((mac) => {
+      const g = byMac[mac];
+      return {
+        machine: g.machine,
+        rate: g.rateCount ? Math.round((g.rateSum / g.rateCount) * 10) / 10 : 0,
+        planned: Math.round(g.planned * 10) / 10,
+        balance: Math.round(g.balance * 10) / 10,
+        loss: Math.round(g.loss),
+      };
+    });
+  }, [filteredRows]);
+
+  const filteredData = machineSummary;
+
+  const machines = React.useMemo(() => {
+    const api = dailyProdSource?.filterOptions?.machines;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(dailyProdRows.map((d) => d.machine).filter(Boolean)));
+  }, [dailyProdSource?.filterOptions?.machines, dailyProdRows]);
 
   const machSuggestions = React.useMemo(() => {
     if (!filters.machineNo) return machines;
     return machines.filter(m => m.toLowerCase().includes(filters.machineNo.toLowerCase()));
-  }, [filters.machineNo]);
+  }, [filters.machineNo, machines]);
 
-  // Data mapping from excel
-  const rawData = [
-    { machine: "CNC1", rate: 210, planned: 22, balance: 2, loss: 420 },
-    { machine: "CNC2", rate: 180, planned: 18, balance: 6, loss: 1080 },
-    { machine: "VMC1", rate: 150, planned: 20, balance: 4, loss: 600 },
-    { machine: "HMC1", rate: 190, planned: 21, balance: 3, loss: 570 }
-  ];
+  const totalPlanned = React.useMemo(() => {
+    return Math.round(filteredData.reduce((acc, r) => acc + Number(r.planned || 0), 0) * 10) / 10;
+  }, [filteredData]);
 
-  const filteredData = React.useMemo(() => {
-    if (!filters.machineNo) return rawData;
-    return rawData.filter(d => d.machine.toLowerCase().includes(filters.machineNo.toLowerCase()));
-  }, [filters.machineNo]);
+  const totalBalance = React.useMemo(() => {
+    return Math.round(filteredData.reduce((acc, r) => acc + Number(r.balance || 0), 0) * 10) / 10;
+  }, [filteredData]);
 
-  const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.planned, 0), [filteredData]);
-  const totalBalance = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.balance, 0), [filteredData]);
-  const totalLoss = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.loss, 0), [filteredData]);
+  const totalLoss = React.useMemo(() => {
+    return Math.round(filteredData.reduce((acc, r) => acc + Number(r.loss || 0), 0));
+  }, [filteredData]);
+
   const avgRate = React.useMemo(() => {
     if (filteredData.length === 0) return 0;
-    const sum = filteredData.reduce((acc, r) => acc + r.rate, 0);
+    const sum = filteredData.reduce((acc, r) => acc + Number(r.rate || 0), 0);
     return (sum / filteredData.length).toFixed(1);
   }, [filteredData]);
 
   const chartLabels = React.useMemo(() => filteredData.map(r => r.machine), [filteredData]);
-  const plannedData = React.useMemo(() => filteredData.map(r => r.planned), [filteredData]);
-  const balanceData = React.useMemo(() => filteredData.map(r => r.balance), [filteredData]);
-  const lossData = React.useMemo(() => filteredData.map(r => r.loss), [filteredData]);
+  const plannedData = React.useMemo(() => filteredData.map(r => Number(r.planned || 0)), [filteredData]);
+  const balanceData = React.useMemo(() => filteredData.map(r => Number(r.balance || 0)), [filteredData]);
+  const lossData = React.useMemo(() => filteredData.map(r => Number(r.loss || 0)), [filteredData]);
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -14878,13 +15727,13 @@ function DailyProductionDashboardView({ filters, onFilterChange, onClose, target
   );
 
   const kpis = [
-    { label: "Planned Hours", value: `${totalPlanned} Hrs`, icon: ClipboardList, color: "#84cc16" },
-    { label: "Balance Hours", value: `${totalBalance} Hrs`, icon: Timer, color: "#f87171" },
-    { label: "Total Loss Value", value: `₹${totalLoss.toLocaleString()}`, icon: AlertTriangle, color: "#0ea5e9" },
-    { label: "Avg Rate/Hr", value: `₹${avgRate}`, icon: Activity, color: "#0f766e" }
+    { label: "Planned Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `${totalPlanned} Hrs`, icon: ClipboardList, color: "#84cc16" },
+    { label: "Balance Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `${totalBalance} Hrs`, icon: Timer, color: "#f87171" },
+    { label: "Total Loss Value", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `₹${totalLoss.toLocaleString()}`, icon: AlertTriangle, color: "#0ea5e9" },
+    { label: "Avg Rate/Hr", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `₹${avgRate}`, icon: Activity, color: "#0f766e" }
   ];
 
-  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(filteredData)}`;
+  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(filteredData)}|${filters.machineNo}|${filters.fromDate}|${filters.toDate}|${dailyProdLoading}`;
 
   return (
     <PremiumDashboardView
@@ -14965,42 +15814,36 @@ function DailyProductionDashboardView({ filters, onFilterChange, onClose, target
   );
 }
 
-function DailyProductionBottomTable({ filters, targetConfig }) {
+function DailyProductionBottomTable({ data, filters, targetConfig }) {
   const maxAllowedHrs = targetConfig?.daily_production?.maxBalanceHours ?? 4.0;
+  const dailyProdRows = Array.isArray(data?.dailyProductionCompare?.rows) ? data.dailyProductionCompare.rows : [];
 
-  const rawData = [
-    { sl: 1, date: "2026-06-25", machine: "CNC1", rate: 210, planned: 22, balance: 2, loss: 420 },
-    { sl: 2, date: "2026-06-25", machine: "CNC2", rate: 180, planned: 18, balance: 6, loss: 1080 },
-    { sl: 3, date: "2026-06-26", machine: "VMC1", rate: 150, planned: 20, balance: 4, loss: 600 },
-    { sl: 4, date: "2026-06-26", machine: "HMC1", rate: 190, planned: 21, balance: 3, loss: 570 }
-  ];
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
   const rows = React.useMemo(() => {
-    let list = rawData;
-    if (filters?.machineNo) {
-      list = list.filter(r => r.machine.toLowerCase().includes(filters.machineNo.toLowerCase()));
-    }
-    if (filters?.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
-
+    const list = filterDailyProdRows(dailyProdRows, filters, defaultRange.from, defaultRange.to);
     return list.map((row, idx) => {
-      const lossPct = ((row.balance / row.planned) * 100).toFixed(1);
+      const planned = Number(row.planned || 0);
+      const balance = Number(row.balance || 0);
+      const lossPct = planned > 0 ? ((balance / planned) * 100).toFixed(1) : "0.0";
       return [
         String(idx + 1),
-        row.date,
-        row.machine,
-        `₹${row.rate}`,
-        `${row.planned} Hrs`,
-        `${row.balance} Hrs`,
-        `₹${row.loss.toLocaleString()}`,
+        row.date || "—",
+        row.machine || "—",
+        `₹${Number(row.rate || 0).toLocaleString()}`,
+        `${planned} Hrs`,
+        `${balance} Hrs`,
+        `₹${Number(row.loss || 0).toLocaleString()}`,
         `${lossPct}%`
       ];
     });
-  }, [filters, maxAllowedHrs]);
+  }, [dailyProdRows, filters, defaultRange, maxAllowedHrs]);
 
   const columns = ["Sl. No", "Date", "Machine No", "Rate Per Hrs", "Production Planned Hrs", "Balance Hrs", "Production Loss", "Production Loss %"];
 
@@ -15281,8 +16124,106 @@ function TargetVsActualBottomTable({ filters, targetConfig }) {
   return <PremiumDashboardBottomTable title="Target Vs Actual Registry" columns={columns} rows={rows} />;
 }
 
-/* ── Operator Efficiency View (UI Alone) ────────────────────────────────── */
-function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+function matchesOpEffLimit(operatorPct, effLimit) {
+  const filterStr = String(effLimit || "").trim();
+  if (!filterStr) return true;
+  const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
+  const val = match ? parseFloat(match[2]) : parseFloat(filterStr);
+  const op = match ? (match[1] || "<") : "<";
+  const pct = Number(operatorPct || 0);
+  if (Number.isNaN(val)) return true;
+  switch (op) {
+    case ">": return pct > val;
+    case ">=": return pct >= val;
+    case "<": return pct < val;
+    case "<=": return pct <= val;
+    case "=": return pct === val;
+    default: return true;
+  }
+}
+
+function getOpEffActiveRange(filters, defaultFrom, defaultTo) {
+  return {
+    from: filters?.fromDate || defaultFrom,
+    to: filters?.toDate || defaultTo,
+  };
+}
+
+function filterOpEffRows(rows, filters, defaultFrom, defaultTo, { dateOnly = false } = {}) {
+  const { from: activeFrom, to: activeTo } = getOpEffActiveRange(filters, defaultFrom, defaultTo);
+  return (Array.isArray(rows) ? rows : []).filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    if (d < activeFrom || d > activeTo) return false;
+    if (!dateOnly && filters?.operator) {
+      const op = String(r.operator || "").toLowerCase();
+      if (!op.includes(String(filters.operator).toLowerCase())) return false;
+    }
+    if (!dateOnly && filters?.effLimit && !matchesOpEffLimit(r.operatorPct, filters.effLimit)) return false;
+    return true;
+  });
+}
+
+function buildOpEffFilterOptions(allRows, filters, defaultFrom, defaultTo) {
+  const dateScoped = filterOpEffRows(allRows, filters, defaultFrom, defaultTo, { dateOnly: true });
+  let scoped = dateScoped;
+  if (filters?.operator) {
+    scoped = scoped.filter((r) =>
+      String(r.operator || "").toLowerCase().includes(String(filters.operator).toLowerCase())
+    );
+  }
+  const operators = [...new Set(dateScoped.map((r) => r.operator).filter(Boolean))].sort();
+  return { operators, dateScoped, scoped };
+}
+
+function buildOpEffChartSeries(filteredRows, filters, defaultFrom, defaultTo) {
+  const { from: activeFrom, to: activeTo } = getOpEffActiveRange(filters, defaultFrom, defaultTo);
+  if (!filteredRows.length || !activeFrom || !activeTo) {
+    return { labels: [], data: [] };
+  }
+
+  const start = new Date(`${activeFrom}T00:00:00`);
+  const end = new Date(`${activeTo}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { labels: [], data: [] };
+  }
+
+  const daySpan = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+  const monthLabels = buildEffMonthLabels(activeFrom, activeTo, null);
+
+  if (daySpan <= 45 || monthLabels.length <= 1) {
+    const dayDates = [...new Set(filteredRows.map((r) => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
+    return {
+      labels: dayDates.map((d) => {
+        const parts = d.split("-");
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;
+      }),
+      data: dayDates.map((d) => {
+        const dayRows = filteredRows.filter((r) => (r.date || "").slice(0, 10) === d);
+        if (!dayRows.length) return 0;
+        const sum = dayRows.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
+        return Number((sum / dayRows.length).toFixed(1));
+      }),
+    };
+  }
+
+  return {
+    labels: monthLabels,
+    data: monthLabels.map((mo) => {
+      const moRows = filteredRows.filter((r) => r.month === mo);
+      if (!moRows.length) return 0;
+      const sum = moRows.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
+      return Number((sum / moRows.length).toFixed(1));
+    }),
+  };
+}
+
+/* ── Operator Efficiency View ───────────────────────────────────────────── */
+function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onOpEffData }) {
+  const [opEffLive, setOpEffLive] = React.useState(null);
+  const [opEffLoading, setOpEffLoading] = React.useState(false);
+  const opEffSource = opEffLive || data?.operatorEfficiencyCompare;
+
   const [operatorOpen, setOperatorOpen] = React.useState(false);
   const operatorRef = React.useRef(null);
   const [effLimitOpen, setEffLimitOpen] = React.useState(false);
@@ -15334,99 +16275,81 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
     });
   };
 
-  const rawData = [
-    { date: "22-06-2026", operator: "Jane Smith", macno: "CNC2", oaEff: 95.0, operatorPct: 96.0, qfEff: 97.0, idle: 3.0, rank: 1, plannedQty: 1200, producedQty: 1140, rejectionQty: 10 },
-    { date: "22-06-2026", operator: "John Doe", macno: "CNC1", oaEff: 90.0, operatorPct: 92.0, qfEff: 94.0, idle: 5.0, rank: 2, plannedQty: 1000, producedQty: 900, rejectionQty: 15 },
-    { date: "22-06-2026", operator: "Robert Chen", macno: "VMC1", oaEff: 88.0, operatorPct: 89.0, qfEff: 91.0, idle: 6.0, rank: 3, plannedQty: 1500, producedQty: 1320, rejectionQty: 25 },
-    { date: "22-06-2026", operator: "Michael Brown", macno: "CNC1", oaEff: 82.0, operatorPct: 83.0, qfEff: 85.0, idle: 10.0, rank: 4, plannedQty: 700, producedQty: 574, rejectionQty: 10 },
-    { date: "22-06-2026", operator: "Alice Johnson", macno: "HMC1", oaEff: 75.0, operatorPct: 76.0, qfEff: 78.0, idle: 15.0, rank: 5, plannedQty: 800, producedQty: 600, rejectionQty: 5 }
-  ];
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setOpEffLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildOpEffUrl(fy.from, fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Operator Efficiency load failed");
+        setOpEffLive(json);
+        onOpEffData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setOpEffLive(null);
+        onOpEffData?.(data?.operatorEfficiencyCompare || null);
+      })
+      .finally(() => setOpEffLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onOpEffData, data?.operatorEfficiencyCompare]);
 
-  const operatorsList = ["John Doe", "Jane Smith", "Robert Chen", "Alice Johnson", "Michael Brown"];
+  const opEffRows = React.useMemo(
+    () => (Array.isArray(opEffSource?.rows) ? opEffSource.rows : []),
+    [opEffSource?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const filteredData = React.useMemo(
+    () => filterOpEffRows(opEffRows, filters, defaultRange.from, defaultRange.to),
+    [opEffRows, filters, defaultRange]
+  );
+
+  const opEffFilterOptions = React.useMemo(
+    () => buildOpEffFilterOptions(opEffRows, filters, defaultRange.from, defaultRange.to),
+    [opEffRows, filters, defaultRange]
+  );
+
+  const operatorsList = React.useMemo(() => {
+    if (opEffFilterOptions.operators.length) return opEffFilterOptions.operators;
+    const api = opEffSource?.filterOptions?.operators;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(opEffRows.map((d) => d.operator).filter(Boolean)));
+  }, [opEffFilterOptions.operators, opEffSource?.filterOptions?.operators, opEffRows]);
 
   const opSuggestions = React.useMemo(() => {
     if (!filters.operator) return operatorsList;
     return operatorsList.filter(o => o.toLowerCase().includes(filters.operator.toLowerCase()));
-  }, [filters.operator]);
+  }, [filters.operator, operatorsList]);
 
-  const filteredData = React.useMemo(() => {
-    let list = rawData;
-    if (filters.operator) {
-      list = list.filter(d => d.operator.toLowerCase().includes(filters.operator.toLowerCase()));
-    }
-    if (filters.effLimit) {
-      const filterStr = filters.effLimit.trim();
-      if (filterStr) {
-        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
-        if (match) {
-          const op = match[1] || "<";
-          const val = parseFloat(match[2]);
-          if (!isNaN(val)) {
-            list = list.filter(d => {
-              switch (op) {
-                case ">": return d.operatorPct > val;
-                case ">=": return d.operatorPct >= val;
-                case "<": return d.operatorPct < val;
-                case "<=": return d.operatorPct <= val;
-                case "=": return d.operatorPct === val;
-                default: return true;
-              }
-            });
-          }
-        } else {
-          const num = parseFloat(filterStr);
-          if (!isNaN(num)) {
-            list = list.filter(d => d.operatorPct < num);
-          }
-        }
-      }
-    }
-    return list;
-  }, [filters.operator, filters.effLimit]);
-
-  const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.plannedQty, 0), [filteredData]);
-  const totalProduced = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.producedQty, 0), [filteredData]);
-  const totalRejections = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.rejectionQty, 0), [filteredData]);
+  const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.plannedQty || 0), 0), [filteredData]);
+  const totalProduced = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.producedQty || 0), 0), [filteredData]);
+  const totalRejections = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.rejectionQty || 0) + Number(r.reworkQty || 0), 0), [filteredData]);
 
   const avgEfficiency = React.useMemo(() => {
     if (filteredData.length === 0) return 0;
-    const sum = filteredData.reduce((acc, r) => acc + r.operatorPct, 0);
+    const sum = filteredData.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
     return (sum / filteredData.length).toFixed(1);
   }, [filteredData]);
 
-  const months = ["Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"];
+  const chartSeries = React.useMemo(
+    () => buildOpEffChartSeries(filteredData, filters, defaultRange.from, defaultRange.to),
+    [filteredData, filters, defaultRange]
+  );
 
-  const monthwiseData = React.useMemo(() => {
-    const activeOps = filteredData.map(r => r.operator.toLowerCase());
-
-    const JohnDoe = [90, 92, 89, 91, 88, 90, 89, 91, 90, 92, 88, 90];
-    const JaneSmith = [94, 96, 95, 97, 93, 95, 94, 96, 95, 97, 94, 95];
-    const RobertChen = [87, 89, 88, 90, 86, 88, 87, 89, 88, 90, 86, 88];
-    const AliceJohnson = [74, 76, 75, 77, 73, 75, 74, 76, 75, 77, 73, 75];
-    const MichaelBrown = [81, 83, 82, 84, 80, 82, 81, 83, 82, 84, 80, 82];
-
-    const opDataMap = {
-      "john doe": JohnDoe,
-      "jane smith": JaneSmith,
-      "robert chen": RobertChen,
-      "alice johnson": AliceJohnson,
-      "michael brown": MichaelBrown
-    };
-
-    if (activeOps.length === 0) {
-      return Array(12).fill(0);
-    }
-
-    const sumArray = Array(12).fill(0);
-    activeOps.forEach(op => {
-      const data = opDataMap[op] || JohnDoe;
-      for (let i = 0; i < 12; i++) {
-        sumArray[i] += data[i];
-      }
-    });
-
-    return sumArray.map(val => Number((val / activeOps.length).toFixed(1)));
-  }, [filteredData]);
+  const monthLabels = chartSeries.labels;
+  const monthwiseData = chartSeries.data;
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -15434,7 +16357,7 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
       return new Chart(canvas, {
         type: "line",
         data: {
-          labels: months,
+          labels: monthLabels,
           datasets: [
             {
               label: filters.operator ? `${filters.operator} Efficiency %` : "Avg Operator Efficiency %",
@@ -15451,7 +16374,7 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
             {
               type: "line",
               label: `Target Limit ${targetVal}%`,
-              data: Array(months.length).fill(targetVal),
+              data: Array(monthLabels.length).fill(targetVal),
               borderColor: "#ef4444",
               borderDash: [5, 5],
               pointRadius: 0,
@@ -15476,17 +16399,17 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
         }
       });
     },
-    [monthwiseData, filters.operator, targetConfig?.operator_efficiency?.minEfficiencyPct]
+    [monthwiseData, monthLabels, filters.operator, targetConfig?.operator_efficiency?.minEfficiencyPct]
   );
 
   const kpis = [
-    { label: "Total Planned Qty", value: totalPlanned.toLocaleString(), icon: ClipboardList, color: "#4f46e5" },
-    { label: "Total Produced Qty", value: totalProduced.toLocaleString(), icon: CheckCircle2, color: "#10b981" },
-    { label: "Total Rejections", value: totalRejections.toLocaleString(), icon: AlertTriangle, color: "#ef4444" },
-    { label: "Avg Efficiency", value: `${avgEfficiency}%`, icon: Users, color: "#8b5cf6" }
+    { label: "Total Planned Qty", value: (loading || opEffLoading) && !filteredData.length ? "…" : totalPlanned.toLocaleString(), icon: ClipboardList, color: "#4f46e5" },
+    { label: "Total Produced Qty", value: (loading || opEffLoading) && !filteredData.length ? "…" : totalProduced.toLocaleString(), icon: CheckCircle2, color: "#10b981" },
+    { label: "Total Rejections", value: (loading || opEffLoading) && !filteredData.length ? "…" : totalRejections.toLocaleString(), icon: AlertTriangle, color: "#ef4444" },
+    { label: "Avg Efficiency", value: (loading || opEffLoading) && !filteredData.length ? "…" : `${avgEfficiency}%`, icon: Users, color: "#8b5cf6" }
   ];
 
-  const rebuildToken = `operator-efficiency-chart|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${filters.operator}`;
+  const rebuildToken = `operator-efficiency-chart|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(monthLabels)}|${filters.operator}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${opEffLoading}`;
 
   return (
     <PremiumDashboardView
@@ -15633,65 +16556,40 @@ function OperatorEfficiencyDashboardView({ filters, onFilterChange, onClose, tar
   );
 }
 
-function OperatorEfficiencyBottomTable({ filters, targetConfig }) {
-  const minEfficiency = targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0;
+function OperatorEfficiencyBottomTable({ data, filters, targetConfig }) {
+  const opEffRows = Array.isArray(data?.operatorEfficiencyCompare?.rows) ? data.operatorEfficiencyCompare.rows : [];
 
-  const rawData = [
-    { date: "22-06-2026", operator: "Jane Smith", macno: "CNC2", oaEff: 95.0, operatorPct: 96.0, qfEff: 97.0, idle: 3.0, rank: 1 },
-    { date: "22-06-2026", operator: "John Doe", macno: "CNC1", oaEff: 90.0, operatorPct: 92.0, qfEff: 94.0, idle: 5.0, rank: 2 },
-    { date: "22-06-2026", operator: "Robert Chen", macno: "VMC1", oaEff: 88.0, operatorPct: 89.0, qfEff: 91.0, idle: 6.0, rank: 3 },
-    { date: "22-06-2026", operator: "Michael Brown", macno: "CNC1", oaEff: 82.0, operatorPct: 83.0, qfEff: 85.0, idle: 10.0, rank: 4 },
-    { date: "22-06-2026", operator: "Alice Johnson", macno: "HMC1", oaEff: 75.0, operatorPct: 76.0, qfEff: 78.0, idle: 15.0, rank: 5 }
-  ];
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const formatOpEffDisplayDate = (iso) => {
+    if (!iso || iso.length < 10) return iso || "—";
+    const [y, m, d] = iso.slice(0, 10).split("-");
+    return `${d}-${m}-${y}`;
+  };
 
   const rows = React.useMemo(() => {
-    let list = rawData;
-    if (filters?.operator) {
-      list = list.filter(r => r.operator.toLowerCase().includes(filters.operator.toLowerCase()));
-    }
-    if (filters?.effLimit) {
-      const filterStr = filters.effLimit.trim();
-      if (filterStr) {
-        const match = filterStr.replace(/\s+/g, "").match(/^([><]=?|=)?([0-9.]+)(%?)$/);
-        if (match) {
-          const op = match[1] || "<";
-          const val = parseFloat(match[2]);
-          if (!isNaN(val)) {
-            list = list.filter(r => {
-              switch (op) {
-                case ">": return r.operatorPct > val;
-                case ">=": return r.operatorPct >= val;
-                case "<": return r.operatorPct < val;
-                case "<=": return r.operatorPct <= val;
-                case "=": return r.operatorPct === val;
-                default: return true;
-              }
-            });
-          }
-        } else {
-          const num = parseFloat(filterStr);
-          if (!isNaN(num)) {
-            list = list.filter(r => r.operatorPct < num);
-          }
-        }
-      }
-    }
+    const list = filterOpEffRows(opEffRows, filters, defaultRange.from, defaultRange.to);
+    const ranked = [...list].sort((a, b) => Number(b.operatorPct || 0) - Number(a.operatorPct || 0));
 
-    return list.map((row, idx) => {
-      const isBelowTarget = row.operatorPct < minEfficiency;
-
+    return ranked.map((row, idx) => {
       return [
         String(idx + 1),
-        row.date,
-        row.operator,
-        `${row.oaEff}%`,
-        `${row.operatorPct}%`,
-        `${row.qfEff}%`,
-        `${row.idle}%`,
-        `# ${row.rank}`
+        formatOpEffDisplayDate(row.date),
+        row.operator || "—",
+        `${Number(row.oaEff || 0).toFixed(1)}%`,
+        `${Number(row.operatorPct || 0).toFixed(1)}%`,
+        `${Number(row.qfEff || 0).toFixed(1)}%`,
+        `${Number(row.idle || 0).toFixed(1)}%`,
+        `# ${idx + 1}`
       ];
     });
-  }, [filters, minEfficiency]);
+  }, [opEffRows, filters, defaultRange]);
 
   const columns = ["Sl.No", "Date", "Operator", "OA EFF%", "Operator %", "QF Eff%", "Idle %", "Rank"];
 
@@ -15699,7 +16597,11 @@ function OperatorEfficiencyBottomTable({ filters, targetConfig }) {
 }
 
 /* ── Machine Efficiency Dashboard View ───────────────────────────────────── */
-function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onMachEffData }) {
+  const [machEffLive, setMachEffLive] = React.useState(null);
+  const [machEffLoading, setMachEffLoading] = React.useState(false);
+  const machEffSource = machEffLive || data?.machineEfficiencyCompare;
+
   const [machineOpen, setMachineOpen] = React.useState(false);
   const machineRef = React.useRef(null);
   const [effLimitOpen, setEffLimitOpen] = React.useState(false);
@@ -15751,26 +16653,64 @@ function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targ
     });
   };
 
-  const rawData = [
-    { date: "22-06-2026", machine: "CNC2", type: "CNC", oaEff: 96.0, machinePct: 97.0, qfEff: 98.0, idle: 2.0, rank: 1, plannedQty: 1200, producedQty: 1164, rejectionQty: 8 },
-    { date: "22-06-2026", machine: "CNC1", type: "CNC", oaEff: 92.0, machinePct: 94.0, qfEff: 95.0, idle: 4.0, rank: 2, plannedQty: 1000, producedQty: 940, rejectionQty: 12 },
-    { date: "22-06-2026", machine: "VMC1", type: "VMC", oaEff: 89.0, machinePct: 90.0, qfEff: 92.0, idle: 5.0, rank: 3, plannedQty: 1500, producedQty: 1350, rejectionQty: 20 },
-    { date: "22-06-2026", machine: "DRL1", type: "Conventional", oaEff: 81.0, machinePct: 83.0, qfEff: 84.0, idle: 9.0, rank: 4, plannedQty: 700, producedQty: 581, rejectionQty: 11 },
-    { date: "22-06-2026", machine: "LATHE1", type: "Conventional", oaEff: 74.0, machinePct: 75.0, qfEff: 77.0, idle: 16.0, rank: 5, plannedQty: 800, producedQty: 592, rejectionQty: 6 }
-  ];
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setMachEffLoading(true);
+    fetch(buildMachEffUrl(filters.fromDate || null, filters.toDate || null, filters.machine || null, null, 0), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Machine Efficiency load failed");
+        setMachEffLive(json);
+        onMachEffData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setMachEffLive(null);
+        onMachEffData?.(data?.machineEfficiencyCompare || null);
+      })
+      .finally(() => setMachEffLoading(false));
+    return () => ctrl.abort();
+  }, [uid, filters.fromDate, filters.toDate, filters.machine, onMachEffData, data?.machineEfficiencyCompare]);
 
-  const machinesList = ["CNC1", "CNC2", "VMC1", "DRL1", "LATHE1"];
+  const machEffRows = React.useMemo(
+    () => (Array.isArray(machEffSource?.machineRows) ? machEffSource.machineRows : Array.isArray(machEffSource?.rows) ? machEffSource.rows : []),
+    [machEffSource]
+  );
+
+  // Separate one-time fetch for full machine list so the dropdown always shows ALL machines
+  const [allMachineNames, setAllMachineNames] = React.useState([]);
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    const fy = currentFinancialYearRange();
+    fetch(buildMachEffUrl(fy.from, fy.to, null, null, 1), { credentials: "include", signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json) return;
+        const macs = json?.filterOptions?.machines;
+        if (Array.isArray(macs) && macs.length) setAllMachineNames(macs);
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [uid]);
+
+  const machinesList = React.useMemo(() => {
+    if (allMachineNames.length) return allMachineNames;
+    const fromApi = machEffSource?.filterOptions?.machines;
+    if (Array.isArray(fromApi) && fromApi.length) return fromApi;
+    return Array.from(new Set(machEffRows.map(d => d.machine).filter(Boolean)));
+  }, [allMachineNames, machEffSource, machEffRows]);
 
   const macSuggestions = React.useMemo(() => {
     if (!filters.machine) return machinesList;
     return machinesList.filter(o => o.toLowerCase().includes(filters.machine.toLowerCase()));
-  }, [filters.machine]);
+  }, [filters.machine, machinesList]);
 
+  // date + machine already filtered server-side; only apply effLimit client-side
   const filteredData = React.useMemo(() => {
-    let list = rawData;
-    if (filters.machine) {
-      list = list.filter(d => d.machine.toLowerCase().includes(filters.machine.toLowerCase()));
-    }
+    let list = machEffRows;
     if (filters.effLimit) {
       const filterStr = filters.effLimit.trim();
       if (filterStr) {
@@ -15780,12 +16720,13 @@ function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targ
           const val = parseFloat(match[2]);
           if (!isNaN(val)) {
             list = list.filter(d => {
+              const pct = Number(d.machinePct || d.availabilityPercent || 0);
               switch (op) {
-                case ">": return d.machinePct > val;
-                case ">=": return d.machinePct >= val;
-                case "<": return d.machinePct < val;
-                case "<=": return d.machinePct <= val;
-                case "=": return d.machinePct === val;
+                case ">": return pct > val;
+                case ">=": return pct >= val;
+                case "<": return pct < val;
+                case "<=": return pct <= val;
+                case "=": return pct === val;
                 default: return true;
               }
             });
@@ -15793,57 +16734,27 @@ function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targ
         } else {
           const num = parseFloat(filterStr);
           if (!isNaN(num)) {
-            list = list.filter(d => d.machinePct < num);
+            list = list.filter(d => Number(d.machinePct || d.availabilityPercent || 0) < num);
           }
         }
       }
     }
     return list;
-  }, [filters.machine, filters.effLimit]);
+  }, [machEffRows, filters.effLimit]);
 
-  const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.plannedQty, 0), [filteredData]);
-  const totalProduced = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.producedQty, 0), [filteredData]);
-  const totalRejections = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.rejectionQty, 0), [filteredData]);
+  const totalRunningHours = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.runningHours || 0), 0), [filteredData]);
+  const totalIdleHours = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.idleHours || 0), 0), [filteredData]);
+  const machineCount = filteredData.length;
 
   const avgEfficiency = React.useMemo(() => {
     if (filteredData.length === 0) return 0;
-    const sum = filteredData.reduce((acc, r) => acc + r.machinePct, 0);
+    const sum = filteredData.reduce((acc, r) => acc + Number(r.machinePct || r.availabilityPercent || 0), 0);
     return (sum / filteredData.length).toFixed(1);
   }, [filteredData]);
 
-  const months = ["Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"];
-
-  const monthwiseData = React.useMemo(() => {
-    const activeMacs = filteredData.map(r => r.machine.toLowerCase());
-
-    const CNC2 = [95, 96, 94, 97, 95, 96, 95, 97, 96, 98, 95, 97];
-    const CNC1 = [91, 93, 92, 94, 91, 93, 92, 94, 93, 95, 91, 94];
-    const VMC1 = [88, 90, 89, 91, 87, 89, 88, 90, 89, 91, 87, 90];
-    const DRL1 = [80, 82, 81, 83, 79, 81, 80, 82, 81, 84, 80, 83];
-    const LATHE1 = [73, 75, 74, 76, 72, 74, 73, 75, 74, 77, 72, 75];
-
-    const macDataMap = {
-      "cnc2": CNC2,
-      "cnc1": CNC1,
-      "vmc1": VMC1,
-      "drl1": DRL1,
-      "lathe1": LATHE1
-    };
-
-    if (activeMacs.length === 0) {
-      return Array(12).fill(0);
-    }
-
-    const sumArray = Array(12).fill(0);
-    activeMacs.forEach(m => {
-      const data = macDataMap[m] || CNC1;
-      for (let i = 0; i < 12; i++) {
-        sumArray[i] += data[i];
-      }
-    });
-
-    return sumArray.map(val => Number((val / activeMacs.length).toFixed(1)));
-  }, [filteredData]);
+  const reportData = machEffSource?.report;
+  const months = Array.isArray(reportData?.labels) && reportData.labels.length ? reportData.labels : ["No Data"];
+  const monthwiseData = Array.isArray(reportData?.data) && reportData.data.length ? reportData.data : [0];
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -15893,17 +16804,17 @@ function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targ
         }
       });
     },
-    [monthwiseData, filters.machine, targetConfig?.machine_efficiency?.minEfficiencyPct]
+    [monthwiseData, months, filters.machine, targetConfig?.machine_efficiency?.minEfficiencyPct]
   );
 
   const kpis = [
-    { label: "Total Planned Qty", value: totalPlanned.toLocaleString(), icon: ClipboardList, color: "#4f46e5" },
-    { label: "Total Produced Qty", value: totalProduced.toLocaleString(), icon: CheckCircle2, color: "#10b981" },
-    { label: "Total Rejections", value: totalRejections.toLocaleString(), icon: AlertTriangle, color: "#ef4444" },
-    { label: "Avg Efficiency", value: `${avgEfficiency}%`, icon: Cpu, color: "#0ea5e9" }
+    { label: "Total Running Hrs", value: (loading || machEffLoading) && !filteredData.length ? "…" : totalRunningHours.toFixed(1), icon: ClipboardList, color: "#4f46e5" },
+    { label: "Total Idle Hrs", value: (loading || machEffLoading) && !filteredData.length ? "…" : totalIdleHours.toFixed(1), icon: CheckCircle2, color: "#10b981" },
+    { label: "Machine Count", value: (loading || machEffLoading) && !filteredData.length ? "…" : machineCount, icon: AlertTriangle, color: "#ef4444" },
+    { label: "Avg Efficiency", value: (loading || machEffLoading) && !filteredData.length ? "…" : `${avgEfficiency}%`, icon: Cpu, color: "#0ea5e9" }
   ];
 
-  const rebuildToken = `machine-efficiency-chart|${targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${filters.machine}`;
+  const rebuildToken = `machine-efficiency-chart|${targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(months)}|${filters.machine}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${machEffLoading}`;
 
   return (
     <PremiumDashboardView
@@ -16051,21 +16962,29 @@ function MachineEfficiencyDashboardView({ filters, onFilterChange, onClose, targ
 }
 
 /* ── Machine Efficiency Bottom Table ─────────────────────────────────────── */
-function MachineEfficiencyBottomTable({ filters, targetConfig }) {
+function MachineEfficiencyBottomTable({ data, filters, targetConfig }) {
   const minEfficiency = targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0;
+  const machEffSource = data?.machineEfficiencyCompare;
 
-  const rawData = [
-    { date: "22-06-2026", machine: "CNC2", type: "CNC", oaEff: 96.0, machinePct: 97.0, qfEff: 98.0, idle: 2.0, rank: 1 },
-    { date: "22-06-2026", machine: "CNC1", type: "CNC", oaEff: 92.0, machinePct: 94.0, qfEff: 95.0, idle: 4.0, rank: 2 },
-    { date: "22-06-2026", machine: "VMC1", type: "VMC", oaEff: 89.0, machinePct: 90.0, qfEff: 92.0, idle: 5.0, rank: 3 },
-    { date: "22-06-2026", machine: "DRL1", type: "Conventional", oaEff: 81.0, machinePct: 83.0, qfEff: 84.0, idle: 9.0, rank: 4 },
-    { date: "22-06-2026", machine: "LATHE1", type: "Conventional", oaEff: 74.0, machinePct: 75.0, qfEff: 77.0, idle: 16.0, rank: 5 }
-  ];
+  const allRows = React.useMemo(() => {
+    if (Array.isArray(machEffSource?.detailRows) && machEffSource.detailRows.length) return machEffSource.detailRows;
+    if (Array.isArray(machEffSource?.machineRows) && machEffSource.machineRows.length) return machEffSource.machineRows;
+    if (Array.isArray(machEffSource?.rows) && machEffSource.rows.length) return machEffSource.rows;
+    return [];
+  }, [machEffSource]);
+
+  const formatMachDate = (val) => {
+    if (!val || val === "—") return "—";
+    const s = String(val).slice(0, 10);
+    if (s.length < 10) return s;
+    const [y, m, d] = s.split("-");
+    return (d && m && y) ? `${d}-${m}-${y}` : s;
+  };
 
   const rows = React.useMemo(() => {
-    let list = rawData;
+    let list = allRows;
     if (filters?.machine) {
-      list = list.filter(r => r.machine.toLowerCase().includes(filters.machine.toLowerCase()));
+      list = list.filter(r => String(r.machine || "").toLowerCase().includes(filters.machine.toLowerCase()));
     }
     if (filters?.effLimit) {
       const filterStr = filters.effLimit.trim();
@@ -16076,12 +16995,13 @@ function MachineEfficiencyBottomTable({ filters, targetConfig }) {
           const val = parseFloat(match[2]);
           if (!isNaN(val)) {
             list = list.filter(r => {
+              const pct = Number(r.machinePct || r.availabilityPercent || 0);
               switch (op) {
-                case ">": return r.machinePct > val;
-                case ">=": return r.machinePct >= val;
-                case "<": return r.machinePct < val;
-                case "<=": return r.machinePct <= val;
-                case "=": return r.machinePct === val;
+                case ">": return pct > val;
+                case ">=": return pct >= val;
+                case "<": return pct < val;
+                case "<=": return pct <= val;
+                case "=": return pct === val;
                 default: return true;
               }
             });
@@ -16089,26 +17009,28 @@ function MachineEfficiencyBottomTable({ filters, targetConfig }) {
         } else {
           const num = parseFloat(filterStr);
           if (!isNaN(num)) {
-            list = list.filter(r => r.machinePct < num);
+            list = list.filter(r => Number(r.machinePct || r.availabilityPercent || 0) < num);
           }
         }
       }
     }
 
     return list.map((row, idx) => {
+      const pct = Number(row.machinePct || row.availabilityPercent || 0);
+      const idlePct = Number(row.idlePct || row.idle || 0);
       return [
         String(idx + 1),
-        row.date,
-        row.machine,
-        row.type,
-        `${row.oaEff}%`,
-        `${row.machinePct}%`,
-        `${row.qfEff}%`,
-        `${row.idle}%`,
-        `# ${row.rank}`
+        formatMachDate(row.date || row.dateIso) || "—",
+        row.machine || "—",
+        row.machineType || row.type || "—",
+        `${Number(row.oaEff || pct).toFixed(1)}%`,
+        `${pct.toFixed(1)}%`,
+        `${Number(row.qfEff || pct).toFixed(1)}%`,
+        `${idlePct.toFixed(1)}%`,
+        `# ${row.rank || idx + 1}`
       ];
     });
-  }, [filters, minEfficiency]);
+  }, [allRows, filters, minEfficiency]);
 
   const columns = ["Sl.No", "Date", "Machine No", "Machine Type", "OA EFF%", "Machine %", "QF Eff%", "Idle %", "Rank"];
 
@@ -16211,8 +17133,41 @@ const MOCK_CAPA_DATA = [
   }
 ];
 
-/* ── Quality Action Plan (CAPA) View (UI Alone) ─────────────────────────── */
-function CapaDashboardView({ filters, onFilterChange, onClose, selectedCapaId, onSelectCapaId }) {
+/* ── Quality Action Plan (CAPA) View ─────────────────────────── */
+function filterCapaRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters?.fromDate || defaultFrom;
+  const activeTo = filters?.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.complDate || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (filters?.customer) {
+      const cust = String(r.customer || "").toLowerCase();
+      if (!cust.includes(String(filters.customer).toLowerCase())) return false;
+    }
+    if (filters?.status && String(r.status || "") !== String(filters.status)) return false;
+    return true;
+  });
+}
+
+function calcCapaAgeDays(row) {
+  const iso = (row?.complDate || "").slice(0, 10);
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return row?.ageDays != null ? Number(row.ageDays) : null;
+  }
+  const start = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return row?.ageDays != null ? Number(row.ageDays) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((today - start) / (1000 * 60 * 60 * 24)));
+}
+
+function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, selectedCapaId, onSelectCapaId, uid, onCapaData }) {
+  const [capaLive, setCapaLive] = React.useState(null);
+  const [capaLoading, setCapaLoading] = React.useState(false);
+  const capaSource = capaLive || data?.capaCompare;
+
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const [statusOpen, setStatusOpen] = React.useState(false);
   const customerRef = React.useRef(null);
@@ -16232,6 +17187,47 @@ function CapaDashboardView({ filters, onFilterChange, onClose, selectedCapaId, o
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setCapaLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildCapaUrl(fy.from, fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "CAPA load failed");
+        setCapaLive(json);
+        onCapaData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setCapaLive(null);
+        onCapaData?.(data?.capaCompare || null);
+      })
+      .finally(() => setCapaLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onCapaData, data?.capaCompare]);
+
+  const capaRows = React.useMemo(
+    () => (Array.isArray(capaSource?.rows) ? capaSource.rows : []),
+    [capaSource?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const filteredCapa = React.useMemo(
+    () => filterCapaRows(capaRows, filters, defaultRange.from, defaultRange.to),
+    [capaRows, filters, defaultRange]
+  );
 
   const pickerFrom = React.useMemo(() => filters?.fromDate ? new Date(filters.fromDate) : null, [filters?.fromDate]);
   const pickerTo = React.useMemo(() => filters?.toDate ? new Date(filters.toDate) : null, [filters?.toDate]);
@@ -16264,29 +17260,26 @@ function CapaDashboardView({ filters, onFilterChange, onClose, selectedCapaId, o
     });
   };
 
-  const filteredCapa = React.useMemo(() => {
-    let list = MOCK_CAPA_DATA;
-    if (filters.customer) {
-      list = list.filter(d => d.customer.toLowerCase().includes(filters.customer.toLowerCase()));
-    }
-    if (filters.status) {
-      list = list.filter(d => d.status.toLowerCase() === filters.status.toLowerCase());
-    }
-    return list;
-  }, [filters.customer, filters.status]);
-
   const totalComplaints = filteredCapa.length;
-  const openCount = filteredCapa.filter(d => d.status === "Open").length;
-  const closedCount = filteredCapa.filter(d => d.status === "Closed").length;
+  const openCount = filteredCapa.filter((d) => String(d.status || "").toLowerCase() === "open").length;
+  const closedCount = filteredCapa.filter((d) => String(d.status || "").toLowerCase() === "closed").length;
   const avgAge = React.useMemo(() => {
     if (filteredCapa.length === 0) return 0;
-    const sum = filteredCapa.reduce((acc, r) => acc + r.ageDays, 0);
-    return Math.round(sum / filteredCapa.length);
+    const ages = filteredCapa.map((r) => calcCapaAgeDays(r)).filter((v) => v != null);
+    if (!ages.length) return 0;
+    return Math.round(ages.reduce((acc, v) => acc + v, 0) / ages.length);
   }, [filteredCapa]);
 
   const selectedRecord = React.useMemo(() => {
-    return MOCK_CAPA_DATA.find(d => d.complNo === selectedCapaId) || MOCK_CAPA_DATA[0];
-  }, [selectedCapaId]);
+    if (!filteredCapa.length) return null;
+    return filteredCapa.find((d) => d.complNo === selectedCapaId) || filteredCapa[0];
+  }, [filteredCapa, selectedCapaId]);
+
+  React.useEffect(() => {
+    if (!filteredCapa.length) return;
+    const exists = filteredCapa.some((d) => d.complNo === selectedCapaId);
+    if (!exists) onSelectCapaId?.(filteredCapa[0].complNo);
+  }, [filteredCapa, selectedCapaId, onSelectCapaId]);
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -16323,8 +17316,12 @@ function CapaDashboardView({ filters, onFilterChange, onClose, selectedCapaId, o
     { label: "Avg Resolution Age", value: `${avgAge}d`, icon: Timer, color: "#3b82f6" }
   ];
 
-  const rebuildToken = `capa-chart|${closedCount}|${openCount}`;
-  const customersList = Array.from(new Set(MOCK_CAPA_DATA.map(d => d.customer)));
+  const rebuildToken = `capa-chart|${closedCount}|${openCount}|${filteredCapa.length}|${capaLoading}`;
+  const customersList = React.useMemo(() => {
+    const api = capaSource?.filterOptions?.customers;
+    if (Array.isArray(api) && api.length) return api;
+    return Array.from(new Set(capaRows.map((d) => d.customer).filter(Boolean)));
+  }, [capaSource?.filterOptions?.customers, capaRows]);
   const custSuggestions = React.useMemo(() => {
     if (!filters.customer) return customersList;
     return customersList.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
@@ -16538,22 +17535,24 @@ function CapaDashboardView({ filters, onFilterChange, onClose, selectedCapaId, o
   );
 }
 
-function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
-  const filteredCapa = React.useMemo(() => {
-    let list = MOCK_CAPA_DATA;
-    if (filters?.customer) {
-      list = list.filter(d => d.customer.toLowerCase().includes(filters.customer.toLowerCase()));
-    }
-    if (filters?.status) {
-      list = list.filter(d => d.status.toLowerCase() === filters.status.toLowerCase());
-    }
-    return list;
-  }, [filters]);
+function CapaBottomTable({ data, filters, selectedCapaId, onSelectCapaId }) {
+  const capaRows = Array.isArray(data?.capaCompare?.rows) ? data.capaCompare.rows : [];
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const filteredCapa = React.useMemo(
+    () => filterCapaRows(capaRows, filters, defaultRange.from, defaultRange.to),
+    [capaRows, filters, defaultRange]
+  );
 
   const rows = React.useMemo(() => {
     return filteredCapa.map((row, idx) => {
-      const isSelected = row.complNo === selectedCapaId;
-
       const complNoElement = (
         <span
           onClick={() => onSelectCapaId(row.complNo)}
@@ -16575,21 +17574,23 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
         </span>
       );
 
+      const age = calcCapaAgeDays(row);
+
       return [
         String(idx + 1),
         complNoElement,
-        row.complDate,
-        row.customer,
-        row.partNo,
-        row.description,
-        row.complDescription,
-        row.qcIncharge,
+        row.complDate || "—",
+        row.customer || "—",
+        row.partNo || "—",
+        row.description || "—",
+        row.complDescription || "—",
+        row.qcIncharge || "—",
         statusElement,
-        `${row.ageDays}d`,
-        row.actionTaken || "Pending"
+        age != null ? `${age}d` : "—",
+        row.repeatedComplaint || row.actionTaken || "Pending"
       ];
     });
-  }, [filteredCapa, selectedCapaId, onSelectCapaId]);
+  }, [filteredCapa, onSelectCapaId]);
 
   const columns = [
     "Sl.No",
@@ -16608,13 +17609,52 @@ function CapaBottomTable({ filters, selectedCapaId, onSelectCapaId }) {
   return <PremiumDashboardBottomTable title="Quality Action Plan (CAPA) Registry" columns={columns} rows={rows} />;
 }
 
-function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose }) {
-  const kpis = [
-    { label: "Active Complaints", value: "2", icon: AlertTriangle, color: "#ef4444" },
-    { label: "Resolved", value: "12", icon: CheckCircle2, color: "#10b981" },
-    { label: "Avg Resolution", value: "4.5d", icon: Timer, color: "#3b82f6" },
-    { label: "Satisfaction", value: "96%", icon: Smile, color: "#8b5cf6" }
-  ];
+function filterCompRows(rows, filters, defaultFrom, defaultTo) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeFrom = filters?.fromDate || defaultFrom;
+  const activeTo = filters?.toDate || defaultTo;
+
+  return source.filter((r) => {
+    const d = (r.date || "").slice(0, 10);
+    if (!d || d < activeFrom || d > activeTo) return false;
+    if (filters?.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters?.status && String(r.status || "") !== String(filters.status)) return false;
+    return true;
+  });
+}
+
+function computeCompKpis(filteredRows) {
+  const rows = Array.isArray(filteredRows) ? filteredRows : [];
+  if (!rows.length) {
+    return { activeComplaints: 0, resolvedComplaints: 0, avgResolutionDays: 0, satisfactionPct: 0 };
+  }
+  const active = rows.filter((r) => String(r.status || "").toLowerCase() === "open").length;
+  const resolved = rows.filter((r) => String(r.status || "").toLowerCase() === "closed").length;
+  const resDays = rows
+    .filter((r) => String(r.status || "").toLowerCase() === "closed" && r.resolutionDays != null)
+    .map((r) => Number(r.resolutionDays));
+  const avgResolutionDays = resDays.length
+    ? Number((resDays.reduce((a, b) => a + b, 0) / resDays.length).toFixed(1))
+    : 0;
+  const withStatus = rows.filter((r) => String(r.status || "").trim());
+  const satisfactionPct = withStatus.length
+    ? Number(((resolved / withStatus.length) * 100).toFixed(1))
+    : 0;
+  return { activeComplaints: active, resolvedComplaints: resolved, avgResolutionDays, satisfactionPct };
+}
+
+function buildCompChartData(filteredRows, monthLabels) {
+  const labels = monthLabels.length ? monthLabels : [];
+  const received = labels.map((mo) => filteredRows.filter((r) => r.month === mo).length);
+  const open = labels.map((mo) => filteredRows.filter((r) => r.month === mo && String(r.status || "").toLowerCase() === "open").length);
+  const closed = labels.map((mo) => filteredRows.filter((r) => r.month === mo && String(r.status || "").toLowerCase() === "closed").length);
+  return { labels, received, open, closed };
+}
+
+function CustomerComplaintReportDashboardView({ data, loading, filters, onFilterChange, onClose, uid, onCompData }) {
+  const [compLive, setCompLive] = React.useState(null);
+  const [compLoading, setCompLoading] = React.useState(false);
+  const compSource = compLive || data?.complaintCompare;
 
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const [statusOpen, setStatusOpen] = React.useState(false);
@@ -16624,6 +17664,93 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
   const customerRef = React.useRef(null);
   const statusRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setCompLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildCompUrl(fy.from, fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Customer Complaint load failed");
+        setCompLive(json);
+        onCompData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setCompLive(null);
+        onCompData?.(data?.complaintCompare || null);
+      })
+      .finally(() => setCompLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onCompData, data?.complaintCompare]);
+
+  const compRows = React.useMemo(
+    () => (Array.isArray(compSource?.rows) ? compSource.rows : []),
+    [compSource?.rows]
+  );
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
+
+  const filteredRows = React.useMemo(
+    () => filterCompRows(compRows, filters, defaultRange.from, defaultRange.to),
+    [compRows, filters, defaultRange]
+  );
+
+  const monthLabels = React.useMemo(() => {
+    const from = filters?.fromDate || defaultRange.from;
+    const to = filters?.toDate || defaultRange.to;
+    const fromDt = new Date(from);
+    const toDt = new Date(to);
+    const labels = [];
+    if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
+      return compSource?.monthLabels || [];
+    }
+    let y = fromDt.getFullYear();
+    let m = fromDt.getMonth();
+    const endY = toDt.getFullYear();
+    const endM = toDt.getMonth();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    while (y < endY || (y === endY && m <= endM)) {
+      labels.push(`${monthNames[m]} ${y}`);
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+    return labels.length ? labels : (compSource?.monthLabels || []);
+  }, [filters?.fromDate, filters?.toDate, defaultRange, compSource?.monthLabels]);
+
+  const chart1Data = React.useMemo(
+    () => buildCompChartData(filteredRows, monthLabels),
+    [filteredRows, monthLabels]
+  );
+
+  const compKpis = React.useMemo(() => computeCompKpis(filteredRows), [filteredRows]);
+
+  const kpis = [
+    { label: "Active Complaints", value: String(compKpis.activeComplaints), icon: AlertTriangle, color: "#ef4444" },
+    { label: "Resolved", value: String(compKpis.resolvedComplaints), icon: CheckCircle2, color: "#10b981" },
+    { label: "Avg Resolution", value: `${compKpis.avgResolutionDays}d`, icon: Timer, color: "#3b82f6" },
+    { label: "Satisfaction", value: `${compKpis.satisfactionPct}%`, icon: Smile, color: "#8b5cf6" }
+  ];
+
+  const customersList = React.useMemo(() => {
+    const api = compSource?.filterOptions?.customers;
+    return Array.isArray(api) && api.length ? api : [];
+  }, [compSource?.filterOptions?.customers]);
+
+  const statusesList = React.useMemo(() => {
+    const api = compSource?.filterOptions?.statuses;
+    return Array.isArray(api) && api.length ? api : ["Open", "Closed"];
+  }, [compSource?.filterOptions?.statuses]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -16678,17 +17805,19 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
   const setupChart = React.useCallback(
     (canvas) => {
       const ctx = canvas.getContext("2d");
+      const totalReceived = chart1Data.received.reduce((a, b) => a + b, 0);
+      const totalOpen = chart1Data.open.reduce((a, b) => a + b, 0);
+      const totalClosed = chart1Data.closed.reduce((a, b) => a + b, 0);
+      const maxVal = Math.max(1, ...chart1Data.received, ...chart1Data.open, ...chart1Data.closed);
 
       if (chartType === "polarArea") {
-        // For Polar Area, show the overall category totals (Received, Open, Closed)
-        // to prevent overlapping datasets and maintain a premium, clean design.
         return new Chart(canvas, {
           type: "polarArea",
           data: {
             labels: ["Received", "Open", "Closed"],
             datasets: [
               {
-                data: [17, 5, 12],
+                data: [totalReceived, totalOpen, totalClosed],
                 backgroundColor: [
                   "rgba(79, 70, 229, 0.75)", // Received (Indigo)
                   "rgba(220, 38, 38, 0.75)", // Open (Red)
@@ -16724,7 +17853,7 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
       const datasets = [
         {
           label: "Received",
-          data: [3, 1, 4, 2, 5, 2],
+          data: chart1Data.received,
           backgroundColor: chartType === "area" || chartType === "stepped"
             ? "rgba(79, 70, 229, 0.25)"
             : (chartType === "radar" ? "rgba(79, 70, 229, 0.15)" : "rgba(79, 70, 229, 0.75)"),
@@ -16739,7 +17868,7 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
         },
         {
           label: "Open",
-          data: [1, 0, 1, 0, 2, 1],
+          data: chart1Data.open,
           backgroundColor: chartType === "area" || chartType === "stepped"
             ? "rgba(220, 38, 38, 0.25)"
             : (chartType === "radar" ? "rgba(220, 38, 38, 0.15)" : "rgba(220, 38, 38, 0.75)"),
@@ -16754,7 +17883,7 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
         },
         {
           label: "Closed",
-          data: [2, 1, 3, 2, 3, 1],
+          data: chart1Data.closed,
           backgroundColor: chartType === "area" || chartType === "stepped"
             ? "rgba(22, 163, 74, 0.25)"
             : (chartType === "radar" ? "rgba(22, 163, 74, 0.15)" : "rgba(22, 163, 74, 0.75)"),
@@ -16772,7 +17901,7 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
       return new Chart(canvas, {
         type: chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line"),
         data: {
-          labels: ["Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"],
+          labels: chart1Data.labels,
           datasets: datasets
         },
         options: {
@@ -16790,27 +17919,24 @@ function CustomerComplaintReportDashboardView({ filters, onFilterChange, onClose
               grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
               ticks: { display: true, font: { size: 8 }, color: "#64748b", backdropColor: "transparent" },
               suggestedMin: 0,
-              suggestedMax: 6
+              suggestedMax: maxVal + 1
             }
           } : {
             x: { grid: { display: false }, ticks: { font: { size: 9 } } },
             y: {
               min: 0,
-              max: 8,
+              max: maxVal + 1,
               grid: { color: "rgba(0,0,0,0.05)" },
-              ticks: { font: { size: 9 }, stepSize: 2 }
+              ticks: { font: { size: 9 }, stepSize: Math.max(1, Math.ceil((maxVal + 1) / 4)) }
             }
           }
         }
       });
     },
-    [chartType]
+    [chartType, chart1Data]
   );
 
-  const customersList = ["Tata Motors", "Mahindra & Mahindra", "Maruti Suzuki"];
-  const statusesList = ["Open", "Closed"];
-
-  const rebuildToken = `cc-report-chart|${chartType}`;
+  const rebuildToken = `cc-report-chart|${chartType}|${filteredRows.length}|${compKpis.activeComplaints}`;
 
   return (
     <PremiumDashboardView
@@ -17024,56 +18150,78 @@ function parseTableDate(dateStr) {
   return `${year}-${month}-${day.padStart(2, "0")}`;
 }
 
-function CustomerComplaintReportBottomTable({ filters }) {
-  const columns = ["Sl.No", "Complaint ID", "Complaint Dt", "Customer Name", "Product", "Complaint Description", "Status", "Age Days"];
-  const allRows = [
-    ["CC-2026-001", "Tata Motors", "Brake Pads", "Surface scratches", "Polished surfaces", "02-Jun-2026", "Enhanced visual inspection", "Automated QC cameras", "Closed"],
-    ["CC-2026-002", "Mahindra & Mahindra", "Disc Rotors", "Thickness variation", "Recalibrated grinder", "05-Jun-2026", "Adjusted grinding head", "CNC alignment checks", "Open"],
-    ["CC-2026-003", "Maruti Suzuki", "Gearbox Hanger", "Mounting hole offset", "Re-aligned fixture", "10-Jun-2026", "Added check pin to fixture", "Poka-yoke pin design", "Closed"]
-  ];
+function calcComplaintAgeDays(row) {
+  const iso = (row?.date || "").slice(0, 10);
+  let start = null;
+  if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    start = new Date(`${iso}T00:00:00`);
+  } else {
+    const parsed = parseTableDate(row?.complaintDateDisplay || "");
+    if (parsed) start = new Date(`${parsed}T00:00:00`);
+  }
+  if (!start || Number.isNaN(start.getTime())) {
+    return row?.ageDays != null ? Number(row.ageDays) : null;
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((today - start) / (1000 * 60 * 60 * 24)));
+}
 
-  const calculateAge = (dateStr) => {
-    if (!dateStr) return "—";
-    const parts = dateStr.split("-");
-    if (parts.length < 3) return "—";
-    const day = parseInt(parts[0], 10);
-    const months = {
-      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
-    };
-    const month = months[parts[1]] || 0;
-    const year = parseInt(parts[2], 10);
-    const diff = new Date() - new Date(year, month, day);
-    const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-    return `${days} Days`;
-  };
+function CustomerComplaintReportBottomTable({ data, filters }) {
+  const columns = ["Sl.No", "Complaint ID", "Complaint Dt", "Customer Name", "Product", "Complaint Description", "Status", "Age Days"];
+  const compRows = Array.isArray(data?.complaintCompare?.rows) ? data.complaintCompare.rows : [];
+
+  const defaultRange = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return { from: `${year}-${month}-01`, to: `${year}-${month}-${day}` };
+  }, []);
 
   const filteredRows = React.useMemo(() => {
-    let list = allRows;
-    if (filters) {
-      list = allRows.filter(row => {
-        const parsedDate = parseTableDate(row[5]);
-        if (filters.fromDate && parsedDate && parsedDate < filters.fromDate) return false;
-        if (filters.toDate && parsedDate && parsedDate > filters.toDate) return false;
-        if (filters.customer && row[1] !== filters.customer) return false;
-        if (filters.status && row[8] !== filters.status) return false;
-        return true;
-      });
-    }
-
+    const list = filterCompRows(compRows, filters, defaultRange.from, defaultRange.to);
     return list.map((row, idx) => [
       String(idx + 1),
-      row[0], // Complaint ID
-      row[5], // Complaint Dt
-      row[1], // Customer Name
-      row[2], // Product
-      row[3], // Complaint Description
-      row[8], // Status
-      calculateAge(row[5]) // Age Days
+      row.complaintId || "—",
+      row.complaintDateDisplay || row.date || "—",
+      row.customer || "—",
+      row.product || "—",
+      row.complaintDescription || "—",
+      row.status || "—",
+      (() => {
+        const age = calcComplaintAgeDays(row);
+        return age != null ? `${age} Days` : "—";
+      })(),
     ]);
-  }, [filters]);
+  }, [compRows, filters, defaultRange]);
 
   return <PremiumDashboardBottomTable title="Customer Complaints Registry" columns={columns} rows={filteredRows} />;
+}
+
+
+/* ── Center panel animated wrapper (zero-latency) ──────────── */
+function CenterTransitionWrapper({ uid, loading, children }) {
+  if (loading) {
+    return (
+      <div className="pp1-ct-skeleton">
+        <div className="pp1-ct-skeleton__header">
+          <div className="pp1-ct-skel-block pp1-ct-skel-block--icon" />
+          <div className="pp1-ct-skel-block pp1-ct-skel-block--title" />
+        </div>
+        <div className="pp1-ct-skeleton__body">
+          <div className="pp1-ct-skel-block pp1-ct-skel-block--display" />
+          <div className="pp1-ct-skel-block pp1-ct-skel-block--row" />
+          <div className="pp1-ct-skel-block pp1-ct-skel-block--row pp1-ct-skel-block--row-sm" />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div key={uid} className="pp1-ct-reveal pp1-ct-reveal--in">
+      {children}
+    </div>
+  );
 }
 
 class DashboardErrorBoundary extends React.Component {
@@ -17184,11 +18332,22 @@ export default function PlantPerformance1() {
     category: "",
   });
   const [otdFilters, setOtdFilters] = useState({
-    fromDate: defaultFrom,
-    toDate: defaultTo,
+    fromDate: "",
+    toDate: "",
     customer: "",
     partNumber: "",
   });
+  const [otdPanelData, setOtdPanelData] = useState(null);
+  const [effPanelData, setEffPanelData] = useState(null);
+  const [oeePanelData, setOeePanelData] = useState(null);
+  const [rejPanelData, setRejPanelData] = useState(null);
+  const [rewPanelData, setRewPanelData] = useState(null);
+  const [compPanelData, setCompPanelData] = useState(null);
+  const [capaPanelData, setCapaPanelData] = useState(null);
+  const [opEffPanelData, setOpEffPanelData] = useState(null);
+  const [machEffPanelData, setMachEffPanelData] = useState(null);
+  const [dailyProdPanelData, setDailyProdPanelData] = useState(null);
+  const [prodValuePanelData, setProdValuePanelData] = useState(null);
   const [supplierFilters, setSupplierFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
@@ -17236,7 +18395,7 @@ export default function PlantPerformance1() {
     customer: "",
     status: "",
   });
-  const [selectedCapaId, setSelectedCapaId] = useState("CM250018");
+  const [selectedCapaId, setSelectedCapaId] = useState(null);
   const [poActiveSlide, setPoActiveSlide] = useState(0);
   const [poShowTargetOnly, setPoShowTargetOnly] = useState(false);
   const [purFilters, setPurFilters] = useState({
@@ -17572,6 +18731,13 @@ export default function PlantPerformance1() {
         return;
       }
       setData(json.data);
+      setRejPanelData(null);
+      setRewPanelData(null);
+      setCompPanelData(null);
+      setCapaPanelData(null);
+      setOpEffPanelData(null);
+      setDailyProdPanelData(null);
+      setProdValuePanelData(null);
       const errs = json.errors ? Object.entries(json.errors) : [];
       const hasAny = Object.values(json.data).some((v) => v != null);
       if (!hasAny && errs.some(([, msg]) => String(msg).includes("Session expired"))) {
@@ -17598,6 +18764,18 @@ export default function PlantPerformance1() {
     fetchAll(monthStart, today, ctrl.signal);
     return () => ctrl.abort();
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (dateRange.from && dateRange.to) {
+      const fromStr = formatLocalYmd(dateRange.from);
+      const toStr = formatLocalYmd(dateRange.to);
+      setMachineEfficiencyFilters(prev => ({
+        ...prev,
+        fromDate: fromStr,
+        toDate: toStr
+      }));
+    }
+  }, [dateRange]);
 
   const handleRangeChange = ({ from, to }) => {
     setDateRange({ from, to });
@@ -17743,17 +18921,50 @@ export default function PlantPerformance1() {
     }
 
     const pvTarget = targetConfig.purchase_value?.minPurchaseValueL ?? 100;
-    const pvActual = 151.0;
-    const pvOk = pvActual >= pvTarget;
-    const pvDiff = pvTarget > 0 ? (((pvActual - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
-    map["purchase_value_report_dashboard"] = {
-      type: pvOk ? "up" : "down",
-      value: `${pvOk ? "+" : ""}${pvDiff}%`,
-      message: pvOk
-        ? `Purchase Value (₹${pvActual.toFixed(1)}L) meets target limit (₹${pvTarget}L)`
-        : `Purchase Value (₹${pvActual.toFixed(1)}L) is below target limit (₹${pvTarget}L)`,
-      priority: pvOk ? "medium" : "high"
-    };
+    const pvMonthlyTotals = {};
+    const pvCompareRows = data?.purchaseValueCompare?.rows;
+    if (pvCompareRows && Array.isArray(pvCompareRows)) {
+      const filteredForTrend = pvCompareRows.filter(r => {
+        if (purchaseValueFilters.supplier && r.supplierName !== purchaseValueFilters.supplier) return false;
+        if (purchaseValueFilters.partNumber) {
+          const pno = String(r.partNo || "").toLowerCase();
+          if (!pno.includes(String(purchaseValueFilters.partNumber).toLowerCase())) return false;
+        }
+        if (purchaseValueFilters.category && (r.category || "") !== purchaseValueFilters.category) return false;
+        return true;
+      });
+      filteredForTrend.forEach((r) => {
+        const mKey = r.monthName || r.month;
+        if (!mKey || mKey === "—") return;
+        pvMonthlyTotals[mKey] = (pvMonthlyTotals[mKey] || 0) + Number(r.amount || 0);
+      });
+    }
+    const pvMonthVals = Object.values(pvMonthlyTotals);
+    if (pvMonthVals.length > 0) {
+      const pvMinMonthly = Math.min(...pvMonthVals);
+      const pvOk = pvMonthVals.every(v => v >= pvTarget);
+      const pvDiff = pvTarget > 0 ? (((pvMinMonthly - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
+      map["purchase_value_report_dashboard"] = {
+        type: pvOk ? "up" : "down",
+        value: `${pvOk ? "+" : ""}${pvDiff}%`,
+        message: pvOk
+          ? `All monthly purchase values meet target (₹${pvTarget}L/month)`
+          : `Monthly purchase value (₹${pvMinMonthly.toFixed(2)}L) is below target (₹${pvTarget}L/month)`,
+        priority: pvOk ? "medium" : "high"
+      };
+    } else {
+      const pvActual = 0;
+      const pvOk = pvActual >= pvTarget;
+      const pvDiff = pvTarget > 0 ? (((pvActual - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
+      map["purchase_value_report_dashboard"] = {
+        type: pvOk ? "up" : "down",
+        value: `${pvOk ? "+" : ""}${pvDiff}%`,
+        message: pvOk
+          ? `Purchase Value (₹${pvActual.toFixed(1)}L) meets target limit (₹${pvTarget}L)`
+          : `Purchase Value (₹${pvActual.toFixed(1)}L) is below target limit (₹${pvTarget}L)`,
+        priority: pvOk ? "medium" : "high"
+      };
+    }
 
     const totalIdle = 17.3;
     const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
@@ -17786,69 +18997,191 @@ export default function PlantPerformance1() {
       priority: "high"
     };
 
-    const rejPct = 1.8;
-    const rejLimit = targetConfig.rejection?.rejectionLimit ?? 2.0;
-    const rejOk = rejPct <= rejLimit;
-    const rejDiff = ((rejLimit - rejPct) / rejLimit * 100).toFixed(1);
-    map["rejection_report_dashboard"] = {
-      type: rejOk ? "up" : "down",
-      value: `${rejOk ? "+" : "-"}${Math.abs(Number(rejDiff))}%`,
-      message: rejOk
-        ? `Rejection Rate (${rejPct}%) is within target limit (${rejLimit}%)`
-        : `Rejection Rate (${rejPct}%) exceeds target limit (${rejLimit}%)`,
-      priority: "high"
-    };
+    const rejLimit = resolveRejectionLimit(targetConfig, rejFilters.rejType);
+    const rejSource = data?.rejectionCompare || rejPanelData;
+    let rejPct = null;
+    let rejQty = 0;
+    let rejValue = 0;
+    const rejRowsForTrend = Array.isArray(rejSource?.rows) ? rejSource.rows : [];
+    const rejTrendFrom = rejFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const rejTrendTo = rejFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
+    if (rejRowsForTrend.length) {
+      const rejFiltered = filterRejRows(rejRowsForTrend, rejFilters, rejTrendFrom, rejTrendTo);
+      if (rejFiltered.length) {
+        rejQty = rejFiltered.reduce((acc, r) => acc + Number(r.rejQty || 0), 0);
+        rejValue = rejFiltered.reduce((acc, r) => acc + Number(r.rejValue || 0), 0);
+        const totalInsp = rejFiltered.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+        if (totalInsp > 0) rejPct = Number(((rejQty / totalInsp) * 100).toFixed(1));
+      } else if (!hasActiveRejDimensionFilters(rejFilters)) {
+        rejPct = 0;
+        rejQty = 0;
+        rejValue = 0;
+      }
+    }
+    if (rejPct == null && rejSource?.kpis?.avgRejPct != null && !hasActiveRejDimensionFilters(rejFilters)) {
+      rejPct = Number(Number(rejSource.kpis.avgRejPct).toFixed(1));
+      rejQty = Number(rejSource.kpis.totalRejQty || 0);
+      rejValue = Number(rejSource.kpis.totalRejValue || 0);
+    }
+    if (rejPct != null) {
+      const rejOk = rejPct <= rejLimit;
+      const rejDiff = rejLimit > 0 ? (((rejLimit - rejPct) / rejLimit) * 100).toFixed(1) : "0.0";
+      map["rejection_report_dashboard"] = {
+        type: rejOk ? "up" : "down",
+        value: `${rejOk ? "+" : "-"}${Math.abs(Number(rejDiff))}%`,
+        message: rejOk
+          ? `Rejection (${rejPct}%, Qty ${Math.round(rejQty)}, ${formatInrValue(rejValue)}) is within target (≤${rejLimit}%)`
+          : `Rejection (${rejPct}%, Qty ${Math.round(rejQty)}, ${formatInrValue(rejValue)}) exceeds target (≤${rejLimit}%)`,
+        priority: "high"
+      };
+    }
 
-    const rewPct = 1.2;
-    const rewLimit = targetConfig.rework?.reworkLimit ?? 1.5;
-    const rewOk = rewPct <= rewLimit;
-    const rewDiff = ((rewLimit - rewPct) / rewLimit * 100).toFixed(1);
-    map["rework_report_dashboard"] = {
-      type: rewOk ? "up" : "down",
-      value: `${rewOk ? "+" : "-"}${Math.abs(Number(rewDiff))}%`,
-      message: rewOk
-        ? `Rework Rate (${rewPct}%) is within target limit (${rewLimit}%)`
-        : `Rework Rate (${rewPct}%) exceeds target limit (${rewLimit}%)`,
-      priority: "high"
-    };
+    const rewLimit = resolveReworkLimit(targetConfig, reworkXAxisGroup);
+    const rewSource = data?.reworkCompare || rewPanelData;
+    let rewPct = null;
+    let rewQty = 0;
+    let rewValue = 0;
+    const rewRowsForTrend = Array.isArray(rewSource?.rows) ? rewSource.rows : [];
+    const rewTrendFrom = rewFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const rewTrendTo = rewFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
+    if (rewRowsForTrend.length) {
+      const rewFiltered = filterRewRows(rewRowsForTrend, rewFilters, rewTrendFrom, rewTrendTo, reworkXAxisGroup);
+      if (rewFiltered.length) {
+        rewQty = rewFiltered.reduce((acc, r) => acc + Number(r.reworkQty || 0), 0);
+        rewValue = rewFiltered.reduce((acc, r) => acc + Number(r.reworkValue || 0), 0);
+        const totalInsp = rewFiltered.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
+        if (totalInsp > 0) rewPct = Number(((rewQty / totalInsp) * 100).toFixed(1));
+      } else if (!hasActiveRewDimensionFilters(rewFilters, reworkXAxisGroup)) {
+        rewPct = 0;
+        rewQty = 0;
+        rewValue = 0;
+      }
+    }
+    if (rewPct == null && rewSource?.kpis?.avgReworkPct != null && !hasActiveRewDimensionFilters(rewFilters, reworkXAxisGroup)) {
+      rewPct = Number(Number(rewSource.kpis.avgReworkPct).toFixed(1));
+      rewQty = Number(rewSource.kpis.totalReworkQty || 0);
+      rewValue = Number(rewSource.kpis.totalReworkValue || 0);
+    }
+    if (rewPct != null) {
+      const rewOk = rewPct <= rewLimit;
+      const rewDiff = rewLimit > 0 ? (((rewLimit - rewPct) / rewLimit) * 100).toFixed(1) : "0.0";
+      map["rework_report_dashboard"] = {
+        type: rewOk ? "up" : "down",
+        value: `${rewOk ? "+" : "-"}${Math.abs(Number(rewDiff))}%`,
+        message: rewOk
+          ? `Rework (${rewPct}%, Qty ${Math.round(rewQty)}, ${formatInrValue(rewValue)}) is within target (≤${rewLimit}%)`
+          : `Rework (${rewPct}%, Qty ${Math.round(rewQty)}, ${formatInrValue(rewValue)}) exceeds target (≤${rewLimit}%)`,
+        priority: "high"
+      };
+    }
     const oeeMinUtilization = targetConfig.oee_comparison?.monthWiseTarget ?? targetConfig.oee_comparison?.minUtilization ?? 75;
-    const currentOee = 76.0;
-    const oeeOk = currentOee >= oeeMinUtilization;
-    const oeeDiff = (((currentOee - oeeMinUtilization) / oeeMinUtilization) * 100).toFixed(1);
-    map["oee_comparison_report_dashboard"] = {
-      type: oeeOk ? "up" : "down",
-      value: `${oeeOk ? "+" : ""}${oeeDiff}%`,
-      message: oeeOk
-        ? `Overall OEE (${currentOee}%) meets target limit (${oeeMinUtilization}%)`
-        : `Overall OEE (${currentOee}%) is below target limit (${oeeMinUtilization}%)`,
-      priority: oeeOk ? "medium" : "high"
-    };
+    const oeeSource = oeePanelData || data?.oeeCompare;
+    let currentOee = null;
+    const oeeRowsForTrend = Array.isArray(oeeSource?.rows) ? oeeSource.rows : [];
+    if (oeeRowsForTrend.length) {
+      const activeFrom = oeeCompFilters.fromDate || defaultFrom;
+      const activeTo = oeeCompFilters.toDate || defaultTo;
+      const oeeFiltered = filterOeeRows(oeeRowsForTrend, oeeCompFilters, activeFrom, activeTo);
+      if (oeeFiltered.length) {
+        const sum = oeeFiltered.reduce((acc, r) => acc + Number(r.overallOee || 0), 0);
+        currentOee = Math.round(sum / oeeFiltered.length);
+      }
+    }
+    if (currentOee == null && oeeSource?.kpis?.avgOee != null && !oeeCompFilters.machineType && !oeeCompFilters.machine) {
+      currentOee = Math.round(Number(oeeSource.kpis.avgOee));
+    }
+    if (currentOee != null && Number(currentOee) >= 0) {
+      const oeeOk = currentOee >= oeeMinUtilization;
+      const oeeDiff = oeeMinUtilization > 0 ? (((currentOee - oeeMinUtilization) / oeeMinUtilization) * 100).toFixed(1) : "0.0";
+      map["oee_comparison_report_dashboard"] = {
+        type: oeeOk ? "up" : "down",
+        value: `${oeeOk ? "+" : ""}${oeeDiff}%`,
+        message: oeeOk
+          ? `Overall OEE (${currentOee}%) meets target limit (${oeeMinUtilization}%)`
+          : `Overall OEE (${currentOee}%) is below target limit (${oeeMinUtilization}%)`,
+        priority: oeeOk ? "medium" : "high"
+      };
+    }
 
     const effTarget = targetConfig.efficiency?.monthWiseTarget ?? 80;
-    const currentEff = 81.5;
-    const effOk = currentEff >= effTarget;
-    const effDiff = (((currentEff - effTarget) / effTarget) * 100).toFixed(1);
-    map["efficiency_eff_report_dashboard"] = {
-      type: effOk ? "up" : "down",
-      value: `${effOk ? "+" : ""}${effDiff}%`,
-      message: effOk
-        ? `Overall Efficiency (${currentEff}%) meets target limit (${effTarget}%)`
-        : `Overall Efficiency (${currentEff}%) is below target limit (${effTarget}%)`,
-      priority: effOk ? "medium" : "high"
-    };
+    const effSource = effPanelData || data?.efficiencyCompare;
+    let currentEff = null;
+    const effRowsForTrend = Array.isArray(effSource?.rows) ? effSource.rows : [];
+    if (effRowsForTrend.length) {
+      const activeFrom = effFilters.fromDate || defaultFrom;
+      const activeTo = effFilters.toDate || defaultTo;
+      const effFiltered = filterEffRows(effRowsForTrend, effFilters, activeFrom, activeTo);
+      if (effFiltered.length) {
+        const sum = effFiltered.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+        currentEff = Math.round(sum / effFiltered.length);
+      }
+    }
+    if (currentEff == null && effSource?.kpis?.avgOaeff != null && !effFilters.team && !effFilters.machineType && !effFilters.machine && !effFilters.operatorName) {
+      currentEff = Math.round(Number(effSource.kpis.avgOaeff));
+    }
+    if (currentEff != null && Number(currentEff) >= 0) {
+      const effOk = currentEff >= effTarget;
+      const effDiff = effTarget > 0 ? (((currentEff - effTarget) / effTarget) * 100).toFixed(1) : "0.0";
+      map["efficiency_eff_report_dashboard"] = {
+        type: effOk ? "up" : "down",
+        value: `${effOk ? "+" : ""}${effDiff}%`,
+        message: effOk
+          ? `Overall Efficiency (${currentEff}%) meets target limit (${effTarget}%)`
+          : `Overall Efficiency (${currentEff}%) is below target limit (${effTarget}%)`,
+        priority: effOk ? "medium" : "high"
+      };
+    }
 
     const prodTarget = targetConfig.production_analysis?.minProductionValue ?? 12.0;
-    const currentProdVal = 15.57;
-    const prodOk = currentProdVal >= prodTarget;
-    const prodDiff = (((currentProdVal - prodTarget) / prodTarget) * 100).toFixed(1);
-    map["production_analysis_report_dashboard"] = {
-      type: prodOk ? "up" : "down",
-      value: `${prodOk ? "+" : ""}${prodDiff}%`,
-      message: prodOk
-        ? `Total Production Value (₹${currentProdVal}L) meets target limit (₹${prodTarget}L)`
-        : `Total Production Value (₹${currentProdVal}L) is below target limit (₹${prodTarget}L)`,
-      priority: prodOk ? "medium" : "high"
-    };
+    const pvSource = data?.productionValueCompare || prodValuePanelData;
+    const pvMachineRows = Array.isArray(pvSource?.machineRows) ? pvSource.machineRows : (pvSource?.rows || []);
+    const pvFilteredDetail = filterProdValueDetailRows(
+      pvSource?.detailRows || [],
+      prodFilters,
+      defaultFrom,
+      defaultTo
+    );
+    let pvScopedMachines = pvMachineRows;
+    if (prodFilters.team) {
+      const teamMacs = new Set(pvFilteredDetail.filter((r) => r.team === prodFilters.team).map((r) => r.machine));
+      pvScopedMachines = pvScopedMachines.filter((r) => teamMacs.has(r.machine));
+    }
+    if (prodFilters.machine) {
+      pvScopedMachines = pvScopedMachines.filter(
+        (r) => r.machine === prodFilters.machine || r.machineName === prodFilters.machine
+      );
+    }
+    if (prodFilters.operator) {
+      const opMacs = new Set(
+        pvFilteredDetail.filter((r) =>
+          String(r.operator || "").toLowerCase().includes(String(prodFilters.operator).toLowerCase())
+        ).map((r) => r.machine)
+      );
+      pvScopedMachines = pvScopedMachines.filter((r) => opMacs.has(r.machine));
+    }
+    const currentProdVal = pvScopedMachines.length
+      ? Math.round((pvScopedMachines.reduce((acc, r) => acc + Number(r.productionValue || 0), 0) / 100000) * 100) / 100
+      : null;
+    if (currentProdVal != null) {
+      const prodOk = currentProdVal >= prodTarget;
+      const prodDiff = prodTarget > 0 ? (((currentProdVal - prodTarget) / prodTarget) * 100).toFixed(1) : "0.0";
+      map["production_analysis_report_dashboard"] = {
+        type: prodOk ? "up" : "down",
+        value: `${prodOk ? "+" : ""}${prodDiff}%`,
+        message: prodOk
+          ? `Total Production Value (₹${currentProdVal}L) meets target limit (₹${prodTarget}L)`
+          : `Total Production Value (₹${currentProdVal}L) is below target limit (₹${prodTarget}L)`,
+        priority: prodOk ? "medium" : "high"
+      };
+    }
 
     // Store Stock Value trend calculation
     const stockVal = 42.5; // Lakhs (mock actual stock value)
@@ -17865,18 +19198,20 @@ export default function PlantPerformance1() {
     };
 
     // OTD trend calculation
-    const otdPct = data?.otd?.kpis?.on_time_delivery_pct ?? 88.5;
+    const otdPct = (otdPanelData || data?.otd)?.kpis?.on_time_delivery_pct;
     const otdTarget = targetConfig.otd?.targetPct ?? 90;
-    const otdOk = otdPct >= otdTarget;
-    const otdDiff = (((otdPct - otdTarget) / otdTarget) * 100).toFixed(1);
-    map["otd_report_dashboard"] = {
-      type: otdOk ? "up" : "down",
-      value: `${otdOk ? "+" : ""}${otdDiff}%`,
-      message: otdOk
-        ? `On-Time Delivery (${otdPct}%) meets target limit (${otdTarget}%)`
-        : `On-Time Delivery (${otdPct}%) is below target limit (${otdTarget}%)`,
-      priority: otdOk ? "medium" : "high"
-    };
+    if (otdPct != null && !Number.isNaN(Number(otdPct))) {
+      const otdOk = otdPct >= otdTarget;
+      const otdDiff = otdTarget > 0 ? (((otdPct - otdTarget) / otdTarget) * 100).toFixed(1) : "0.0";
+      map["otd_report_dashboard"] = {
+        type: otdOk ? "up" : "down",
+        value: `${otdOk ? "+" : ""}${otdDiff}%`,
+        message: otdOk
+          ? `On-Time Delivery (${otdPct}%) meets target limit (${otdTarget}%)`
+          : `On-Time Delivery (${otdPct}%) is below target limit (${otdTarget}%)`,
+        priority: otdOk ? "medium" : "high"
+      };
+    }
 
     // Supplier Rating trend calculation (UI alone)
     const supplierRating = 92.5;
@@ -17920,19 +19255,35 @@ export default function PlantPerformance1() {
       priority: fgOk ? "medium" : "high"
     };
 
-    // Daily Production trend calculation (UI alone)
-    const machinesHrs = [2, 6, 4, 3];
+    // Daily Production trend — machines exceeding balance hours limit
+    const dpSource = data?.dailyProductionCompare || dailyProdPanelData;
+    const dpRowsForTrend = Array.isArray(dpSource?.rows) ? dpSource.rows : [];
+    const dpTrendFrom = dailyProductionFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const dpTrendTo = dailyProductionFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
     const maxAllowedHrs = targetConfig.daily_production?.maxBalanceHours ?? 4.0;
-    const dpExceedsList = machinesHrs.filter(h => h > maxAllowedHrs);
-    const dpOk = dpExceedsList.length === 0;
-    map["daily_production_report_dashboard"] = {
-      type: dpOk ? "up" : "down",
-      value: dpOk ? "+15.5%" : "-28.4%",
-      message: dpOk
-        ? `All machines are within the Balance Hours limit of ${maxAllowedHrs} hrs.`
-        : `${dpExceedsList.length} machine(s) exceed the Balance Hours limit of ${maxAllowedHrs} hrs.`,
-      priority: dpOk ? "medium" : "high"
-    };
+    if (dpRowsForTrend.length || dpSource?.kpis) {
+      const dpFiltered = filterDailyProdRows(dpRowsForTrend, dailyProductionFilters, dpTrendFrom, dpTrendTo);
+      const dpUse = dpFiltered.length ? dpFiltered : dpRowsForTrend;
+      const byMacBalance = {};
+      dpUse.forEach((r) => {
+        const mac = r.machine || "—";
+        byMacBalance[mac] = (byMacBalance[mac] || 0) + Number(r.balance || 0);
+      });
+      const dpExceedsList = Object.entries(byMacBalance).filter(([, hrs]) => hrs > maxAllowedHrs);
+      const dpOk = dpExceedsList.length === 0;
+      map["daily_production_report_dashboard"] = {
+        type: dpOk ? "up" : "down",
+        value: dpOk ? "OK" : `${dpExceedsList.length} Over`,
+        message: dpOk
+          ? `All machines are within the Balance Hours limit of ${maxAllowedHrs} hrs.`
+          : `${dpExceedsList.length} machine(s) exceed the Balance Hours limit of ${maxAllowedHrs} hrs.`,
+        priority: dpOk ? "medium" : "high"
+      };
+    }
 
     // Target Vs Actual trend calculation (UI alone)
     const tvaFulfillment = 82.7; // Percent
@@ -17947,18 +19298,42 @@ export default function PlantPerformance1() {
       priority: tvaOk ? "medium" : "high"
     };
 
-    // Operator Efficiency trend calculation (UI alone)
-    const oeVal = 86.0; // Percent
+    // Operator Efficiency trend — avg OPREFF from live data
+    const opEffSource = data?.operatorEfficiencyCompare || opEffPanelData;
+    const opEffRowsForTrend = Array.isArray(opEffSource?.rows) ? opEffSource.rows : [];
+    const opEffTrendFrom = operatorEfficiencyFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const opEffTrendTo = operatorEfficiencyFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
     const oeLimit = targetConfig.operator_efficiency?.minEfficiencyPct ?? 90.0;
-    const oeOk = oeVal >= oeLimit;
-    map["operator_efficiency_report_dashboard"] = {
-      type: oeOk ? "up" : "down",
-      value: oeOk ? "+1.8%" : "-4.0%",
-      message: oeOk
-        ? `Avg Operator Efficiency (${oeVal}%) meets target (${oeLimit}%)`
-        : `Avg Operator Efficiency (${oeVal}%) is below target (${oeLimit}%)`,
-      priority: oeOk ? "medium" : "high"
-    };
+    if (opEffRowsForTrend.length || opEffSource?.kpis) {
+      let oeVal = null;
+      const trendFiltered = filterOpEffRows(
+        opEffRowsForTrend,
+        operatorEfficiencyFilters,
+        opEffTrendFrom,
+        opEffTrendTo
+      );
+      if (trendFiltered.length) {
+        oeVal = Math.round(trendFiltered.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0) / trendFiltered.length);
+      } else if (opEffSource?.kpis?.avgEfficiency != null && !operatorEfficiencyFilters.operator && !operatorEfficiencyFilters.effLimit) {
+        oeVal = Math.round(Number(opEffSource.kpis.avgEfficiency));
+      }
+      if (oeVal != null) {
+        const oeOk = oeVal >= oeLimit;
+        const oeDiff = oeLimit > 0 ? (((oeVal - oeLimit) / oeLimit) * 100).toFixed(1) : "0.0";
+        map["operator_efficiency_report_dashboard"] = {
+          type: oeOk ? "up" : "down",
+          value: `${oeOk ? "+" : ""}${oeDiff}%`,
+          message: oeOk
+            ? `Avg Operator Efficiency (${oeVal}%) meets target (${oeLimit}%)`
+            : `Avg Operator Efficiency (${oeVal}%) is below target (${oeLimit}%)`,
+          priority: oeOk ? "medium" : "high"
+        };
+      }
+    }
 
     // Machine Efficiency trend calculation (UI alone)
     const meVal = 88.0; // Percent
@@ -17973,16 +19348,59 @@ export default function PlantPerformance1() {
       priority: meOk ? "medium" : "high"
     };
 
-    // Quality Action Plan (CAPA) trend calculation (UI alone)
-    map["capa_report_dashboard"] = {
-      type: "down",
-      value: "1 Open",
-      message: "1 open CAPA complaint (OD 165.6 - 0.4) requires corrective action.",
-      priority: "medium"
-    };
+    // Customer Complaint trend — active open complaints
+    const compSource = data?.complaintCompare || compPanelData;
+    const compRowsForTrend = Array.isArray(compSource?.rows) ? compSource.rows : [];
+    const compTrendFrom = compFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const compTrendTo = compFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
+    const compFiltered = filterCompRows(compRowsForTrend, compFilters, compTrendFrom, compTrendTo);
+    const compKpiTrend = computeCompKpis(compFiltered.length ? compFiltered : compRowsForTrend);
+    if (compRowsForTrend.length || compSource?.kpis) {
+      const activeCount = compKpiTrend.activeComplaints;
+      const compOk = activeCount === 0;
+      map["customer_complaint_report_dashboard"] = {
+        type: compOk ? "up" : "down",
+        value: compOk ? "0 Open" : `${activeCount} Open`,
+        message: compOk
+          ? "No active customer complaints in selected period"
+          : `${activeCount} active customer complaint(s) require action`,
+        priority: compOk ? "medium" : "high"
+      };
+    }
+
+    // Quality Action Plan (CAPA) trend — open CAPA count
+    const capaSource = data?.capaCompare || capaPanelData;
+    const capaRowsForTrend = Array.isArray(capaSource?.rows) ? capaSource.rows : [];
+    const capaTrendFrom = capaFilters.fromDate || (dateRange.from
+      ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}`
+      : defaultFrom);
+    const capaTrendTo = capaFilters.toDate || (dateRange.to
+      ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
+      : defaultTo);
+    const capaFiltered = filterCapaRows(capaRowsForTrend, capaFilters, capaTrendFrom, capaTrendTo);
+    if (capaRowsForTrend.length || capaSource?.kpis) {
+      const openCapa = capaFiltered.filter((r) => String(r.status || "").toLowerCase() === "open").length;
+      const capaOk = openCapa === 0;
+      const sampleOpen = capaFiltered.find((r) => String(r.status || "").toLowerCase() === "open");
+      const sampleAge = sampleOpen ? calcCapaAgeDays(sampleOpen) : null;
+      map["capa_report_dashboard"] = {
+        type: capaOk ? "up" : "down",
+        value: capaOk ? "0 Open" : `${openCapa} Open`,
+        message: capaOk
+          ? "No open CAPA in selected period"
+          : sampleOpen
+            ? `${openCapa} open CAPA${openCapa > 1 ? "s" : ""} (${sampleOpen.complNo}${sampleAge != null ? ` — ${sampleAge}d` : ""}) require corrective action.`
+            : `${openCapa} open CAPA${openCapa > 1 ? "s" : ""} require corrective action.`,
+        priority: capaOk ? "medium" : "high"
+      };
+    }
 
     return map;
-  }, [targetConfig, data, poFilters, purFilters, salesFilters]);
+  }, [targetConfig, data, dateRange, otdPanelData, effPanelData, oeePanelData, rejPanelData, rewPanelData, compPanelData, capaPanelData, opEffPanelData, dailyProdPanelData, prodValuePanelData, poFilters, purFilters, salesFilters, purchaseValueFilters, effFilters, oeeCompFilters, rejFilters, rewFilters, compFilters, capaFilters, operatorEfficiencyFilters, dailyProductionFilters, prodFilters, reworkXAxisGroup, defaultFrom, defaultTo]);
 
   // actionItems = only cards whose computed trend is "down" (needs action)
   const actionItems = useMemo(() => {
@@ -18037,15 +19455,15 @@ export default function PlantPerformance1() {
         return `Target: ${val}%`;
       }
       case "rejection_report_dashboard": {
-        const val = targetConfig.rejection?.rejectionLimit ?? 2.0;
+        const val = resolveRejectionLimit(targetConfig, rejFilters.rejType);
         return `Limit: ≤${val}%`;
       }
       case "rework_report_dashboard": {
-        const val = targetConfig.rework?.reworkLimit ?? 1.5;
+        const val = resolveReworkLimit(targetConfig, reworkXAxisGroup);
         return `Limit: ≤${val}%`;
       }
       case "customer_complaint_report_dashboard":
-        return "Status: 2 Open";
+        return "Status: Open = Action";
       case "capa_report_dashboard":
         return "Value: 1 Open";
       case "store_stock_value_report_dashboard": {
@@ -18107,7 +19525,7 @@ export default function PlantPerformance1() {
       default:
         return "";
     }
-  }, [targetConfig]);
+  }, [targetConfig, rejFilters.rejType, reworkXAxisGroup]);
 
   const getCardStatus = useCallback((cardId) => {
     const item = actionItems.find(x => x.id === cardId);
@@ -18159,7 +19577,6 @@ export default function PlantPerformance1() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [centerKey, selectionId, loading, isStackedLayout]);
-
   return (
     <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`}>
       <div className="pp1-fbar">
@@ -19080,193 +20497,54 @@ export default function PlantPerformance1() {
           <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-              <CenterTransitionWrapper uid={centerKey} loading={loading}>
+<CenterTransitionWrapper uid={centerKey} loading={loading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
-                    <CustomerPoCompareView
-                      data={data}
-                      loading={loading}
-                      uid={centerKey}
-                      filters={poFilters}
-                      onFilterChange={setPoFilters}
-                      activeSlide={poActiveSlide}
-                      onActiveSlideChange={setPoActiveSlide}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }}
-                      targetConfig={targetConfig}
-                      showTargetOnly={poShowTargetOnly}
-                      setShowTargetOnly={setPoShowTargetOnly}
-                    />
+                    <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
                   ) : selectionId === "purchase_report_dashboard" ? (
-                    <PurchaseReportDashboardView
-                      data={data}
-                      loading={loading}
-                      filters={purFilters}
-                      onFilterChange={setPurFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                      trend={computedCardTrends["purchase_report_dashboard"]}
-                    />
+                    <PurchaseReportDashboardView data={data} loading={loading} filters={purFilters} onFilterChange={setPurFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["purchase_report_dashboard"]} />
                   ) : selectionId === "purchase_value_report_dashboard" ? (
-                    <PurchaseValueDashboardView
-                      filters={purchaseValueFilters}
-                      onFilterChange={setPurchaseValueFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <PurchaseValueDashboardView data={data} filters={purchaseValueFilters} onFilterChange={setPurchaseValueFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "sales_analysis_report_dashboard" ? (
-                    <SalesAnalysisReportDashboardView
-                      data={data}
-                      loading={loading}
-                      filters={salesFilters}
-                      onFilterChange={setSalesFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                      trend={computedCardTrends["sales_analysis_report_dashboard"]}
-                    />
+                    <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
                   ) : selectionId === "production_analysis_report_dashboard" ? (
-                    <ProductionAnalysisReportDashboardView
-                      filters={prodFilters}
-                      onFilterChange={setProdFilters}
-                      xAxisGroup={prodXAxisGroup}
-                      setXAxisGroup={setProdXAxisGroup}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
                   ) : selectionId === "idle_hours_report_dashboard" ? (
-                    <IdleHoursReportDashboardView
-                      filters={idleFilters}
-                      onFilterChange={setIdleFilters}
-                      activeTab={idleActiveTab}
-                      onActiveTabChange={setIdleActiveTab}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-                    <IdleHoursNonAcceptedReasonLossReportView
-                      filters={nonAccFilters}
-                      onFilterChange={setNonAccFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <IdleHoursNonAcceptedReasonLossReportView filters={nonAccFilters} onFilterChange={setNonAccFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "oee_comparison_report_dashboard" ? (
-                    <OeeComparisonReportDashboardView
-                      filters={oeeCompFilters}
-                      onFilterChange={setOeeCompFilters}
-                      activeTab={oeeCompActiveTab}
-                      onActiveTabChange={setOeeCompActiveTab}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                      xAxisGroup={oeeCompXAxisGroup}
-                      setXAxisGroup={setOeeCompXAxisGroup}
-                    />
+                    <OeeComparisonReportDashboardView data={data} loading={loading} filters={oeeCompFilters} onFilterChange={setOeeCompFilters} activeTab={oeeCompActiveTab} onActiveTabChange={setOeeCompActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOeePanelData(null); }} targetConfig={targetConfig} xAxisGroup={oeeCompXAxisGroup} setXAxisGroup={setOeeCompXAxisGroup} uid={centerKey} onOeeData={setOeePanelData} />
                   ) : selectionId === "efficiency_eff_report_dashboard" ? (
-                    <EfficiencyEffReportDashboardView
-                      filters={effFilters}
-                      onFilterChange={setEffFilters}
-                      xAxisGroup={effXAxisGroup}
-                      setXAxisGroup={setEffXAxisGroup}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <EfficiencyEffReportDashboardView data={data} loading={loading} filters={effFilters} onFilterChange={setEffFilters} xAxisGroup={effXAxisGroup} setXAxisGroup={setEffXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onEffData={setEffPanelData} />
                   ) : selectionId === "rejection_report_dashboard" ? (
-                    <RejectionReportDashboardView
-                      filters={rejFilters}
-                      onFilterChange={setRejFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <RejectionReportDashboardView data={data} loading={loading} filters={rejFilters} onFilterChange={setRejFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRejPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onRejData={setRejPanelData} />
                   ) : selectionId === "rework_report_dashboard" ? (
-                    <ReworkReportDashboardView
-                      filters={rewFilters}
-                      onFilterChange={setRewFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                      xAxisGroup={reworkXAxisGroup}
-                      setXAxisGroup={setReworkXAxisGroup}
-                    />
+                    <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
                   ) : selectionId === "store_stock_value_report_dashboard" ? (
-                    <StoreStockValueReportDashboardView
-                      filters={stockFilters}
-                      onFilterChange={setStockFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <StoreStockValueReportDashboardView filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "otd_report_dashboard" ? (
-                    <OtdTrendView
-                      data={data}
-                      loading={loading}
-                      uid={centerKey}
-                      filters={otdFilters}
-                      onFilterChange={setOtdFilters}
-                      from={dateRange.from}
-                      to={dateRange.to}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
                   ) : selectionId === "supplier_rating_report_dashboard" ? (
-                    <SupplierRatingReportDashboardView
-                      filters={supplierFilters}
-                      onFilterChange={setSupplierFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <SupplierRatingReportDashboardView filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "vendor_rating_report_dashboard" ? (
-                    <VendorRatingReportDashboardView
-                      filters={vendorFilters}
-                      onFilterChange={setVendorFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <VendorRatingReportDashboardView filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "fg_value_report_dashboard" ? (
-                    <FgValueReportDashboardView
-                      filters={fgFilters}
-                      onFilterChange={setFgFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <FgValueReportDashboardView filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "daily_production_report_dashboard" ? (
-                    <DailyProductionDashboardView
-                      filters={dailyProductionFilters}
-                      onFilterChange={setDailyProductionFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
                   ) : selectionId === "target_vs_actual_report_dashboard" ? (
-                    <TargetVsActualDashboardView
-                      filters={targetVsActualFilters}
-                      onFilterChange={setTargetVsActualFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <TargetVsActualDashboardView filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "operator_efficiency_report_dashboard" ? (
-                    <OperatorEfficiencyDashboardView
-                      filters={operatorEfficiencyFilters}
-                      onFilterChange={setOperatorEfficiencyFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
                   ) : selectionId === "machine_efficiency_report_dashboard" ? (
-                    <MachineEfficiencyDashboardView
-                      filters={machineEfficiencyFilters}
-                      onFilterChange={setMachineEfficiencyFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      targetConfig={targetConfig}
-                    />
+                    <MachineEfficiencyDashboardView data={data} loading={loading} filters={machineEfficiencyFilters} onFilterChange={setMachineEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setMachEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onMachEffData={setMachEffPanelData} />
                   ) : selectionId === "capa_report_dashboard" ? (
-                    <CapaDashboardView
-                      filters={capaFilters}
-                      onFilterChange={setCapaFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                      selectedCapaId={selectedCapaId}
-                      onSelectCapaId={setSelectedCapaId}
-                    />
+                    <CapaDashboardView data={data} loading={loading} filters={capaFilters} onFilterChange={setCapaFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCapaPanelData(null); }} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} uid={centerKey} onCapaData={setCapaPanelData} />
                   ) : selectionId === "customer_complaint_report_dashboard" ? (
-                    <CustomerComplaintReportDashboardView
-                      filters={compFilters}
-                      onFilterChange={setCompFilters}
-                      onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }}
-                    />
+                    <CustomerComplaintReportDashboardView data={data} loading={loading} filters={compFilters} onFilterChange={setCompFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCompPanelData(null); }} uid={centerKey} onCompData={setCompPanelData} />
                   ) : (
+
                     <div className="pp1-placeholder-container" style={{
                       display: "flex",
                       flexDirection: "column",
@@ -19336,6 +20614,7 @@ export default function PlantPerformance1() {
                         System Operational & Ready
                       </div>
                     </div>
+
                   )}
                 </DashboardErrorBoundary>
               </CenterTransitionWrapper>
@@ -19533,44 +20812,33 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-        <DashboardErrorBoundary>
+<DashboardErrorBoundary>
           {selectionId === "customer_po_vs_sales_analysis" ? (
-            <CustomerPoCompareBottomTable
-              data={data}
-              loading={loading}
-              uid={`bot-pocomp-${centerKey}`}
-              filters={poFilters}
-              showTargetOnly={poShowTargetOnly}
-              targetConfig={targetConfig}
-            />
+            <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
           ) : selectionId === "purchase_report_dashboard" ? (
             <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
           ) : selectionId === "purchase_value_report_dashboard" ? (
-            <PurchaseValueBottomTable filters={purchaseValueFilters} />
+            <PurchaseValueBottomTable data={data} filters={purchaseValueFilters} />
           ) : selectionId === "sales_analysis_report_dashboard" ? (
             <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
           ) : selectionId === "production_analysis_report_dashboard" ? (
-            <ProductionAnalysisReportBottomTable filters={prodFilters} xAxisGroup={prodXAxisGroup} />
+            <ProductionAnalysisReportBottomTable data={{ productionValueCompare: prodValuePanelData ?? { machineRows: [], detailRows: [], rows: [] } }} filters={prodFilters} xAxisGroup={prodXAxisGroup} defaultFrom={defaultFrom} defaultTo={defaultTo} />
           ) : selectionId === "idle_hours_report_dashboard" ? (
-            <IdleHoursReportBottomTable
-              filters={idleFilters}
-              activeTab={idleActiveTab}
-              setActiveTab={setIdleActiveTab}
-            />
+            <IdleHoursReportBottomTable filters={idleFilters} activeTab={idleActiveTab} setActiveTab={setIdleActiveTab} />
           ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
             <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
           ) : selectionId === "oee_comparison_report_dashboard" ? (
-            <OeeComparisonReportBottomTable filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
+            <OeeComparisonReportBottomTable data={{ oeeCompare: oeePanelData || data?.oeeCompare }} filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
           ) : selectionId === "efficiency_eff_report_dashboard" ? (
-            <EfficiencyEffReportBottomTable filters={effFilters} xAxisGroup={effXAxisGroup} />
+            <EfficiencyEffReportBottomTable data={{ efficiencyCompare: effPanelData || data?.efficiencyCompare }} filters={effFilters} xAxisGroup={effXAxisGroup} />
           ) : selectionId === "rejection_report_dashboard" ? (
-            <RejectionReportBottomTable filters={rejFilters} />
+            <RejectionReportBottomTable data={{ rejectionCompare: rejPanelData || data?.rejectionCompare }} filters={rejFilters} />
           ) : selectionId === "rework_report_dashboard" ? (
-            <ReworkReportBottomTable filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
+            <ReworkReportBottomTable data={{ reworkCompare: rewPanelData || data?.reworkCompare }} filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
           ) : selectionId === "store_stock_value_report_dashboard" ? (
             <StoreStockValueReportBottomTable filters={stockFilters} />
           ) : selectionId === "otd_report_dashboard" ? (
-            <OtdReportBottomTable filters={otdFilters} />
+            <OtdReportBottomTable data={{ otd: otdPanelData || data?.otd }} filters={otdFilters} />
           ) : selectionId === "supplier_rating_report_dashboard" ? (
             <SupplierRatingBottomTable filters={supplierFilters} />
           ) : selectionId === "vendor_rating_report_dashboard" ? (
@@ -19578,17 +20846,17 @@ export default function PlantPerformance1() {
           ) : selectionId === "fg_value_report_dashboard" ? (
             <FgValueReportBottomTable filters={fgFilters} />
           ) : selectionId === "daily_production_report_dashboard" ? (
-            <DailyProductionBottomTable filters={dailyProductionFilters} targetConfig={targetConfig} />
+            <DailyProductionBottomTable data={{ dailyProductionCompare: dailyProdPanelData || data?.dailyProductionCompare }} filters={dailyProductionFilters} targetConfig={targetConfig} />
           ) : selectionId === "target_vs_actual_report_dashboard" ? (
             <TargetVsActualBottomTable filters={targetVsActualFilters} targetConfig={targetConfig} />
           ) : selectionId === "operator_efficiency_report_dashboard" ? (
-            <OperatorEfficiencyBottomTable filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
+            <OperatorEfficiencyBottomTable data={{ operatorEfficiencyCompare: opEffPanelData || data?.operatorEfficiencyCompare }} filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
           ) : selectionId === "machine_efficiency_report_dashboard" ? (
-            <MachineEfficiencyBottomTable filters={machineEfficiencyFilters} targetConfig={targetConfig} />
+            <MachineEfficiencyBottomTable data={{ machineEfficiencyCompare: machEffPanelData || data?.machineEfficiencyCompare }} filters={machineEfficiencyFilters} targetConfig={targetConfig} />
           ) : selectionId === "capa_report_dashboard" ? (
-            <CapaBottomTable filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
+            <CapaBottomTable data={{ capaCompare: capaPanelData || data?.capaCompare }} filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
           ) : selectionId === "customer_complaint_report_dashboard" ? (
-            <CustomerComplaintReportBottomTable filters={compFilters} />
+            <CustomerComplaintReportBottomTable data={{ complaintCompare: compPanelData || data?.complaintCompare }} filters={compFilters} />
           ) : null}
         </DashboardErrorBoundary>
       </div>
