@@ -1086,9 +1086,12 @@
         transform: scale(1.1);
     }
 
-    /* Reduced motion preference */
+    /* Reduced motion preference — scoped to login page only */
     @media (prefers-reduced-motion: reduce) {
-        * {
+        .lp,
+        .lp *,
+        .lp *::before,
+        .lp *::after {
             animation-duration: 0.01ms !important;
             animation-iteration-count: 1 !important;
             transition-duration: 0.01ms !important;

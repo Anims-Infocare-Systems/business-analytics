@@ -87,24 +87,20 @@
 
 @keyframes dl-page-out {
     from {
-        opacity: 1;
         transform: translateY(0) scale(1);
     }
 
     to {
-        opacity: 0;
         transform: translateY(-12px) scale(0.985);
     }
 }
 
 @keyframes dl-page-in {
     from {
-        opacity: 0;
         transform: translateY(16px) scale(0.985);
     }
 
     to {
-        opacity: 1;
         transform: translateY(0) scale(1);
     }
 }
@@ -1336,6 +1332,7 @@
 /* ── Page transition wrapper ──────────────────────────────── */
 .dl-page-wrap {
     width: 100%;
+    opacity: 1;
 }
 
 .dl-page-wrap--plant {
@@ -1345,6 +1342,11 @@
     flex-direction: column;
     animation: none;
     opacity: 1;
+}
+
+.dl-page-wrap--static {
+    opacity: 1;
+    animation: none;
 }
 
 .dl-page-wrap--out {
@@ -1632,6 +1634,18 @@
         animation-duration: .01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: .01ms !important;
+    }
+
+    .dl-page-wrap,
+    .dl-topbar__inner,
+    .dl-header,
+    .wh-hero,
+    .wh-kpi-row,
+    .wh-section,
+    .wh-tile {
+        opacity: 1 !important;
+        animation: none !important;
+        transform: none !important;
     }
 }
 

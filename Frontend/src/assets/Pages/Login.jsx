@@ -376,7 +376,9 @@ export default function LoginPage() {
                     data.rights || {},
                     !!data.isSuperAdmin,
                 );
-                navigate("/AnimsBusinessAnalytics", { replace: true });
+                // Full navigation so PWA + all dashboard CSS load cleanly (client-side
+                // navigate can leave enter animations stuck at opacity 0).
+                window.location.replace("/AnimsBusinessAnalytics");
             } else if (res.status === 403 && data.code === "account_inactive") {
                 showAccountInactiveToast();
             } else if (res.status === 503 && data.code === "erp_unavailable") {

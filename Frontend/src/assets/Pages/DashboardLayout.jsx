@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
+import "./Welcome.css";
 
 const API = resolveApiBase();
 import Dashboard1 from "./Dashboard1";
@@ -104,9 +105,14 @@ const HEADING_MAP = {
 
 /* ── Page content with fade+slide transition ─────────────── */
 function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin }) {
+    const isInitialMount = useRef(true);
     const [visible, setVisible] = useState(true);
     const [content, setContent] = useState({ activeSubItem, activeItem });
     const prevKey = useRef(`${activeItem}__${activeSubItem}`);
+
+    useEffect(() => {
+        isInitialMount.current = false;
+    }, []);
 
     useEffect(() => {
         const newKey = `${activeItem}__${activeSubItem}`;
@@ -153,9 +159,14 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     );
 
     const isPlant = si === "Plant Performance Dashboard";
+    const enterClass = isInitialMount.current
+        ? "dl-page-wrap--static"
+        : visible
+            ? "dl-page-wrap--in"
+            : "dl-page-wrap--out";
 
     return (
-        <div className={`dl-page-wrap ${visible ? "dl-page-wrap--in" : "dl-page-wrap--out"}${isPlant ? " dl-page-wrap--plant" : ""}`}>
+        <div className={`dl-page-wrap ${enterClass}${isPlant ? " dl-page-wrap--plant" : ""}`}>
             {node}
         </div>
     );

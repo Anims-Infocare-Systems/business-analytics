@@ -29,7 +29,10 @@ function viteApiProxy(mode) {
   }
 }
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  const isDev = mode === 'development'
+
+  return {
   plugins: [
     react(),
 
@@ -100,6 +103,7 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // SPA routing: all navigations fall back to index.html
         navigateFallback: '/index.html',
+        navigateFallbackAllowlist: [/^(?!\/api).*/],
 
         // Don't apply navigateFallback to API calls or non-HTML assets
         navigateFallbackDenylist: [
@@ -116,10 +120,12 @@ export default defineConfig(({ mode }) => ({
             options: { cacheName: 'api-no-cache' },
           },
 
-          // Static assets (JS, CSS chunks) → CacheFirst, long TTL
+          // Static assets (JS, CSS chunks)
+          // Dev: StaleWhileRevalidate — always pick up fresh Vite output, cache for offline
+          // Prod: CacheFirst — offline-first PWA behaviour
           {
             urlPattern: /\.(?:js|css)$/i,
-            handler: 'CacheFirst',
+            handler: isDev ? 'StaleWhileRevalidate' : 'CacheFirst',
             options: {
               cacheName: 'static-assets',
               expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
@@ -185,4 +191,5 @@ export default defineConfig(({ mode }) => ({
   preview: {
     proxy: { ...viteApiProxy(mode) },
   },
-}))
+}
+})
