@@ -38,17 +38,13 @@ export default defineConfig(({ mode }) => {
 
     VitePWA({
       // ─── Register strategy ─────────────────────────────────────────────
-      // 'autoUpdate': silently installs new SW & reloads on next navigation
-      registerType: 'autoUpdate',
+      registerType: isDev ? 'prompt' : 'autoUpdate',
+      injectRegister: false,
 
-      // ─── Dev options ────────────────────────────────────────────────────
-      // SW only registers in dev when accessed via `localhost` (secure context).
-      // On a LAN IP (192.168.x.x) over HTTP, browsers block SW by design —
-      // the app still works normally on mobile, just without offline caching.
-      // Full PWA runs on production where real HTTPS is present.
+      // Dev: lightweight SW (manifest + SPA shell only — no Vite asset caching)
       devOptions: {
         enabled: true,
-        type: 'classic',           // Workbox SWs must be classic scripts, not ESM
+        type: 'classic',
         navigateFallback: 'index.html',
       },
 
@@ -101,82 +97,67 @@ export default defineConfig(({ mode }) => {
 
       // ─── Workbox runtime caching ────────────────────────────────────────
       workbox: {
-        // SPA routing: all navigations fall back to index.html
         navigateFallback: '/index.html',
-        navigateFallbackAllowlist: [/^(?!\/api).*/],
 
-        // Don't apply navigateFallback to API calls or non-HTML assets
         navigateFallbackDenylist: [
-          /^\/api\//,           // Django REST API — never intercept
+          /^\/api\//,
+          /^\/@/,               // Vite internals — never intercept in dev
+          /^\/src\//,
+          /^\/node_modules\//,
           /\.(png|jpg|jpeg|svg|gif|ico|webp|woff2?|ttf|eot)$/,
         ],
 
-        // ── Runtime caching rules ──────────────────────────────────────
-        runtimeCaching: [
-          // API calls → always fetch live, never cache
-          {
-            urlPattern: /^.*\/api\/.*/i,
-            handler: 'NetworkOnly',
-            options: { cacheName: 'api-no-cache' },
-          },
+        // Dev: API-only rule — caching JS/CSS/Vite modules caused OOM crashes
+        runtimeCaching: isDev
+          ? [
+              {
+                urlPattern: /^.*\/api\/.*/i,
+                handler: 'NetworkOnly',
+                options: { cacheName: 'api-no-cache' },
+              },
+            ]
+          : [
+              {
+                urlPattern: /^.*\/api\/.*/i,
+                handler: 'NetworkOnly',
+                options: { cacheName: 'api-no-cache' },
+              },
+              {
+                urlPattern: /\.(?:js|css)$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'static-assets',
+                  expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
+                  cacheableResponse: { statuses: [0, 200] },
+                },
+              },
+              {
+                urlPattern: /\.(?:png|jpg|jpeg|gif|svg|ico|webp)$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'image-cache',
+                  expiration: { maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 },
+                  cacheableResponse: { statuses: [0, 200] },
+                },
+              },
+              {
+                urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+                handler: 'StaleWhileRevalidate',
+                options: {
+                  cacheName: 'google-fonts',
+                  expiration: { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 },
+                  cacheableResponse: { statuses: [0, 200] },
+                },
+              },
+            ],
 
-          // Static assets (JS, CSS chunks)
-          // Dev: StaleWhileRevalidate — always pick up fresh Vite output, cache for offline
-          // Prod: CacheFirst — offline-first PWA behaviour
-          {
-            urlPattern: /\.(?:js|css)$/i,
-            handler: isDev ? 'StaleWhileRevalidate' : 'CacheFirst',
-            options: {
-              cacheName: 'static-assets',
-              expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
-          // Images → CacheFirst, 30 days
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|gif|svg|ico|webp)$/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'image-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
-          // Google Fonts → StaleWhileRevalidate
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
-          // All other network requests → NetworkFirst with fallback
-          {
-            urlPattern: /^https?:\/\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'network-first-fallback',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+        globPatterns: isDev ? undefined : ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
+        globIgnores: isDev ? undefined : [
+          '**/Images/**/*',
+          '**/*.map',
         ],
 
-        // Precache all Vite build output (skip large /Images/ directory)
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
-        globIgnores: [
-          '**/Images/**/*',     // large product/logo images — cached lazily at runtime
-          '**/*.map',           // source maps — not needed in SW
-        ],
-
-        // Skip waiting — apply new SW immediately
-        skipWaiting: true,
+        skipWaiting: !isDev,
         clientsClaim: true,
       },
     }),

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { resolveApiBase } from "../../apiBase";
-import ChartDatePicker from "./ChartDatePicker";
+import IdleTimeReportDatePicker from "./IdleTimeReportDatePicker";
 import "./IdleTimeReport.css";
 
 Chart.register(...registerables);
@@ -811,7 +811,7 @@ export default function IdleTimeReport() {
           <div className="itr-filter-grid">
             <div className="itr-filter-group itr-filter-group--daterange">
               <label className="itr-filter-label">Date Range</label>
-              <ChartDatePicker
+              <IdleTimeReportDatePicker
                 from={dateRange.from}
                 to={dateRange.to}
                 onChange={({ from, to }) => setDateRange({ from, to })}

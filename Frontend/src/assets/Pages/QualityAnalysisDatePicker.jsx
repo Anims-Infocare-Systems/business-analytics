@@ -12,6 +12,31 @@ const FMT  = d => d ? `${PAD(d.getDate())}-${PAD(d.getMonth() + 1)}-${d.getFullY
 const MONTHS     = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
+const toInputFmt = d => {
+  if (!d) return "";
+  const p = n => String(n).padStart(2, "0");
+  return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}`;
+};
+
+const autoFmtDate = (raw, prev) => {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length > 8) digits = digits.slice(0, 8);
+  let out = digits;
+  if (digits.length > 4) out = digits.slice(0,2) + "-" + digits.slice(2,4) + "-" + digits.slice(4);
+  else if (digits.length > 2) out = digits.slice(0,2) + "-" + digits.slice(2);
+  return out;
+};
+
+const parseTyped = str => {
+  if (!str) return null;
+  str = str.trim();
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) { const d = new Date(+m[1], +m[2]-1, +m[3]); d.setHours(0,0,0,0); return isNaN(d) ? null : d; }
+  m = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); d.setHours(0,0,0,0); return isNaN(d) ? null : d; }
+  return null;
+};
+
 function sameDay(a, b) {
     return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
@@ -103,6 +128,16 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
     const triggerRef = useRef(null);
     const rightMonth = addMonths(leftMonth, 1);
 
+    const [fromInput, setFromInput] = useState("");
+    const [toInput,   setToInput]   = useState("");
+    const [inputErr,  setInputErr]  = useState("");
+
+    useEffect(() => {
+        setFromInput(toInputFmt(from));
+        setToInput(toInputFmt(to));
+        setInputErr("");
+    }, [from, to, open]);
+
     useEffect(() => {
         if (!open) return;
         const h = e => {
@@ -139,7 +174,36 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
         setActivePreset(preset.label); setOpen(false);
     };
 
-    const label = from && to ? `${FMT(from)}  →  ${FMT(to)}` : from ? `${FMT(from)}  →  Pick end date` : "Select date range";
+    const handleApply = () => {
+        const f = parseTyped(fromInput);
+        const t = parseTyped(toInput);
+        if (fromInput && !f) { setInputErr("Invalid From date"); return; }
+        if (toInput   && !t) { setInputErr("Invalid To date");   return; }
+        if (f && t && f > t) { setInputErr("From must be ≤ To"); return; }
+        setInputErr("");
+        if (f || t) {
+            onChange({ from: f || from, to: t || to });
+            if (f) setLeft(new Date(f.getFullYear(), f.getMonth(), 1));
+            setActivePreset(null);
+            setSelecting(null);
+        }
+        setOpen(false);
+    };
+
+    const handleClear = () => {
+        onChange({ from: null, to: null });
+        setSelecting(null);
+        setActivePreset(null);
+        setFromInput("");
+        setToInput("");
+        setInputErr("");
+    };
+
+    const days = from && to ? Math.round((to - from) / 86400000) + 1 : null;
+    const label = from && to
+        ? `${FMT(from)}  →  ${FMT(to)}${days ? `  (${days}d)` : ""}`
+        : from ? `${FMT(from)}  →  Pick end date`
+        : "Select date range";
 
     const isExtraActive = EXTRA_PRESETS.some(p => p.label === activePreset);
 
@@ -209,13 +273,37 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
                         </div>
                         <div className="qadp-footer">
                             <div className="qadp-footer__range">
-                                <span className="qadp-footer__field"><Calendar size={12} />{from?FMT(from):"From date"}</span>
+                                <div className="qadp-footer__input-wrap">
+                                    <Calendar className="qadp-footer__input-ico" size={12} />
+                                    <input
+                                        className={`qadp-footer__input ${inputErr.includes("From") ? "qadp-footer__input--err" : from ? "qadp-footer__input--set" : ""}`}
+                                        type="text"
+                                        placeholder="DD-MM-YYYY"
+                                        value={fromInput}
+                                        onChange={e => { setFromInput(autoFmtDate(e.target.value, fromInput)); setInputErr(""); }}
+                                        onKeyDown={e => e.key === "Enter" && handleApply()}
+                                        maxLength={10}
+                                    />
+                                </div>
                                 <ArrowRight size={14} />
-                                <span className="qadp-footer__field"><Calendar size={12} />{to?FMT(to):"To date"}</span>
+                                <div className="qadp-footer__input-wrap">
+                                    <Calendar className="qadp-footer__input-ico" size={12} />
+                                    <input
+                                        className={`qadp-footer__input ${inputErr.includes("To") ? "qadp-footer__input--err" : to ? "qadp-footer__input--set" : ""}`}
+                                        type="text"
+                                        placeholder="DD-MM-YYYY"
+                                        value={toInput}
+                                        onChange={e => { setToInput(autoFmtDate(e.target.value, toInput)); setInputErr(""); }}
+                                        onKeyDown={e => e.key === "Enter" && handleApply()}
+                                        maxLength={10}
+                                    />
+                                </div>
+                                {days && <span className="qadp-footer__days">{days} days</span>}
+                                {inputErr && <span className="qadp-footer__err">{inputErr}</span>}
                             </div>
                             <div className="qadp-footer__btns">
-                                <button className="qadp-footer-btn qadp-footer-btn--sec" onClick={()=>{onChange({from:null,to:null});setSelecting(null);setActivePreset(null);}} type="button">Clear</button>
-                                <button className="qadp-footer-btn qadp-footer-btn--pri" onClick={()=>setOpen(false)} type="button">Apply</button>
+                                <button className="qadp-footer-btn qadp-footer-btn--sec" onClick={handleClear} type="button">Clear</button>
+                                <button className="qadp-footer-btn qadp-footer-btn--pri" onClick={handleApply} type="button">Apply</button>
                             </div>
                         </div>
                     </div>

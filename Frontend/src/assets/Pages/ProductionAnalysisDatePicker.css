@@ -126,6 +126,11 @@
     border-color: var(--padp-accent);
     color: #ffffff !important;
 }
+.padp-preset--active:hover {
+    background: var(--padp-accent2) !important;
+    border-color: var(--padp-accent2) !important;
+    color: #ffffff !important;
+}
 
 /* Dropdown styling */
 .padp-dropdown-container {
@@ -168,6 +173,10 @@
 }
 .padp-dropdown-item--active {
     background: var(--padp-accent);
+    color: #ffffff !important;
+}
+.padp-dropdown-item--active:hover {
+    background: var(--padp-accent2) !important;
     color: #ffffff !important;
 }
 

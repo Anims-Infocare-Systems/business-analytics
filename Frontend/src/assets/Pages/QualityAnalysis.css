@@ -422,11 +422,8 @@
 
 /* ── Summary Strip ────────────────────────────────────────── */
 .qa2-summary-strip {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
     background: linear-gradient(90deg, rgba(45,109,232,0.09), rgba(26,84,212,0.05));
     border: 1.5px solid rgba(45, 109, 232, 0.16);
     border-radius: 12px;
@@ -437,10 +434,8 @@
 
 .qa2-strip-item {
     text-align: center;
-    flex: 1;
     padding: 0.85rem 0.6rem;
     border-right: 1px solid rgba(45, 109, 232, 0.1);
-    min-width: 80px;
 }
 
 .qa2-strip-item:last-child {
@@ -1349,7 +1344,7 @@
    ═══════════════════════════════════════════════════════ */
 @media (max-width: 1300px) {
     .qa2-kpi-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
     }
 
     .qa2-charts-3 {
@@ -1386,6 +1381,18 @@
         grid-template-columns: repeat(3, 1fr);
     }
 
+    .qa2-summary-strip {
+        grid-template-columns: repeat(3, 1fr);
+        background: rgba(45, 109, 232, 0.16);
+        gap: 1px;
+    }
+
+    .qa2-strip-item {
+        border-right: none;
+        background: #ffffff;
+        padding: 0.65rem 0.4rem;
+    }
+
     .qa2-insights-grid {
         grid-template-columns: 1fr;
     }
@@ -1396,7 +1403,7 @@
     }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
     .qa2-kpi-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -1406,26 +1413,30 @@
         align-items: flex-start;
     }
 
-    .qa2-hero-pills {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .qa2-summary-strip>*:nth-child(2n) {
-        display: none;
-    }
-
     .qa2-scrap-grid {
         grid-template-columns: 1fr 1fr;
+    }
+
+    .qa2-table tbody td, .qa2-table thead th {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.72rem;
     }
 }
 
 @media (max-width: 480px) {
     .qa2-kpi-grid {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
+    }
+
+    .qa2-summary-strip {
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .qa2-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .qa2-scrap-grid {
         grid-template-columns: 1fr;
     }
 }

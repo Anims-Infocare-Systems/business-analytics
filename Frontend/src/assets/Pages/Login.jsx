@@ -448,6 +448,9 @@ export default function LoginPage() {
                             src="/Images/LOGIN FINAL imag eand curve.png"
                             alt="Business analytics dashboard illustration"
                             className="lp__illus-img float-slow"
+                            loading="lazy"
+                            decoding="async"
+                            fetchPriority="low"
                         />
                     </div>
 

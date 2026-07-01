@@ -183,7 +183,7 @@ function CdrPortal({ anchorRef, children }) {
       const r  = anchorRef.current.getBoundingClientRect();
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const W  = Math.min(720, vw - 24);
+      const W  = Math.min(680, vw - 24);
       let left = r.left;
       if (left + W > vw - 10) left = Math.max(10, vw - W - 10);
       const spaceBelow = vh - r.bottom - 10;
@@ -493,7 +493,7 @@ export default function ChartDatePicker({ from, to, onChange }) {
                     {MONTHS_FULL[leftMonth.getMonth()]}
                     <em>{leftMonth.getFullYear()}</em>
                   </span>
-                  <NavBtn dir="next" onClick={() => setLeftMonth(addMo(leftMonth, 1))} label="Next month" />
+                  <div style={{ width: 22, height: 22 }} />
                 </div>
                 <CdrMonthGrid
                   year={leftMonth.getFullYear()} month={leftMonth.getMonth()}
@@ -508,7 +508,7 @@ export default function ChartDatePicker({ from, to, onChange }) {
               {/* Right month */}
               <div className="cdr-month-wrap">
                 <div className="cdr-month-nav">
-                  <NavBtn dir="prev" onClick={() => setLeftMonth(addMo(leftMonth, -1))} label="Previous month" />
+                  <div style={{ width: 22, height: 22 }} />
                   <span className="cdr-month-lbl">
                     {MONTHS_FULL[rightMonth.getMonth()]}
                     <em>{rightMonth.getFullYear()}</em>

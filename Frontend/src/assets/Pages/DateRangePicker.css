@@ -144,6 +144,11 @@
     border-color: var(--drp-accent);
     color: #ffffff;
 }
+.drp-preset--active:hover {
+    background: var(--drp-accent2) !important;
+    border-color: var(--drp-accent2) !important;
+    color: #ffffff !important;
+}
 
 /* ── More button & sub-dropdown ───────────────────────────── */
 .drp-more-wrap {
@@ -204,6 +209,10 @@
 .drp-more-item--active {
     background: var(--drp-accent);
     color: #ffffff;
+}
+.drp-more-item--active:hover {
+    background: var(--drp-accent2) !important;
+    color: #ffffff !important;
 }
 
 
@@ -350,8 +359,8 @@
     color: var(--drp-muted);
     flex: 1;
 }
-.drp-footer__field {
-    display: flex;
+.drp-footer__input-wrap {
+    display: inline-flex;
     align-items: center;
     gap: .35rem;
     padding: .35rem .7rem;
@@ -360,7 +369,66 @@
     border-radius: 7px;
     font-size: .78rem;
     font-weight: 600;
-    color: var(--drp-sub);
+    transition: border-color var(--drp-tr), box-shadow var(--drp-tr);
+}
+
+.drp-footer__input-wrap:focus-within {
+    border-color: var(--drp-accent);
+    box-shadow: 0 0 0 2.5px var(--drp-focus-ring);
+}
+
+.drp-footer__input-ico {
+    color: var(--drp-accent);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.drp-footer__input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--drp-text);
+    width: 78px;
+    min-width: 0;
+    line-height: 1.3;
+    padding: 0;
+}
+
+.drp-footer__input::placeholder {
+    color: var(--drp-muted);
+    font-weight: 500;
+}
+
+.drp-footer__input--set {
+    color: var(--drp-accent-txt);
+    font-weight: 700;
+}
+
+.drp-footer__input--err {
+    color: #ef4444;
+}
+
+.drp-footer__input-wrap:has(.drp-footer__input--err) {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.12);
+}
+
+.drp-footer__days {
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--drp-accent-txt);
+    background: var(--drp-accent-lt);
+    padding: .2rem .5rem;
+    border-radius: 4px;
+}
+
+.drp-footer__err {
+    font-size: 10px;
+    color: #ef4444;
+    font-weight: 600;
     white-space: nowrap;
 }
 .drp-footer__btns { display: flex; gap: .55rem; }

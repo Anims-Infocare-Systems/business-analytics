@@ -637,11 +637,16 @@ export default function DashboardLayout() {
             localStorage.removeItem("user");
             localStorage.removeItem("ba_user_rights");
             localStorage.removeItem("ba_settings_profile");
-        } catch { }
-        navigate("/", { replace: true });
+        } catch { /* ignore */ }
 
-        fetch(`${API}/logout/`, { method: "POST", credentials: "include" })
-            .catch(err => console.error("Error logging out from backend:", err));
+        fetch(`${API}/logout/`, {
+            method: "POST",
+            credentials: "include",
+            keepalive: true,
+        }).catch(err => console.error("Error logging out from backend:", err));
+
+        // Full page unload — releases the large dashboard bundle from memory.
+        window.location.replace("/");
     };
     const showExpanded = isMobile ? true : expanded;
     const topbarHeading = activeSubItem

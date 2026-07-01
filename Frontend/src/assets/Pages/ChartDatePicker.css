@@ -251,9 +251,11 @@
   border: 1px solid var(--cdr-border);
   border-radius: 12px;
   box-shadow: var(--cdr-shadow-lg);
-  overflow: hidden;
+  overflow: visible;
   animation: cdr-pop 0.22s var(--cdr-ease) both;
   transform-origin: top left;
+  width: 680px;
+  max-width: 100%;
 }
 
 /* ── Preset chips row ─────────────────────────────────────── */
@@ -261,9 +263,11 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3.5px;
   padding: 8px 12px 6px;
   background: linear-gradient(to bottom, #fafcff, var(--cdr-bg));
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
 }
 
 .cdr-presets::-webkit-scrollbar {
@@ -285,12 +289,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 9px;
+  padding: 2.5px 6.5px;
   background: var(--cdr-surface);
   border: 1px solid var(--cdr-border);
   border-radius: 99px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: 9.2px;
   font-weight: 500;
   color: var(--cdr-ink2);
   cursor: pointer;
@@ -345,7 +349,11 @@
   border-color: #bfdbfe;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+  padding: 3.5px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-width: 1.5px;
 }
 
 .cdr-preset--more:hover,
@@ -679,6 +687,8 @@
   border-top: 1px solid var(--cdr-border);
   background: linear-gradient(to bottom, var(--cdr-surface), #f1f5fa);
   flex-wrap: wrap;
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
 }
 
 .cdr-footer__range {

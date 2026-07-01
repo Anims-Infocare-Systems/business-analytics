@@ -26,15 +26,24 @@
   <meta name="apple-mobile-web-app-title" content="Anims BA" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-  <!-- ── Favicon ────────────────────────────────────────────────────────── -->
-  <link rel="icon" type="image/png" href="/Images/logohead.png" />
-  <link rel="shortcut icon" href="/Images/logohead.png" />
-
-  <!-- ── Preload critical assets ────────────────────────────────────────── -->
-  <link rel="preload" as="image" href="/Images/LOGIN%20FINAL%20imag%20eand%20curve.png" fetchpriority="high" />
+  <!-- ── Favicon (use small PWA icon — logohead.png is 3 MB) ─────────────── -->
+  <link rel="icon" type="image/png" href="/pwa-192.png" />
+  <link rel="shortcut icon" href="/pwa-192.png" />
 </head>
 
 <body>
+  <!-- One-time cleanup of legacy dev SW caches (old config cached Vite modules → OOM) -->
+  <script>
+    (function () {
+      if (!("caches" in window)) return;
+      var legacy = ["static-assets", "network-first-fallback", "image-cache", "google-fonts"];
+      caches.keys().then(function (keys) {
+        keys.forEach(function (k) {
+          if (legacy.indexOf(k) !== -1) caches.delete(k);
+        });
+      });
+    })();
+  </script>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

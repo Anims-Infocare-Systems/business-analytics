@@ -2,12 +2,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import "./index.css";
-import "./assets/Pages/Welcome.css";
-import "./assets/Pages/DashboardLayout.css";
 import App from "./App.jsx";
 
-// ─── PWA Service Worker Registration ──────────────────────────────────────────
-import { registerSW } from "virtual:pwa-register";
+// ─── PWA Service Worker (dev + production — registered below) ────────────────
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Toast utility  (used for SW updates, offline, install — all same style)
@@ -157,9 +154,15 @@ const wasDismissed = () =>
 const markDismissed = () =>
   localStorage.setItem(DISMISSED_KEY, String(Date.now()));
 
+const isAuthPage = () => {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return path === "/" || path === "/index.html" || path === "/login"
+    || path === "/signup" || path === "/forgot-password";
+};
+
 const isLoginPage = () => {
-  const path = window.location.pathname;
-  return path === "/" || path === "/index.html" || path === "/login" || path === "/AnimsBusinessAnalytics/";
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return path === "/" || path === "/index.html" || path === "/login";
 };
 
 // ── Android / Desktop — toast-style install prompt ────────────────────────────
@@ -234,23 +237,28 @@ window.history.replaceState = function(...args) {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Register Service Worker
+//  Register Service Worker (dev + production)
+//  Dev SW is lightweight — no Vite module caching (see vite.config.js)
 // ══════════════════════════════════════════════════════════════════════════════
-const updateSW = registerSW({
-  onNeedRefresh() {
-    showToast({
-      message:     "New version available!",
-      actionLabel: "Update",
-      onAction:    () => updateSW(true),
-      type:        "info",
-    });
-  },
-  onOfflineReady() {
-    showToast({ message: "Ready to work offline ✓", type: "success", duration: 4000 });
-  },
-  onRegisterError(err) {
-    console.warn("[PWA] SW registration failed:", err);
-  },
+let updateSW = () => {};
+
+import("virtual:pwa-register").then(({ registerSW }) => {
+  updateSW = registerSW({
+    onNeedRefresh() {
+      showToast({
+        message:     "New version available!",
+        actionLabel: "Update",
+        onAction:    () => updateSW(true),
+        type:        "info",
+      });
+    },
+    onOfflineReady() {
+      showToast({ message: "Ready to work offline ✓", type: "success", duration: 4000 });
+    },
+    onRegisterError(err) {
+      console.warn("[PWA] SW registration failed:", err);
+    },
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -308,8 +316,8 @@ window.fetch = async (...args) => {
 
   if (res.status === 401 && !_redirecting401) {
     const isAdminApi = url.includes("/admin/");
-    const isUserLoginApi = url.includes("/login/") || url.includes("/forgot-password/");
-    if (!isUserLoginApi && !isAdminApi) {
+    const isUserLoginApi = url.includes("/login/") || url.includes("/forgot-password/") || url.includes("/logout/");
+    if (!isUserLoginApi && !isAdminApi && !isAuthPage()) {
       _redirecting401 = true;
       try {
         localStorage.removeItem("user");
@@ -319,7 +327,7 @@ window.fetch = async (...args) => {
       } catch (e) {
         console.error("Storage clear failed:", e);
       }
-      window.location.href = "/";
+      window.location.replace("/");
     }
   }
   return res;

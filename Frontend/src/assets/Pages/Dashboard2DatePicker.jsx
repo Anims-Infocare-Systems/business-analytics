@@ -58,9 +58,13 @@ function rangeChipLabel(activePeriod, fromDate, toDate) {
     const { from, to } = presetRange(activePeriod);
     if (!from) return "Select range…";
     if (sameDay(from, to)) return fmt(from);
-    return `${fmt(from)}  →  ${fmt(to)}`;
+    const days = Math.round((to - from) / 86400000) + 1;
+    return `${fmt(from)}  →  ${fmt(to)}${days ? ` (${days}d)` : ""}`;
   }
-  if (fromDate && toDate) return `${fmt(fromDate)}  →  ${fmt(toDate)}`;
+  if (fromDate && toDate) {
+    const days = Math.round((toDate - fromDate) / 86400000) + 1;
+    return `${fmt(fromDate)}  →  ${fmt(toDate)}${days ? ` (${days}d)` : ""}`;
+  }
   if (fromDate)           return `${fmt(fromDate)}  →  …`;
   return "Pick a date range…";
 }

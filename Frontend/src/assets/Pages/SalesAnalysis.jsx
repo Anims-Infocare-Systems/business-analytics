@@ -17,7 +17,7 @@ import {
   Pin
 } from "lucide-react";
 import "./SalesAnalysis.css";
-import ChartDatePicker from "./ChartDatePicker";
+import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
 
 Chart.register(...registerables);
 
@@ -573,7 +573,7 @@ export default function SalesAnalysis() {
         <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 8px' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
           <span className="sa-fl" style={{ margin: 0, fontSize: '0.62rem', color: '#5a6a9a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date Range</span>
-          <ChartDatePicker
+          <SalesAnalysisDatePicker
             from={dateRange.from}
             to={dateRange.to}
             onChange={({ from, to }) => setDateRange({ from, to })}

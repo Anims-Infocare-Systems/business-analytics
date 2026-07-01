@@ -2,18 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import "./QualityAnalysis.css";
 import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
-import { 
-    SlidersHorizontal, 
-    ClipboardCheck, 
-    CheckCircle2, 
-    XCircle, 
-    Wrench, 
-    Hourglass, 
-    Coins, 
-    TrendingUp, 
-    BarChart2, 
-    AlertTriangle, 
-    Package, 
+import {
+    SlidersHorizontal,
+    ClipboardCheck,
+    CheckCircle2,
+    XCircle,
+    Wrench,
+    Hourglass,
+    Coins,
+    TrendingUp,
+    BarChart2,
+    AlertTriangle,
+    Package,
     Lightbulb,
     FileText,
     Activity,
@@ -71,7 +71,7 @@ const KPI_CARDS = [
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
-    
+
     { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: "115", sub: "Material defects", trend: "Action required", cls: "qa2-t-down" },
     { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "90", sub: "Processing defects", trend: "Under watch", cls: "qa2-t-down" },
     { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "3", sub: "Log complaints", trend: "3 open issues", cls: "qa2-t-down" },
@@ -87,7 +87,7 @@ const EMPTY_KPI_CARDS = [
     { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "0.0%", sub: "0 units rejected", trend: "—", cls: "qa2-t-neutral" },
     { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "0.0%", sub: "0 units rework", trend: "—", cls: "qa2-t-neutral" },
     { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹0", sub: "Total Rejection Cost", trend: "Within control", cls: "qa2-t-up" },
-    
+
     { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: "0", sub: "Material defects", trend: "Healthy status", cls: "qa2-t-up" },
     { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "0", sub: "Processing defects", trend: "All clear", cls: "qa2-t-up" },
     { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "0", sub: "Log complaints", trend: "0 complaints", cls: "qa2-t-up" },
@@ -138,12 +138,12 @@ const REWORK_QUEUE = [
 ];
 
 const TRACEABILITY_ROWS = [
-    { routecardNo: "RC-2602-081", date: "22-Feb-2026", supplierName: "A-One Steel Forgings", customerName: "TVS Motor Company", materialName: "Steel Bar EN8", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", operator: "Operator John", qty: "100", okQty: "100", rejQty: "0", rwQty: "0" },
-    { routecardNo: "RC-2602-082", date: "22-Feb-2026", supplierName: "Apex Industries Ltd", customerName: "Sundram Fasteners", materialName: "Thinner GP 015", partNoDesc: "PDC0018 - Thinner GP 015", operator: "Operator Sam", qty: "60", okQty: "0", rejQty: "0", rwQty: "60" },
-    { routecardNo: "RC-2602-083", date: "21-Feb-2026", supplierName: "Dynamic Precision India", customerName: "Lucas TVS Ltd", materialName: "Paint GP Grey", partNoDesc: "PDC0017 - Paint-Seal Cast", operator: "Operator Sarah", qty: "75", okQty: "0", rejQty: "75", rwQty: "0" },
-    { routecardNo: "RC-2602-084", date: "20-Feb-2026", supplierName: "Micro Tools & Dies", customerName: "Brakes India", materialName: "CCMT Carbide Insert", partNoDesc: "PDCT0165 - Insert CCMT 09T304", operator: "Operator Alex", qty: "200", okQty: "200", rejQty: "0", rwQty: "0" },
-    { routecardNo: "RC-2602-085", date: "19-Feb-2026", supplierName: "Super Forge Pvt Ltd", customerName: "TVS Motor Company", materialName: "Round Rod DIA 65MM", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", operator: "Operator John", qty: "150", okQty: "150", rejQty: "0", rwQty: "0" },
-    { routecardNo: "RC-2602-086", date: "18-Feb-2026", supplierName: "Ultra Tech Engineering", customerName: "Lucas TVS Ltd", materialName: "Casting EN9", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", operator: "Operator Mike", qty: "183", okQty: "183", rejQty: "0", rwQty: "0" },
+    { routecardNo: "RC-2602-081", date: "22-Feb-2026", supplierName: "A-One Steel Forgings", grnDetails: "GRN-9801 · 21-Feb-2026", materialName: "Steel Bar EN8", customerName: "TVS Motor Company", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", operator: "Operator John", qty: "100", okQty: "100", rejQty: "0", rwQty: "0", dispatchQty: "100" },
+    { routecardNo: "RC-2602-082", date: "22-Feb-2026", supplierName: "Apex Industries Ltd", grnDetails: "GRN-9802 · 20-Feb-2026", materialName: "Thinner GP 015", customerName: "Sundram Fasteners", partNoDesc: "PDC0018 - Thinner GP 015", operator: "Operator Sam", qty: "60", okQty: "0", rejQty: "0", rwQty: "60", dispatchQty: "0" },
+    { routecardNo: "RC-2602-083", date: "21-Feb-2026", supplierName: "Dynamic Precision India", grnDetails: "GRN-9803 · 19-Feb-2026", materialName: "Paint GP Grey", customerName: "Lucas TVS Ltd", partNoDesc: "PDC0017 - Paint-Seal Cast", operator: "Operator Sarah", qty: "75", okQty: "0", rejQty: "75", rwQty: "0", dispatchQty: "0" },
+    { routecardNo: "RC-2602-084", date: "20-Feb-2026", supplierName: "Micro Tools & Dies", grnDetails: "GRN-9804 · 18-Feb-2026", materialName: "CCMT Carbide Insert", customerName: "Brakes India", partNoDesc: "PDCT0165 - Insert CCMT 09T304", operator: "Operator Alex", qty: "200", okQty: "200", rejQty: "0", rwQty: "0", dispatchQty: "200" },
+    { routecardNo: "RC-2602-085", date: "19-Feb-2026", supplierName: "Super Forge Pvt Ltd", grnDetails: "GRN-9805 · 17-Feb-2026", materialName: "Round Rod DIA 65MM", customerName: "TVS Motor Company", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", operator: "Operator John", qty: "150", okQty: "150", rejQty: "0", rwQty: "0", dispatchQty: "150" },
+    { routecardNo: "RC-2602-086", date: "18-Feb-2026", supplierName: "Ultra Tech Engineering", grnDetails: "GRN-9806 · 16-Feb-2026", materialName: "Casting EN9", customerName: "Lucas TVS Ltd", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", operator: "Operator Mike", qty: "183", okQty: "183", rejQty: "0", rwQty: "0", dispatchQty: "183" },
 ];
 
 // CALIBRATION_ROWS removed — live data from Ins_Mas only
@@ -331,7 +331,7 @@ function readFilterSession(key, defaults) {
     } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function QualityAnalysis() {
@@ -379,6 +379,8 @@ export default function QualityAnalysis() {
     const defectRef = useRef(null); const defectChart = useRef(null);
     const ppmRef = useRef(null); const ppmChart = useRef(null);
     const paretoRef = useRef(null); const paretoChart = useRef(null);
+    const rejectionRef = useRef(null); const rejectionChart = useRef(null);
+    const reworkRef = useRef(null); const reworkChart = useRef(null);
 
     const debounceRef = useRef(null);
 
@@ -463,6 +465,44 @@ export default function QualityAnalysis() {
         const ppmData = chartsData?.mac_rejection_ppm || PPM_DATA;
         const paretoData = chartsData?.pareto || PARETO_DATA;
 
+        // ── Rejection Gradient ──
+        const rejectionCanvas = rejectionRef.current;
+        let rejectionGradient = "rgba(239, 68, 68, 0.1)";
+        if (rejectionCanvas) {
+            const ctx = rejectionCanvas.getContext("2d");
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 192);
+                grad.addColorStop(0, "rgba(239, 68, 68, 0.35)");
+                grad.addColorStop(1, "rgba(239, 68, 68, 0.0)");
+                rejectionGradient = grad;
+            }
+        }
+
+        // ── Rework Gradient ──
+        const reworkCanvas = reworkRef.current;
+        let reworkGradient = "rgba(245, 166, 35, 0.1)";
+        if (reworkCanvas) {
+            const ctx = reworkCanvas.getContext("2d");
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 192);
+                grad.addColorStop(0, "rgba(245, 166, 35, 0.35)");
+                grad.addColorStop(1, "rgba(245, 166, 35, 0.0)");
+                reworkGradient = grad;
+            }
+        }
+
+        // ── Extract datasets ──
+        const trendLabels = trendData.labels || [];
+        const rejectDataset = trendData.datasets?.find(d =>
+            d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
+        );
+        const reworkDataset = trendData.datasets?.find(d =>
+            d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
+        );
+
+        const rejectDataPoints = rejectDataset ? rejectDataset.data : [];
+        const reworkDataPoints = reworkDataset ? reworkDataset.data : [];
+
         mk(trendRef, trendChart, "bar", trendData, {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } } },
@@ -517,8 +557,54 @@ export default function QualityAnalysis() {
             },
         });
 
+        mk(rejectionRef, rejectionChart, "line", {
+            labels: trendLabels,
+            datasets: [{
+                label: "Rejection Qty",
+                data: rejectDataPoints,
+                borderColor: "#ef4444",
+                backgroundColor: rejectionGradient,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 4,
+                pointBackgroundColor: "#ef4444",
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+            }]
+        }, {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+            },
+        });
+
+        mk(reworkRef, reworkChart, "line", {
+            labels: trendLabels,
+            datasets: [{
+                label: "Rework Qty",
+                data: reworkDataPoints,
+                borderColor: "#f97316",
+                backgroundColor: reworkGradient,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 4,
+                pointBackgroundColor: "#f97316",
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+            }]
+        }, {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+            },
+        });
+
         return () => {
-            [trendChart, resultChart, defectChart, ppmChart, paretoChart].forEach(c => c.current?.destroy());
+            [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart].forEach(c => c.current?.destroy());
         };
     }, [chartsData]);
 
@@ -557,7 +643,7 @@ export default function QualityAnalysis() {
         const raw = recordsData?.inspection_records || INSPECTION_ROWS;
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r => 
+        return raw.filter(r =>
             (r.id && r.id.toLowerCase().includes(q)) ||
             (r.partyName && r.partyName.toLowerCase().includes(q)) ||
             (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
@@ -568,7 +654,7 @@ export default function QualityAnalysis() {
         );
     }, [recordsData, hasNoData, searchQuery]);
 
-    const activeProductQuality  = useMemo(() => {
+    const activeProductQuality = useMemo(() => {
         if (hasNoData && !hasSearchWithData) return [];
         // When search is active: use backend-filtered data directly (no additional client filter)
         // When no search: use raw API data or fallback mock
@@ -580,21 +666,21 @@ export default function QualityAnalysis() {
     }, [prodPerfData, hasNoData, hasSearchWithData, searchQuery]);
 
 
-    const activeDefectCauses    = useMemo(() => {
+    const activeDefectCauses = useMemo(() => {
         if (hasNoData) return [];
-        return defectCausesData?.causes   || DEFECT_CAUSES;
+        return defectCausesData?.causes || DEFECT_CAUSES;
     }, [defectCausesData, hasNoData]);
 
-    const activeDefectClasses   = useMemo(() => {
+    const activeDefectClasses = useMemo(() => {
         if (hasNoData) return [
             { bg: "#fee2e2", lbl: "Critical", val: "0", pct: "0.0%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
-            { bg: "#ffedd5", lbl: "Major",    val: "0",  pct: "0.0%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
-            { bg: "#fef9c3", lbl: "Minor",    val: "0",  pct: "0.0%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
+            { bg: "#ffedd5", lbl: "Major", val: "0", pct: "0.0%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
+            { bg: "#fef9c3", lbl: "Minor", val: "0", pct: "0.0%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
         ];
-        return defectCausesData?.classes  || [
+        return defectCausesData?.classes || [
             { bg: "#fee2e2", lbl: "Critical", val: "115", pct: "56.1%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
-            { bg: "#ffedd5", lbl: "Major",    val: "60",  pct: "29.3%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
-            { bg: "#fef9c3", lbl: "Minor",    val: "30",  pct: "14.6%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
+            { bg: "#ffedd5", lbl: "Major", val: "60", pct: "29.3%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
+            { bg: "#fef9c3", lbl: "Minor", val: "30", pct: "14.6%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
         ];
     }, [defectCausesData, hasNoData]);
 
@@ -615,7 +701,7 @@ export default function QualityAnalysis() {
         const raw = recordsData?.rejection_rows || REJECTION_ROWS;
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r => 
+        return raw.filter(r =>
             (r.id && r.id.toLowerCase().includes(q)) ||
             (r.product && r.product.toLowerCase().includes(q)) ||
             (r.reason && r.reason.toLowerCase().includes(q)) ||
@@ -634,20 +720,20 @@ export default function QualityAnalysis() {
         });
     }, [searchFilteredRejectionRows, selectedDispFilter]);
 
-    const rejectionCount = useMemo(() => 
+    const rejectionCount = useMemo(() =>
         searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("reject")).length,
-    [searchFilteredRejectionRows]);
+        [searchFilteredRejectionRows]);
 
-    const reworkCount = useMemo(() => 
+    const reworkCount = useMemo(() =>
         searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("rework")).length,
-    [searchFilteredRejectionRows]);
+        [searchFilteredRejectionRows]);
 
-    const activeReworkQueue     = useMemo(() => {
+    const activeReworkQueue = useMemo(() => {
         if (hasNoData) return [];
         const raw = recordsData?.rework_queue || REWORK_QUEUE;
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r => 
+        return raw.filter(r =>
             (r.name && r.name.toLowerCase().includes(q)) ||
             (r.code && r.code.toLowerCase().includes(q))
         );
@@ -655,12 +741,12 @@ export default function QualityAnalysis() {
 
     const activeCalibrationRows = useMemo(() => {
         if (hasNoData) return [];
-        return calibrationData?.calibrations   || [];
+        return calibrationData?.calibrations || [];
     }, [calibrationData, hasNoData]);
 
     const activeVendorRejection = useMemo(() => {
         const vendorMap = {};
-        
+
         // Aggregate from searchFilteredInspectionRows (which are dynamically search-filtered and date-range filtered)
         searchFilteredInspectionRows.forEach(r => {
             const vendor = r.partyName || "Unknown Vendor";
@@ -671,7 +757,7 @@ export default function QualityAnalysis() {
             const okQty = parseFloat(String(r.okQty).replace(/[^0-9.]/g, "")) || 0;
             const matRej = parseFloat(String(r.matRejQty).replace(/[^0-9.]/g, "")) || 0;
             const macRej = parseFloat(String(r.macRejQty).replace(/[^0-9.]/g, "")) || 0;
-            
+
             vendorMap[vendor].insp += qty;
             vendorMap[vendor].pass += okQty;
             vendorMap[vendor].rej += (matRej + macRej);
@@ -698,7 +784,7 @@ export default function QualityAnalysis() {
             const rej = v.rej;
             const rateVal = total > 0 ? (rej / total) * 100 : 0;
             const shareVal = totalRejectionsAllVendors > 0 ? (rej / totalRejectionsAllVendors) * 100 : 0;
-            
+
             let color = "#10b981";
             if (rateVal >= 8.0) color = "#ef4444";
             else if (rateVal >= 4.0) color = "#f97316";
@@ -717,7 +803,7 @@ export default function QualityAnalysis() {
 
     const activeProcessRejection = useMemo(() => {
         const processMap = {};
-        
+
         // Aggregate from searchFilteredInspectionRows (which are dynamically search-filtered and date-range filtered)
         searchFilteredInspectionRows.forEach(r => {
             const process = r.process || "Unknown Process";
@@ -728,7 +814,7 @@ export default function QualityAnalysis() {
             const okQty = parseFloat(String(r.okQty).replace(/[^0-9.]/g, "")) || 0;
             const matRej = parseFloat(String(r.matRejQty).replace(/[^0-9.]/g, "")) || 0;
             const macRej = parseFloat(String(r.macRejQty).replace(/[^0-9.]/g, "")) || 0;
-            
+
             processMap[process].insp += qty;
             processMap[process].pass += okQty;
             processMap[process].rej += (matRej + macRej);
@@ -756,7 +842,7 @@ export default function QualityAnalysis() {
             const rej = v.rej;
             const rateVal = total > 0 ? (rej / total) * 100 : 0;
             const shareVal = totalRejectionsAllProcesses > 0 ? (rej / totalRejectionsAllProcesses) * 100 : 0;
-            
+
             let color = "#10b981";
             if (rateVal >= 5.0) color = "#ef4444";
             else if (rateVal >= 2.5) color = "#f97316";
@@ -786,7 +872,7 @@ export default function QualityAnalysis() {
             }
         });
         let list = Object.values(map).sort((a, b) => b.qty - a.qty);
-        
+
         if (list.length === 0 || hasNoData) {
             list = [
                 { name: "Round Rod DIA 50MM", qty: 48, process: "Cutting" },
@@ -810,7 +896,7 @@ export default function QualityAnalysis() {
             }
         });
         let list = Object.values(map).sort((a, b) => b.qty - a.qty);
-        
+
         if (list.length === 0 || hasNoData) {
             list = [
                 { name: "Segment Carrier RM", qty: 40, process: "Assembly" },
@@ -828,7 +914,7 @@ export default function QualityAnalysis() {
             const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
             const rej = matRej + macRej;
             const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
-            
+
             if (!map[dept]) {
                 map[dept] = { department: dept, inspected: 0, rejected: 0 };
             }
@@ -867,7 +953,7 @@ export default function QualityAnalysis() {
     const activeCustomerComplaints = useMemo(() => {
         if (hasNoData) return [];
         const raw = customerComplaintsData?.complaints || [];
-        
+
         // Fallback mock data when empty/offline
         if (raw.length === 0) {
             const mock = [
@@ -875,7 +961,7 @@ export default function QualityAnalysis() {
                 { complaint_id: "CC-2601-002", customer_name: "Sundram Fasteners", product: "PKM0012 - VCI Cover 8\"×8\"", complaint_description: "VCI bags having tear at the corner.", action_taken: "Replaced the damaged covers.", complaint_date: "18-Feb-2026", corrective_action: "Adjusted folding machine guide rails.", permanent_action: "Reinforced corner thickness specifications.", status: "IN PROGRESS" },
                 { complaint_id: "CC-2601-003", customer_name: "Lucas TVS Ltd", product: "PDC0017 - Paint-Seal Cast Dipping", complaint_description: "Paint peel-off from corners.", action_taken: "Stripped paint and re-dipped casting.", complaint_date: "15-Feb-2026", corrective_action: "Increased oven curing time by 5 minutes.", permanent_action: "Added hourly viscosity checks for dipping paint.", status: "RESOLVED" }
             ];
-            const filteredMock = searchQuery ? mock.filter(c => 
+            const filteredMock = searchQuery ? mock.filter(c =>
                 (c.complaint_id && c.complaint_id.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
                 (c.customer_name && c.customer_name.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
                 (c.product && c.product.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
@@ -887,10 +973,10 @@ export default function QualityAnalysis() {
             ) : mock;
             return filteredMock;
         }
-        
+
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
-        return raw.filter(c => 
+        return raw.filter(c =>
             (c.complaint_id && c.complaint_id.toLowerCase().includes(q)) ||
             (c.customer_name && c.customer_name.toLowerCase().includes(q)) ||
             (c.product && c.product.toLowerCase().includes(q)) ||
@@ -905,7 +991,7 @@ export default function QualityAnalysis() {
     const activeTraceabilityRows = useMemo(() => {
         if (hasNoData) return [];
         let list = TRACEABILITY_ROWS;
-        
+
         // Filter by date range if active
         if (dateRange.from && dateRange.to) {
             list = list.filter(r => {
@@ -914,11 +1000,11 @@ export default function QualityAnalysis() {
                 return rd >= dateRange.from && rd <= dateRange.to;
             });
         }
-        
+
         // Filter by search query if active
         if (!searchQuery) return list;
         const q = searchQuery.toLowerCase().trim();
-        return list.filter(r => 
+        return list.filter(r =>
             (r.routecardNo && r.routecardNo.toLowerCase().includes(q)) ||
             (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
             (r.customerName && r.customerName.toLowerCase().includes(q)) ||
@@ -930,20 +1016,20 @@ export default function QualityAnalysis() {
 
     const interInspCount = useMemo(() =>
         searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.toLowerCase().startsWith("ii")).length,
-    [searchFilteredInspectionRows]);
+        [searchFilteredInspectionRows]);
     const finalInspCount = useMemo(() =>
         searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("final") || r.id?.toLowerCase().startsWith("fi")).length,
-    [searchFilteredInspectionRows]);
-    const jobOrderCount  = useMemo(() =>
-        searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("job")   || r.id?.toLowerCase().startsWith("ji")).length,
-    [searchFilteredInspectionRows]);
+        [searchFilteredInspectionRows]);
+    const jobOrderCount = useMemo(() =>
+        searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("job") || r.id?.toLowerCase().startsWith("ji")).length,
+        [searchFilteredInspectionRows]);
 
     // Count items that are overdue or due within 7 days
     const calibrationAlertCount = useMemo(() =>
         activeCalibrationRows.filter(c => c.cls === "qa2-cal-over" || c.cls === "qa2-cal-warn").length,
-    [activeCalibrationRows]);
+        [activeCalibrationRows]);
 
-    const activeInsightsLeft  = useMemo(() => {
+    const activeInsightsLeft = useMemo(() => {
         if (hasNoData) return [];
         if (insightsData?.insights_left) {
             return insightsData.insights_left.map((ins, idx) => {
@@ -972,7 +1058,7 @@ export default function QualityAnalysis() {
                 "1) Initiate supplier audit for Paint-Seal Cast (100% batch failure).",
                 "2) Calibrate Hardness Tester #HT-01 today.",
                 "3) Review assembly fixture for Segment Carrier alignment."
-              ];
+            ];
     }, [insightsData, hasNoData]);
 
 
@@ -1010,7 +1096,7 @@ export default function QualityAnalysis() {
             { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: rejRate, sub: "Defective units", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
             { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: reworkRate, sub: "Reworked units", trend: "Within tolerance", cls: "qa2-t-neutral" },
             { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: qualityVal, sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
-            
+
             { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: totalMaterialRej.toLocaleString("en-IN"), sub: "Material defects", trend: totalMaterialRej > 0 ? "Action required" : "Healthy status", cls: totalMaterialRej > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: totalMachineRej.toLocaleString("en-IN"), sub: "Processing defects", trend: totalMachineRej > 0 ? "Under watch" : "All clear", cls: totalMachineRej > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: complaintsCount.toString(), sub: "Log complaints", trend: complaintsCount > 0 ? `${complaintsCount} open issues` : "0 complaints", cls: complaintsCount > 0 ? "qa2-t-down" : "qa2-t-up" },
@@ -1059,7 +1145,7 @@ export default function QualityAnalysis() {
                     <SlidersHorizontal size={18} style={{ color: '#2d6de8', strokeWidth: 2.25 }} /> Report Filters
                 </div>
                 <div className="qa2-filter-grid" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'end', padding: '1rem 1.25rem' }}>
-                    <div className="qa2-fg" style={{ flex: '0 0 260px' }}>
+                    <div className="qa2-fg" style={{ width: '320px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Date Range</label>
                         <QualityAnalysisDatePicker
                             from={dateRange.from}
@@ -1067,7 +1153,7 @@ export default function QualityAnalysis() {
                             onChange={({ from, to }) => setDateRange({ from, to })}
                         />
                     </div>
-                    <div className="qa2-fg" style={{ flex: '0 0 260px' }}>
+                    <div className="qa2-fg" style={{ width: '240px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Search Records</label>
                         <div className="qa2-search-input-wrapper" style={{ position: 'relative', width: '100%' }}>
                             <input
@@ -1121,12 +1207,12 @@ export default function QualityAnalysis() {
             ) : (
                 <div className="qa2-summary-strip qa2-animate qa2-d2">
                     {[
-                        { lbl: "Period",          val: summaryData?.period            ?? "Jan–Feb 2026", cls: "" },
-                        { lbl: "Total Inspected", val: summaryData?.total_inspected   ?? "—",            cls: "qa2-blue" },
-                        { lbl: "Pass Rate",       val: summaryData?.pass_rate         ?? "—",            cls: "qa2-green" },
-                        { lbl: "Total Rejected",  val: summaryData?.total_rejected    ?? "—",            cls: "qa2-red" },
-                        { lbl: "Rework",          val: summaryData?.rework            ?? "—",            cls: "qa2-orange" },
-                        { lbl: "Pending Insp.",   val: summaryData?.pending_inspection ?? "—",           cls: "qa2-yellow" },
+                        { lbl: "Period", val: summaryData?.period ?? "Jan–Feb 2026", cls: "" },
+                        { lbl: "Total Inspected", val: summaryData?.total_inspected ?? "—", cls: "qa2-blue" },
+                        { lbl: "Pass Rate", val: summaryData?.pass_rate ?? "—", cls: "qa2-green" },
+                        { lbl: "Total Rejected", val: summaryData?.total_rejected ?? "—", cls: "qa2-red" },
+                        { lbl: "Rework", val: summaryData?.rework ?? "—", cls: "qa2-orange" },
+                        { lbl: "Pending Insp.", val: summaryData?.pending_inspection ?? "—", cls: "qa2-yellow" },
                     ].map((s, i) => (
                         <div className="qa2-strip-item" key={i}>
                             <div className="qa2-strip-lbl">{s.lbl}</div>
@@ -1159,7 +1245,7 @@ export default function QualityAnalysis() {
                         const cleanTrendText = k.trend ? k.trend.replace(/^[↑↓\s]+/, "") : "";
                         const hasUp = k.trend && k.trend.includes("↑");
                         const hasDown = k.trend && k.trend.includes("↓");
-                        
+
                         return (
                             <div className="qa2-kpi-card qa2-card-premium qa2-animate" style={{ animationDelay: `${0.08 + i * 0.06}s` }} key={i}>
                                 <div className="qa2-kpi-top">
@@ -1254,7 +1340,7 @@ export default function QualityAnalysis() {
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon={BarChart2} iconColor="#ef4444" title="Top Defect Causes — Pareto" />
+                    <SectionHead icon={BarChart2} iconColor="#ef4444" title="Top Defect Causes" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
@@ -1269,6 +1355,50 @@ export default function QualityAnalysis() {
                         </div>
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={paretoRef} /></div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Charts Row 3: Rejection & Rework Analytics ── */}
+            <div className="qa2-charts-2 qa2-animate qa2-d3">
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                    <SectionHead
+                        icon={AlertTriangle}
+                        iconColor="#ef4444"
+                        title="Rejection Analytics Trend"
+                        badge={summaryData?.kpis?.rejection_rate_card?.value || "7.5% Rate"}
+                        badgeCls="qa2-badge-red"
+                    />
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                            <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={rejectionRef} /></div>
+                    )}
+                </div>
+                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                    <SectionHead
+                        icon={Wrench}
+                        iconColor="#f97316"
+                        title="Rework Analytics Trend"
+                        badge={summaryData?.kpis?.rework_rate_card?.value || "4.9% Rate"}
+                        badgeCls="qa2-badge-orange"
+                    />
+                    {chartsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                            <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
+                        </div>
+                    ) : hasNoData ? (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
+                            No data found for the selected period
+                        </div>
+                    ) : (
+                        <div className="qa2-chart-wrap"><canvas ref={reworkRef} /></div>
                     )}
                 </div>
             </div>
@@ -1589,21 +1719,21 @@ export default function QualityAnalysis() {
                 <div className="qa2-table-header">
                     <SectionHead icon={FileText} iconColor="#3b82f6" title="Inspection Records — All Transactions" />
                     <div className="qa2-tag-row">
-                        <span 
+                        <span
                             className={`qa2-badge qa2-badge-blue qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "INTER" ? "qa2-badge-inactive" : ""} ${selectedType === "INTER" ? "qa2-badge-active-blue" : ""}`}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => setSelectedType(prev => prev === "INTER" ? "ALL" : "INTER")}
                         >
                             <Activity size={10} style={{ strokeWidth: 3 }} /> Inter Insp: {interInspCount}
                         </span>
-                        <span 
+                        <span
                             className={`qa2-badge qa2-badge-teal qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "FINAL" ? "qa2-badge-inactive" : ""} ${selectedType === "FINAL" ? "qa2-badge-active-teal" : ""}`}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => setSelectedType(prev => prev === "FINAL" ? "ALL" : "FINAL")}
                         >
                             <CheckCircle size={10} style={{ strokeWidth: 3 }} /> Final Insp: {finalInspCount}
                         </span>
-                        <span 
+                        <span
                             className={`qa2-badge qa2-badge-purple qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "JOB" ? "qa2-badge-inactive" : ""} ${selectedType === "JOB" ? "qa2-badge-active-purple" : ""}`}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => setSelectedType(prev => prev === "JOB" ? "ALL" : "JOB")}
@@ -1611,7 +1741,7 @@ export default function QualityAnalysis() {
                             <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
                         </span>
                         {selectedType !== "ALL" && (
-                            <button 
+                            <button
                                 className="qa2-clear-type-filter-btn"
                                 onClick={() => setSelectedType("ALL")}
                                 style={{
@@ -1675,14 +1805,14 @@ export default function QualityAnalysis() {
                                         return (
                                             <tr key={i} className="qa2-tr">
                                                 <td style={getColStyle("Type")}>
-                                                     <span 
-                                                         className={`qa2-badge ${typeCls} qa2-badge-interactive`}
-                                                         style={{ display: 'inline-flex', alignItems: 'center' }}
-                                                         onClick={() => handleTypeBadgeClick(typeLabel)}
-                                                     >
-                                                         {typeLabel}
-                                                     </span>
-                                                 </td>
+                                                    <span
+                                                        className={`qa2-badge ${typeCls} qa2-badge-interactive`}
+                                                        style={{ display: 'inline-flex', alignItems: 'center' }}
+                                                        onClick={() => handleTypeBadgeClick(typeLabel)}
+                                                    >
+                                                        {typeLabel}
+                                                    </span>
+                                                </td>
                                                 <td style={getColStyle("Insp No")}><span className="qa2-insp-id">{inspNo}</span></td>
                                                 <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp Date")}>{inspDate}</td>
                                                 <td className="qa2-mono qa2-muted" style={getColStyle("Part No – Description")}>{partNoDesc}</td>
@@ -1718,28 +1848,28 @@ export default function QualityAnalysis() {
                 <div className="qa2-table-header">
                     <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary" />
                     <div className="qa2-tag-row">
-                        <span 
-                            className="qa2-badge" 
-                            style={{ 
-                                display: 'inline-flex', 
-                                alignItems: 'center', 
-                                gap: '4px', 
-                                background: '#f1f5f9', 
-                                color: '#475569', 
-                                border: '1px solid #e2e8f0', 
-                                fontWeight: 600 
+                        <span
+                            className="qa2-badge"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                border: '1px solid #e2e8f0',
+                                fontWeight: 600
                             }}
                         >
                             {activeRejectionRows.length} Record{activeRejectionRows.length !== 1 ? 's' : ''}
                         </span>
-                        <span 
+                        <span
                             className={`qa2-badge qa2-badge-red qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REJECTION" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REJECTION" ? "qa2-badge-active-red" : ""}`}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => setSelectedDispFilter(prev => prev === "REJECTION" ? "ALL" : "REJECTION")}
                         >
                             <XCircle size={10} style={{ strokeWidth: 3 }} /> Rejection: {rejectionCount}
                         </span>
-                        <span 
+                        <span
                             className={`qa2-badge qa2-badge-orange qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REWORK" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REWORK" ? "qa2-badge-active-orange" : ""}`}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => setSelectedDispFilter(prev => prev === "REWORK" ? "ALL" : "REWORK")}
@@ -1747,7 +1877,7 @@ export default function QualityAnalysis() {
                             <Wrench size={10} style={{ strokeWidth: 3 }} /> Rework: {reworkCount}
                         </span>
                         {selectedDispFilter !== "ALL" && (
-                            <button 
+                            <button
                                 className="qa2-clear-type-filter-btn"
                                 onClick={() => setSelectedDispFilter("ALL")}
                                 style={{
@@ -1799,7 +1929,7 @@ export default function QualityAnalysis() {
                                             <td>{r.reason}</td>
                                             <td className="qa2-td-r">{r.qty}</td>
                                             <td>
-                                                <span 
+                                                <span
                                                     className={`qa2-badge ${r.dispCls} qa2-badge-interactive`}
                                                     style={{ display: 'inline-flex', alignItems: 'center' }}
                                                     onClick={() => handleDispBadgeClick(r.disp)}
@@ -1888,19 +2018,19 @@ export default function QualityAnalysis() {
 
             {/* ── Traceability (Full Width) ── */}
             <div className="qa2-card qa2-card-premium qa2-animate qa2-d4">
-                <SectionHead 
-                    icon={FileText} 
-                    iconColor="#8b5cf6" 
-                    title="Traceability Records" 
-                    badge={`${activeTraceabilityRows.length} Record${activeTraceabilityRows.length !== 1 ? "s" : ""}`} 
-                    badgeCls="qa2-badge-purple" 
+                <SectionHead
+                    icon={FileText}
+                    iconColor="#8b5cf6"
+                    title="Traceability Records"
+                    badge={`${activeTraceabilityRows.length} Record${activeTraceabilityRows.length !== 1 ? "s" : ""}`}
+                    badgeCls="qa2-badge-purple"
                 />
                 <div className="qa2-table-scroll">
                     <table className="qa2-table">
                         <thead>
                             <tr>
-                                {["Routecard No", "Routecard Date", "Supplier Name", "Customer Name", "Material Name", "Part No – Description", "Operator", "Qty", "OK Qty", "Rej Qty", "Rw Qty"].map(h => (
-                                    <th key={h} className={["Qty", "OK Qty", "Rej Qty", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
+                                {["ROUTECARD NO", "ROUTECARD DATE", "SUPPLIER NAME", "GRN Details", "MATERIAL NAME", "CUSTOMER NAME", "PART NO – DESCRIPTION", "OPERATOR", "Tot QTY", "OK QTY", "REJ QTY", "RW QTY", "Dispatch Qty"].map(h => (
+                                    <th key={h} className={["Tot QTY", "OK QTY", "REJ QTY", "RW QTY", "Dispatch Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -1909,8 +2039,8 @@ export default function QualityAnalysis() {
                                 activeTraceabilityRows.map((r, i) => (
                                     <tr key={i} className="qa2-tr">
                                         <td style={{ minWidth: "130px" }}>
-                                            <span 
-                                                className="qa2-badge" 
+                                            <span
+                                                className="qa2-badge"
                                                 style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6", fontWeight: 700 }}
                                             >
                                                 {r.routecardNo}
@@ -1918,19 +2048,21 @@ export default function QualityAnalysis() {
                                         </td>
                                         <td className="qa2-muted qa2-nowrap" style={{ minWidth: "120px" }}>{r.date}</td>
                                         <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.supplierName}</td>
-                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.customerName}</td>
+                                        <td className="qa2-muted qa2-nowrap" style={{ minWidth: "150px" }}>{r.grnDetails || "—"}</td>
                                         <td className="qa2-muted" style={{ minWidth: "150px" }}>{r.materialName}</td>
+                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.customerName}</td>
                                         <td className="qa2-mono qa2-muted" style={{ minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" }}>{r.partNoDesc}</td>
                                         <td className="qa2-nowrap" style={{ minWidth: "130px" }}>{r.operator}</td>
                                         <td className="qa2-td-r" style={{ minWidth: "80px", fontWeight: 600 }}>{r.qty}</td>
                                         <td className="qa2-td-r qa2-green" style={{ minWidth: "80px", fontWeight: 600 }}>{r.okQty}</td>
                                         <td className="qa2-td-r qa2-red" style={{ minWidth: "80px" }}>{r.rejQty}</td>
                                         <td className="qa2-td-r qa2-orange" style={{ minWidth: "80px" }}>{r.rwQty}</td>
+                                        <td className="qa2-td-r qa2-blue" style={{ minWidth: "90px", fontWeight: 600 }}>{r.dispatchQty || "0"}</td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="11" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                    <td colSpan="13" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
                                         No traceability records found for the selected period
                                     </td>
                                 </tr>
@@ -2010,7 +2142,7 @@ export default function QualityAnalysis() {
                                 const cleanVal = ins.val ? ins.val.replace(/^[↑↓\s]+/, "") : "";
                                 const hasUp = ins.val && ins.val.includes("↑");
                                 const hasDown = ins.val && ins.val.includes("↓");
-                                
+
                                 return (
                                     <div className="qa2-insight-row" key={i}
                                         style={{ borderLeft: `3px solid ${ins.valColor || "transparent"}` }}>
