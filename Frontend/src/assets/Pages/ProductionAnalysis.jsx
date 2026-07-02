@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { FiCpu, FiUser, FiLayers, FiCompass, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar } from "react-icons/fi";
+import { FiCpu, FiUser, FiLayers, FiCompass, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
 import ProductionAnalysisDatePicker from "./ProductionAnalysisDatePicker";
 import { resolveApiBase } from "../../apiBase";
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 const API_BASE = resolveApiBase();
 
 /* ═══════════════════════════════════════════════
@@ -305,6 +306,8 @@ export default function ProductionAnalysis() {
   const [mounted, setMounted] = useState(false);
   const [pvMode, setPvMode] = useState("machine"); // "machine" | "month"
   const [oeeMode, setOeeMode] = useState("machine"); // "machine" | "month"
+  const [pvChartType, setPvChartType] = useState("bar"); // "bar" | "line"
+  const [oeeChartType, setOeeChartType] = useState("line"); // "line" | "bar"
   const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("All");
   const [searchMacQuery, setSearchMacQuery] = useState("");
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -316,6 +319,10 @@ export default function ProductionAnalysis() {
   const setChartInst = useRef(null);
   const utilChartRef = useRef(null);
   const utilChartInst = useRef(null);
+  const macAddedChartRef = useRef(null);
+  const macAddedChartInst = useRef(null);
+  const macEffTrendChartRef = useRef(null);
+  const macEffTrendChartInst = useRef(null);
   const [pvChartData, setPvChartData] = useState({
     machine_data: { labels: [], achieved: [] },
     month_data: { labels: [], datasets: [] },
@@ -326,6 +333,48 @@ export default function ProductionAnalysis() {
   });
   const [tableData, setTableData] = useState([]);
   const [tableLoading, setTableLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [traceSearch, setTraceSearch] = useState("");
+
+  const traceabilityData = [
+    { sno: 1, partNo: "P-1002-39", routeCardNo: "RC-2026-9041", machineName: "TC-59", runningHrs: 6.8, operator: "Ramchandra Soran", qty: 450 },
+    { sno: 2, partNo: "P-1002-39", routeCardNo: "RC-2026-9042", machineName: "TC-60", runningHrs: 7.2, operator: "Santhana Lakshmi", qty: 480 },
+    { sno: 3, partNo: "P-8094-11", routeCardNo: "RC-2026-9043", machineName: "TC 50", runningHrs: 5.5, operator: "Akash.A", qty: 320 },
+    { sno: 4, partNo: "P-4509-02", routeCardNo: "RC-2026-9044", machineName: "TC 43 L", runningHrs: 6.0, operator: "Mohan Kewat", qty: 390 },
+    { sno: 5, partNo: "P-3321-77", routeCardNo: "RC-2026-9045", machineName: "VMC-07", runningHrs: 7.5, operator: "Karthi.S", qty: 510 },
+    { sno: 6, partNo: "P-8809-54", routeCardNo: "RC-2026-9046", machineName: "VMC 18", runningHrs: 4.8, operator: "Chandan Kumar", qty: 290 },
+    { sno: 7, partNo: "P-1002-39", routeCardNo: "RC-2026-9047", machineName: "SPM-04", runningHrs: 6.2, operator: "Ajith.A", qty: 410 },
+    { sno: 8, partNo: "P-8094-11", routeCardNo: "RC-2026-9048", machineName: "BROACHING-1", runningHrs: 5.9, operator: "Nagamani", qty: 380 },
+  ];
+
+  const topUtilizationData = [
+    { rank: 1, machine: "TC-60", utilization: 91, runningHrs: 7.2, idleHrs: 0.8 },
+    { rank: 2, machine: "TC-59", utilization: 88, runningHrs: 6.8, idleHrs: 1.2 },
+    { rank: 3, machine: "VMC-07", utilization: 85, runningHrs: 6.5, idleHrs: 1.5 },
+    { rank: 4, machine: "M/C-09", utilization: 82, runningHrs: 6.2, idleHrs: 1.8 },
+    { rank: 5, machine: "M/C-11", utilization: 80, runningHrs: 6.0, idleHrs: 2.0 },
+    { rank: 6, machine: "M/C-09", utilization: 79, runningHrs: 5.9, idleHrs: 2.1 },
+    { rank: 7, machine: "TC 50", utilization: 74, runningHrs: 5.5, idleHrs: 2.5 },
+    { rank: 8, machine: "M/C-12", utilization: 75, runningHrs: 5.6, idleHrs: 2.4 },
+    { rank: 9, machine: "VMC 18", utilization: 70, runningHrs: 5.2, idleHrs: 2.8 },
+    { rank: 10, machine: "TC 43 L", utilization: 66, runningHrs: 4.8, idleHrs: 3.2 }
+  ];
+
+  const topOeeData = [
+    { rank: 1, machine: "TC-60", oee: 88, type: "CNC Turning" },
+    { rank: 2, machine: "TC-59", oee: 84, type: "CNC Turning" },
+    { rank: 3, machine: "VMC-07", oee: 82, type: "Milling" },
+    { rank: 4, machine: "M/C-11", oee: 79, type: "Conventional" },
+    { rank: 5, machine: "M/C-09", oee: 78, type: "Conventional" }
+  ];
+
+  const leastOeeData = [
+    { rank: 1, machine: "SPM-04", oee: 52, type: "Special Purpose" },
+    { rank: 2, machine: "VMC 18", oee: 58, type: "Milling" },
+    { rank: 3, machine: "TC 50", oee: 62, type: "CNC Turning" },
+    { rank: 4, machine: "TC 43 L", oee: 65, type: "CNC Turning" },
+    { rank: 5, machine: "BROACHING-1", oee: 68, type: "Broaching" }
+  ];
 
   const allMachinesList = [
     { name: "TC-59", type: "CNC Turning", color: "#2563eb" },
@@ -676,6 +725,7 @@ export default function ProductionAnalysis() {
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
+    setPageLoading(true);
     const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
     fetch(`${API_BASE}/production-analysis-report/?${params}`, { credentials: "include" })
       .then(async (res) => { const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data?.error || "Failed to load production analysis report"); return data; })
@@ -685,7 +735,10 @@ export default function ProductionAnalysis() {
           setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0 });
         }
       })
-      .catch(err => console.error("Error connecting to production analysis backend:", err));
+      .catch(err => console.error("Error connecting to production analysis backend:", err))
+      .finally(() => {
+        setTimeout(() => setPageLoading(false), 700);
+      });
   }, [dateRange.from, dateRange.to]);
 
   /* ── Production Value chart fetch ───────────────── */
@@ -739,19 +792,51 @@ export default function ProductionAnalysis() {
     const ctx = pvChartRef.current.getContext("2d");
     const machineData = pvChartData.machine_data;
     const monthData = pvChartData.month_data;
+
+    let datasets = [];
+    if (isMachine) {
+      const palette = ["rgba(37,99,235,0.75)", "rgba(249,115,22,0.75)", "rgba(16,185,129,0.75)", "rgba(139,92,246,0.75)", "rgba(6,182,212,0.75)", "rgba(236,72,153,0.75)", "rgba(245,158,11,0.75)", "rgba(99,102,241,0.75)", "rgba(239,68,68,0.75)"];
+      const borders = ["#2563eb", "#f97316", "#10b981", "#8b5cf6", "#06b6d4", "#ec4899", "#f59e0b", "#6366f1", "#ef4444"];
+      
+      datasets = [{
+        label: "Achieved Value (₹)",
+        data: machineData.achieved,
+        backgroundColor: pvChartType === "line" ? "rgba(37, 99, 235, 0.15)" : machineData.labels.map((_, i) => palette[i % palette.length]),
+        borderColor: pvChartType === "line" ? "#2563eb" : machineData.labels.map((_, i) => borders[i % borders.length]),
+        borderWidth: pvChartType === "line" ? 3 : 1.5,
+        borderRadius: pvChartType === "line" ? 0 : 7,
+        fill: pvChartType === "line",
+        tension: 0.38,
+        pointBackgroundColor: "#ffffff",
+        pointBorderColor: "#2563eb",
+        pointBorderWidth: 2,
+        pointRadius: pvChartType === "line" ? 4 : 0
+      }];
+    } else {
+      datasets = monthData.datasets.map(d => ({
+        ...d,
+        type: pvChartType,
+        borderRadius: pvChartType === "line" ? 0 : 4,
+        fill: pvChartType === "line",
+        tension: 0.38
+      }));
+    }
+
     pvChartInst.current = new Chart(ctx, {
-      type: "bar",
-      data: isMachine ? { labels: machineData.labels, datasets: [{ label: "Achieved Value (₹)", data: machineData.achieved, backgroundColor: machineData.labels.map((_, i) => { const palette = ["rgba(37,99,235,0.75)", "rgba(249,115,22,0.75)", "rgba(16,185,129,0.75)", "rgba(139,92,246,0.75)", "rgba(6,182,212,0.75)", "rgba(236,72,153,0.75)", "rgba(245,158,11,0.75)", "rgba(99,102,241,0.75)", "rgba(239,68,68,0.75)", "rgba(132,204,22,0.75)", "rgba(20,184,166,0.75)", "rgba(168,85,247,0.75)", "rgba(251,146,60,0.75)", "rgba(34,211,238,0.75)", "rgba(74,222,128,0.75)", "rgba(244,63,94,0.75)", "rgba(14,165,233,0.75)", "rgba(217,70,239,0.75)", "rgba(251,191,36,0.75)", "rgba(52,211,153,0.75)"]; return palette[i % palette.length]; }), borderColor: machineData.labels.map((_, i) => { const borders = ["#2563eb", "#f97316", "#10b981", "#8b5cf6", "#06b6d4", "#ec4899", "#f59e0b", "#6366f1", "#ef4444", "#84cc16", "#14b8a6", "#a855f7", "#fb923c", "#22d3ee", "#4ade80", "#f43f5e", "#0ea5e9", "#d946ef", "#fbbf24", "#34d399"]; return borders[i % borders.length]; }), borderWidth: 1.5, borderRadius: 7 }] } : { labels: monthData.labels, datasets: monthData.datasets.map(d => ({ ...d, borderRadius: 4 })) },
+      type: pvChartType,
+      data: {
+        labels: isMachine ? machineData.labels : monthData.labels,
+        datasets: datasets
+      },
       options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
         plugins: { legend: { position: "top", labels: { font: { family: "'DM Sans','Outfit',sans-serif", size: 12, weight: "600" }, padding: 18, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.y.toLocaleString("en-IN")}` } }, datalabels: isMachine ? { anchor: "end", align: "top", formatter: v => `₹${(v / 1000).toFixed(0)}K`, font: { size: 10, weight: "700" }, color: "#475569" } : false },
-        scales: { x: { stacked: !isMachine, ticks: { font: { size: 11 }, maxRotation: isMachine ? 35 : 0 }, grid: { display: false } }, y: { stacked: !isMachine, beginAtZero: true, ticks: { callback: v => `₹${(v / 1000).toFixed(0)}K`, font: { size: 11 } }, grid: { color: "#f1f5f9" } } }
+        scales: { x: { stacked: !isMachine && pvChartType === "bar", ticks: { font: { size: 11 }, maxRotation: isMachine ? 35 : 0 }, grid: { display: false } }, y: { stacked: !isMachine && pvChartType === "bar", beginAtZero: true, ticks: { callback: v => `₹${(v / 1000).toFixed(0)}K`, font: { size: 11 } }, grid: { color: "#f1f5f9" } } }
       }
     });
     return () => pvChartInst.current?.destroy();
-  }, [pvMode, pvChartData]);
+  }, [pvMode, pvChartData, pvChartType, pageLoading]);
 
-  /* ── Machine OEE Chart ─────────────────── */
   useEffect(() => {
     if (!oeeChartRef.current) return;
     oeeChartInst.current?.destroy();
@@ -770,22 +855,23 @@ export default function ProductionAnalysis() {
       : [73, 75, 72, 78, 81, 84, 82];
 
     oeeChartInst.current = new Chart(ctx, {
-      type: "line",
+      type: oeeChartType,
       data: {
         labels: labels,
         datasets: [{
           label: "OEE %",
           data: oeeData,
           borderColor: "#6366f1",
-          borderWidth: 3,
+          borderWidth: oeeChartType === "line" ? 3 : 1.5,
           pointBackgroundColor: "#ffffff",
           pointBorderColor: "#6366f1",
           pointBorderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          fill: true,
-          backgroundColor: gradient,
+          pointRadius: oeeChartType === "line" ? 4 : 0,
+          pointHoverRadius: oeeChartType === "line" ? 6 : 0,
+          fill: oeeChartType === "line",
+          backgroundColor: oeeChartType === "line" ? gradient : "rgba(99, 102, 241, 0.8)",
           tension: 0.38,
+          borderRadius: oeeChartType === "bar" ? 6 : 0
         }]
       },
       options: {
@@ -795,11 +881,43 @@ export default function ProductionAnalysis() {
           legend: { display: false },
           tooltip: { callbacks: { label: ctx => ` OEE: ${ctx.parsed.y}%` } },
           datalabels: {
-            anchor: "end",
-            align: "top",
-            formatter: v => `${v}%`,
-            font: { size: 10, weight: "700", family: "'Plus Jakarta Sans',sans-serif" },
-            color: "#6366f1"
+            anchor: context => {
+              const isMobile = window.innerWidth < 640;
+              if (isMobile && oeeChartType === "line") {
+                return context.dataIndex % 2 === 0 ? "end" : "start";
+              }
+              return "end";
+            },
+            align: context => {
+              const isMobile = window.innerWidth < 640;
+              if (isMobile && oeeChartType === "line") {
+                return context.dataIndex % 2 === 0 ? "top" : "bottom";
+              }
+              return "top";
+            },
+            offset: context => {
+              const isMobile = window.innerWidth < 640;
+              if (isMobile && oeeChartType === "line") {
+                return context.dataIndex % 2 === 0 ? 4 : 4;
+              }
+              return 6;
+            },
+            formatter: (v, context) => {
+              const isMobile = window.innerWidth < 640;
+              if (isMobile && oeeChartType === "line") {
+                return `${v}`; // Truncate % symbol on mobile line chart to save space
+              }
+              return `${v}%`;
+            },
+            font: context => {
+              const isMobile = window.innerWidth < 640;
+              return {
+                size: isMobile ? 8 : 10,
+                weight: "700",
+                family: "'Plus Jakarta Sans',sans-serif"
+              };
+            },
+            color: "#475569"
           }
         },
         scales: {
@@ -817,7 +935,7 @@ export default function ProductionAnalysis() {
       }
     });
     return () => oeeChartInst.current?.destroy();
-  }, [pvChartData, oeeMode]);
+  }, [pvChartData, oeeMode, oeeChartType, pageLoading]);
 
   /* ── Setting Time Machine Wise Chart ─────── */
   useEffect(() => {
@@ -874,7 +992,7 @@ export default function ProductionAnalysis() {
       }
     });
     return () => setChartInst.current?.destroy();
-  }, [pvChartData]);
+  }, [pvChartData, pageLoading]);
 
   /* ── Machine Utilization Chart ──────────── */
   useEffect(() => {
@@ -938,7 +1056,160 @@ export default function ProductionAnalysis() {
       }
     });
     return () => utilChartInst.current?.destroy();
-  }, [pvChartData]);
+  }, [pvChartData, pageLoading]);
+
+  /* ── Machine Added Trend Chart ───────────── */
+  useEffect(() => {
+    if (!macAddedChartRef.current) return;
+    macAddedChartInst.current?.destroy();
+    const ctx = macAddedChartRef.current.getContext("2d");
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 220);
+    gradient.addColorStop(0, "rgba(249, 115, 22, 0.85)");
+    gradient.addColorStop(1, "rgba(249, 115, 22, 0.2)");
+
+    const machineListByMonth = [
+      "TC-59",
+      "TC-60, TC 50",
+      "None",
+      "TC 43 L",
+      "VMC-07, VMC 18, SPM-04",
+      "BROACHING-1, M/C-09"
+    ];
+
+    macAddedChartInst.current = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: [
+          "Jan 26 (TC-59)",
+          "Feb 26 (TC-60, TC 50)",
+          "Mar 26",
+          "Apr 26 (TC 43 L)",
+          "May 26 (VMC/SPM)",
+          "Jun 26 (BRO/MC)"
+        ],
+        datasets: [{
+          label: "Machines Added",
+          data: [1, 2, 0, 1, 3, 2],
+          backgroundColor: gradient,
+          borderColor: "#f97316",
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: context => {
+                const idx = context.dataIndex;
+                return ` Added: ${context.parsed.y} machine(s) (${machineListByMonth[idx]})`;
+              }
+            }
+          },
+          datalabels: {
+            anchor: "end",
+            align: "top",
+            formatter: (v, context) => {
+              if (v === 0) return "";
+              const idx = context.dataIndex;
+              // Return first machine name to fit nicely
+              const firstMac = machineListByMonth[idx].split(",")[0];
+              return `+${v} (${firstMac})`;
+            },
+            font: { size: 9, weight: "700", family: "'Plus Jakarta Sans',sans-serif" },
+            color: "#f97316"
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1, font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } },
+            grid: { color: "#f1f5f9" }
+          }
+        }
+      }
+    });
+    return () => macAddedChartInst.current?.destroy();
+  }, [pvChartData, pageLoading]);
+
+  /* ── Machine Efficiency% Trend Chart ─────── */
+  useEffect(() => {
+    if (!macEffTrendChartRef.current) return;
+    macEffTrendChartInst.current?.destroy();
+    const ctx = macEffTrendChartRef.current.getContext("2d");
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 220);
+    gradient.addColorStop(0, "rgba(6, 182, 212, 0.35)");
+    gradient.addColorStop(1, "rgba(6, 182, 212, 0.0)");
+
+    macEffTrendChartInst.current = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: ["Jan 26", "Feb 26", "Mar 26", "Apr 26", "May 26", "Jun 26"],
+        datasets: [{
+          label: "Avg Efficiency %",
+          data: [78, 80, 83, 81, 85, 87],
+          borderColor: "#06b6d4",
+          borderWidth: 3,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#06b6d4",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: true,
+          backgroundColor: gradient,
+          tension: 0.35,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` Efficiency: ${ctx.parsed.y}%` } },
+          datalabels: {
+            anchor: "end",
+            align: "top",
+            formatter: v => `${v}%`,
+            font: { size: 10, weight: "700", family: "'Plus Jakarta Sans',sans-serif" },
+            color: "#06b6d4"
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { callback: v => `${v}%`, font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } },
+            grid: { color: "#f1f5f9" }
+          }
+        }
+      }
+    });
+    return () => macEffTrendChartInst.current?.destroy();
+  }, [pvChartData, pageLoading]);
+
+  const filteredTraceData = traceabilityData.filter(row => {
+    if (!traceSearch) return true;
+    const q = traceSearch.toLowerCase();
+    return (
+      (row.partNo || "").toLowerCase().includes(q) ||
+      (row.routeCardNo || "").toLowerCase().includes(q) ||
+      (row.machineName || "").toLowerCase().includes(q) ||
+      (row.operator || "").toLowerCase().includes(q)
+    );
+  });
 
   const filteredTableData = tableData.filter(row => {
     // 1. Search Query
@@ -1097,23 +1368,40 @@ export default function ProductionAnalysis() {
       </div>
       {/* ── KPI CARDS ─────────────────────────────────── */}
       <div className="pa2-kpi-grid">
-        {activeKpiData.map((k, i) => (
-          <div key={i} className={`pa2-kpi ${k.variant} pa2-anim`} style={{ "--d": `${i * 55}ms` }}>
-            <div className="pa2-kpi-hdr">
-              <div className="pa2-kpi-label">{k.label}</div>
-              <div className="pa2-kpi-icon-wrap">{k.icon}</div>
-            </div>
-            <div className="pa2-kpi-body">
-              <div className="pa2-kpi-value">
-                <AnimatedValue target={k.value} suffix="" />
-                <span className="pa2-kpi-unit"> {k.unit}</span>
+        {pageLoading ? (
+          Array.from({ length: 7 }).map((_, idx) => (
+            <div key={idx} className="pa2-kpi pa2-kpi--skeleton">
+              <div className="pa2-kpi-hdr">
+                <div className="pa2-skeleton" style={{ width: "80px", height: "14px" }} />
+                <div className="pa2-skeleton" style={{ width: "26px", height: "26px", borderRadius: "8px" }} />
+              </div>
+              <div className="pa2-kpi-body" style={{ margin: "14px 0 10px" }}>
+                <div className="pa2-skeleton" style={{ width: "110px", height: "26px" }} />
+              </div>
+              <div className="pa2-kpi-footer">
+                <div className="pa2-skeleton" style={{ width: "90px", height: "12px" }} />
               </div>
             </div>
-            <div className="pa2-kpi-footer">
-              <div className={`pa2-kpi-meta ${k.pos ? "pa2-pos" : ""}`}>{k.meta}</div>
+          ))
+        ) : (
+          activeKpiData.map((k, i) => (
+            <div key={i} className={`pa2-kpi ${k.variant} pa2-anim`} style={{ "--d": `${i * 55}ms` }}>
+              <div className="pa2-kpi-hdr">
+                <div className="pa2-kpi-label">{k.label}</div>
+                <div className="pa2-kpi-icon-wrap">{k.icon}</div>
+              </div>
+              <div className="pa2-kpi-body">
+                <div className="pa2-kpi-value">
+                  <AnimatedValue target={k.value} suffix="" />
+                  <span className="pa2-kpi-unit"> {k.unit}</span>
+                </div>
+              </div>
+              <div className="pa2-kpi-footer">
+                <div className={`pa2-kpi-meta ${k.pos ? "pa2-pos" : ""}`}>{k.meta}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
       {/* ── MACHINE DETAILS (Full-width Card) ── */}
       <div className="pa2-card pa2-anim pa2-macdetail-card" style={{ "--d": "70ms", marginBottom: "18px" }}>
@@ -1155,7 +1443,19 @@ export default function ProductionAnalysis() {
           </div>
         </div>
         <div className="pa2-macdetails-scroll-container">
-          {filteredMachinesList.length > 0 ? (
+          {pageLoading ? (
+            <div className="pa2-machinedetails-grid">
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div key={idx} className="pa2-mac-chip" style={{ background: "#ffffff", borderColor: "#f1f5f9" }}>
+                  <div className="pa2-mac-chip-body" style={{ gap: "5px" }}>
+                    <div className="pa2-skeleton" style={{ width: "30px", height: "8px" }} />
+                    <div className="pa2-skeleton" style={{ width: "65px", height: "14px" }} />
+                    <div className="pa2-skeleton" style={{ width: "85px", height: "9px" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredMachinesList.length > 0 ? (
             <div className="pa2-machinedetails-grid">
               {filteredMachinesList.map((m, i) => (
                 <div
@@ -1305,29 +1605,56 @@ export default function ProductionAnalysis() {
         <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
           <SectionHeader icon={<FiList size={16} />} title="Daily Production Summary" />
           <div className="pa2-summary-grid">
-            {[{ label: "Total Shifts", value: kpiValues.totalShifts }, { label: "Avg Prod / Shift", value: kpiValues.avgProdPerShift }, { label: "Peak Shift Output", value: kpiValues.peakShiftOutput }, { label: "Lowest Shift Output", value: kpiValues.lowestShiftOutput }, { label: "Active Machines", value: kpiValues.activeMachines }, { label: "Idle Machines", value: kpiValues.idleMachines }].map((s, i) => (
-              <div key={i} className="pa2-summary-chip"><div className="pa2-summary-lbl">{s.label}</div><div className="pa2-summary-val"><AnimatedValue target={s.value} /></div></div>
-            ))}
+            {pageLoading ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="pa2-summary-chip" style={{ background: "#f8faff" }}>
+                  <div className="pa2-skeleton" style={{ width: "80px", height: "8px", margin: "0 auto 8px" }} />
+                  <div className="pa2-skeleton" style={{ width: "45px", height: "18px", margin: "0 auto" }} />
+                </div>
+              ))
+            ) : (
+              [{ label: "Total Shifts", value: kpiValues.totalShifts }, { label: "Avg Prod / Shift", value: kpiValues.avgProdPerShift }, { label: "Peak Shift Output", value: kpiValues.peakShiftOutput }, { label: "Lowest Shift Output", value: kpiValues.lowestShiftOutput }, { label: "Active Machines", value: kpiValues.activeMachines }, { label: "Idle Machines", value: kpiValues.idleMachines }].map((s, i) => (
+                <div key={i} className="pa2-summary-chip"><div className="pa2-summary-lbl">{s.label}</div><div className="pa2-summary-val"><AnimatedValue target={s.value} /></div></div>
+              ))
+            )}
           </div>
         </div>
         <div className="pa2-card pa2-anim" style={{ "--d": "120ms" }}>
           <SectionHeader icon={<FiAward size={16} />} title="Machine & Operator Efficiency" />
           <div className="pa2-metrics-list">
-            {[{ name: "Machine Utilization", pct: kpiValues.machineUtilization, color: "#2d6de8", bg: "#dbe9ff" }, { name: "Machine Efficiency", pct: kpiValues.machineEfficiency, color: "#f59e0b", bg: "#fef3c7" }, { name: "Operator Efficiency", pct: kpiValues.operatorEfficiency, color: "#059669", bg: "#d1fae5" }, { name: "Quality Rate", pct: kpiValues.qualityRate, color: "#059669", bg: "#d1fae5" }, { name: "Material Rejection", pct: kpiValues.materialRejection, color: "#ef4444", bg: "#fee2e2" }, { name: "Machine Rejection", pct: kpiValues.machineRejection, color: "#ef4444", bg: "#fee2e2" }].map((m, i) => (
-              <div key={i} className="pa2-metric-row"><div className="pa2-metric-name">{m.name}</div><ProgressBar pct={m.pct} color={m.color} bg={m.bg} /><div className="pa2-metric-pct" style={{ color: m.color }}>{m.pct}%</div></div>
-            ))}
+            {pageLoading ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="pa2-metric-row">
+                  <div className="pa2-skeleton" style={{ width: "100px", height: "12px" }} />
+                  <div className="pa2-skeleton" style={{ width: "100%", height: "8px" }} />
+                  <div className="pa2-skeleton" style={{ width: "30px", height: "12px" }} />
+                </div>
+              ))
+            ) : (
+              [{ name: "Machine Utilization", pct: kpiValues.machineUtilization, color: "#2d6de8", bg: "#dbe9ff" }, { name: "Machine Efficiency", pct: kpiValues.machineEfficiency, color: "#f59e0b", bg: "#fef3c7" }, { name: "Operator Efficiency", pct: kpiValues.operatorEfficiency, color: "#059669", bg: "#d1fae5" }, { name: "Quality Rate", pct: kpiValues.qualityRate, color: "#059669", bg: "#d1fae5" }, { name: "Material Rejection", pct: kpiValues.materialRejection, color: "#ef4444", bg: "#fee2e2" }, { name: "Machine Rejection", pct: kpiValues.machineRejection, color: "#ef4444", bg: "#fee2e2" }].map((m, i) => (
+                <div key={i} className="pa2-metric-row"><div className="pa2-metric-name">{m.name}</div><ProgressBar pct={m.pct} color={m.color} bg={m.bg} /><div className="pa2-metric-pct" style={{ color: m.color }}>{m.pct}%</div></div>
+              ))
+            )}
           </div>
         </div>
       </div>
       {/* ══════════════════════════════════════════════
 §1 — PRODUCTION VALUE REPORT
 ══════════════════════════════════════════════ */}
+      {/* ── PRODUCTION VALUE REPORT ── */}
       <div className="pa2-card pa2-anim" style={{ "--d": "100ms" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiDollarSign size={16} />} title="Production Value Report" sub="Machine-wise bar chart / Month-wise stacked bar — Production Value (₹)" />
-          <div className="pa2-pv-toggle">
-            <button className={`pa2-pv-tab ${pvMode === "machine" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("machine")}><FiCpu size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Machine Wise</button>
-            <button className={`pa2-pv-tab ${pvMode === "month" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("month")}><FiCalendar size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Month Wise</button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <div className="pa2-pv-toggle">
+              <button className={`pa2-pv-tab ${pvMode === "machine" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("machine")}><FiCpu size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Machine Wise</button>
+              <button className={`pa2-pv-tab ${pvMode === "month" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("month")}><FiCalendar size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Month Wise</button>
+            </div>
+            
+            <div className="pa2-pv-toggle" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <button className={`pa2-pv-tab ${pvChartType === "bar" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("bar")} style={{ padding: "6px 12px" }}><FiLayers size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Bar</button>
+              <button className={`pa2-pv-tab ${pvChartType === "line" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("line")} style={{ padding: "6px 12px" }}><FiActivity size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Line</button>
+            </div>
           </div>
         </div>
         <div className="pa2-pv-kpis">
@@ -1342,7 +1669,19 @@ export default function ProductionAnalysis() {
             ));
           })()}
         </div>
-        <div style={{ height: 340, marginTop: "1rem" }}><canvas ref={pvChartRef} /></div>
+        <div style={{ height: 340, marginTop: "1rem", position: "relative" }}>
+          {pageLoading ? (
+            <div className="pa2-chart-skeleton">
+              <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+              <div className="pa2-skeleton-spinner">
+                <FiLoader className="pa2-spinner-icon" />
+                <span>Loading Production Values...</span>
+              </div>
+            </div>
+          ) : (
+            <canvas ref={pvChartRef} />
+          )}
+        </div>
       </div>
 
       {/* ── MACHINE OEE GRAPH ── */}
@@ -1350,17 +1689,29 @@ export default function ProductionAnalysis() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiTrendingUp size={16} />} title="Machine Overall Equipment Effectiveness (OEE %)" sub="OEE performance trend analysis — Machine-wise / Month-wise" />
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "11px", fontWeight: "700", color: "#6366f1", background: "rgba(99, 102, 241, 0.08)", padding: "5px 12px", borderRadius: "99px", marginRight: "6px" }}>
-              Target: 75% Min OEE
-            </span>
             <div className="pa2-pv-toggle">
               <button className={`pa2-pv-tab ${oeeMode === "machine" ? "pa2-pv-tab--active" : ""}`} onClick={() => setOeeMode("machine")}><FiCpu size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Machine Wise</button>
               <button className={`pa2-pv-tab ${oeeMode === "month" ? "pa2-pv-tab--active" : ""}`} onClick={() => setOeeMode("month")}><FiCalendar size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Month Wise</button>
             </div>
+
+            <div className="pa2-pv-toggle" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <button className={`pa2-pv-tab ${oeeChartType === "bar" ? "pa2-pv-tab--active" : ""}`} onClick={() => setOeeChartType("bar")} style={{ padding: "6px 12px" }}><FiLayers size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Bar</button>
+              <button className={`pa2-pv-tab ${oeeChartType === "line" ? "pa2-pv-tab--active" : ""}`} onClick={() => setOeeChartType("line")} style={{ padding: "6px 12px" }}><FiActivity size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Line</button>
+            </div>
           </div>
         </div>
-        <div style={{ height: 260, marginTop: "0.5rem" }}>
-          <canvas ref={oeeChartRef} />
+        <div style={{ height: 260, marginTop: "0.5rem", position: "relative" }}>
+          {pageLoading ? (
+            <div className="pa2-chart-skeleton">
+              <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+              <div className="pa2-skeleton-spinner">
+                <FiLoader className="pa2-spinner-icon" />
+                <span>Loading OEE Performance...</span>
+              </div>
+            </div>
+          ) : (
+            <canvas ref={oeeChartRef} />
+          )}
         </div>
       </div>
 
@@ -1368,54 +1719,307 @@ export default function ProductionAnalysis() {
       <div className="pa2-row-2" style={{ marginTop: "18px", marginBottom: "18px" }}>
         <div className="pa2-card pa2-anim" style={{ "--d": "120ms" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Setup Time Machine-Wise" sub="Setup / setting hours comparison across all machines" />
-          <div style={{ height: 250, marginTop: "1.2rem" }}>
-            <canvas ref={setChartRef} />
+          <div style={{ height: 250, marginTop: "1.2rem", position: "relative" }}>
+            {pageLoading ? (
+              <div className="pa2-chart-skeleton">
+                <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+                <div className="pa2-skeleton-spinner">
+                  <FiLoader className="pa2-spinner-icon" />
+                  <span>Loading Setup Times...</span>
+                </div>
+              </div>
+            ) : (
+              <canvas ref={setChartRef} />
+            )}
           </div>
         </div>
         <div className="pa2-card pa2-anim" style={{ "--d": "130ms" }}>
           <SectionHeader icon={<FiActivity size={16} />} title="Machine Utilization (%)" sub="Active machine running time as percentage of total hours" />
-          <div style={{ height: 250, marginTop: "1.2rem" }}>
-            <canvas ref={utilChartRef} />
+          <div style={{ height: 250, marginTop: "1.2rem", position: "relative" }}>
+            {pageLoading ? (
+              <div className="pa2-chart-skeleton">
+                <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+                <div className="pa2-skeleton-spinner">
+                  <FiLoader className="pa2-spinner-icon" />
+                  <span>Loading Utilization Index...</span>
+                </div>
+              </div>
+            ) : (
+              <canvas ref={utilChartRef} />
+            )}
           </div>
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════
-NEW §2 — IDLE HOURS: ACCEPTED vs NON-ACCEPTED
-══════════════════════════════════════════════ */}
-      <div className="pa2-row-2">
-        <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
-          <SectionHeader icon={<FiCheckCircle size={16} />} title="Idle Hours — Accepted Reasons" sub={`Total: ${totalAcceptedHrs.toFixed(1)} hrs  (${idleBreakdown.summary.accepted_pct}%)`} />
-          <div className="pa2-idle-layout">
-            <DonutChart data={idleBreakdown.accepted.reasons.length >= 2 ? idleBreakdown.accepted.reasons : idleBreakdown.accepted.reasons.length === 1 ? [...idleBreakdown.accepted.reasons, { hours: 0.001, color: "#e2e8f0" }] : [{ hours: 0.6, color: "#2563eb" }, { hours: 0.4, color: "#e2e8f0" }]} total={totalAcceptedHrs > 0 ? totalAcceptedHrs : 1} />
-            <div className="pa2-idle-list">
-              {idleBreakdown.accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No accepted idle data for this period</div>}
-              {idleBreakdown.accepted.reasons.map((r, i) => (
-                <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
-                  <span className="pa2-idle-dot" style={{ background: r.color }} />
-                  <span className="pa2-idle-reason">{r.reason}</span>
-                  <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
-                  <span className="pa2-idle-pct">({r.pct}%)</span>
-                </div>
-              ))}
+      {/* ── TOP 10 MACHINE UTILIZATION TABLE ── */}
+      <div className="pa2-card pa2-anim" style={{ "--d": "140ms", marginBottom: "18px" }}>
+        <SectionHeader icon={<FiActivity size={16} />} title="Top 10 Machine Utilization" sub="Active machine running hours vs idle breakdown ordered by highest utilization rate" />
+        <div className="pa2-table-wrap" style={{ maxHeight: "310px" }}>
+          <table className="pa2-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Machine</th>
+                <th>Utilization %</th>
+                <th>Running Hours</th>
+                <th>Idle Hours</th>
+                <th>Performance Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageLoading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <tr key={idx}>
+                    {Array.from({ length: 6 }).map((__, tdIdx) => (
+                      <td key={tdIdx}>
+                        <div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : "60px", height: "12px" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                topUtilizationData.map((row, i) => {
+                  const statusColor = row.utilization >= 85 ? "#10b981" : row.utilization >= 75 ? "#3b82f6" : "#f59e0b";
+                  const statusBg = row.utilization >= 85 ? "rgba(16, 185, 129, 0.08)" : row.utilization >= 75 ? "rgba(59, 130, 246, 0.08)" : "rgba(245, 158, 11, 0.08)";
+                  const statusLabel = row.utilization >= 85 ? "Optimal" : row.utilization >= 75 ? "Target Met" : "Underutilized";
+
+                  // Rank Medals / Modern styling
+                  let rankContent;
+                  if (row.rank === 1) {
+                    rankContent = <span style={{ display: "inline-block", background: "linear-gradient(135deg, #fef08a, #eab308)", color: "#854d0e", width: "22px", height: "22px", borderRadius: "50%", textAlign: "center", lineHeight: "22px", fontSize: "11px", fontWeight: "800", boxShadow: "0 2px 4px rgba(234,179,8,0.25)" }}>1</span>;
+                  } else if (row.rank === 2) {
+                    rankContent = <span style={{ display: "inline-block", background: "linear-gradient(135deg, #f1f5f9, #cbd5e1)", color: "#334155", width: "22px", height: "22px", borderRadius: "50%", textAlign: "center", lineHeight: "22px", fontSize: "11px", fontWeight: "800", boxShadow: "0 2px 4px rgba(148,163,184,0.2)" }}>2</span>;
+                  } else if (row.rank === 3) {
+                    rankContent = <span style={{ display: "inline-block", background: "linear-gradient(135deg, #ffedd5, #ca8a04)", color: "#78350f", width: "22px", height: "22px", borderRadius: "50%", textAlign: "center", lineHeight: "22px", fontSize: "11px", fontWeight: "800", boxShadow: "0 2px 4px rgba(202,138,4,0.2)" }}>3</span>;
+                  } else {
+                    rankContent = <span style={{ fontWeight: "700", color: "#64748b", paddingLeft: "6px" }}>{row.rank}</span>;
+                  }
+
+                  return (
+                    <tr key={i} className="pa2-anim" style={{ "--d": `${i * 35}ms` }}>
+                      <td>{rankContent}</td>
+                      <td>
+                        <span className="pa2-machine-chip" style={{ borderLeft: `3px solid ${row.utilization >= 85 ? "#10b981" : "#3b82f6"}`, paddingLeft: "8px", fontWeight: "600" }}>
+                          {row.machine}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontWeight: "800", color: "#1e293b", minWidth: "35px" }}>{row.utilization}%</span>
+                          <div style={{ flex: 1, height: "6px", background: "#f1f5f9", borderRadius: "99px", overflow: "hidden", minWidth: "120px" }}>
+                            <div style={{ width: `${row.utilization}%`, height: "100%", background: `linear-gradient(90deg, ${statusColor}dd, ${statusColor})`, borderRadius: "99px" }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: "600", color: "#475569" }}>{row.runningHrs} hrs</td>
+                      <td style={{ color: "#ef4444", fontWeight: "600" }}>{row.idleHrs} hrs</td>
+                      <td>
+                        <span className="pa2-badge" style={{ background: statusBg, color: statusColor, border: `1px solid ${statusColor}22`, fontWeight: "700", fontSize: "10px", padding: "3px 8px", borderRadius: "6px" }}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── TOP 5 & LEAST 5 OEE MACHINES IN SINGLE SECTION ── */}
+      <div className="pa2-card pa2-anim" style={{ "--d": "145ms", marginBottom: "18px" }}>
+        <SectionHeader icon={<FiAward size={16} />} title="OEE Leaders & Laggards" sub="Direct comparison of Top 5 performing vs Least 5 performing machines by Overall Equipment Effectiveness" />
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginTop: "1rem" }}>
+
+          {/* Top 5 OEE (Leaders) */}
+          <div style={{ background: "rgba(16, 185, 129, 0.02)", border: "1px solid rgba(16, 185, 129, 0.08)", borderRadius: "10px", padding: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", borderBottom: "1px solid rgba(16, 185, 129, 0.1)", paddingBottom: "8px" }}>
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#d1fae5", color: "#065f46", width: "24px", height: "24px", borderRadius: "50%", fontSize: "11px", fontWeight: "700" }}>↑</span>
+              <h4 style={{ margin: 0, fontSize: "13px", fontWeight: "800", color: "#065f46" }}>Top 5 OEE Machines</h4>
             </div>
+
+            <table className="pa2-table pa2-table--simple" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Machine</th>
+                  <th style={{ textAlign: "right" }}>OEE %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageLoading ? (
+                  Array.from({ length: 5 }).map((_, idx) => (
+                    <tr key={idx}>
+                      <td><div className="pa2-skeleton" style={{ width: "15px", height: "12px" }} /></td>
+                      <td><div className="pa2-skeleton" style={{ width: "60px", height: "12px" }} /></td>
+                      <td><div className="pa2-skeleton" style={{ width: "30px", height: "12px", marginLeft: "auto" }} /></td>
+                    </tr>
+                  ))
+                ) : (
+                  topOeeData.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: "700", color: "#10b981" }}>#{row.rank}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span style={{ fontWeight: "600", color: "#1e293b" }}>{row.machine}</span>
+                          <span style={{ fontSize: "9.5px", color: "#64748b" }}>{row.type}</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="pa2-badge" style={{ background: "rgba(16, 185, 129, 0.08)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.15)", fontWeight: "800", fontSize: "11px" }}>{row.oee}%</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Least 5 OEE (Laggards) */}
+          <div style={{ background: "rgba(239, 68, 68, 0.02)", border: "1px solid rgba(239, 68, 68, 0.08)", borderRadius: "10px", padding: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", borderBottom: "1px solid rgba(239, 68, 68, 0.1)", paddingBottom: "8px" }}>
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#fee2e2", color: "#991b1b", width: "24px", height: "24px", borderRadius: "50%", fontSize: "11px", fontWeight: "700" }}>↓</span>
+              <h4 style={{ margin: 0, fontSize: "13px", fontWeight: "800", color: "#991b1b" }}>Least 5 OEE Machines</h4>
+            </div>
+
+            <table className="pa2-table pa2-table--simple" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Machine</th>
+                  <th style={{ textAlign: "right" }}>OEE %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageLoading ? (
+                  Array.from({ length: 5 }).map((_, idx) => (
+                    <tr key={idx}>
+                      <td><div className="pa2-skeleton" style={{ width: "15px", height: "12px" }} /></td>
+                      <td><div className="pa2-skeleton" style={{ width: "60px", height: "12px" }} /></td>
+                      <td><div className="pa2-skeleton" style={{ width: "30px", height: "12px", marginLeft: "auto" }} /></td>
+                    </tr>
+                  ))
+                ) : (
+                  leastOeeData.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: "700", color: "#ef4444" }}>#{row.rank}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span style={{ fontWeight: "600", color: "#1e293b" }}>{row.machine}</span>
+                          <span style={{ fontSize: "9.5px", color: "#64748b" }}>{row.type}</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="pa2-badge" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.15)", fontWeight: "800", fontSize: "11px" }}>{row.oee}%</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+
+      {/* ── MACHINE TREND GRAPHS ── */}
+      <div className="pa2-row-2" style={{ marginBottom: "18px" }}>
+        <div className="pa2-card pa2-anim" style={{ "--d": "150ms" }}>
+          <SectionHeader icon={<FiPlus size={16} />} title="Machine Added Trend" sub="Incubation / addition of new machines in production line month-wise" />
+          <div style={{ height: 230, marginTop: "1rem", position: "relative" }}>
+            {pageLoading ? (
+              <div className="pa2-chart-skeleton">
+                <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+                <div className="pa2-skeleton-spinner">
+                  <FiLoader className="pa2-spinner-icon" />
+                  <span>Loading Trend...</span>
+                </div>
+              </div>
+            ) : (
+              <canvas ref={macAddedChartRef} />
+            )}
+          </div>
+        </div>
+        <div className="pa2-card pa2-anim" style={{ "--d": "160ms" }}>
+          <SectionHeader icon={<FiActivity size={16} />} title="Machine Efficiency% Trend" sub="Average operational performance rate tracking month-wise" />
+          <div style={{ height: 230, marginTop: "1rem", position: "relative" }}>
+            {pageLoading ? (
+              <div className="pa2-chart-skeleton">
+                <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+                <div className="pa2-skeleton-spinner">
+                  <FiLoader className="pa2-spinner-icon" />
+                  <span>Loading Trend Index...</span>
+                </div>
+              </div>
+            ) : (
+              <canvas ref={macEffTrendChartRef} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="pa2-row-2">
+        <div className="pa2-card pa2-card--success pa2-anim" style={{ "--d": "80ms" }}>
+          <SectionHeader icon={<FiCheckCircle size={16} />} title="Idle Hours — Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${totalAcceptedHrs.toFixed(1)} hrs  (${idleBreakdown.summary.accepted_pct}%)`} />
+          <div className="pa2-idle-layout">
+            {pageLoading ? (
+              <>
+                <div className="pa2-skeleton" style={{ width: "130px", height: "130px", borderRadius: "50%" }} />
+                <div className="pa2-idle-list" style={{ width: "100%", gap: "8px" }}>
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="pa2-idle-row"><div className="pa2-skeleton" style={{ width: "100%", height: "12px" }} /></div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <DonutChart data={idleBreakdown.accepted.reasons.length >= 2 ? idleBreakdown.accepted.reasons : idleBreakdown.accepted.reasons.length === 1 ? [...idleBreakdown.accepted.reasons, { hours: 0.001, color: "#e2e8f0" }] : [{ hours: 0.6, color: "#2563eb" }, { hours: 0.4, color: "#e2e8f0" }]} total={totalAcceptedHrs > 0 ? totalAcceptedHrs : 1} />
+                <div className="pa2-idle-list">
+                  {idleBreakdown.accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No accepted idle data for this period</div>}
+                  {idleBreakdown.accepted.reasons.map((r, i) => (
+                    <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
+                      <span className="pa2-idle-dot" style={{ background: r.color }} />
+                      <span className="pa2-idle-reason">{r.reason}</span>
+                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
+                      <span className="pa2-idle-pct">({r.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="pa2-card pa2-card--danger pa2-anim" style={{ "--d": "110ms" }}>
-          <SectionHeader icon={<FiAlertCircle size={16} />} title="Idle Hours — Non-Accepted Reasons" sub={`Total: ${totalNonAccepted.toFixed(1)} hrs  |  ⚠ Needs Action (${idleBreakdown.summary.non_accepted_pct}%)`} />
+          <SectionHeader icon={<FiAlertCircle size={16} />} title="Idle Hours — Non-Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${totalNonAccepted.toFixed(1)} hrs  |  ⚠ Needs Action (${idleBreakdown.summary.non_accepted_pct}%)`} />
           <div className="pa2-idle-layout">
-            <DonutChart data={idleBreakdown.non_accepted.reasons.length >= 2 ? idleBreakdown.non_accepted.reasons : idleBreakdown.non_accepted.reasons.length === 1 ? [...idleBreakdown.non_accepted.reasons, { hours: 0.001, color: "#fee2e2" }] : [{ hours: 0.6, color: "#ef4444" }, { hours: 0.4, color: "#fee2e2" }]} total={totalNonAccepted > 0 ? totalNonAccepted : 1} />
-            <div className="pa2-idle-list">
-              {idleBreakdown.non_accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No non-accepted idle data for this period</div>}
-              {idleBreakdown.non_accepted.reasons.map((r, i) => (
-                <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
-                  <span className="pa2-idle-dot" style={{ background: r.color }} />
-                  <span className="pa2-idle-reason">{r.reason}</span>
-                  <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
-                  <span className="pa2-idle-pct">({r.pct}%)</span>
+            {pageLoading ? (
+              <>
+                <div className="pa2-skeleton" style={{ width: "130px", height: "130px", borderRadius: "50%" }} />
+                <div className="pa2-idle-list" style={{ width: "100%", gap: "8px" }}>
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="pa2-idle-row"><div className="pa2-skeleton" style={{ width: "100%", height: "12px" }} /></div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <>
+                <DonutChart data={idleBreakdown.non_accepted.reasons.length >= 2 ? idleBreakdown.non_accepted.reasons : idleBreakdown.non_accepted.reasons.length === 1 ? [...idleBreakdown.non_accepted.reasons, { hours: 0.001, color: "#fee2e2" }] : [{ hours: 0.6, color: "#ef4444" }, { hours: 0.4, color: "#fee2e2" }]} total={totalNonAccepted > 0 ? totalNonAccepted : 1} />
+                <div className="pa2-idle-list">
+                  {idleBreakdown.non_accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No non-accepted idle data for this period</div>}
+                  {idleBreakdown.non_accepted.reasons.map((r, i) => (
+                    <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
+                      <span className="pa2-idle-dot" style={{ background: r.color }} />
+                      <span className="pa2-idle-reason">{r.reason}</span>
+                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
+                      <span className="pa2-idle-pct">({r.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1425,61 +2029,202 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
       <div className="pa2-card pa2-card--loss pa2-anim" style={{ "--d": "90ms" }}>
         <SectionHeader icon={<FiTrendingDown size={16} />} title="Production Loss — Non-Accepted Idle Hours × Rate per Hour" sub="Financial impact of unplanned downtime based on process-specific production rate" />
         <div className="pa2-loss-kpis">
-          <div className="pa2-loss-kpi pa2-loss-kpi--red"><div className="pa2-loss-kpi-lbl">Total Loss Value</div><div className="pa2-loss-kpi-val">₹{totalLoss.toLocaleString("en-IN")}</div></div>
-          <div className="pa2-loss-kpi pa2-loss-kpi--orange"><div className="pa2-loss-kpi-lbl">Total Unplanned Hours</div><div className="pa2-loss-kpi-val">{totalNonAccepted.toFixed(1)} hrs</div></div>
-          <div className="pa2-loss-kpi pa2-loss-kpi--amber"><div className="pa2-loss-kpi-lbl">Avg Loss per Hour</div><div className="pa2-loss-kpi-val">₹{(totalLoss / totalNonAccepted).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
-          <div className="pa2-loss-kpi pa2-loss-kpi--purple"><div className="pa2-loss-kpi-lbl">Recoverable Potential</div><div className="pa2-loss-kpi-val">₹{(totalLoss * 0.62).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
+          {pageLoading ? (
+            Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="pa2-loss-kpi" style={{ borderColor: "#f1f5f9" }}>
+                <div className="pa2-skeleton" style={{ width: "80px", height: "10px", marginBottom: "8px" }} />
+                <div className="pa2-skeleton" style={{ width: "60px", height: "18px" }} />
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="pa2-loss-kpi pa2-loss-kpi--red"><div className="pa2-loss-kpi-lbl">Total Loss Value</div><div className="pa2-loss-kpi-val">₹{totalLoss.toLocaleString("en-IN")}</div></div>
+              <div className="pa2-loss-kpi pa2-loss-kpi--orange"><div className="pa2-loss-kpi-lbl">Total Unplanned Hours</div><div className="pa2-loss-kpi-val">{totalNonAccepted.toFixed(1)} hrs</div></div>
+              <div className="pa2-loss-kpi pa2-loss-kpi--amber"><div className="pa2-loss-kpi-lbl">Avg Loss per Hour</div><div className="pa2-loss-kpi-val">₹{(totalLoss / totalNonAccepted).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
+              <div className="pa2-loss-kpi pa2-loss-kpi--purple"><div className="pa2-loss-kpi-lbl">Recoverable Potential</div><div className="pa2-loss-kpi-val">₹{(totalLoss * 0.62).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
+            </>
+          )}
         </div>
         <div className="pa2-loss-table-wrap">
           <table className="pa2-loss-table">
-            <thead><tr><th>Reason</th><th>Idle Hours</th><th>Rate / hr</th><th>Loss Value</th><th>% of Total Loss</th><th>Impact</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left" }}>Reason</th>
+                <th style={{ textAlign: "right" }}>Idle Hours</th>
+                <th style={{ textAlign: "right" }}>Rate / hr</th>
+                <th style={{ textAlign: "right" }}>Loss Value</th>
+                <th style={{ textAlign: "left", paddingLeft: "24px" }}>% of Total Loss</th>
+                <th style={{ textAlign: "left" }}>Impact</th>
+              </tr>
+            </thead>
             <tbody>
-              {idleBreakdown.non_accepted.reasons.map((r, i) => {
-                const loss = r.loss_value || 0;
-                const lossPct = totalLoss > 0 ? (loss / totalLoss * 100).toFixed(1) : "0.0";
-                const impact = loss > 300000 ? "Critical" : loss > 150000 ? "High" : loss > 80000 ? "Medium" : "Low";
-                const impactClass = loss > 300000 ? "pa2-imp--crit" : loss > 150000 ? "pa2-imp--high" : loss > 80000 ? "pa2-imp--med" : "pa2-imp--low";
-                return (<tr key={i} className="pa2-anim" style={{ "--d": `${i * 50}ms` }}><td><span className="pa2-idle-dot" style={{ background: r.color }} />{r.reason}</td><td className="pa2-td-num">{r.hours}</td><td className="pa2-td-num">₹{(r.rate_per_hr || 0).toLocaleString("en-IN")}</td><td className="pa2-td-num pa2-td-loss">₹{loss.toLocaleString("en-IN")}</td><td><div className="pa2-loss-bar-inline"><div className="pa2-loss-bar-fill" style={{ width: `${lossPct}%`, background: r.color }} /><span>{lossPct}%</span></div></td><td><span className={`pa2-imp ${impactClass}`}>{impact}</span></td></tr>);
-              })}
-              <tr className="pa2-total-row"><td><strong>Total</strong></td><td className="pa2-td-num"><strong>{totalNonAccepted.toFixed(1)}</strong></td><td className="pa2-td-num">—</td><td className="pa2-td-num pa2-td-loss"><strong>₹{totalLoss.toLocaleString("en-IN")}</strong></td><td className="pa2-td-num"><strong>100%</strong></td><td>—</td></tr>
+              {pageLoading ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <tr key={idx}>
+                    <td><div className="pa2-skeleton" style={{ width: "120px", height: "12px" }} /></td>
+                    <td><div className="pa2-skeleton" style={{ width: "40px", height: "12px", marginLeft: "auto" }} /></td>
+                    <td><div className="pa2-skeleton" style={{ width: "50px", height: "12px", marginLeft: "auto" }} /></td>
+                    <td><div className="pa2-skeleton" style={{ width: "60px", height: "12px", marginLeft: "auto" }} /></td>
+                    <td><div className="pa2-skeleton" style={{ width: "80px", height: "10px" }} /></td>
+                    <td><div className="pa2-skeleton" style={{ width: "50px", height: "14px", borderRadius: "4px" }} /></td>
+                  </tr>
+                ))
+              ) : (
+                <>
+                  {idleBreakdown.non_accepted.reasons.map((r, i) => {
+                    const loss = r.loss_value || 0;
+                    const lossPct = totalLoss > 0 ? (loss / totalLoss * 100).toFixed(1) : "0.0";
+                    const impact = loss > 300000 ? "Critical" : loss > 150000 ? "High" : loss > 80000 ? "Medium" : "Low";
+                    const impactClass = loss > 300000 ? "pa2-imp--crit" : loss > 150000 ? "pa2-imp--high" : loss > 80000 ? "pa2-imp--med" : "pa2-imp--low";
+                    return (
+                      <tr key={i} className="pa2-anim" style={{ "--d": `${i * 50}ms` }}>
+                        <td><span className="pa2-idle-dot" style={{ background: r.color }} />{r.reason}</td>
+                        <td className="pa2-td-num">{r.hours}</td>
+                        <td className="pa2-td-num">₹{(r.rate_per_hr || 0).toLocaleString("en-IN")}</td>
+                        <td className="pa2-td-num pa2-td-loss">₹{loss.toLocaleString("en-IN")}</td>
+                        <td style={{ paddingLeft: "24px" }}>
+                          <div className="pa2-loss-bar-inline">
+                            <div className="pa2-loss-bar-fill" style={{ width: `${lossPct}%`, background: r.color }} />
+                            <span>{lossPct}%</span>
+                          </div>
+                        </td>
+                        <td><span className={`pa2-imp ${impactClass}`}>{impact}</span></td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="pa2-total-row">
+                    <td><strong>Total</strong></td>
+                    <td className="pa2-td-num"><strong>{totalNonAccepted.toFixed(1)}</strong></td>
+                    <td className="pa2-td-num">—</td>
+                    <td className="pa2-td-num pa2-td-loss"><strong>₹{totalLoss.toLocaleString("en-IN")}</strong></td>
+                    <td style={{ paddingLeft: "24px" }}><strong>100%</strong></td>
+                    <td>—</td>
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+      {/* ── TRACEABILITY TABLE ── */}
+      <div className="pa2-card pa2-anim" style={{ "--d": "90ms", marginBottom: "18px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
+          <SectionHeader icon={<FiCompass size={16} />} title="Traceability Table" sub="Trace parts and routing by Route Card and Operator" />
+          <div className="pa2-macdetail-search-wrapper" style={{ margin: 0, width: "240px" }}>
+            <svg className="pa2-macdetail-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search Route Card / Part..."
+              value={traceSearch}
+              onChange={e => setTraceSearch(e.target.value)}
+              className="pa2-macdetail-search-input"
+            />
+          </div>
+        </div>
+        <div className="pa2-table-wrap" style={{ maxHeight: "300px" }}>
+          <table className="pa2-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Part No</th>
+                <th>Route Card No</th>
+                <th>Machine Name</th>
+                <th>Running Hrs</th>
+                <th>Operator</th>
+                <th style={{ textAlign: "right" }}>Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageLoading ? (
+                Array.from({ length: 4 }).map((_, idx) => (
+                  <tr key={idx}>
+                    {Array.from({ length: 7 }).map((__, tdIdx) => (
+                      <td key={tdIdx}>
+                        <div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : tdIdx === 2 ? "90px" : "55px", height: "12px", marginLeft: tdIdx === 6 ? "auto" : "0" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : filteredTraceData.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>
+                    No traceability records found matching search query.
+                  </td>
+                </tr>
+              ) : (
+                filteredTraceData.map((row, i) => (
+                  <tr key={i} className="pa2-anim" style={{ "--d": `${i * 45}ms` }}>
+                    <td className="pa2-td-muted">{row.sno}</td>
+                    <td className="pa2-td-part" style={{ fontWeight: "700" }}>{row.partNo}</td>
+                    <td>
+                      <span className="pa2-badge pa2-badge--ok" style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.15)", color: "#6366f1", fontWeight: "700" }}>
+                        {row.routeCardNo}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="pa2-machine-chip">
+                        {row.machineName}
+                      </span>
+                    </td>
+                    <td>{row.runningHrs} hrs</td>
+                    <td style={{ fontWeight: "600", color: "#475569" }}>{row.operator}</td>
+                    <td className="pa2-td-num" style={{ fontWeight: "700", color: "#0f172a" }}>{row.qty.toLocaleString()}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
-        <SectionHeader icon={<FiTable size={16} />} title="Daily Production Details" sub={tableLoading ? "Loading…" : `${filteredTableData.length} shift record(s)`} />
+        <SectionHeader icon={<FiTable size={16} />} title="Daily Production Details" sub={pageLoading ? "Loading…" : `${filteredTableData.length} shift record(s)`} />
         <div className="pa2-table-wrap">
           <table className="pa2-table">
             <thead><tr>{["#", "Date", "Machine", "Shift", "Operator", "Part", "Process", "Target", "OK Qty", "Rej", "Eff %", "OEE %", "Status"].map(h => (<th key={h}>{h}</th>))}</tr></thead>
             <tbody>
-              {tableLoading && (
-                <tr><td colSpan={13} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>Loading production data…</td></tr>
-              )}
-              {!tableLoading && filteredTableData.length === 0 && (
-                <tr><td colSpan={13} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>No production records found matching the filters.</td></tr>
-              )}
-              {!tableLoading && filteredTableData.map((row, i) => {
-                const isRejected = row.Status === "Rejected";
-                const badge = isRejected ? "pa2-badge--bad" : "pa2-badge--ok";
-                const formattedDate = row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—";
-                return (
-                  <tr key={i} className="pa2-anim" style={{ "--d": `${i * 40}ms` }}>
-                    <td className="pa2-td-muted">{row.SNo}</td>
-                    <td>{formattedDate}</td>
-                    <td><span className="pa2-machine-chip">{row.Machine || "—"}</span></td>
-                    <td>{row.Shift || "—"}</td>
-                    <td>{row.Operator || "—"}</td>
-                    <td className="pa2-td-part">{row.Part || "—"}</td>
-                    <td>{row.Process || "—"}</td>
-                    <td className="pa2-td-num">{(row.Target || 0).toLocaleString()}</td>
-                    <td className="pa2-td-num">{(row.OKQty || 0).toLocaleString()}</td>
-                    <td className="pa2-td-num" style={{ color: row.Rej > 0 ? "#ef4444" : "#059669" }}>{row.Rej || 0}</td>
-                    <td className="pa2-td-num">{(row.EffPct || 0).toFixed(2)}%</td>
-                    <td className="pa2-td-num">{(row.OEEPct || 0).toFixed(2)}%</td>
-                    <td><span className={`pa2-badge ${badge}`}>{row.Status || "OK"}</span></td>
+              {pageLoading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={idx}>
+                    {Array.from({ length: 13 }).map((__, tdIdx) => (
+                      <td key={tdIdx}><div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : tdIdx === 4 ? "90px" : "45px", height: "12px" }} /></td>
+                    ))}
                   </tr>
-                );
-              })}
+                ))
+              ) : (
+                <>
+                  {tableLoading && (
+                    <tr><td colSpan={13} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>Loading production data…</td></tr>
+                  )}
+                  {!tableLoading && filteredTableData.length === 0 && (
+                    <tr><td colSpan={13} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>No production records found matching the filters.</td></tr>
+                  )}
+                  {!tableLoading && filteredTableData.map((row, i) => {
+                    const isRejected = row.Status === "Rejected";
+                    const badge = isRejected ? "pa2-badge--bad" : "pa2-badge--ok";
+                    const formattedDate = row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—";
+                    return (
+                      <tr key={i} className="pa2-anim" style={{ "--d": `${i * 40}ms` }}>
+                        <td className="pa2-td-muted">{row.SNo}</td>
+                        <td>{formattedDate}</td>
+                        <td><span className="pa2-machine-chip">{row.Machine || "—"}</span></td>
+                        <td>{row.Shift || "—"}</td>
+                        <td>{row.Operator || "—"}</td>
+                        <td className="pa2-td-part">{row.Part || "—"}</td>
+                        <td>{row.Process || "—"}</td>
+                        <td className="pa2-td-num">{(row.Target || 0).toLocaleString()}</td>
+                        <td className="pa2-td-num">{(row.OKQty || 0).toLocaleString()}</td>
+                        <td className="pa2-td-num" style={{ color: row.Rej > 0 ? "#ef4444" : "#059669" }}>{row.Rej || 0}</td>
+                        <td className="pa2-td-num">{(row.EffPct || 0).toFixed(2)}%</td>
+                        <td className="pa2-td-num">{(row.OEEPct || 0).toFixed(2)}%</td>
+                        <td><span className={`pa2-badge ${badge}`}>{row.Status || "OK"}</span></td>
+                      </tr>
+                    );
+                  })}
+                </>
+              )}
             </tbody>
           </table>
         </div>
