@@ -254,6 +254,9 @@
 /* ── Filter Card ──────────────────────────────────────────── */
 .pa2-filter-card {
     margin-bottom: 1.4rem;
+    overflow: visible !important;
+    position: relative;
+    z-index: 100 !important;
 }
 
 .pa2-filter-bar-title {
@@ -272,11 +275,11 @@
 }
 
 .pa2-filter-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.9rem;
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
     padding: 1rem 1.3rem 1.2rem;
-    align-items: end;
+    flex-wrap: wrap;
 }
 
 .pa2-filter-group {
@@ -408,7 +411,7 @@
 /* ── KPI Cards ────────────────────────────────────────────── */
 .pa2-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 1rem;
     margin-bottom: 1.4rem;
 }
@@ -438,19 +441,27 @@
 }
 
 .pa2-kpi-card:nth-child(2)::before {
-    background: linear-gradient(90deg, #06b6d4, #3b82f6);
-}
-
-.pa2-kpi-card:nth-child(3)::before {
     background: linear-gradient(90deg, #10b981, #34d399);
 }
 
-.pa2-kpi-card:nth-child(4)::before {
+.pa2-kpi-card:nth-child(3)::before {
     background: linear-gradient(90deg, #f5a623, #f76b1c);
 }
 
+.pa2-kpi-card:nth-child(4)::before {
+    background: linear-gradient(90deg, #f97316, #fb923c);
+}
+
 .pa2-kpi-card:nth-child(5)::before {
-    background: linear-gradient(90deg, #ef4444, #fb7185);
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.pa2-kpi-card:nth-child(6)::before {
+    background: linear-gradient(90deg, #ec4899, #f472b6);
+}
+
+.pa2-kpi-card:nth-child(7)::before {
+    background: linear-gradient(90deg, #8b5cf6, #a855f7);
 }
 
 .pa2-kpi-card:hover {
@@ -523,7 +534,6 @@
 }
 
 /* .pa2-chart-card {} */
-
 /* .pa2-chart-wide {} */
 
 .pa2-chart-wrap {
@@ -534,6 +544,63 @@
 
 .pa2-chart-wrap--donut {
     height: 250px;
+}
+
+/* ── Full-width Trend Chart ──────────────────────────────── */
+.pa2-trend-chart-full-wrap {
+    position: relative;
+    height: 280px;
+    padding: 0 1.2rem 1rem;
+}
+
+/* ── Donut Charts Side-by-Side Row ──────────────────────── */
+.pa2-donuts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+}
+
+/* ── Trend Summary Stats Strip ──────────────────────────── */
+.pa2-trend-summary-strip {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    padding: 14px 20px;
+    margin: 0 1rem 0.5rem;
+    background: linear-gradient(135deg, #f8faff 0%, #eff6ff 100%);
+    border-radius: 10px;
+    border: 1px solid rgba(45, 109, 232, 0.08);
+}
+
+.pa2-trend-stat {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.pa2-trend-stat-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.8), 0 0 0 5px rgba(0,0,0,0.06);
+}
+
+.pa2-trend-stat-label {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+}
+
+.pa2-trend-stat-val {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
 }
 
 /* ── Two Column ───────────────────────────────────────────── */
@@ -1516,4 +1583,390 @@
     align-items: center;
     gap: 10px;
     width: 100%;
+}
+
+/* ── Modern Custom Select / Dropdown ── */
+@keyframes pa2-dropdown-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.pa2-custom-select {
+    position: relative;
+    width: 180px;
+}
+
+.pa2-custom-select-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.83rem;
+    font-family: inherit;
+    color: #1a2a5e;
+    background: #f8faff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 9px;
+    outline: none;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(45, 109, 232, 0.02);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: left;
+}
+
+.pa2-custom-select-trigger:hover {
+    border-color: rgba(45, 109, 232, 0.35);
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.06);
+}
+
+.pa2-custom-select.pa2-active .pa2-custom-select-trigger {
+    border-color: #2d6de8;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(45, 109, 232, 0.12), 0 4px 12px rgba(45, 109, 232, 0.08);
+}
+
+.pa2-custom-select-arrow {
+    color: #94a3b8;
+    transition: transform 0.3s ease, color 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.pa2-custom-select.pa2-active .pa2-custom-select-arrow {
+    transform: rotate(180deg);
+    color: #2d6de8;
+}
+
+.pa2-custom-select-options {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid rgba(45, 109, 232, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(26, 42, 94, 0.08), 0 4px 12px rgba(45, 109, 232, 0.04);
+    z-index: 999;
+    padding: 5px;
+    margin: 0;
+    list-style: none;
+    transform-origin: top;
+    animation: pa2-dropdown-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.pa2-custom-select-option {
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    color: #475569;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pa2-custom-select-option:hover,
+.pa2-custom-select-option.pa2-focused {
+    background: rgba(45, 109, 232, 0.08);
+    color: #2d6de8;
+    padding-left: 14px;
+}
+
+.pa2-custom-select-option.pa2-selected {
+    background: #2d6de8;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ── Modern Animated Search Input ── */
+.pa2-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 220px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pa2-search-wrapper:focus-within {
+    width: 280px;
+}
+
+.pa2-search-input {
+    width: 100%;
+    padding: 0.6rem 0.85rem 0.6rem 2.2rem;
+    font-size: 0.83rem;
+    font-family: inherit;
+    color: #1a2a5e;
+    background: #f8faff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 9px;
+    outline: none;
+    box-shadow: 0 2px 6px rgba(45, 109, 232, 0.02);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pa2-search-input::placeholder {
+    color: #94a3b8;
+}
+
+.pa2-search-input:hover {
+    border-color: rgba(45, 109, 232, 0.35);
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.06);
+}
+
+.pa2-search-input:focus {
+    border-color: #2d6de8;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(45, 109, 232, 0.12), 0 4px 12px rgba(45, 109, 232, 0.08);
+}
+
+.pa2-search-icon-inside {
+    position: absolute;
+    left: 12px;
+    color: #94a3b8;
+    transition: all 0.3s ease;
+    pointer-events: none;
+}
+
+.pa2-search-wrapper:focus-within .pa2-search-icon-inside {
+    color: #2d6de8;
+    transform: scale(1.1) rotate(5deg);
+}
+
+.pa2-search-clear-btn {
+    transition: all 0.2s ease;
+}
+
+.pa2-search-clear-btn:hover {
+    color: #ef4444 !important;
+    transform: scale(1.15);
+}
+
+/* ── Reset Filters Button with Modern Animation ── */
+.pa2-btn-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(220, 38, 38, 0.05);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.15);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.02);
+    align-self: flex-end;
+    height: 38px;
+}
+
+.pa2-btn-reset:hover {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+    transform: translateY(-1px);
+}
+
+.pa2-btn-reset:active {
+    transform: translateY(1px);
+}
+
+.pa2-btn-reset-icon {
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pa2-btn-reset:hover .pa2-btn-reset-icon {
+    transform: rotate(-180deg);
+}
+
+.pa2-btn-reset:active .pa2-btn-reset-icon {
+    transform: rotate(-360deg) scale(0.95);
+}
+
+/* ── Crisp Canvas Rendering & Hardware Acceleration ── */
+.pa2-chart-wrap canvas,
+.pa2-trend-chart-full-wrap canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* ── Segmented Control tabs for Month-wise chart ── */
+.pa2-segmented-control {
+    display: inline-flex;
+    background: #f1f5f9;
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.pa2-segment-btn {
+    padding: 6px 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    font-family: inherit;
+}
+
+.pa2-segment-btn:hover {
+    color: #1e293b;
+}
+
+.pa2-segment-btn.active {
+    background: #ffffff;
+    color: #2d6de8;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.01);
+}
+
+/* ── Top Buying Products Section — Compact & Professional ── */
+.pa2-top-products-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem;
+}
+
+.pa2-top-prod-col {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    min-width: 0;
+}
+
+.pa2-col-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.8rem;
+    letter-spacing: -0.01em;
+}
+
+.pa2-col-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.pa2-prod-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.pa2-prod-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 9px;
+    background: #ffffff;
+    border-radius: 6px;
+    border: 1px solid rgba(226, 232, 240, 0.45);
+    transition: all 0.2s ease;
+}
+
+.pa2-prod-row:hover {
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.04);
+    border-color: rgba(45, 109, 232, 0.15);
+}
+
+.pa2-prod-rank {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #64748b;
+    background: #f1f5f9;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pa2-prod-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.pa2-prod-name {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.pa2-prod-code {
+    font-size: 0.62rem;
+    color: #94a3b8;
+    font-family: monospace;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.pa2-prod-bar-track {
+    height: 3px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.pa2-prod-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pa2-prod-meta {
+    text-align: right;
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.pa2-prod-val {
+    font-size: 0.8rem;
+    font-weight: 750;
+    color: #1e293b;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+
+.pa2-prod-qty {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #64748b;
+    margin-top: 1px;
+}
+
+@media (max-width: 960px) {
+    .pa2-top-products-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1rem;
+    }
 }

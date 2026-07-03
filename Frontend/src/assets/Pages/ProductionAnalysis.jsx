@@ -337,14 +337,106 @@ export default function ProductionAnalysis() {
   const [traceSearch, setTraceSearch] = useState("");
 
   const traceabilityData = [
-    { sno: 1, partNo: "P-1002-39", routeCardNo: "RC-2026-9041", machineName: "TC-59", runningHrs: 6.8, operator: "Ramchandra Soran", qty: 450 },
-    { sno: 2, partNo: "P-1002-39", routeCardNo: "RC-2026-9042", machineName: "TC-60", runningHrs: 7.2, operator: "Santhana Lakshmi", qty: 480 },
-    { sno: 3, partNo: "P-8094-11", routeCardNo: "RC-2026-9043", machineName: "TC 50", runningHrs: 5.5, operator: "Akash.A", qty: 320 },
-    { sno: 4, partNo: "P-4509-02", routeCardNo: "RC-2026-9044", machineName: "TC 43 L", runningHrs: 6.0, operator: "Mohan Kewat", qty: 390 },
-    { sno: 5, partNo: "P-3321-77", routeCardNo: "RC-2026-9045", machineName: "VMC-07", runningHrs: 7.5, operator: "Karthi.S", qty: 510 },
-    { sno: 6, partNo: "P-8809-54", routeCardNo: "RC-2026-9046", machineName: "VMC 18", runningHrs: 4.8, operator: "Chandan Kumar", qty: 290 },
-    { sno: 7, partNo: "P-1002-39", routeCardNo: "RC-2026-9047", machineName: "SPM-04", runningHrs: 6.2, operator: "Ajith.A", qty: 410 },
-    { sno: 8, partNo: "P-8094-11", routeCardNo: "RC-2026-9048", machineName: "BROACHING-1", runningHrs: 5.9, operator: "Nagamani", qty: 380 },
+    {
+      sno: 1,
+      indNo: "IND-2026-0041",
+      indDt: "05-Jan-2026",
+      indQty: 500,
+      indPoNo: "PO-2026-0075",
+      poDt: "10-Jan-2026",
+      poQty: 500,
+      poRate: 250,
+      poValue: 125000,
+      grnNo: "GRN-2026-0081",
+      grnDt: "15-Jan-2026",
+      grnOky: 495,
+      grnRate: 250,
+      grnValue: 123750,
+      routeCardNo: "RC-2026-9041",
+      routeCardDt: "20-Jan-2026",
+      routeCardQty: 490,
+      partNo: "P-1002-39 (Impeller Casting)"
+    },
+    {
+      sno: 2,
+      indNo: "IND-2026-0042",
+      indDt: "08-Jan-2026",
+      indQty: 1000,
+      indPoNo: "PO-2026-0079",
+      poDt: "12-Jan-2026",
+      poQty: 1000,
+      poRate: 180,
+      poValue: 180000,
+      grnNo: "GRN-2026-0089",
+      grnDt: "18-Jan-2026",
+      grnOky: 1000,
+      grnRate: 180,
+      grnValue: 180000,
+      routeCardNo: "RC-2026-9042",
+      routeCardDt: "22-Jan-2026",
+      routeCardQty: 995,
+      partNo: "P-1002-40 (Shaft Pin)"
+    },
+    {
+      sno: 3,
+      indNo: "IND-2026-0043",
+      indDt: "12-Jan-2026",
+      indQty: 350,
+      indPoNo: "PO-2026-0082",
+      poDt: "16-Jan-2026",
+      poQty: 350,
+      poRate: 450,
+      poValue: 157500,
+      grnNo: "GRN-2026-0095",
+      grnDt: "22-Jan-2026",
+      grnOky: 350,
+      grnRate: 450,
+      grnValue: 157500,
+      routeCardNo: "RC-2026-9043",
+      routeCardDt: "25-Jan-2026",
+      routeCardQty: 348,
+      partNo: "P-8094-11 (Metallic Impeller)"
+    },
+    {
+      sno: 4,
+      indNo: "IND-2026-0044",
+      indDt: "15-Jan-2026",
+      indQty: 800,
+      indPoNo: "PO-2026-0084",
+      poDt: "19-Jan-2026",
+      poQty: 800,
+      poRate: 320,
+      poValue: 256000,
+      grnNo: "GRN-2026-0102",
+      grnDt: "26-Jan-2026",
+      grnOky: 790,
+      grnRate: 320,
+      grnValue: 252800,
+      routeCardNo: "RC-2026-9044",
+      routeCardDt: "30-Jan-2026",
+      routeCardQty: 785,
+      partNo: "P-4509-02 (Adapter Ring)"
+    },
+    {
+      sno: 5,
+      indNo: "IND-2026-0045",
+      indDt: "19-Jan-2026",
+      indQty: 250,
+      indPoNo: "PO-2026-0088",
+      poDt: "23-Jan-2026",
+      poQty: 250,
+      poRate: 980,
+      poValue: 245000,
+      grnNo: "GRN-2026-0110",
+      grnDt: "29-Jan-2026",
+      grnOky: 250,
+      grnRate: 980,
+      grnValue: 245000,
+      routeCardNo: "RC-2026-9045",
+      routeCardDt: "04-Feb-2026",
+      routeCardQty: 248,
+      partNo: "P-3321-77 (Bearing Housing)"
+    }
   ];
 
   const topUtilizationData = [
@@ -797,7 +889,7 @@ export default function ProductionAnalysis() {
     if (isMachine) {
       const palette = ["rgba(37,99,235,0.75)", "rgba(249,115,22,0.75)", "rgba(16,185,129,0.75)", "rgba(139,92,246,0.75)", "rgba(6,182,212,0.75)", "rgba(236,72,153,0.75)", "rgba(245,158,11,0.75)", "rgba(99,102,241,0.75)", "rgba(239,68,68,0.75)"];
       const borders = ["#2563eb", "#f97316", "#10b981", "#8b5cf6", "#06b6d4", "#ec4899", "#f59e0b", "#6366f1", "#ef4444"];
-      
+
       datasets = [{
         label: "Achieved Value (₹)",
         data: machineData.achieved,
@@ -1206,8 +1298,9 @@ export default function ProductionAnalysis() {
     return (
       (row.partNo || "").toLowerCase().includes(q) ||
       (row.routeCardNo || "").toLowerCase().includes(q) ||
-      (row.machineName || "").toLowerCase().includes(q) ||
-      (row.operator || "").toLowerCase().includes(q)
+      (row.indNo || "").toLowerCase().includes(q) ||
+      (row.indPoNo || "").toLowerCase().includes(q) ||
+      (row.grnNo || "").toLowerCase().includes(q)
     );
   });
 
@@ -1650,7 +1743,7 @@ export default function ProductionAnalysis() {
               <button className={`pa2-pv-tab ${pvMode === "machine" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("machine")}><FiCpu size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Machine Wise</button>
               <button className={`pa2-pv-tab ${pvMode === "month" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvMode("month")}><FiCalendar size={12} style={{ marginRight: "5px", verticalAlign: "middle" }} />Month Wise</button>
             </div>
-            
+
             <div className="pa2-pv-toggle" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <button className={`pa2-pv-tab ${pvChartType === "bar" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("bar")} style={{ padding: "6px 12px" }}><FiLayers size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Bar</button>
               <button className={`pa2-pv-tab ${pvChartType === "line" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("line")} style={{ padding: "6px 12px" }}><FiActivity size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Line</button>
@@ -2128,28 +2221,39 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
             <thead>
               <tr>
                 <th>#</th>
-                <th>Part No</th>
-                <th>Route Card No</th>
-                <th>Machine Name</th>
-                <th>Running Hrs</th>
-                <th>Operator</th>
-                <th style={{ textAlign: "right" }}>Qty</th>
+                <th>Ind No</th>
+                <th>Ind Dt</th>
+                <th style={{ textAlign: "right" }}>Ind Qty</th>
+                <th>Ind Po No</th>
+                <th>Po Dt</th>
+                <th style={{ textAlign: "right" }}>Po Qty</th>
+                <th style={{ textAlign: "right" }}>Po Rate</th>
+                <th style={{ textAlign: "right" }}>Po Value</th>
+                <th>Grn No</th>
+                <th>Grn Dt</th>
+                <th style={{ textAlign: "right" }}>Grn Oky</th>
+                <th style={{ textAlign: "right" }}>Grn rate</th>
+                <th style={{ textAlign: "right" }}>Grn Value</th>
+                <th>Routecard No</th>
+                <th>Roucard Dt</th>
+                <th style={{ textAlign: "right" }}>Roucard Qty</th>
+                <th>Prod Det/Partno</th>
               </tr>
             </thead>
             <tbody>
               {pageLoading ? (
                 Array.from({ length: 4 }).map((_, idx) => (
                   <tr key={idx}>
-                    {Array.from({ length: 7 }).map((__, tdIdx) => (
+                    {Array.from({ length: 18 }).map((__, tdIdx) => (
                       <td key={tdIdx}>
-                        <div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : tdIdx === 2 ? "90px" : "55px", height: "12px", marginLeft: tdIdx === 6 ? "auto" : "0" }} />
+                        <div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : "55px", height: "12px" }} />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : filteredTraceData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>
+                  <td colSpan={18} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>
                     No traceability records found matching search query.
                   </td>
                 </tr>
@@ -2157,20 +2261,27 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                 filteredTraceData.map((row, i) => (
                   <tr key={i} className="pa2-anim" style={{ "--d": `${i * 45}ms` }}>
                     <td className="pa2-td-muted">{row.sno}</td>
-                    <td className="pa2-td-part" style={{ fontWeight: "700" }}>{row.partNo}</td>
+                    <td style={{ fontWeight: "600", color: "#2d6de8", whiteSpace: "nowrap" }}>{row.indNo}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{row.indDt}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.indQty.toLocaleString()}</td>
+                    <td style={{ fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>{row.indPoNo}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{row.poDt}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.poQty.toLocaleString()}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>₹{row.poRate}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right", fontWeight: "600" }}>₹{row.poValue.toLocaleString("en-IN")}</td>
+                    <td style={{ fontWeight: "600", color: "#f5a623", whiteSpace: "nowrap" }}>{row.grnNo}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{row.grnDt}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.grnOky.toLocaleString()}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>₹{row.grnRate}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right", fontWeight: "600" }}>₹{row.grnValue.toLocaleString("en-IN")}</td>
                     <td>
-                      <span className="pa2-badge pa2-badge--ok" style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.15)", color: "#6366f1", fontWeight: "700" }}>
+                      <span className="pa2-badge" style={{ background: "rgba(139, 92, 246, 0.08)", border: "1px solid rgba(139, 92, 246, 0.15)", color: "#8b5cf6", fontWeight: "700", whiteSpace: "nowrap" }}>
                         {row.routeCardNo}
                       </span>
                     </td>
-                    <td>
-                      <span className="pa2-machine-chip">
-                        {row.machineName}
-                      </span>
-                    </td>
-                    <td>{row.runningHrs} hrs</td>
-                    <td style={{ fontWeight: "600", color: "#475569" }}>{row.operator}</td>
-                    <td className="pa2-td-num" style={{ fontWeight: "700", color: "#0f172a" }}>{row.qty.toLocaleString()}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{row.routeCardDt}</td>
+                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.routeCardQty.toLocaleString()}</td>
+                    <td className="pa2-td-part" style={{ fontWeight: "700", whiteSpace: "nowrap" }}>{row.partNo}</td>
                   </tr>
                 ))
               )}

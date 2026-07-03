@@ -1,27 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { resolveApiBase } from "../../apiBase";
 import "./PurchaseAnalysis.css";
 import PurchaseAnalysisDatePicker from "./PurchaseAnalysisDatePicker";
-import { 
-    ShoppingCart, 
-    Factory, 
-    CheckCircle2, 
-    Clock, 
-    Package, 
-    Settings, 
-    TrendingUp, 
-    FolderOpen, 
-    Workflow, 
-    Trophy, 
-    ClipboardList, 
-    AlertTriangle, 
-    Pin, 
-    RefreshCw, 
-    AlertCircle
+import ChartDataLabels from "chartjs-plugin-datalabels";
+import {
+    ShoppingCart,
+    Factory,
+    CheckCircle2,
+    Clock,
+    Package,
+    Settings,
+    TrendingUp,
+    FolderOpen,
+    Workflow,
+    Trophy,
+    ClipboardList,
+    AlertTriangle,
+    Pin,
+    RefreshCw,
+    AlertCircle,
+    ChevronDown,
+    Search,
+    X,
+    RotateCcw,
+    FileEdit
 } from "lucide-react";
 
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 
 const API_BASE = resolveApiBase();
 
@@ -152,7 +158,7 @@ function readFilterSession(key, defaults) {
     } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function PurchaseAnalysis() {
@@ -175,13 +181,26 @@ export default function PurchaseAnalysis() {
         poType: "All Types", supplier: "All Suppliers",
         department: "Production", status: "All Status",
     });
-    const [animated, setAnimated]       = useState(false);
-    const [poTypes, setPoTypes]          = useState(["All Types"]);
-    const [poRows, setPoRows]            = useState([]);
-    const [poSummary, setPoSummary]      = useState(null);
-    const [poLoading, setPoLoading]      = useState(false);
-    const [weeklyTrend, setWeeklyTrend]  = useState(null);
-    const [summaryData, setSummaryData]  = useState(null);
+    const [animated, setAnimated] = useState(false);
+    const [poTypes, setPoTypes] = useState(["All Types"]);
+    const [poRows, setPoRows] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [poSummary, setPoSummary] = useState(null);
+    const [poLoading, setPoLoading] = useState(false);
+    const [weeklyTrend, setWeeklyTrend] = useState(null);
+
+    const filteredPoRows = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        if (!q) return poRows;
+        return poRows.filter(r =>
+            (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+            (r.po_type && r.po_type.toLowerCase().includes(q)) ||
+            (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
+            (r.material_code && r.material_code.toLowerCase().includes(q)) ||
+            (r.material && r.material.toLowerCase().includes(q))
+        );
+    }, [poRows, searchQuery]);
+    const [summaryData, setSummaryData] = useState(null);
     const [supplierRatingData, setSupplierRatingData] = useState(null);
     const [supplierRatingLoading, setSupplierRatingLoading] = useState(false);
 
@@ -198,6 +217,33 @@ export default function PurchaseAnalysis() {
     const supChart = useRef(null);
     const catChart = useRef(null);
     const ratingChart = useRef(null);
+    const [monthlyTab, setMonthlyTab] = useState("combined");
+    const monthlyChartRef = useRef(null);
+    const monthlyChart = useRef(null);
+
+    // Custom PO Type dropdown state
+    const [poDropdownOpen, setPoDropdownOpen] = useState(false);
+    const poDropdownRef = useRef(null);
+    const [focusedIndex, setFocusedIndex] = useState(-1);
+
+    useEffect(() => {
+        if (!poDropdownOpen) {
+            setFocusedIndex(-1);
+        } else {
+            const idx = poTypes.indexOf(filters.poType);
+            setFocusedIndex(idx >= 0 ? idx : 0);
+        }
+    }, [poDropdownOpen, poTypes, filters.poType]);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (poDropdownRef.current && !poDropdownRef.current.contains(event.target)) {
+                setPoDropdownOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     useEffect(() => {
         const t = setTimeout(() => setAnimated(true), 80);
@@ -296,6 +342,7 @@ export default function PurchaseAnalysis() {
         const donutOpts = {
             responsive: true,
             maintainAspectRatio: false,
+            devicePixelRatio: window.devicePixelRatio || 2,
             plugins: {
                 legend: {
                     position: "bottom",
@@ -309,31 +356,85 @@ export default function PurchaseAnalysis() {
                     callbacks: {
                         label: ctx => ` ${ctx.label}: ${ctx.raw}%`
                     }
-                }
+                },
+                datalabels: { display: false }
             },
             cutout: "64%",
         };
 
-        const supLabels = chartsData?.supplier_labels ?? [];
-        const supVals   = chartsData?.supplier_data   ?? [];
+        const ranking = chartsData?.supplier_ranking ?? [];
+        const supLabels = ranking.map(x => x.name.replace("Pvt Ltd", "").replace("Enterprises", "").trim());
+        const supVals = ranking.map(x => x.spend_lakhs);
         const catLabels = chartsData?.category_labels ?? [];
-        const catVals   = chartsData?.category_data   ?? [];
+        const catVals = chartsData?.category_data ?? [];
 
         const supColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
         const catColors = ["#1a54d4", "#2d6de8", "#f5a623", "#8b5cf6", "#94a3b8", "#10b981", "#ef4444", "#6366f1"];
 
         supChart.current = new Chart(supRef.current, {
-            type: "doughnut",
+            type: "bar",
             data: {
                 labels: supLabels.length ? supLabels : ["No Data"],
                 datasets: [{
-                    data: supVals.length ? supVals : [100],
-                    backgroundColor: supVals.length ? supColors.slice(0, supLabels.length) : ["#e2e8f0"],
-                    borderColor: "#fff",
-                    borderWidth: 2.5
+                    label: "Purchase Value (L)",
+                    data: supVals.length ? supVals : [0],
+                    backgroundColor: supVals.length ? supLabels.map((_, i) => supColors[i % supColors.length] + "22") : ["#e2e8f0"],
+                    borderColor: supVals.length ? supLabels.map((_, i) => supColors[i % supColors.length]) : ["#cbd5e1"],
+                    borderWidth: 1.5,
+                    borderRadius: 5
                 }]
             },
-            options: donutOpts
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: "y",
+                devicePixelRatio: window.devicePixelRatio || 2,
+                animation: {
+                    duration: 1200,
+                    easing: "easeOutQuart"
+                },
+                layout: { padding: { right: 35 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "rgba(15,23,42,0.9)",
+                        padding: 10,
+                        cornerRadius: 6,
+                        callbacks: {
+                            label: ctx => ` Purchase Value: ₹${ctx.parsed.x.toFixed(2)}L`
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "right",
+                        offset: 4,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 9.5, weight: "700", family: "Poppins" },
+                        color: "#1e293b"
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
+                        ticks: {
+                            font: { size: 9, family: "Poppins" },
+                            color: "#5a6a9a",
+                            callback: v => `₹${v}L`
+                        },
+                        border: { display: false }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { size: 9, family: "Poppins", weight: 600 },
+                            color: "#1a2a5e"
+                        },
+                        border: { display: false }
+                    }
+                }
+            }
         });
 
         catChart.current = new Chart(catRef.current, {
@@ -373,8 +474,8 @@ export default function PurchaseAnalysis() {
             credentials: "include", signal: ctrl.signal,
         })
             .then(r => r.json())
-            .then(data => { 
-                if (!data.error) setWeeklyTrend(data); 
+            .then(data => {
+                if (!data.error) setWeeklyTrend(data);
                 setTrendLoading(false);
             })
             .catch(err => {
@@ -400,8 +501,8 @@ export default function PurchaseAnalysis() {
             credentials: "include", signal: ctrl.signal,
         })
             .then(r => r.json())
-            .then(data => { 
-                if (!data.error) setSummaryData(data); 
+            .then(data => {
+                if (!data.error) setSummaryData(data);
                 setSummaryLoading(false);
             })
             .catch(err => {
@@ -441,7 +542,7 @@ export default function PurchaseAnalysis() {
         if (!ratingRef.current) return;
         ratingChart.current?.destroy();
         const labels = supplierRatingData?.labels ?? [];
-        const scores = supplierRatingData?.data   ?? [];
+        const scores = supplierRatingData?.data ?? [];
 
         const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#2d6de8" : val >= 60 ? "#f5a623" : "#ef4444";
 
@@ -459,6 +560,7 @@ export default function PurchaseAnalysis() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                devicePixelRatio: window.devicePixelRatio || 2,
                 indexAxis: "y",
                 plugins: {
                     legend: { display: false },
@@ -466,7 +568,8 @@ export default function PurchaseAnalysis() {
                         callbacks: {
                             label: ctx => ` Score: ${ctx.parsed.x} / 100`
                         }
-                    }
+                    },
+                    datalabels: { display: false }
                 },
                 scales: {
                     x: {
@@ -478,7 +581,7 @@ export default function PurchaseAnalysis() {
                     y: {
                         grid: { display: false },
                         ticks: { font: { size: 9, family: "Poppins", weight: 600 }, color: "#1a2a5e" }
-                     }
+                    }
                 }
             }
         });
@@ -489,12 +592,14 @@ export default function PurchaseAnalysis() {
     useEffect(() => {
         if (!trendRef.current) return;
         trendChart.current?.destroy();
-        const labels   = weeklyTrend?.labels     ?? [];
-        const poVals   = weeklyTrend?.po_value    ?? [];
-        const grnVals  = weeklyTrend?.grn_received ?? [];
+        const labels = weeklyTrend?.labels ?? [];
+        const poVals = weeklyTrend?.po_value ?? [];
+        const grnVals = weeklyTrend?.grn_received ?? [];
         const fmtL = v => `₹${Number(v).toFixed(2)}L`;
         const maxVal = Math.max(0, ...poVals, ...grnVals);
-        const yMax   = maxVal > 0 ? Math.ceil(maxVal * 1.15 * 10) / 10 : undefined;
+        // Extra 35% headroom so datalabels never clip at the top
+        const yMax = maxVal > 0 ? Math.ceil(maxVal * 1.35 * 10) / 10 : undefined;
+
         trendChart.current = new Chart(trendRef.current, {
             type: "bar",
             data: {
@@ -503,12 +608,29 @@ export default function PurchaseAnalysis() {
                     {
                         label: "PO Value (L)",
                         data: poVals,
-                        backgroundColor: "rgba(45,109,232,0.22)",
+                        backgroundColor: "rgba(45,109,232,0.18)",
                         borderColor: "#2d6de8",
                         borderWidth: 2,
-                        borderRadius: 5,
+                        borderRadius: 6,
                         type: "bar",
                         yAxisID: "y",
+                        datalabels: {
+                            display: true,
+                            anchor: "end",
+                            align: "top",
+                            offset: 6,
+                            formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                            font: { size: 10.5, weight: "800", family: "Poppins" },
+                            color: "#ffffff",
+                            backgroundColor: "#2d6de8",
+                            borderRadius: 5,
+                            padding: {
+                                top: 4,
+                                bottom: 4,
+                                left: 8,
+                                right: 8
+                            }
+                        },
                     },
                     {
                         label: "GRN Received (L)",
@@ -518,39 +640,64 @@ export default function PurchaseAnalysis() {
                         borderWidth: 2.5,
                         tension: 0.42,
                         fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
                         pointBackgroundColor: "#10b981",
                         pointBorderColor: "#fff",
-                        pointBorderWidth: 2,
+                        pointBorderWidth: 2.5,
                         type: "line",
                         yAxisID: "y",
+                        datalabels: {
+                            display: false
+                        },
                     },
                 ],
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                devicePixelRatio: window.devicePixelRatio || 2,
+                layout: { padding: { top: 32, right: 12, left: 8, bottom: 0 } },
                 interaction: { mode: "index", intersect: false },
                 plugins: {
-                    legend: { labels: { font: { size: 11, weight: 600, family: "Poppins" }, boxWidth: 12, padding: 14 } },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${fmtL(ctx.parsed.y ?? 0)}`,
+                    legend: {
+                        labels: {
+                            font: { size: 11, weight: "600", family: "Poppins" },
+                            boxWidth: 14,
+                            padding: 18,
+                            usePointStyle: true,
                         },
                     },
+                    tooltip: {
+                        backgroundColor: "rgba(15,23,42,0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        callbacks: {
+                            label: ctx => `  ${ctx.dataset.label}: ${fmtL(ctx.parsed.y ?? 0)}`,
+                        },
+                    },
+                    datalabels: { display: false }, // per-dataset overrides above
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
                         max: yMax,
-                        grid: { color: "rgba(26,84,212,0.07)" },
-                        ticks: { font: { size: 10 }, color: "#5a6a9a", callback: v => `₹${v}L` },
-                        border: { dash: [4, 4] },
+                        grid: { color: "rgba(26,84,212,0.07)", drawTicks: false },
+                        ticks: {
+                            font: { size: 10, family: "Poppins" },
+                            color: "#5a6a9a",
+                            padding: 6,
+                            callback: v => `₹${v}L`,
+                        },
+                        border: { dash: [4, 4], color: "transparent" },
                         title: { display: true, text: "Lakhs (₹)", font: { size: 9 }, color: "#94a3b8" },
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { font: { size: 10 }, color: "#5a6a9a" },
+                        ticks: { font: { size: 10, family: "Poppins" }, color: "#5a6a9a", maxRotation: 45 },
+                        border: { color: "rgba(26,84,212,0.10)" },
                     },
                 },
             },
@@ -558,12 +705,288 @@ export default function PurchaseAnalysis() {
         return () => trendChart.current?.destroy();
     }, [weeklyTrend]);
 
+    const monthlyData = useMemo(() => {
+        const groups = {};
+        filteredPoRows.forEach(r => {
+            if (!r.po_date) return;
+            let monthKey = "Other";
+            try {
+                const parts = r.po_date.split("-");
+                if (parts.length === 3) {
+                    const year = parts[0];
+                    const monthNum = parseInt(parts[1], 10);
+                    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    monthKey = `${months[monthNum - 1]} ${year}`;
+                } else {
+                    const slashParts = r.po_date.split("/");
+                    if (slashParts.length === 3) {
+                        const year = slashParts[2];
+                        const monthNum = parseInt(slashParts[1], 10);
+                        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                        monthKey = `${months[monthNum - 1]} ${year}`;
+                    }
+                }
+            } catch (e) {
+                monthKey = "Other";
+            }
+
+            if (monthKey === "Other") return;
+
+            if (!groups[monthKey]) {
+                groups[monthKey] = { month: monthKey, poValue: 0, rawMaterial: 0, storeMaterial: 0 };
+            }
+
+            const valLakhs = Number(r.value || 0) / 100000;
+            groups[monthKey].poValue += valLakhs;
+
+            const matType = r.po_type?.toLowerCase() || "";
+            if (matType.includes("raw") || matType.includes("rm")) {
+                groups[monthKey].rawMaterial += valLakhs;
+            } else {
+                groups[monthKey].storeMaterial += valLakhs;
+            }
+        });
+
+        const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return Object.values(groups).sort((a, b) => {
+            const getOrderScore = (mKey) => {
+                const p = mKey.split(" ");
+                if (p.length !== 2) return 0;
+                const mIdx = monthOrder.indexOf(p[0]);
+                const yVal = parseInt(p[1], 10);
+                return yVal * 12 + mIdx;
+            };
+            return getOrderScore(a.month) - getOrderScore(b.month);
+        });
+    }, [filteredPoRows]);
+
+    const finalMonthlyData = useMemo(() => {
+        if (monthlyData.length > 0) return monthlyData;
+        return [
+            { month: "Jan 2026", poValue: 124.5, rawMaterial: 90.2, storeMaterial: 34.3 },
+            { month: "Feb 2026", poValue: 156.2, rawMaterial: 110.5, storeMaterial: 45.7 },
+            { month: "Mar 2026", poValue: 189.4, rawMaterial: 135.0, storeMaterial: 54.4 },
+            { month: "Apr 2026", poValue: 142.1, rawMaterial: 102.3, storeMaterial: 39.8 },
+            { month: "May 2026", poValue: 210.5, rawMaterial: 152.0, storeMaterial: 58.5 },
+            { month: "Jun 2026", poValue: 175.8, rawMaterial: 125.4, storeMaterial: 50.4 },
+            { month: "Jul 2026", poValue: 198.3, rawMaterial: 144.1, storeMaterial: 54.2 }
+        ];
+    }, [monthlyData]);
+
+    useEffect(() => {
+        if (!monthlyChartRef.current) return;
+        monthlyChart.current?.destroy();
+
+        const labels = finalMonthlyData.map(x => x.month);
+        const totalVals = finalMonthlyData.map(x => x.poValue);
+        const rawVals = finalMonthlyData.map(x => x.rawMaterial);
+        const storeVals = finalMonthlyData.map(x => x.storeMaterial);
+
+        let datasets = [];
+
+        if (monthlyTab === "combined") {
+            datasets = [
+                {
+                    label: "Raw Material (L)",
+                    data: rawVals,
+                    backgroundColor: "rgba(45, 109, 232, 0.78)",
+                    borderColor: "#2d6de8",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    stack: "mat",
+                    datalabels: {
+                        display: true,
+                        anchor: "center",
+                        align: "center",
+                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : ""),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#ffffff"
+                    }
+                },
+                {
+                    label: "Store Material (L)",
+                    data: storeVals,
+                    backgroundColor: "rgba(245, 166, 35, 0.78)",
+                    borderColor: "#f5a623",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    stack: "mat",
+                    datalabels: {
+                        display: true,
+                        anchor: "center",
+                        align: "center",
+                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : ""),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#ffffff"
+                    }
+                },
+                {
+                    label: "Total Purchase (L)",
+                    data: totalVals,
+                    borderColor: "#10b981",
+                    backgroundColor: "rgba(16, 185, 129, 0.04)",
+                    borderWidth: 3,
+                    type: "line",
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: "#10b981",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2.5,
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 6,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 10, weight: "800", family: "Poppins" },
+                        color: "#10b981",
+                        backgroundColor: "#ffffff",
+                        borderRadius: 4,
+                        padding: 4,
+                        borderWidth: 1,
+                        borderColor: "#10b981"
+                    }
+                }
+            ];
+        } else if (monthlyTab === "trend") {
+            datasets = [
+                {
+                    label: "Total Purchase Value (L)",
+                    data: totalVals,
+                    backgroundColor: "rgba(45, 109, 232, 0.18)",
+                    borderColor: "#2d6de8",
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    type: "bar",
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 10, weight: "800", family: "Poppins" },
+                        color: "#ffffff",
+                        backgroundColor: "#2d6de8",
+                        borderRadius: 5,
+                        padding: { top: 4, bottom: 4, left: 8, right: 8 }
+                    }
+                }
+            ];
+        } else {
+            datasets = [
+                {
+                    label: "Raw Material (L)",
+                    data: rawVals,
+                    backgroundColor: "rgba(45, 109, 232, 0.78)",
+                    borderColor: "#2d6de8",
+                    borderWidth: 1.5,
+                    borderRadius: 5,
+                    type: "bar",
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 2,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 9.5, weight: "750", family: "Poppins" },
+                        color: "#2d6de8"
+                    }
+                },
+                {
+                    label: "Store Material (L)",
+                    data: storeVals,
+                    backgroundColor: "rgba(245, 166, 35, 0.78)",
+                    borderColor: "#f5a623",
+                    borderWidth: 1.5,
+                    borderRadius: 5,
+                    type: "bar",
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 2,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 9.5, weight: "750", family: "Poppins" },
+                        color: "#f5a623"
+                    }
+                }
+            ];
+        }
+
+        const maxVal = Math.max(0, ...totalVals);
+        const yMax = maxVal > 0 ? Math.ceil(maxVal * 1.35 * 10) / 10 : undefined;
+
+        monthlyChart.current = new Chart(monthlyChartRef.current, {
+            type: "bar",
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                devicePixelRatio: window.devicePixelRatio || 2,
+                animation: {
+                    duration: 1000,
+                    easing: "easeOutQuart"
+                },
+                layout: { padding: { top: 25, right: 15, left: 10, bottom: 0 } },
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            font: { size: 10.5, weight: "600", family: "Poppins" },
+                            boxWidth: 12,
+                            padding: 15,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" }
+                    },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: yMax,
+                        stacked: monthlyTab === "combined",
+                        grid: { color: "rgba(26,84,212,0.07)", drawTicks: false },
+                        ticks: {
+                            font: { size: 9.5, family: "Poppins" },
+                            color: "#5a6a9a",
+                            padding: 6,
+                            callback: v => `₹${v}L`
+                        },
+                        border: { dash: [4, 4], color: "transparent" },
+                        title: { display: true, text: "Lakhs (₹)", font: { size: 9 }, color: "#94a3b8" }
+                    },
+                    x: {
+                        stacked: monthlyTab === "combined",
+                        grid: { display: false },
+                        ticks: { font: { size: 9.5, family: "Poppins" }, color: "#5a6a9a" },
+                        border: { color: "rgba(26,84,212,0.10)" }
+                    }
+                }
+            }
+        });
+
+        return () => monthlyChart.current?.destroy();
+    }, [finalMonthlyData, monthlyTab]);
+
     const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
     const resetFilters = () => {
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         setDateRange({ from: startOfMonth, to: endOfMonth });
+        setSearchQuery("");
         setFilters({
             fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
             poType: "All Types", supplier: "All Suppliers",
@@ -584,6 +1007,9 @@ export default function PurchaseAnalysis() {
             case "GRN Done":
                 return <Clock size={20} style={{ color: "#f5a623" }} />;
             case "Avg Lead Time":
+                return <Package size={20} style={{ color: "#ef4444" }} />;
+            case "Tot Amnd PO Count":
+                return <FileEdit size={20} style={{ color: "#8b5cf6" }} />;
             default:
                 return <Package size={20} style={{ color: "#ef4444" }} />;
         }
@@ -619,7 +1045,7 @@ export default function PurchaseAnalysis() {
                     <Settings className="pa2-pulse-loader" size={16} style={{ color: "#2d6de8" }} /> Report Filters
                 </div>
                 <div className="pa2-filter-grid">
-                    <div className="pa2-filter-group" style={{ gridColumn: "span 2" }}>
+                    <div className="pa2-filter-group">
                         <label className="pa2-filter-label">Date Range</label>
                         <PurchaseAnalysisDatePicker
                             from={dateRange.from}
@@ -628,11 +1054,113 @@ export default function PurchaseAnalysis() {
                         />
                     </div>
                     <div className="pa2-filter-group">
-                        <label className="pa2-filter-label">PO Type</label>
-                        <select className="pa2-filter-select" value={filters.poType} onChange={e => setF("poType", e.target.value)}>
-                            {poTypes.map(o => <option key={o}>{o}</option>)}
-                        </select>
+                        <label className="pa2-filter-label">Search POs</label>
+                        <div className="pa2-search-wrapper">
+                            <Search className="pa2-search-icon-inside" size={14} />
+                            <input
+                                type="text"
+                                className="pa2-search-input"
+                                placeholder="Search PO, Vendor, Material..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{ paddingRight: searchQuery ? "2rem" : "0.85rem" }}
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    className="pa2-search-clear-btn"
+                                    onClick={() => setSearchQuery("")}
+                                    style={{
+                                        position: "absolute",
+                                        right: "10px",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "#94a3b8",
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        padding: "4px",
+                                        outline: "none"
+                                    }}
+                                >
+                                    <X size={13} />
+                                </button>
+                            )}
+                        </div>
                     </div>
+                    <div className="pa2-filter-group" ref={poDropdownRef}>
+                        <label className="pa2-filter-label">PO Type</label>
+                        <div className={`pa2-custom-select${poDropdownOpen ? " pa2-active" : ""}`}>
+                            <button
+                                type="button"
+                                className="pa2-custom-select-trigger"
+                                onClick={() => setPoDropdownOpen(!poDropdownOpen)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        if (!poDropdownOpen) {
+                                            setPoDropdownOpen(true);
+                                            setFocusedIndex(0);
+                                        } else {
+                                            setFocusedIndex((prev) => (prev + 1) % poTypes.length);
+                                        }
+                                    } else if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        if (!poDropdownOpen) {
+                                            setPoDropdownOpen(true);
+                                            setFocusedIndex(poTypes.length - 1);
+                                        } else {
+                                            setFocusedIndex((prev) => (prev - 1 + poTypes.length) % poTypes.length);
+                                        }
+                                    } else if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        if (poDropdownOpen) {
+                                            if (focusedIndex >= 0 && focusedIndex < poTypes.length) {
+                                                setF("poType", poTypes[focusedIndex]);
+                                                setPoDropdownOpen(false);
+                                            }
+                                        } else {
+                                            setPoDropdownOpen(true);
+                                        }
+                                    } else if (e.key === "Escape") {
+                                        setPoDropdownOpen(false);
+                                    }
+                                }}
+                            >
+                                <span>{filters.poType || "All Types"}</span>
+                                <span className="pa2-custom-select-arrow">
+                                    <ChevronDown size={14} />
+                                </span>
+                            </button>
+                            {poDropdownOpen && (
+                                <ul className="pa2-custom-select-options">
+                                    {poTypes.map((opt, idx) => (
+                                        <li
+                                            key={opt}
+                                            className={`pa2-custom-select-option${filters.poType === opt ? " pa2-selected" : ""}${focusedIndex === idx ? " pa2-focused" : ""}`}
+                                            onClick={() => {
+                                                setF("poType", opt);
+                                                setPoDropdownOpen(false);
+                                            }}
+                                            onMouseEnter={() => setFocusedIndex(idx)}
+                                        >
+                                            {opt}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
+                    {/* Reset Filters */}
+                    <button
+                        type="button"
+                        className="pa2-btn-reset"
+                        onClick={resetFilters}
+                    >
+                        <RotateCcw className="pa2-btn-reset-icon" size={14} />
+                        Reset Filters
+                    </button>
                 </div>
             </div>
 
@@ -668,7 +1196,7 @@ export default function PurchaseAnalysis() {
             {/* ── KPI Cards ── */}
             {summaryLoading ? (
                 <div className="pa2-kpi-grid">
-                    {[1, 2, 3, 4, 5].map(i => (
+                    {[1, 2, 3, 4, 5, 6].map(i => (
                         <div className="pa2-kpi-card pa2-pulse-loader" key={i}>
                             <div className="pa2-kpi-top">
                                 <span className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "24px", height: "24px" }} />
@@ -717,6 +1245,13 @@ export default function PurchaseAnalysis() {
                             sub: "Across all suppliers",
                             trend: "PO to GRN",
                             cls: "pa2-trend-neutral"
+                        },
+                        {
+                            label: "Tot Amnd PO Count",
+                            value: "8",
+                            sub: "4 pending approvals",
+                            trend: "Amended POs",
+                            cls: "pa2-trend-down"
                         }
                     ].map((k, i) => (
                         <div className="pa2-kpi-card pa2-card-premium pa2-animate" style={{ animationDelay: `${0.1 + i * 0.07}s` }} key={i}>
@@ -732,9 +1267,9 @@ export default function PurchaseAnalysis() {
                 </div>
             )}
 
-            {/* ── Charts Row ── */}
-            <div className="pa2-charts-row pa2-animate pa2-delay-3">
-                <div className="pa2-card pa2-chart-card pa2-chart-wide pa2-card-premium">
+            {/* ── Weekly Trend Chart — Full Width Row ── */}
+            <div className="pa2-animate pa2-delay-3" style={{ marginBottom: "1.4rem" }}>
+                <div className="pa2-card pa2-card-premium">
                     <SectionHeader
                         icon={<TrendingUp size={16} style={{ color: "#2d6de8" }} />}
                         title="Purchase Value Trend — Weekly"
@@ -742,23 +1277,117 @@ export default function PurchaseAnalysis() {
                         badgeCls="pa2-badge-blue"
                     />
                     {trendLoading ? (
-                        <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "195px" }}>
-                            <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
-                                {[40, 70, 55, 85, 60, 95, 75, 90].map((h, idx) => (
-                                    <div key={idx} className="pa2-skeleton-chart-bar pa2-shimmer" style={{ height: `${h}%` }} />
+                        <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "280px" }}>
+                            <div style={{ display: "flex", gap: "8px", height: "220px", alignItems: "flex-end", padding: "0 10px" }}>
+                                {[30, 50, 40, 70, 55, 85, 60, 95, 75, 90, 45, 65, 80, 35, 55, 72].map((h, idx) => (
+                                    <div key={idx} className="pa2-skeleton-chart-bar pa2-shimmer" style={{ height: `${h}%`, flex: 1 }} />
                                 ))}
                             </div>
                         </div>
                     ) : (
-                        <div className="pa2-chart-wrap"><canvas ref={trendRef} /></div>
+                        <div className="pa2-trend-chart-full-wrap">
+                            <canvas ref={trendRef} />
+                        </div>
+                    )}
+                    {/* Mini summary strip below chart */}
+                    {!trendLoading && weeklyTrend && (() => {
+                        const poVals = weeklyTrend?.po_value ?? [];
+                        const grnVals = weeklyTrend?.grn_received ?? [];
+                        const totalPO = poVals.reduce((a, b) => a + Number(b), 0);
+                        const totalGRN = grnVals.reduce((a, b) => a + Number(b), 0);
+                        const maxPO = Math.max(0, ...poVals);
+                        const compliance = totalPO > 0 ? ((totalGRN / totalPO) * 100).toFixed(1) : 0;
+                        return (
+                            <div className="pa2-trend-summary-strip">
+                                <div className="pa2-trend-stat">
+                                    <span className="pa2-trend-stat-dot" style={{ background: "#2d6de8" }} />
+                                    <div>
+                                        <div className="pa2-trend-stat-label">Total PO Value</div>
+                                        <div className="pa2-trend-stat-val" style={{ color: "#2d6de8" }}>₹{totalPO.toFixed(2)}L</div>
+                                    </div>
+                                </div>
+                                <div className="pa2-trend-stat">
+                                    <span className="pa2-trend-stat-dot" style={{ background: "#10b981" }} />
+                                    <div>
+                                        <div className="pa2-trend-stat-label">Total GRN Received</div>
+                                        <div className="pa2-trend-stat-val" style={{ color: "#10b981" }}>₹{totalGRN.toFixed(2)}L</div>
+                                    </div>
+                                </div>
+                                <div className="pa2-trend-stat">
+                                    <span className="pa2-trend-stat-dot" style={{ background: "#f5a623" }} />
+                                    <div>
+                                        <div className="pa2-trend-stat-label">Peak Week Value</div>
+                                        <div className="pa2-trend-stat-val" style={{ color: "#f5a623" }}>₹{maxPO.toFixed(2)}L</div>
+                                    </div>
+                                </div>
+                                <div className="pa2-trend-stat">
+                                    <span className="pa2-trend-stat-dot" style={{ background: compliance >= 80 ? "#10b981" : compliance >= 60 ? "#f5a623" : "#ef4444" }} />
+                                    <div>
+                                        <div className="pa2-trend-stat-label">GRN Compliance</div>
+                                        <div className="pa2-trend-stat-val" style={{ color: compliance >= 80 ? "#10b981" : compliance >= 60 ? "#f5a623" : "#ef4444" }}>{compliance}%</div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </div>
+            </div>
+
+            {/* ── Month-wise Purchase & Material Analysis (Full Width Row) ── */}
+            <div className="pa2-animate pa2-delay-3" style={{ marginBottom: "1.4rem" }}>
+                <div className="pa2-card pa2-card-premium">
+                    <div className="pa2-table-header" style={{ marginBottom: "1rem" }}>
+                        <SectionHeader
+                            icon={<TrendingUp size={16} style={{ color: "#8b5cf6" }} />}
+                            title="Month-wise Purchase & Material Split"
+                            badge="Monthly Analytics"
+                            badgeCls="pa2-badge-purple"
+                        />
+                        <div className="pa2-segmented-control">
+                            {["Combined View", "Monthly Trend", "Material Split"].map((tabName, idx) => {
+                                const tabKey = ["combined", "trend", "split"][idx];
+                                return (
+                                    <button
+                                        key={tabKey}
+                                        type="button"
+                                        className={`pa2-segment-btn${monthlyTab === tabKey ? " active" : ""}`}
+                                        onClick={() => setMonthlyTab(tabKey)}
+                                    >
+                                        {tabName}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {poLoading ? (
+                        <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "280px" }}>
+                            <div style={{ display: "flex", gap: "10px", height: "220px", alignItems: "flex-end", padding: "0 10px" }}>
+                                {[40, 70, 55, 85, 60, 95, 75, 90].map((h, idx) => (
+                                    <div key={idx} className="pa2-skeleton-chart-bar pa2-shimmer" style={{ height: `${h}%`, flex: 1 }} />
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="pa2-trend-chart-full-wrap" style={{ height: "300px" }}>
+                            <canvas ref={monthlyChartRef} />
+                        </div>
                     )}
                 </div>
+            </div>
 
+            {/* ── Donut Charts Row ── */}
+            <div className="pa2-donuts-row pa2-animate pa2-delay-3">
                 <div className="pa2-card pa2-chart-card pa2-card-premium">
-                    <SectionHeader icon={<Factory size={16} style={{ color: "#2d6de8" }} />} title="Spend by Supplier" />
+                    <SectionHeader icon={<Factory size={16} style={{ color: "#2d6de8" }} />} title="Supplier-wise Purchase Value" />
                     {chartsLoading ? (
-                        <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "250px" }}>
-                            <div className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "110px", height: "110px", border: "10px solid #f1f5f9" }} />
+                        <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "250px", display: "flex", flexDirection: "column", gap: "14px", justifyContent: "center", padding: "0 1.2rem" }}>
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                                    <div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "12px" }} />
+                                    <div className="pa2-skeleton pa2-shimmer" style={{ flex: 1, height: "16px", borderRadius: "4px" }} />
+                                </div>
+                            ))}
                         </div>
                     ) : (
                         <div className="pa2-chart-wrap pa2-chart-wrap--donut"><canvas ref={supRef} /></div>
@@ -806,10 +1435,10 @@ export default function PurchaseAnalysis() {
                                     const fmtL = v => v != null ? `₹${(v / 1e5).toFixed(2)}L` : "—";
                                     const sm = poSummary;
                                     return [
-                                        { n: sm ? String(sm.total_pos) : "—",   v: sm ? fmtL(sm.total_po_value)  : "—", l: "Total PO Value",  cls: "pa2-pipe-blue"   },
-                                        { n: sm ? String(sm.grn_done)    : "—",   v: sm ? `${sm.grn_done} POs`    : "—", l: "GRN Done",       cls: "pa2-pipe-cyan"   },
-                                        { n: sm ? String(sm.grn_pending) : "—",   v: sm ? `${sm.grn_pending} POs` : "—", l: "GRN Pending",    cls: "pa2-pipe-orange" },
-                                        { n: "₹",                                   v: sm ? fmtL(sm.total_grn_value): "—", l: "Total GRN Value", cls: "pa2-pipe-green"  },
+                                        { n: sm ? String(sm.total_pos) : "—", v: sm ? fmtL(sm.total_po_value) : "—", l: "Total PO Value", cls: "pa2-pipe-blue" },
+                                        { n: sm ? String(sm.grn_done) : "—", v: sm ? `${sm.grn_done} POs` : "—", l: "GRN Done", cls: "pa2-pipe-cyan" },
+                                        { n: sm ? String(sm.grn_pending) : "—", v: sm ? `${sm.grn_pending} POs` : "—", l: "GRN Pending", cls: "pa2-pipe-orange" },
+                                        { n: "₹", v: sm ? fmtL(sm.total_grn_value) : "—", l: "Total GRN Value", cls: "pa2-pipe-green" },
                                     ].map((s, i) => (
                                         <div className="pa2-pipe-step" key={i}>
                                             <div className={`pa2-pipe-circle ${s.cls}`}>{s.n}</div>
@@ -824,12 +1453,12 @@ export default function PurchaseAnalysis() {
                             {/* ── Progress bar: GRN done vs pending ── */}
                             {(() => {
                                 const total = poSummary?.total_pos || 0;
-                                const donePct  = total ? Math.round((poSummary.grn_done    / total) * 100) : 0;
-                                const pendPct  = total ? Math.round((poSummary.grn_pending / total) * 100) : 0;
+                                const donePct = total ? Math.round((poSummary.grn_done / total) * 100) : 0;
+                                const pendPct = total ? Math.round((poSummary.grn_pending / total) * 100) : 0;
                                 return (
                                     <div className="pa2-progress-bar-wrap">
                                         <div className="pa2-progress-track">
-                                            <div className="pa2-progress-fill pa2-fill-blue"   style={{ width: `${donePct}%` }} />
+                                            <div className="pa2-progress-fill pa2-fill-blue" style={{ width: `${donePct}%` }} />
                                             <div className="pa2-progress-fill pa2-fill-orange" style={{ width: `${pendPct}%` }} />
                                         </div>
                                     </div>
@@ -903,7 +1532,7 @@ export default function PurchaseAnalysis() {
                 <div className="pa2-table-header">
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Details" />
                     <div className="pa2-tag-row">
-                        <span className="pa2-badge pa2-badge-blue">{poLoading ? "Loading…" : `${poRows.length} records`}</span>
+                        <span className="pa2-badge pa2-badge-blue">{poLoading ? "Loading…" : `${filteredPoRows.length} records`}</span>
                     </div>
                 </div>
                 <div className="pa2-table-scroll">
@@ -937,10 +1566,10 @@ export default function PurchaseAnalysis() {
                                     </tr>
                                 ))
                             )}
-                            {!poLoading && poRows.length === 0 && (
+                            {!poLoading && filteredPoRows.length === 0 && (
                                 <tr><td colSpan={9} className="pa2-po-empty">— No records found —</td></tr>
                             )}
-                            {!poLoading && poRows.map((r, i) => (
+                            {!poLoading && filteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
                                     <td className="pa2-po-td pa2-po-link">{r.po_number}</td>
                                     <td className="pa2-po-td">

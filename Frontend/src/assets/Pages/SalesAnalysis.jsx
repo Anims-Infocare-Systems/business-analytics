@@ -18,7 +18,8 @@ import {
   Search,
   ChevronDown,
   RotateCcw,
-  Link
+  Link,
+  Inbox
 } from "lucide-react";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
@@ -179,7 +180,7 @@ const INSIGHTS = [
 ];
 
 const TREND_CHART_OPTS = (font, maxValue = 0) => {
-  const yMax = maxValue > 0 ? Math.ceil(maxValue * 1.12) : undefined;
+  const yMax = maxValue > 0 ? Math.ceil(maxValue * 1.35) : undefined;
   const axisLakhsTick = v => formatAxisLakhs(v);
   return {
     responsive: true,
@@ -248,45 +249,48 @@ function buildWeeklyTrendChartData(trend) {
       {
         label: "Weekly sales",
         data: sales,
-        backgroundColor: "rgba(45, 109, 232, 0.18)",
+        backgroundColor: "rgba(45, 109, 232, 0.85)",
         borderColor: "#2d6de8",
-        borderWidth: 2,
-        borderRadius: 6,
+        borderWidth: 1.5,
+        borderRadius: 4,
         type: "bar",
         yAxisID: "y",
         datalabels: {
           display: true,
           align: "top",
           anchor: "end",
-          rotation: -45,
-          offset: -2,
+          offset: 6,
           formatter: (value) => {
             if (!value || value < 10_000) return "";
             if (value >= 100_000) {
-              return `${(value / 100_000).toFixed(1)}L`;
+              return `₹${(value / 100_000).toFixed(1)}L`;
             }
-            return `${(value / 1000).toFixed(0)}K`;
+            return `₹${(value / 1000).toFixed(0)}K`;
           },
           font: {
-            size: 9.5,
-            weight: "700"
+            size: 9,
+            weight: "700",
+            family: "Inter"
           },
-          color: "#1e40af"
+          color: "#ffffff",
+          backgroundColor: "#2d6de8",
+          borderRadius: 4,
+          padding: { top: 3, bottom: 3, left: 5, right: 5 }
         }
       },
       {
         label: "Cumulative",
         data: cumulative,
         borderColor: "#10b981",
-        backgroundColor: "rgba(16,185,129,0.08)",
-        borderWidth: 2.5,
-        tension: 0.42,
+        backgroundColor: "rgba(16, 185, 129, 0.04)",
+        borderWidth: 3,
+        tension: 0.4,
         fill: true,
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        pointRadius: 4,
+        pointHoverRadius: 6,
         pointBackgroundColor: "#10b981",
         pointBorderColor: "#fff",
-        pointBorderWidth: 2,
+        pointBorderWidth: 1.5,
         type: "line",
         yAxisID: "y1",
         datalabels: {
@@ -464,11 +468,13 @@ export default function SalesAnalysis() {
   const prodRef = useRef(null);
   const monthlyTrendRef = useRef(null);
   const billTypeRef = useRef(null);
+  const taxRef = useRef(null);
   const trendChart = useRef(null);
   const custChart = useRef(null);
   const prodChart = useRef(null);
   const monthlyTrendChart = useRef(null);
   const billTypeChart = useRef(null);
+  const taxChart = useRef(null);
 
   const CHART_FONT = "'Segoe UI', system-ui, sans-serif";
 
@@ -634,6 +640,68 @@ export default function SalesAnalysis() {
       }
     });
     return () => billTypeChart.current?.destroy();
+  }, [loading]);
+
+  useEffect(() => {
+    if (!taxRef.current) return;
+    taxChart.current?.destroy();
+    taxChart.current = new Chart(taxRef.current, {
+      type: "bar",
+      data: {
+        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+        datasets: [
+          {
+            label: "Tax Value (Lakhs)",
+            data: [2.25, 2.55, 2.12, 2.97, 3.28, 2.86, 3.78],
+            backgroundColor: "rgba(16, 185, 129, 0.85)",
+            borderRadius: 6,
+            yAxisID: "yValue",
+          },
+          {
+            label: "Tax Rate (%)",
+            data: [18.0, 17.95, 17.97, 18.0, 18.02, 17.99, 18.0],
+            type: "line",
+            borderColor: "#ef4444",
+            borderWidth: 3,
+            pointBackgroundColor: "#ef4444",
+            pointRadius: 4,
+            tension: 0.2,
+            fill: false,
+            yAxisID: "yPercent",
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { font: { family: 'Inter', size: 10 } }
+          },
+          datalabels: { display: false }
+        },
+        scales: {
+          yValue: {
+            type: "linear",
+            position: "left",
+            grid: { color: "rgba(16, 185, 129, 0.05)" },
+            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `₹${v}L` }
+          },
+          yPercent: {
+            type: "linear",
+            position: "right",
+            grid: { drawOnChartArea: false },
+            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `${v}%` }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Inter', size: 9 } }
+          }
+        }
+      }
+    });
+    return () => taxChart.current?.destroy();
   }, [loading]);
 
   useEffect(() => {
@@ -916,7 +984,24 @@ export default function SalesAnalysis() {
         </button>
       </div>
 
-      {/* ── Summary Strip ── */}
+      {!loading && invoiceRows.length === 0 ? (
+        <div className="sa-card sa-no-data-card" style={{ animationDelay: '0.1s' }}>
+          <div className="sa-no-data-content">
+            <div className="sa-no-data-icon-wrap">
+              <Inbox size={48} className="sa-no-data-icon" />
+            </div>
+            <h3 className="sa-no-data-title">No Data found for this Period</h3>
+            <p className="sa-no-data-sub">
+              There are no transactions recorded between <strong>{dateRange.from ? dateRange.from.toLocaleDateString() : ""}</strong> and <strong>{dateRange.to ? dateRange.to.toLocaleDateString() : ""}</strong>.
+            </p>
+            <button className="sa-btn sa-btn--primary sa-no-data-btn" onClick={resetFilters}>
+              Reset Date Range
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Summary Strip ── */}
       <div className="sa-summary-strip">
         {[
           { label: "Period", val: loading ? <div className="sa-skeleton" style={{ width: '75px', height: '14px', borderRadius: '4px' }} /> : summary?.period ?? "—", sm: true },
@@ -967,9 +1052,9 @@ export default function SalesAnalysis() {
         })}
       </div>
 
-      {/* ── Charts Row ── */}
-      <div className="sa-charts-row">
-        <div className="sa-card sa-card--chart">
+      {/* ── Weekly Sales Trend (Full Width Row) ── */}
+      <div className="sa-animate" style={{ marginBottom: "1.4rem" }}>
+        <div className="sa-card sa-card--chart" style={{ width: "100%" }}>
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && weeklyTrend?.period ? ` (${weeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
@@ -987,9 +1072,13 @@ export default function SalesAnalysis() {
           {loading ? (
             <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
           ) : (
-            <div className="sa-chart-wrap"><canvas ref={trendRef} /></div>
+            <div className="sa-chart-wrap" style={{ height: "300px" }}><canvas ref={trendRef} /></div>
           )}
         </div>
+      </div>
+
+      {/* ── Revenue by Customer & Product (Dual Column Row) ── */}
+      <div className="sa-donuts-row sa-animate">
         <div className="sa-card sa-card--chart">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1027,15 +1116,33 @@ export default function SalesAnalysis() {
         <div className="sa-monthly-charts-row">
           <div className="sa-monthly-chart-container">
             <h4 className="sa-chart-title">Monthly Sales Trend (Value & % Growth)</h4>
-            <div className="sa-chart-wrap" style={{ height: '260px' }}>
-              <canvas ref={monthlyTrendRef} />
-            </div>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                <canvas ref={monthlyTrendRef} />
+              </div>
+            )}
           </div>
           <div className="sa-monthly-chart-container">
             <h4 className="sa-chart-title">Bill Type Revenue Contribution (Month-wise)</h4>
-            <div className="sa-chart-wrap" style={{ height: '260px' }}>
-              <canvas ref={billTypeRef} />
-            </div>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                <canvas ref={billTypeRef} />
+              </div>
+            )}
+          </div>
+          <div className="sa-monthly-chart-container">
+            <h4 className="sa-chart-title">Monthly Tax Trend (Value & Rate %)</h4>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                <canvas ref={taxRef} />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1503,6 +1610,8 @@ export default function SalesAnalysis() {
         </div>
 
       </div>
-    </div>
+    </>
+    )}
+  </div>
   );
 }

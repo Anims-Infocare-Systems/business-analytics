@@ -8,7 +8,6 @@ import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import "./plantperformance1.css";
 import PlantPerformance1DatePicker from "./plantperformance1DatePicker";
-import PlantPerformance1ProductionDataView from "./plantperformance1ProductionDataView";
 import {
   Scale,
   ClipboardCheck,
@@ -4483,124 +4482,124 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                         </td>
                       );
                     }
-                      const colLower = columns[ci].toLowerCase();
-                      const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
-                      const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
-                      const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
-                      const isAgeDays = colLower.includes("age days");
-                      const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
-                      const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
-                      const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
+                    const colLower = columns[ci].toLowerCase();
+                    const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
+                    const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
+                    const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
+                    const isAgeDays = colLower.includes("age days");
+                    const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
+                    const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
+                    const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
 
-                      if (isAgeDays) {
-                        const pctVal = parseFloat(cell) || 0;
-                        let badgeBg = "rgba(16, 185, 129, 0.1)";
-                        let badgeColor = "#10b981";
-                        let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
+                    if (isAgeDays) {
+                      const pctVal = parseFloat(cell) || 0;
+                      let badgeBg = "rgba(16, 185, 129, 0.1)";
+                      let badgeColor = "#10b981";
+                      let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
 
-                        if (pctVal <= 15) {
-                          badgeBg = "rgba(16, 185, 129, 0.08)";
-                          badgeColor = "#10b981";
-                          badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
-                        } else if (pctVal <= 40) {
-                          badgeBg = "rgba(245, 158, 11, 0.08)";
-                          badgeColor = "#d97706";
-                          badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
-                        } else {
-                          badgeBg = "rgba(239, 68, 68, 0.08)";
-                          badgeColor = "#ef4444";
-                          badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
-                        }
-
-                        const cellStr = String(cell);
-                        const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
-
-                        return (
-                          <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
-                            <span style={{
-                              display: "inline-block",
-                              background: badgeBg,
-                              color: badgeColor,
-                              border: badgeBorder,
-                              padding: "4px 10px",
-                              borderRadius: "12px",
-                              fontSize: "10.5px",
-                              fontWeight: 750,
-                              textAlign: "center",
-                              minWidth: "68px",
-                              boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
-                              transition: "all 0.2s ease"
-                            }}>
-                              {displayVal}
-                            </span>
-                          </td>
-                        );
+                      if (pctVal <= 15) {
+                        badgeBg = "rgba(16, 185, 129, 0.08)";
+                        badgeColor = "#10b981";
+                        badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
+                      } else if (pctVal <= 40) {
+                        badgeBg = "rgba(245, 158, 11, 0.08)";
+                        badgeColor = "#d97706";
+                        badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
+                      } else {
+                        badgeBg = "rgba(239, 68, 68, 0.08)";
+                        badgeColor = "#ef4444";
+                        badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
                       }
 
-                      if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
-                        const pctVal = parseFloat(cell) || 0;
-                        let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
-                        let barWidthPct = 0;
+                      const cellStr = String(cell);
+                      const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
 
-                        if (isRejectionPct) {
-                          barWidthPct = Math.min(100, pctVal * 3.33);
-                          if (pctVal > 12) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
-                          } else if (pctVal > 5) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
-                          }
-                        } else if (isReworkPct) {
-                          barWidthPct = Math.min(100, pctVal * 5.0);
-                          if (pctVal > 8) {
-                            barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
-                          } else if (pctVal > 1.5) {
-                            barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
-                          } else {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
-                          }
-                        } else if (isOtdPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 95) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
-                          } else if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
-                          }
-                        } else if (isLossPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal > 25) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
-                          } else if (pctVal > 15) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
-                          }
-                        } else if (isOperatorPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 75) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                          }
-                        } else if (isMachinePct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 75) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                          }
+                      return (
+                        <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
+                          <span style={{
+                            display: "inline-block",
+                            background: badgeBg,
+                            color: badgeColor,
+                            border: badgeBorder,
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            fontSize: "10.5px",
+                            fontWeight: 750,
+                            textAlign: "center",
+                            minWidth: "68px",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
+                            transition: "all 0.2s ease"
+                          }}>
+                            {displayVal}
+                          </span>
+                        </td>
+                      );
+                    }
+
+                    if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
+                      const pctVal = parseFloat(cell) || 0;
+                      let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                      let barWidthPct = 0;
+
+                      if (isRejectionPct) {
+                        barWidthPct = Math.min(100, pctVal * 3.33);
+                        if (pctVal > 12) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                        } else if (pctVal > 5) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
                         }
+                      } else if (isReworkPct) {
+                        barWidthPct = Math.min(100, pctVal * 5.0);
+                        if (pctVal > 8) {
+                          barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
+                        } else if (pctVal > 1.5) {
+                          barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
+                        } else {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
+                        }
+                      } else if (isOtdPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 95) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
+                        } else if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
+                        }
+                      } else if (isLossPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal > 25) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
+                        } else if (pctVal > 15) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
+                        }
+                      } else if (isOperatorPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 75) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                        }
+                      } else if (isMachinePct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 75) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                        }
+                      }
 
                       return (
                         <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
@@ -6067,21 +6066,21 @@ function PurchaseValueBottomTable({ data, filters }) {
                 <tr><td colSpan={columns2.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
                 sortedSummaryRows.map((row, ri) => (
-                <tr key={ri} className="pp1-cc-tbl__tr">
-                  <td style={pvWrapCell}>{ri + 1}</td>
-                  <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
-                  <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
-                    <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {row.poNo}
-                    </span>
-                  </td>
-                  <td style={pvNoWrapCell}>{row.poDate}</td>
-                  <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
-                  <td style={pvWrapCell}>{row.name}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
-                </tr>
+                  <tr key={ri} className="pp1-cc-tbl__tr">
+                    <td style={pvWrapCell}>{ri + 1}</td>
+                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
+                    <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
+                      <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {row.poNo}
+                      </span>
+                    </td>
+                    <td style={pvNoWrapCell}>{row.poDate}</td>
+                    <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
+                    <td style={pvWrapCell}>{row.name}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -9908,9 +9907,9 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-          const p = d.split("-");
-          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-        })
+        const p = d.split("-");
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+      })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -10798,9 +10797,9 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-          const p = d.split("-");
-          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-        })
+        const p = d.split("-");
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+      })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -16496,18 +16495,18 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
                 height: "28px"
               }}
             />
-            <ChevronDown 
-              size={14} 
+            <ChevronDown
+              size={14}
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{ 
-                position: "absolute", 
-                right: "8px", 
-                top: "50%", 
-                transform: "translateY(-50%)", 
-                opacity: 0.6, 
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                opacity: 0.6,
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }} 
+              }}
             />
 
             {effLimitOpen && (
@@ -16692,7 +16691,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
         const macs = json?.filterOptions?.machines;
         if (Array.isArray(macs) && macs.length) setAllMachineNames(macs);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => ctrl.abort();
   }, [uid]);
 
@@ -16901,18 +16900,18 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
                 height: "28px"
               }}
             />
-            <ChevronDown 
-              size={14} 
+            <ChevronDown
+              size={14}
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{ 
-                position: "absolute", 
-                right: "8px", 
-                top: "50%", 
-                transform: "translateY(-50%)", 
-                opacity: 0.6, 
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                opacity: 0.6,
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }} 
+              }}
             />
 
             {effLimitOpen && (
@@ -20497,7 +20496,7 @@ export default function PlantPerformance1() {
           <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-<CenterTransitionWrapper uid={centerKey} loading={loading}>
+              <CenterTransitionWrapper uid={centerKey} loading={loading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
                     <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
@@ -20812,7 +20811,7 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-<DashboardErrorBoundary>
+        <DashboardErrorBoundary>
           {selectionId === "customer_po_vs_sales_analysis" ? (
             <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
           ) : selectionId === "purchase_report_dashboard" ? (
