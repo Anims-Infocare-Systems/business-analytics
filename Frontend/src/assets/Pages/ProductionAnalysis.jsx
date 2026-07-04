@@ -905,13 +905,22 @@ export default function ProductionAnalysis() {
         pointRadius: pvChartType === "line" ? 4 : 0
       }];
     } else {
-      datasets = monthData.datasets.map(d => ({
-        ...d,
-        type: pvChartType,
-        borderRadius: pvChartType === "line" ? 0 : 4,
-        fill: pvChartType === "line",
-        tension: 0.38
-      }));
+      datasets = monthData.datasets.map(d => {
+        const color = d.borderColor || d.backgroundColor || "#2563eb";
+        return {
+          ...d,
+          type: pvChartType,
+          borderRadius: pvChartType === "line" ? 0 : 4,
+          fill: false,
+          borderColor: color,
+          borderWidth: pvChartType === "line" ? 3 : 1.5,
+          tension: 0.38,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: color,
+          pointBorderWidth: 2,
+          pointRadius: pvChartType === "line" ? 4 : 0
+        };
+      });
     }
 
     pvChartInst.current = new Chart(ctx, {

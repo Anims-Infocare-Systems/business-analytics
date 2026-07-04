@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./QualityAnalysis.css";
 import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
 import {
@@ -28,7 +29,7 @@ import {
     Users
 } from "lucide-react";
 
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 
 // ─────────────────────────────────────────────
 //  Count-up hook for KPI numbers
@@ -505,7 +506,33 @@ export default function QualityAnalysis() {
 
         mk(trendRef, trendChart, "bar", trendData, {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } } },
+            plugins: {
+                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                datalabels: {
+                    display: true,
+                    anchor: "end",
+                    align: "top",
+                    offset: 2,
+                    formatter: (value, context) => {
+                        const index = context.dataIndex;
+                        const datasets = context.chart.data.datasets;
+                        let topDatasetIndex = -1;
+                        for (let i = datasets.length - 1; i >= 0; i--) {
+                            if (datasets[i].data[index] > 0) {
+                                topDatasetIndex = i;
+                                break;
+                            }
+                        }
+                        if (context.datasetIndex === topDatasetIndex) {
+                            const total = datasets.reduce((sum, ds) => sum + (ds.data[index] || 0), 0);
+                            return total > 0 ? total.toLocaleString() : "";
+                        }
+                        return "";
+                    },
+                    font: { size: 9.5, weight: "700", family: "Poppins" },
+                    color: "#1e293b"
+                }
+            },
             scales: {
                 x: { stacked: true, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
                 y: { stacked: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
@@ -514,7 +541,19 @@ export default function QualityAnalysis() {
 
         const donut = {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position: "bottom", labels: { font: { ...fontBase, size: 10 }, padding: 10, boxWidth: 10 } } },
+            plugins: {
+                legend: { position: "bottom", labels: { font: { ...fontBase, size: 10 }, padding: 10, boxWidth: 10 } },
+                datalabels: {
+                    display: true,
+                    color: "#fff",
+                    font: { size: 10.5, weight: "700", family: "Poppins" },
+                    formatter: (value, context) => {
+                        const sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const pct = sum > 0 ? ((value / sum) * 100).toFixed(0) : 0;
+                        return pct > 8 ? `${pct}%` : "";
+                    }
+                }
+            },
             cutout: "64%",
         };
         mk(resultRef, resultChart, "doughnut", resultDonut, donut);
@@ -530,6 +569,20 @@ export default function QualityAnalysis() {
                     font: { ...fontBase, size: 12, weight: 600 },
                     color: "#5a6a9a",
                     padding: { bottom: 8 }
+                },
+                datalabels: {
+                    display: true,
+                    anchor: "end",
+                    align: "top",
+                    offset: 6,
+                    formatter: (v) => (v > 0 ? `${Math.round(v).toLocaleString()}` : ""),
+                    font: { size: 9, weight: "700", family: "Poppins" },
+                    color: "#f97316",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                    borderWidth: 1,
+                    borderColor: "rgba(249, 115, 22, 0.25)"
                 }
             },
             scales: {
@@ -549,7 +602,47 @@ export default function QualityAnalysis() {
 
         mk(paretoRef, paretoChart, "bar", paretoData, {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } } },
+            plugins: {
+                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                datalabels: {
+                    display: true,
+                    formatter: (value, context) => {
+                        if (context.datasetIndex === 0) {
+                            return value > 0 ? value.toString() : "";
+                        } else {
+                            return value > 0 ? `${value.toFixed(0)}%` : "";
+                        }
+                    },
+                    font: { size: 9.5, weight: "700", family: "Poppins" },
+                    color: (context) => {
+                        return context.datasetIndex === 0 ? "#ef4444" : "#2d6de8";
+                    },
+                    anchor: (context) => {
+                        return context.datasetIndex === 0 ? "end" : "center";
+                    },
+                    align: (context) => {
+                        return context.datasetIndex === 0 ? "top" : "top";
+                    },
+                    offset: (context) => {
+                        return context.datasetIndex === 0 ? 2 : 6;
+                    },
+                    backgroundColor: (context) => {
+                        return context.datasetIndex === 1 ? "#ffffff" : null;
+                    },
+                    borderRadius: (context) => {
+                        return context.datasetIndex === 1 ? 4 : null;
+                    },
+                    borderWidth: (context) => {
+                        return context.datasetIndex === 1 ? 1 : null;
+                    },
+                    borderColor: (context) => {
+                        return context.datasetIndex === 1 ? "rgba(45, 109, 232, 0.25)" : null;
+                    },
+                    padding: (context) => {
+                        return context.datasetIndex === 1 ? { top: 2, bottom: 2, left: 6, right: 6 } : null;
+                    }
+                }
+            },
             scales: {
                 y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
                 y2: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a", callback: v => v + "%" } },
@@ -573,7 +666,23 @@ export default function QualityAnalysis() {
             }]
         }, {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    display: true,
+                    anchor: "end",
+                    align: "top",
+                    offset: 6,
+                    formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
+                    font: { size: 9, weight: "700", family: "Poppins" },
+                    color: "#ef4444",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                    borderWidth: 1,
+                    borderColor: "rgba(239, 68, 68, 0.25)"
+                }
+            },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
                 y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
@@ -596,7 +705,23 @@ export default function QualityAnalysis() {
             }]
         }, {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    display: true,
+                    anchor: "end",
+                    align: "top",
+                    offset: 6,
+                    formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
+                    font: { size: 9, weight: "700", family: "Poppins" },
+                    color: "#f97316",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                    borderWidth: 1,
+                    borderColor: "rgba(249, 115, 22, 0.25)"
+                }
+            },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
                 y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
@@ -695,6 +820,36 @@ export default function QualityAnalysis() {
             return true;
         });
     }, [searchFilteredInspectionRows, selectedType]);
+
+    const activeInspectionRowsTotals = useMemo(() => {
+        let totalInsp = 0;
+        let totalOk = 0;
+        let totalMatRej = 0;
+        let totalMacRej = 0;
+        let totalRework = 0;
+
+        activeInspectionRows.forEach(r => {
+            const qty = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+            const ok = parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : "0"))).replace(/,/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.partNoDesc?.toLowerCase().includes("segment") && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/,/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && (r.partNoDesc?.toLowerCase().includes("segment") || r.product?.toLowerCase().includes("segment")) ? r.qty : "0")).replace(/,/g, "")) || 0;
+            const rework = parseFloat(String(r.reworkQty || (r.result === "REWORK" ? r.qty : "0")).replace(/,/g, "")) || 0;
+
+            totalInsp += qty;
+            totalOk += ok;
+            totalMatRej += matRej;
+            totalMacRej += macRej;
+            totalRework += rework;
+        });
+
+        return {
+            insp: totalInsp,
+            ok: totalOk,
+            matRej: totalMatRej,
+            macRej: totalMacRej,
+            rework: totalRework
+        };
+    }, [activeInspectionRows]);
 
     const searchFilteredRejectionRows = useMemo(() => {
         if (hasNoData) return [];
@@ -1267,9 +1422,9 @@ export default function QualityAnalysis() {
                 </div>
             )}
 
-            {/* ── Charts Row 1: 3-col ── */}
-            <div className="qa2-charts-3 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+            {/* ── Charts Row 1: Weekly Inspection Trend (Full Width) ── */}
+            <div className="qa2-animate qa2-d3" style={{ marginBottom: "1.3rem" }}>
+                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ marginBottom: 0 }}>
                     <SectionHead icon={TrendingUp} iconColor="#3b82f6" title="Weekly Inspection Trend"
                         badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue" />
                     {chartsLoading ? (
@@ -1288,6 +1443,10 @@ export default function QualityAnalysis() {
                         <div className="qa2-chart-wrap"><canvas ref={trendRef} /></div>
                     )}
                 </div>
+            </div>
+
+            {/* ── Charts Row 1.5: Results Split & Defect Category Breakdown (2-col) ── */}
+            <div className="qa2-charts-2 qa2-animate qa2-d3">
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
                     <SectionHead icon={BarChart2} iconColor="#10b981" title="Inspection Results Split" />
                     {chartsLoading ? (
@@ -1838,6 +1997,17 @@ export default function QualityAnalysis() {
                                     </tr>
                                 )}
                             </tbody>
+                            <tfoot>
+                                <tr className="qa2-total-row">
+                                    <td colSpan="5" className="qa2-total-label">Total</td>
+                                    <td className="qa2-td-r" style={getColStyle("Insp Qty")}><span className="qa2-total-badge qa2-total-badge-blue">{activeInspectionRowsTotals.insp.toLocaleString()}</span></td>
+                                    <td className="qa2-td-r" style={getColStyle("OK Qty")}><span className="qa2-total-badge qa2-total-badge-green">{activeInspectionRowsTotals.ok.toLocaleString()}</span></td>
+                                    <td className="qa2-td-r" style={getColStyle("Mat Rej Qty")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.matRej.toLocaleString()}</span></td>
+                                    <td className="qa2-td-r" style={getColStyle("Mac Rej Qty")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.macRej.toLocaleString()}</span></td>
+                                    <td className="qa2-td-r" style={getColStyle("Rework Qty")}><span className="qa2-total-badge qa2-total-badge-orange">{activeInspectionRowsTotals.rework.toLocaleString()}</span></td>
+                                    <td style={getColStyle("Insp By")}></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 )}

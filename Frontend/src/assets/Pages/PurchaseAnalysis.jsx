@@ -24,7 +24,8 @@ import {
     Search,
     X,
     RotateCcw,
-    FileEdit
+    FileEdit,
+    Check
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -157,6 +158,27 @@ function readFilterSession(key, defaults) {
 function writeFilterSession(key, data) {
     try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
+const getAvatarColor = (char) => {
+    const colors = {
+        A: "#e0e7ff", B: "#fef3c7", C: "#d1fae5", D: "#fee2e2", E: "#f3e8ff",
+        F: "#e0f2fe", G: "#fce7f3", H: "#eef2f6", I: "#e0e7ff", J: "#fef3c7",
+        K: "#d1fae5", L: "#fee2e2", M: "#f3e8ff", N: "#e0f2fe", O: "#fce7f3",
+        P: "#eef2f6", Q: "#e0e7ff", R: "#fef3c7", S: "#d1fae5", T: "#fee2e2",
+        U: "#f3e8ff", V: "#e0f2fe", W: "#fce7f3", X: "#eef2f6", Y: "#e0e7ff", Z: "#fef3c7"
+    };
+    const textColors = {
+        A: "#4f46e5", B: "#d97706", C: "#059669", D: "#dc2626", E: "#7c3aed",
+        F: "#0284c7", G: "#db2777", H: "#475569", I: "#4f46e5", J: "#d97706",
+        K: "#059669", L: "#dc2626", M: "#7c3aed", N: "#0284c7", O: "#db2777",
+        P: "#475569", Q: "#4f46e5", R: "#d97706", S: "#059669", T: "#dc2626",
+        U: "#7c3aed", V: "#0284c7", W: "#db2777", X: "#475569", Y: "#4f46e5", Z: "#d97706"
+    };
+    const c = (char || "").toUpperCase();
+    return {
+        bg: colors[c] || "#f1f5f9",
+        fg: textColors[c] || "#64748b"
+    };
+};
 
 export default function PurchaseAnalysis() {
     const today = new Date();
@@ -175,7 +197,7 @@ export default function PurchaseAnalysis() {
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [filters, setFilters] = useState({
         fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
-        poType: "All Types", supplier: "All Suppliers",
+        poType: "All Types", supplier: ["All Suppliers"],
         department: "Production", status: "All Status",
     });
     const [animated, setAnimated] = useState(false);
@@ -197,8 +219,8 @@ export default function PurchaseAnalysis() {
                     (r.material && r.material.toLowerCase().includes(q));
                 if (!match) return false;
             }
-            if (filters.supplier && filters.supplier !== "All Suppliers") {
-                if ((r.vendor_name || "").toLowerCase() !== filters.supplier.toLowerCase()) return false;
+            if (filters.supplier && filters.supplier.length > 0 && !filters.supplier.includes("All Suppliers")) {
+                if (!filters.supplier.includes(r.vendor_name)) return false;
             }
             if (filters.department && filters.department !== "All Departments" && filters.department !== "Production") {
                 const d = r.department || r.dept;
@@ -417,6 +439,25 @@ export default function PurchaseAnalysis() {
     const poDropdownRef = useRef(null);
     const [focusedIndex, setFocusedIndex] = useState(-1);
 
+    // Custom Supplier dropdown state
+    const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
+    const supplierDropdownRef = useRef(null);
+    const [supplierFocusedIndex, setSupplierFocusedIndex] = useState(-1);
+    const [supplierSearchQuery, setSupplierSearchQuery] = useState("");
+
+    // Custom Status dropdown state
+    const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+    const statusDropdownRef = useRef(null);
+    const [statusFocusedIndex, setStatusFocusedIndex] = useState(-1);
+
+    const statusOptions = useMemo(() => ["All Status", "GRN Done", "GRN Pending"], []);
+
+    const filteredSuppliers = useMemo(() => {
+        if (!supplierSearchQuery) return suppliersList;
+        const q = supplierSearchQuery.toLowerCase().trim();
+        return suppliersList.filter(s => s.toLowerCase().includes(q));
+    }, [suppliersList, supplierSearchQuery]);
+
     useEffect(() => {
         if (!poDropdownOpen) {
             setFocusedIndex(-1);
@@ -427,9 +468,36 @@ export default function PurchaseAnalysis() {
     }, [poDropdownOpen, poTypes, filters.poType]);
 
     useEffect(() => {
+        if (!supplierDropdownOpen) {
+            setSupplierFocusedIndex(-1);
+            setSupplierSearchQuery("");
+        } else {
+            const idx = Array.isArray(filters.supplier)
+                ? filteredSuppliers.findIndex(s => filters.supplier.includes(s))
+                : filteredSuppliers.indexOf(filters.supplier);
+            setSupplierFocusedIndex(idx >= 0 ? idx : 0);
+        }
+    }, [supplierDropdownOpen, filteredSuppliers, filters.supplier]);
+
+    useEffect(() => {
+        if (!statusDropdownOpen) {
+            setStatusFocusedIndex(-1);
+        } else {
+            const idx = statusOptions.indexOf(filters.status);
+            setStatusFocusedIndex(idx >= 0 ? idx : 0);
+        }
+    }, [statusDropdownOpen, statusOptions, filters.status]);
+
+    useEffect(() => {
         function handleClickOutside(event) {
             if (poDropdownRef.current && !poDropdownRef.current.contains(event.target)) {
                 setPoDropdownOpen(false);
+            }
+            if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(event.target)) {
+                setSupplierDropdownOpen(false);
+            }
+            if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+                setStatusDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -806,8 +874,11 @@ export default function PurchaseAnalysis() {
                         type: "bar",
                         yAxisID: "y",
                         datalabels: {
-                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0.5,
-                            align: "bottom",
+                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
+                            align: (ctx) => {
+                                const val = ctx.dataset.data[ctx.dataIndex];
+                                return val < 6.0 ? "top" : "bottom";
+                            },
                             anchor: "end",
                             formatter: (v) => `₹${v.toFixed(1)}L`,
                             font: { size: 9.5, weight: "800", family: "Poppins" },
@@ -836,7 +907,7 @@ export default function PurchaseAnalysis() {
                         type: "line",
                         yAxisID: "y",
                         datalabels: {
-                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0.5,
+                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
                             align: "top",
                             anchor: "end",
                             formatter: (v) => `₹${v.toFixed(1)}L`,
@@ -856,7 +927,7 @@ export default function PurchaseAnalysis() {
                 responsive: true,
                 maintainAspectRatio: false,
                 devicePixelRatio: window.devicePixelRatio || 2,
-                layout: { padding: { top: 32, right: 12, left: 8, bottom: 0 } },
+                layout: { padding: { top: 32, right: 12, left: 8, bottom: 10 } },
                 interaction: { mode: "index", intersect: false },
                 plugins: {
                     legend: {
@@ -1493,6 +1564,28 @@ export default function PurchaseAnalysis() {
         };
     }, [finalMonthlyData, deptData]);
 
+    const handleSupplierToggle = (opt) => {
+        setFilters(prev => {
+            let current = prev.supplier;
+            if (!Array.isArray(current)) {
+                current = current ? [current] : ["All Suppliers"];
+            }
+            if (opt === "All Suppliers") {
+                return { ...prev, supplier: ["All Suppliers"] };
+            }
+            let next = current.filter(x => x !== "All Suppliers");
+            if (next.includes(opt)) {
+                next = next.filter(x => x !== opt);
+            } else {
+                next = [...next, opt];
+            }
+            if (next.length === 0) {
+                next = ["All Suppliers"];
+            }
+            return { ...prev, supplier: next };
+        });
+    };
+
     const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
     const resetFilters = () => {
         const today = new Date();
@@ -1502,7 +1595,7 @@ export default function PurchaseAnalysis() {
         setSearchQuery("");
         setFilters({
             fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
-            poType: "All Types", supplier: "All Suppliers",
+            poType: "All Types", supplier: ["All Suppliers"],
             department: "Production", status: "All Status"
         });
     };
@@ -1606,7 +1699,7 @@ export default function PurchaseAnalysis() {
                             )}
                         </div>
                     </div>
-                    <div className="pa2-filter-group" ref={poDropdownRef}>
+                    <div className="pa2-filter-group" ref={poDropdownRef} style={{ minWidth: "180px" }}>
                         <label className="pa2-filter-label">PO Type</label>
                         <div className={`pa2-custom-select${poDropdownOpen ? " pa2-active" : ""}`}>
                             <button
@@ -1669,23 +1762,167 @@ export default function PurchaseAnalysis() {
                             )}
                         </div>
                     </div>
-                    <div className="pa2-filter-group" style={{ minWidth: "180px" }}>
+                    <div className="pa2-filter-group" ref={supplierDropdownRef} style={{ minWidth: "300px" }}>
                         <label className="pa2-filter-label">Supplier</label>
-                        <select className="pa2-filter-select" value={filters.supplier} onChange={e => setF("supplier", e.target.value)}>
-                            {suppliersList.map(o => <option key={o}>{o}</option>)}
-                        </select>
+                        <div className={`pa2-custom-select${supplierDropdownOpen ? " pa2-active" : ""}`}>
+                            <button
+                                type="button"
+                                className="pa2-custom-select-trigger"
+                                onClick={() => setSupplierDropdownOpen(!supplierDropdownOpen)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        if (!supplierDropdownOpen) {
+                                            setSupplierDropdownOpen(true);
+                                            setSupplierFocusedIndex(0);
+                                        } else {
+                                            setSupplierFocusedIndex((prev) => (prev + 1) % filteredSuppliers.length);
+                                        }
+                                    } else if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        if (!supplierDropdownOpen) {
+                                            setSupplierDropdownOpen(true);
+                                            setSupplierFocusedIndex(filteredSuppliers.length - 1);
+                                        } else {
+                                            setSupplierFocusedIndex((prev) => (prev - 1 + filteredSuppliers.length) % filteredSuppliers.length);
+                                        }
+                                    } else if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        if (supplierDropdownOpen) {
+                                            if (supplierFocusedIndex >= 0 && supplierFocusedIndex < filteredSuppliers.length) {
+                                                handleSupplierToggle(filteredSuppliers[supplierFocusedIndex]);
+                                            }
+                                        } else {
+                                            setSupplierDropdownOpen(true);
+                                        }
+                                    } else if (e.key === "Escape") {
+                                        setSupplierDropdownOpen(false);
+                                    }
+                                }}
+                            >
+                                <span>
+                                    {Array.isArray(filters.supplier)
+                                        ? (filters.supplier.includes("All Suppliers") || filters.supplier.length === 0)
+                                            ? "All Suppliers"
+                                            : filters.supplier.length === 1
+                                                ? filters.supplier[0]
+                                                : `${filters.supplier.length} Selected`
+                                        : filters.supplier || "All Suppliers"
+                                    }
+                                </span>
+                                <span className="pa2-custom-select-arrow">
+                                    <ChevronDown size={14} />
+                                </span>
+                            </button>
+                            {supplierDropdownOpen && (
+                                <ul className="pa2-custom-select-options">
+                                    <div className="pa2-dropdown-search-wrapper">
+                                        <Search size={12} className="pa2-dropdown-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Filter suppliers..."
+                                            className="pa2-dropdown-search-input"
+                                            value={supplierSearchQuery}
+                                            onChange={(e) => setSupplierSearchQuery(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    </div>
+                                    {filteredSuppliers.length === 0 ? (
+                                        <div style={{ padding: "8px 12px", fontSize: "0.78rem", color: "#94a3b8", textAlign: "center" }}>
+                                            No suppliers found
+                                        </div>
+                                    ) : (
+                                        filteredSuppliers.map((opt, idx) => {
+                                            const initial = opt.charAt(0);
+                                            const colors = getAvatarColor(initial);
+                                            const isSelected = Array.isArray(filters.supplier)
+                                                ? filters.supplier.includes(opt)
+                                                : filters.supplier === opt;
+                                            return (
+                                                <li
+                                                    key={opt}
+                                                    className={`pa2-custom-select-option${isSelected ? " pa2-selected" : ""}${supplierFocusedIndex === idx ? " pa2-focused" : ""}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleSupplierToggle(opt);
+                                                    }}
+                                                    onMouseEnter={() => setSupplierFocusedIndex(idx)}
+                                                >
+                                                    <span className="pa2-avatar" style={{ background: colors.bg, color: colors.fg }}>
+                                                        {initial}
+                                                    </span>
+                                                    <span className="pa2-opt-text">{opt}</span>
+                                                    {isSelected && <Check size={12} className="pa2-check-icon" />}
+                                                </li>
+                                            );
+                                        })
+                                    )}
+                                </ul>
+                            )}
+                        </div>
                     </div>
-                    <div className="pa2-filter-group">
-                        <label className="pa2-filter-label">Department</label>
-                        <select className="pa2-filter-select" value={filters.department} onChange={e => setF("department", e.target.value)}>
-                            {departmentsList.map(o => <option key={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div className="pa2-filter-group">
+                    <div className="pa2-filter-group" ref={statusDropdownRef} style={{ minWidth: "160px" }}>
                         <label className="pa2-filter-label">Status</label>
-                        <select className="pa2-filter-select" value={filters.status} onChange={e => setF("status", e.target.value)}>
-                            {["All Status", "GRN Done", "GRN Pending"].map(o => <option key={o}>{o}</option>)}
-                        </select>
+                        <div className={`pa2-custom-select${statusDropdownOpen ? " pa2-active" : ""}`}>
+                            <button
+                                type="button"
+                                className="pa2-custom-select-trigger"
+                                onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        if (!statusDropdownOpen) {
+                                            setStatusDropdownOpen(true);
+                                            setStatusFocusedIndex(0);
+                                        } else {
+                                            setStatusFocusedIndex((prev) => (prev + 1) % statusOptions.length);
+                                        }
+                                    } else if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        if (!statusDropdownOpen) {
+                                            setStatusDropdownOpen(true);
+                                            setStatusFocusedIndex(statusOptions.length - 1);
+                                        } else {
+                                            setStatusFocusedIndex((prev) => (prev - 1 + statusOptions.length) % statusOptions.length);
+                                        }
+                                    } else if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        if (statusDropdownOpen) {
+                                            if (statusFocusedIndex >= 0 && statusFocusedIndex < statusOptions.length) {
+                                                setF("status", statusOptions[statusFocusedIndex]);
+                                                setStatusDropdownOpen(false);
+                                            }
+                                        } else {
+                                            setStatusDropdownOpen(true);
+                                        }
+                                    } else if (e.key === "Escape") {
+                                        setStatusDropdownOpen(false);
+                                    }
+                                }}
+                            >
+                                <span>{filters.status || "All Status"}</span>
+                                <span className="pa2-custom-select-arrow">
+                                    <ChevronDown size={14} />
+                                </span>
+                            </button>
+                            {statusDropdownOpen && (
+                                <ul className="pa2-custom-select-options">
+                                    {statusOptions.map((opt, idx) => (
+                                        <li
+                                            key={opt}
+                                            className={`pa2-custom-select-option${filters.status === opt ? " pa2-selected" : ""}${statusFocusedIndex === idx ? " pa2-focused" : ""}`}
+                                            onClick={() => {
+                                                setF("status", opt);
+                                                setStatusDropdownOpen(false);
+                                            }}
+                                            onMouseEnter={() => setStatusFocusedIndex(idx)}
+                                        >
+                                            {opt}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     </div>
                     {/* Reset Filters */}
                     <button

@@ -1774,6 +1774,23 @@
 /* Monthly Performance & Bill Type Analytics Section */
 .sa-monthly-analytics-card {
   margin-bottom: 1.4rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f6f8ff 100%) !important;
+  border: 1px solid rgba(99, 102, 241, 0.15) !important;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.05) !important;
+}
+
+.sa-monthly-analytics-card .sa-card__title {
+  color: #312e81 !important;
+}
+
+.sa-monthly-analytics-card .sa-card__title svg {
+  color: #4f46e5 !important;
+}
+
+.sa-monthly-analytics-card .sa-badge--blue {
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: #4f46e5 !important;
+  border: 1px solid rgba(99, 102, 241, 0.15) !important;
 }
 
 .sa-monthly-charts-row {
@@ -1786,24 +1803,24 @@
 .sa-monthly-chart-container {
   flex: 1;
   min-width: 340px;
-  background: #fff;
+  background: #ffffff;
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid rgba(45, 109, 232, 0.06);
-  box-shadow: 0 4px 12px rgba(45, 109, 232, 0.02);
+  border: 1px solid rgba(99, 102, 241, 0.08);
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.02);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sa-monthly-chart-container:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(45, 109, 232, 0.06);
-  border-color: rgba(45, 109, 232, 0.15);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.25);
 }
 
 .sa-chart-title {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #1a2a5e;
+  color: #312e81;
   margin-bottom: 16px;
   text-align: center;
   text-transform: uppercase;
@@ -2022,4 +2039,53 @@
     grid-template-columns: 1fr;
     gap: 1rem;
   }
+}
+
+/* Modern, premium Customer Dropdown width overrides */
+.sa-custom-select.sa-custom-select--customer {
+  width: 220px;
+}
+
+.sa-custom-select--customer .sa-custom-select-trigger span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 175px;
+  display: block;
+}
+
+/* Premium Checkbox element styles for Multi-Select UI */
+.sa-checkbox-box {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  background: #fff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.sa-custom-select-option:hover .sa-checkbox-box {
+  border-color: #2d6de8;
+}
+
+.sa-checkbox-box--checked {
+  background: #2d6de8;
+  border-color: #2d6de8;
+  color: #fff;
+}
+
+.sa-custom-select-option.sa-multi-selected {
+  background: rgba(45, 109, 232, 0.05);
+  color: #2d6de8;
+  font-weight: 600;
+}
+
+.sa-custom-select-option.sa-multi-selected:hover {
+  background: rgba(45, 109, 232, 0.1);
 }

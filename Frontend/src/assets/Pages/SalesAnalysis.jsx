@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
 import {
   IndianRupee,
@@ -24,7 +25,7 @@ import {
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
 
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 
 const API_BASE = resolveApiBase();
 
@@ -398,6 +399,21 @@ export default function SalesAnalysis() {
   const [invoiceBtypes, setInvoiceBtypes] = useState([]);
   const [invoiceBtype, setInvoiceBtype] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCustomers, setSelectedCustomers] = useState([]);
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef(null);
+  const [customerFocusedIndex, setCustomerFocusedIndex] = useState(-1);
+
+  const customerOptions = useMemo(() => {
+    const customers = new Set();
+    invoiceRows.forEach((r) => {
+      if (r.customer && r.customer !== "—" && r.customer !== "") {
+        customers.add(r.customer);
+      }
+    });
+    return Array.from(customers).sort();
+  }, [invoiceRows]);
+
   const [topProductsRaw, setTopProductsRaw] = useState(null);
   const [invoiceDropdownOpen, setInvoiceDropdownOpen] = useState(false);
   const invoiceDropdownRef = useRef(null);
@@ -424,26 +440,28 @@ export default function SalesAnalysis() {
   }, [invoiceDropdownOpen, optionsList, invoiceBtype]);
 
   useEffect(() => {
+    if (!customerDropdownOpen) {
+      setCustomerFocusedIndex(-1);
+    } else {
+      setCustomerFocusedIndex(0);
+    }
+  }, [customerDropdownOpen]);
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (invoiceDropdownRef.current && !invoiceDropdownRef.current.contains(event.target)) {
         setInvoiceDropdownOpen(false);
+      }
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target)) {
+        setCustomerDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-  const kpiCards = useMemo(() => buildKpiCards(summary), [summary]);
-  const customerRanking = useMemo(
-    () => buildCustomerRanking(revenueCharts?.customer_ranking),
-    [revenueCharts],
-  );
-  const topProducts = useMemo(
-    () => buildTopProducts(topProductsRaw?.products),
-    [topProductsRaw],
-  );
-
   const filteredInvoices = useMemo(() => {
     return invoiceRows.filter((r) => {
+      if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) return false;
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
@@ -453,7 +471,45 @@ export default function SalesAnalysis() {
         (r.description && r.description.toLowerCase().includes(q))
       );
     });
-  }, [invoiceRows, searchQuery]);
+  }, [invoiceRows, searchQuery, selectedCustomers]);
+
+  const derivedSummary = useMemo(() => {
+    if (!summary) return null;
+    if (selectedCustomers.length === 0) return summary;
+
+    const totalInvoicesSet = new Set();
+    let grandTotal = 0;
+    let totalQty = 0;
+
+    filteredInvoices.forEach((r) => {
+      grandTotal += r.amount || 0;
+      totalQty += r.qty || 0;
+      if (r.invoice_no) totalInvoicesSet.add(r.invoice_no);
+    });
+
+    const totalInvoices = totalInvoicesSet.size;
+    const avgInvoice = totalInvoices > 0 ? grandTotal / totalInvoices : 0;
+
+    return {
+      ...summary,
+      grand_total: grandTotal,
+      total_invoices: totalInvoices,
+      customers: selectedCustomers.length,
+      total_qty_sold: totalQty,
+      avg_invoice: avgInvoice,
+      turn_over_lakhs: grandTotal / 100_000,
+    };
+  }, [summary, selectedCustomers, filteredInvoices]);
+
+  const kpiCards = useMemo(() => buildKpiCards(derivedSummary), [derivedSummary]);
+  const customerRanking = useMemo(
+    () => buildCustomerRanking(revenueCharts?.customer_ranking),
+    [revenueCharts],
+  );
+  const topProducts = useMemo(
+    () => buildTopProducts(topProductsRaw?.products),
+    [topProductsRaw],
+  );
 
   const invoiceStats = useMemo(() => {
     const invSet = new Set();
@@ -521,6 +577,11 @@ export default function SalesAnalysis() {
 
   useEffect(() => {
     if (!monthlyTrendRef.current) return;
+    const ctx = monthlyTrendRef.current.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+    gradient.addColorStop(0, "rgba(99, 102, 241, 0.95)");
+    gradient.addColorStop(1, "rgba(99, 102, 241, 0.15)");
+
     monthlyTrendChart.current?.destroy();
     monthlyTrendChart.current = new Chart(monthlyTrendRef.current, {
       type: "bar",
@@ -530,21 +591,11 @@ export default function SalesAnalysis() {
           {
             label: "Sales Value (Lakhs)",
             data: [12.5, 14.2, 11.8, 16.5, 18.2, 15.9, 21.0],
-            backgroundColor: "rgba(45, 109, 232, 0.85)",
+            backgroundColor: gradient,
+            borderColor: "rgba(99, 102, 241, 1)",
+            borderWidth: 1.5,
             borderRadius: 6,
-            yAxisID: "yValue",
-          },
-          {
-            label: "Growth (%)",
-            data: [0, 13.6, -16.9, 39.8, 10.3, -12.6, 32.0],
-            type: "line",
-            borderColor: "#f97316",
-            borderWidth: 3,
-            pointBackgroundColor: "#f97316",
-            pointRadius: 4,
-            tension: 0.35,
-            fill: false,
-            yAxisID: "yGrowth",
+            yAxisID: "y",
           }
         ]
       },
@@ -553,27 +604,28 @@ export default function SalesAnalysis() {
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            position: 'top',
-            labels: { font: { family: 'Inter', size: 10 } }
+            display: false
           },
-          datalabels: { display: false }
+          datalabels: {
+            display: true,
+            align: "end",
+            anchor: "end",
+            offset: 2,
+            font: { family: 'Inter', size: 10, weight: '700' },
+            color: "#4f46e5",
+            formatter: (v) => `₹${v.toFixed(1)}L`
+          }
         },
         scales: {
-          yValue: {
+          y: {
             type: "linear",
             position: "left",
-            grid: { color: "rgba(45, 109, 232, 0.05)" },
-            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `₹${v}L` }
-          },
-          yGrowth: {
-            type: "linear",
-            position: "right",
-            grid: { drawOnChartArea: false },
-            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `${v}%` }
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
           },
           x: {
             grid: { display: false },
-            ticks: { font: { family: 'Inter', size: 9 } }
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81' }
           }
         }
       }
@@ -583,6 +635,24 @@ export default function SalesAnalysis() {
 
   useEffect(() => {
     if (!billTypeRef.current) return;
+    const ctx = billTypeRef.current.getContext("2d");
+
+    const gradMaterial = ctx.createLinearGradient(0, 0, 0, 240);
+    gradMaterial.addColorStop(0, "rgba(79, 70, 229, 0.95)");
+    gradMaterial.addColorStop(1, "rgba(79, 70, 229, 0.4)");
+
+    const gradLabour = ctx.createLinearGradient(0, 0, 0, 240);
+    gradLabour.addColorStop(0, "rgba(124, 58, 237, 0.95)");
+    gradLabour.addColorStop(1, "rgba(124, 58, 237, 0.4)");
+
+    const gradRework = ctx.createLinearGradient(0, 0, 0, 240);
+    gradRework.addColorStop(0, "rgba(168, 85, 247, 0.95)");
+    gradRework.addColorStop(1, "rgba(168, 85, 247, 0.4)");
+
+    const gradDebit = ctx.createLinearGradient(0, 0, 0, 240);
+    gradDebit.addColorStop(0, "rgba(192, 132, 252, 0.9)");
+    gradDebit.addColorStop(1, "rgba(192, 132, 252, 0.35)");
+
     billTypeChart.current?.destroy();
     billTypeChart.current = new Chart(billTypeRef.current, {
       type: "bar",
@@ -592,25 +662,33 @@ export default function SalesAnalysis() {
           {
             label: "With Material",
             data: [8.2, 9.5, 7.8, 11.0, 12.2, 10.5, 14.2],
-            backgroundColor: "#06b6d4",
+            backgroundColor: gradMaterial,
+            borderColor: "rgba(79, 70, 229, 1)",
+            borderWidth: 1,
             borderRadius: 4,
           },
           {
             label: "Labour Charges",
             data: [2.1, 2.4, 2.0, 2.8, 3.2, 2.7, 3.8],
-            backgroundColor: "#8b5cf6",
+            backgroundColor: gradLabour,
+            borderColor: "rgba(124, 58, 237, 1)",
+            borderWidth: 1,
             borderRadius: 4,
           },
           {
             label: "General / Rework",
             data: [1.5, 1.8, 1.3, 2.0, 2.1, 2.0, 2.3],
-            backgroundColor: "#f43f5e",
+            backgroundColor: gradRework,
+            borderColor: "rgba(168, 85, 247, 1)",
+            borderWidth: 1,
             borderRadius: 4,
           },
           {
             label: "Debit Note",
             data: [0.7, 0.5, 0.7, 0.7, 0.7, 0.7, 0.7],
-            backgroundColor: "#eab308",
+            backgroundColor: gradDebit,
+            borderColor: "rgba(192, 132, 252, 1)",
+            borderWidth: 1,
             borderRadius: 4,
           }
         ]
@@ -621,20 +699,28 @@ export default function SalesAnalysis() {
         plugins: {
           legend: {
             position: 'top',
-            labels: { font: { family: 'Inter', size: 10 } }
+            labels: { font: { family: 'Inter', size: 10 }, color: '#312e81' }
           },
-          datalabels: { display: false }
+          datalabels: {
+            display: (ctx) => {
+              const val = ctx.dataset.data[ctx.dataIndex];
+              return val > 0.8;
+            },
+            color: "#ffffff",
+            font: { family: 'Inter', size: 9, weight: '700' },
+            formatter: (v) => `₹${v.toFixed(1)}L`
+          }
         },
         scales: {
           y: {
             stacked: true,
-            grid: { color: "rgba(45, 109, 232, 0.05)" },
-            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `₹${v}L` }
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
           },
           x: {
             stacked: true,
             grid: { display: false },
-            ticks: { font: { family: 'Inter', size: 9 } }
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81' }
           }
         }
       }
@@ -644,6 +730,11 @@ export default function SalesAnalysis() {
 
   useEffect(() => {
     if (!taxRef.current) return;
+    const ctx = taxRef.current.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+    gradient.addColorStop(0, "rgba(139, 92, 246, 0.95)");
+    gradient.addColorStop(1, "rgba(139, 92, 246, 0.15)");
+
     taxChart.current?.destroy();
     taxChart.current = new Chart(taxRef.current, {
       type: "bar",
@@ -653,21 +744,11 @@ export default function SalesAnalysis() {
           {
             label: "Tax Value (Lakhs)",
             data: [2.25, 2.55, 2.12, 2.97, 3.28, 2.86, 3.78],
-            backgroundColor: "rgba(16, 185, 129, 0.85)",
+            backgroundColor: gradient,
+            borderColor: "rgba(139, 92, 246, 1)",
+            borderWidth: 1.5,
             borderRadius: 6,
-            yAxisID: "yValue",
-          },
-          {
-            label: "Tax Rate (%)",
-            data: [18.0, 17.95, 17.97, 18.0, 18.02, 17.99, 18.0],
-            type: "line",
-            borderColor: "#ef4444",
-            borderWidth: 3,
-            pointBackgroundColor: "#ef4444",
-            pointRadius: 4,
-            tension: 0.2,
-            fill: false,
-            yAxisID: "yPercent",
+            yAxisID: "y",
           }
         ]
       },
@@ -676,27 +757,28 @@ export default function SalesAnalysis() {
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            position: 'top',
-            labels: { font: { family: 'Inter', size: 10 } }
+            display: false
           },
-          datalabels: { display: false }
+          datalabels: {
+            display: true,
+            align: "end",
+            anchor: "end",
+            offset: 2,
+            font: { family: 'Inter', size: 10, weight: '700' },
+            color: "#7c3aed",
+            formatter: (v) => `₹${v.toFixed(2)}L`
+          }
         },
         scales: {
-          yValue: {
+          y: {
             type: "linear",
             position: "left",
-            grid: { color: "rgba(16, 185, 129, 0.05)" },
-            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `₹${v}L` }
-          },
-          yPercent: {
-            type: "linear",
-            position: "right",
-            grid: { drawOnChartArea: false },
-            ticks: { font: { family: 'Inter', size: 9 }, callback: (v) => `${v}%` }
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
           },
           x: {
             grid: { display: false },
-            ticks: { font: { family: 'Inter', size: 9 } }
+            ticks: { font: { family: 'Inter', size: 9 }, color: '#312e81' }
           }
         }
       }
@@ -854,6 +936,7 @@ export default function SalesAnalysis() {
     setDateRange({ from: new Date(2026, 0, 1), to: new Date(2026, 1, 28) });
     setSearchQuery("");
     setInvoiceBtype("");
+    setSelectedCustomers([]);
     setFilters({ customer: "All Customers", product: "All Products", salesGroup: "Sales Group", rejection: "No" });
   };
 
@@ -905,6 +988,136 @@ export default function SalesAnalysis() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+        </div>
+
+        {/* Customer Filter */}
+        <div className="sa-filter-item" ref={customerDropdownRef}>
+          <span className="sa-filter-label">Customer Name</span>
+          <div className={`sa-custom-select sa-custom-select--customer${customerDropdownOpen ? " sa-active" : ""}`}>
+            <button
+              type="button"
+              className="sa-custom-select-trigger"
+              onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  if (!customerDropdownOpen) {
+                    setCustomerDropdownOpen(true);
+                    setCustomerFocusedIndex(0);
+                  } else {
+                    setCustomerFocusedIndex((prev) => (prev + 1) % (customerOptions.length + 1));
+                  }
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  if (!customerDropdownOpen) {
+                    setCustomerDropdownOpen(true);
+                    setCustomerFocusedIndex(customerOptions.length);
+                  } else {
+                    setCustomerFocusedIndex((prev) => (prev - 1 + customerOptions.length + 1) % (customerOptions.length + 1));
+                  }
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (customerDropdownOpen) {
+                    if (customerFocusedIndex === 0) {
+                      setSelectedCustomers([]);
+                      setCustomerDropdownOpen(false);
+                    } else if (customerFocusedIndex > 0 && customerFocusedIndex <= customerOptions.length) {
+                      const opt = customerOptions[customerFocusedIndex - 1];
+                      setSelectedCustomers((prev) => {
+                        const isSel = prev.includes(opt);
+                        return isSel ? prev.filter((c) => c !== opt) : [...prev, opt];
+                      });
+                    }
+                  } else {
+                    setCustomerDropdownOpen(true);
+                  }
+                } else if (e.key === "Escape") {
+                  setCustomerDropdownOpen(false);
+                }
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedCustomers.length === 0
+                    ? "All Customers"
+                    : selectedCustomers.length === 1
+                    ? selectedCustomers[0]
+                    : `${selectedCustomers.length} Customers`}
+                </span>
+                {selectedCustomers.length > 1 && (
+                  <span style={{
+                    background: "#2d6de8",
+                    color: "#fff",
+                    borderRadius: "50%",
+                    minWidth: "16px",
+                    height: "16px",
+                    fontSize: "0.62rem",
+                    fontWeight: "700",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginLeft: "6px",
+                    padding: "0 4px",
+                    flexShrink: 0
+                  }}>
+                    {selectedCustomers.length}
+                  </span>
+                )}
+              </span>
+              <span className="sa-custom-select-arrow">
+                <ChevronDown size={14} />
+              </span>
+            </button>
+            {customerDropdownOpen && (
+              <ul className="sa-custom-select-options" style={{ maxHeight: "250px", overflowY: "auto" }}>
+                <li
+                  className={`sa-custom-select-option${selectedCustomers.length === 0 ? " sa-multi-selected" : ""}${customerFocusedIndex === 0 ? " sa-focused" : ""}`}
+                  onClick={() => {
+                    setSelectedCustomers([]);
+                    setCustomerDropdownOpen(false);
+                  }}
+                  onMouseEnter={() => setCustomerFocusedIndex(0)}
+                  style={{ display: 'flex', alignItems: 'center' }}
+                >
+                  <span className={`sa-checkbox-box${selectedCustomers.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                    {selectedCustomers.length === 0 && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </span>
+                  All Customers
+                </li>
+                {customerOptions.map((opt, idx) => {
+                  const isSelected = selectedCustomers.includes(opt);
+                  const itemIdx = idx + 1;
+                  return (
+                    <li
+                      key={opt}
+                      className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}${customerFocusedIndex === itemIdx ? " sa-focused" : ""}`}
+                      onClick={() => {
+                        setSelectedCustomers((prev) => {
+                          const isSel = prev.includes(opt);
+                          return isSel ? prev.filter((c) => c !== opt) : [...prev, opt];
+                        });
+                      }}
+                      onMouseEnter={() => setCustomerFocusedIndex(itemIdx)}
+                      style={{ display: 'flex', alignItems: 'center' }}
+                    >
+                      <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                        {isSelected && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </span>
+                      {opt}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
 
@@ -1004,15 +1217,15 @@ export default function SalesAnalysis() {
           {/* ── Summary Strip ── */}
       <div className="sa-summary-strip">
         {[
-          { label: "Period", val: loading ? <div className="sa-skeleton" style={{ width: '75px', height: '14px', borderRadius: '4px' }} /> : summary?.period ?? "—", sm: true },
-          { label: "Grand Total", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : summary ? `₹${formatRupees(summary.grand_total)}` : "—" },
-          { label: "Total Invoices", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : summary ? String(summary.total_invoices) : "—" },
-          { label: "Customers", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : summary ? String(summary.customers) : "—" },
-          { label: "Total Qty Sold", val: loading ? <div className="sa-skeleton" style={{ width: '55px', height: '14px', borderRadius: '4px' }} /> : summary ? formatQty(summary.total_qty_sold) : "—" },
-          { label: "Avg Invoice", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : summary ? `₹${formatRupees(summary.avg_invoice)}` : "—" },
+          { label: "Period", val: loading ? <div className="sa-skeleton" style={{ width: '75px', height: '14px', borderRadius: '4px' }} /> : derivedSummary?.period ?? "—", sm: true },
+          { label: "Grand Total", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.grand_total)}` : "—" },
+          { label: "Total Invoices", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.total_invoices) : "—" },
+          { label: "Customers", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.customers) : "—" },
+          { label: "Total Qty Sold", val: loading ? <div className="sa-skeleton" style={{ width: '55px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? formatQty(derivedSummary.total_qty_sold) : "—" },
+          { label: "Avg Invoice", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.avg_invoice)}` : "—" },
           {
             label: "Turn Over",
-            val: loading ? <div className="sa-skeleton" style={{ width: '65px', height: '14px', borderRadius: '4px' }} /> : summary ? `₹${Number(summary.turn_over_lakhs).toFixed(2)}L` : "—",
+            val: loading ? <div className="sa-skeleton" style={{ width: '65px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${Number(derivedSummary.turn_over_lakhs).toFixed(2)}L` : "—",
             green: true,
           },
         ].map((s, i) => (
@@ -1115,7 +1328,7 @@ export default function SalesAnalysis() {
         </div>
         <div className="sa-monthly-charts-row">
           <div className="sa-monthly-chart-container">
-            <h4 className="sa-chart-title">Monthly Sales Trend (Value & % Growth)</h4>
+            <h4 className="sa-chart-title">Monthly Sales Trend (Value)</h4>
             {loading ? (
               <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
             ) : (
@@ -1135,7 +1348,7 @@ export default function SalesAnalysis() {
             )}
           </div>
           <div className="sa-monthly-chart-container">
-            <h4 className="sa-chart-title">Monthly Tax Trend (Value & Rate %)</h4>
+            <h4 className="sa-chart-title">Monthly Tax Trend (Value)</h4>
             {loading ? (
               <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
             ) : (

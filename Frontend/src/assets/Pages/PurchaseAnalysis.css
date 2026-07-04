@@ -1599,7 +1599,7 @@
 
 .pa2-custom-select {
     position: relative;
-    width: 180px;
+    width: 100%;
 }
 
 .pa2-custom-select-trigger {
@@ -1661,15 +1661,92 @@
     list-style: none;
     transform-origin: top;
     animation: pa2-dropdown-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+    max-height: 250px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.pa2-custom-select-options::-webkit-scrollbar {
+    width: 6px;
+}
+
+.pa2-custom-select-options::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-custom-select-options::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.3);
+    border-radius: 20px;
+}
+
+.pa2-custom-select-options::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(148, 163, 184, 0.5);
 }
 
 .pa2-custom-select-option {
-    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
     font-size: 0.78rem;
     color: #475569;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s ease;
+}
+
+.pa2-dropdown-search-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 5px;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+}
+
+.pa2-dropdown-search-icon {
+    color: #94a3b8;
+}
+
+.pa2-dropdown-search-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 0.8rem;
+    color: #1e293b;
+    padding: 4px 0;
+    font-family: inherit;
+    background: transparent;
+}
+
+.pa2-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+
+.pa2-opt-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pa2-check-icon {
+    color: #2d6de8;
+    flex-shrink: 0;
 }
 
 .pa2-custom-select-option:hover,
