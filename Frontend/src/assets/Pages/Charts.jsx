@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import jsPDF from "jspdf";
 import ChartDatePicker from "./ChartDatePicker";
 import { resolveApiBase } from "../../apiBase";
@@ -28,7 +29,27 @@ import {
   Activity
 } from "lucide-react";
 import "./Charts.css";
-Chart.register(...registerables);
+
+/** Subtle gradient wash behind Cartesian chart areas */
+const premiumAreaPlugin = {
+  id: "chPremiumArea",
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return;
+    const type = chart.config.type;
+    if (["pie", "doughnut", "polarArea", "radar"].includes(type)) return;
+    ctx.save();
+    const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, "rgba(248, 250, 255, 0.62)");
+    g.addColorStop(0.55, "rgba(255, 255, 255, 0.08)");
+    g.addColorStop(1, "rgba(241, 245, 249, 0.42)");
+    ctx.fillStyle = g;
+    ctx.fillRect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+    ctx.restore();
+  },
+};
+
+Chart.register(...registerables, ChartDataLabels, premiumAreaPlugin);
 
 const API_BASE = resolveApiBase();
 function api(path) {
@@ -247,6 +268,552 @@ function normalizeVendorRejectionChartDatasets(datasets) {
 function hexToRgb(hex) {
   const clean = hex.replace("#", "");
   return { r: parseInt(clean.slice(0, 2), 16), g: parseInt(clean.slice(2, 4), 16), b: parseInt(clean.slice(4, 6), 16) };
+}
+
+// ─── Premium UI helpers for Chart.js ───────────────────────────
+function hexToRgba(hex, opacity = 1) {
+  if (!hex || typeof hex !== "string") return `rgba(59, 130, 246, ${opacity})`;
+  const clean = hex.replace("#", "");
+  let r, g, b;
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else {
+    r = parseInt(clean.slice(0, 2), 16);
+    g = parseInt(clean.slice(2, 4), 16);
+    b = parseInt(clean.slice(4, 6), 16);
+  }
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+// Category palette mappings for modern gradients
+const CATEGORY_PALETTES = {
+  sales: [
+    { start: "#6366f1", end: "#3b82f6", stroke: "#3b82f6" },   // Indigo to Blue
+    { start: "#10b981", end: "#059669", stroke: "#10b981" }    // Emerald to Green
+  ],
+  quality: [
+    { start: "#a855f7", end: "#7c3aed", stroke: "#a855f7" },   // Violet/Purple
+    { start: "#ec4899", end: "#db2777", stroke: "#ec4899" },   // Pink/Fuchsia
+    { start: "#f97316", end: "#ea580c", stroke: "#f97316" },   // Orange
+    { start: "#06b6d4", end: "#0891b2", stroke: "#06b6d4" }    // Cyan
+  ],
+  production: [
+    { start: "#3b82f6", end: "#1d4ed8", stroke: "#3b82f6" },   // Blue
+    { start: "#06b6d4", end: "#0891b2", stroke: "#06b6d4" },   // Cyan
+    { start: "#f59e0b", end: "#d97706", stroke: "#f59e0b" }    // Amber
+  ],
+  operations: [
+    { start: "#10b981", end: "#047857", stroke: "#10b981" },   // Emerald/Green
+    { start: "#3b82f6", end: "#1d4ed8", stroke: "#3b82f6" }    // Blue
+  ],
+  purchase: [
+    { start: "#3b82f6", end: "#1d4ed8", stroke: "#3b82f6" },   // Blue
+    { start: "#06b6d4", end: "#0891b2", stroke: "#06b6d4" },   // Cyan
+    { start: "#f97316", end: "#ea580c", stroke: "#f97316" }    // Orange
+  ],
+  vendor: [
+    { start: "#8b5cf6", end: "#6d28d9", stroke: "#8b5cf6" },   // Violet
+    { start: "#10b981", end: "#047857", stroke: "#10b981" },   // Emerald
+    { start: "#f97316", end: "#ea580c", stroke: "#f97316" }    // Orange
+  ]
+};
+
+// Default premium palette for fallback or multi-index elements
+const PREMIUM_COLOR_PALETTE = [
+  { start: "#3b82f6", end: "#1d4ed8", stroke: "#3b82f6" }, // Blue
+  { start: "#06b6d4", end: "#0891b2", stroke: "#06b6d4" }, // Cyan
+  { start: "#10b981", end: "#047857", stroke: "#10b981" }, // Emerald
+  { start: "#f97316", end: "#ea580c", stroke: "#f97316" }, // Orange
+  { start: "#8b5cf6", end: "#6d28d9", stroke: "#8b5cf6" }, // Violet
+  { start: "#ec4899", end: "#db2777", stroke: "#ec4899" }, // Pink
+  { start: "#f59e0b", end: "#d97706", stroke: "#f59e0b" }, // Amber
+  { start: "#14b8a6", end: "#0f766e", stroke: "#14b8a6" }  // Teal
+];
+
+function getDatasetAccentColor(dataset, dataIndex = 0, datasetIndex = 0) {
+  if (dataset._chAccents?.[dataIndex]) return dataset._chAccents[dataIndex];
+  if (dataset._chAccent) return dataset._chAccent;
+  const palette = PREMIUM_COLOR_PALETTE;
+  if (typeof dataset.borderColor === "string" && dataset.borderColor.startsWith("#")) return dataset.borderColor;
+  if (Array.isArray(dataset.borderColor)) return dataset.borderColor[dataIndex] || palette[datasetIndex % palette.length].stroke;
+  if (typeof dataset.backgroundColor === "string" && dataset.backgroundColor.startsWith("#")) return dataset.backgroundColor;
+  if (Array.isArray(dataset.backgroundColor) && typeof dataset.backgroundColor[dataIndex] === "string") {
+    return dataset.backgroundColor[dataIndex];
+  }
+  return palette[datasetIndex % palette.length].stroke;
+}
+
+function isChartStacked(baseOptions = {}) {
+  return !!(baseOptions.scales?.x?.stacked || baseOptions.scales?.y?.stacked);
+}
+
+function isTargetDataset(dataset) {
+  const label = (dataset?.label || "").toLowerCase();
+  return label.includes("target") || !!dataset?.borderDash;
+}
+
+function formatChartValue(val, context) {
+  if (typeof val !== "number") return val;
+  const label = (context.dataset.label || "").toLowerCase();
+  if (label.includes("%") || label.includes("efficiency") || label.includes("otd")) {
+    return val % 1 !== 0 ? `${val.toFixed(1)}%` : `${val}%`;
+  }
+  if (label.includes("ppm")) return val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toLocaleString();
+  if (label.includes("₹") || label.includes("value") || label.includes("material") || label.includes("service")) {
+    if (val >= 1000) return `${(val / 1000).toFixed(1)}k`;
+    if (val % 1 !== 0) return val.toFixed(1);
+    return String(val);
+  }
+  if (label.includes("hour") || label.includes("idle") || label.includes("setup")) {
+    return val % 1 !== 0 ? `${val.toFixed(1)}h` : `${val}h`;
+  }
+  if (label.includes("rating") || label.includes("score")) return `${val}`;
+  if (val >= 1000) return `${(val / 1000).toFixed(1)}k`;
+  if (val % 1 !== 0) return val.toFixed(1);
+  return String(val);
+}
+
+function buildPremiumDatalabels(baseOptions = {}, chartType = "bar") {
+  const isHorizontal = baseOptions.indexAxis === "y";
+  const isStacked = isChartStacked(baseOptions);
+  const isRadial = ["pie", "doughnut", "polarArea"].includes(chartType);
+
+  return {
+    clip: false,
+    display(context) {
+      const resolvedType = context.chart.config.type || chartType;
+      if (resolvedType === "radar" || resolvedType === "polarArea") return false;
+
+      if (isTargetDataset(context.dataset)) return false;
+      const val = context.dataset.data[context.dataIndex];
+      if (val === 0 || val === null || val === undefined) return false;
+
+      const dsType = context.dataset.type || chartType;
+
+      if (dsType === "line" || chartType === "line") {
+        return true;
+      }
+
+      if (isStacked && (dsType === "bar" || chartType === "bar")) {
+        const total = context.chart.data.datasets.reduce((sum, ds) => {
+          const v = ds.data[context.dataIndex];
+          return sum + (typeof v === "number" && Number.isFinite(v) ? v : 0);
+        }, 0);
+        if (total > 0 && val / total < 0.04 && val < 18) return false;
+        const meta = context.chart.getDatasetMeta(context.datasetIndex);
+        const bar = meta?.data?.[context.dataIndex];
+        const size = bar ? Math.abs(isHorizontal ? (bar.width ?? 0) : (bar.height ?? 0)) : 999;
+        if (size > 0 && size < 11) return false;
+      }
+
+      return true;
+    },
+    color: "#ffffff",
+    font(context) {
+      const wide = context.chart.width > 480;
+      const dsType = context.dataset.type || chartType;
+      const isLinePoint = dsType === "line" || chartType === "line";
+      return {
+        family: "'DM Sans', 'Inter', sans-serif",
+        size: isLinePoint ? (wide ? 9 : 7) : (wide ? 10 : 8),
+        weight: "bold",
+      };
+    },
+    backgroundColor(context) {
+      const accent = getDatasetAccentColor(context.dataset, context.dataIndex, context.datasetIndex);
+      const dsType = context.dataset.type || chartType;
+      const alpha = dsType === "line" || chartType === "line" ? 0.88 : 0.93;
+      return hexToRgba(accent, alpha);
+    },
+    borderColor: "rgba(255, 255, 255, 0.42)",
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: { top: 3, bottom: 2, left: 6, right: 6 },
+    anchor(context) {
+      const dsType = context.dataset.type || chartType;
+      if (isRadial) return "center";
+      if (chartType === "radar") return "center";
+      if (dsType === "line" || chartType === "line") return "end";
+      if (isStacked) return "center";
+      if (isHorizontal) return "end";
+      return "end";
+    },
+    align(context) {
+      const dsType = context.dataset.type || chartType;
+      if (isRadial) return "center";
+      if (chartType === "radar") return "center";
+      if (dsType === "line" || chartType === "line") return "top";
+      if (isStacked) return "center";
+      if (isHorizontal) return "right";
+      return "top";
+    },
+    offset(context) {
+      const dsType = context.dataset.type || chartType;
+      if (isRadial) return 2;
+      if (chartType === "radar") return 0;
+      if (dsType === "line" || chartType === "line") return 5;
+      if (isStacked) return 0;
+      if (isHorizontal) return 4;
+      return 7;
+    },
+    formatter: (val, context) => formatChartValue(val, context),
+  };
+}
+
+function getTypeAnimationConfig(chartType) {
+  const isRadial = ["pie", "doughnut", "polarArea"].includes(chartType);
+  const isLine = chartType === "line" || chartType === "radar";
+
+  if (isRadial) {
+    return {
+      animateRotate: true,
+      animateScale: true,
+      duration: 1150,
+      easing: "easeOutQuart",
+      delay(context) {
+        if (context.type !== "data" || context.mode !== "default") return 0;
+        return context.dataIndex * 58 + context.datasetIndex * 90;
+      },
+    };
+  }
+
+  if (isLine) {
+    return {
+      duration: 1350,
+      easing: "easeOutQuart",
+      delay(context) {
+        if (context.type !== "data" || context.mode !== "default") return 0;
+        return context.dataIndex * 62 + context.datasetIndex * 140;
+      },
+    };
+  }
+
+  return {
+    duration: 1050,
+    easing: "easeOutCubic",
+    delay(context) {
+      if (context.type !== "data" || context.mode !== "default") return 0;
+      return context.dataIndex * 36 + context.datasetIndex * 105;
+    },
+  };
+}
+
+function applyPremiumDatasetStyling(ctx, dataset, category, datasetIndex, datasetCount, chartType, chartOptions = {}) {
+  const isRadial = ["pie", "doughnut", "polarArea", "radar"].includes(chartType);
+  const isHorizontalBar = chartOptions.indexAxis === "y";
+  const label = dataset.label || "";
+  const isTarget = label.toLowerCase().includes("target") || dataset.borderDash;
+
+  if (isTarget) {
+    if (chartType === "bar" || dataset.type === "bar") {
+      dataset.backgroundColor = dataset.backgroundColor || "rgba(100, 116, 139, 0.18)";
+      dataset.borderColor = dataset.borderColor || "#94a3b8";
+      dataset.borderWidth = 1.5;
+      dataset.borderRadius = isHorizontalBar
+        ? { topLeft: 0, bottomLeft: 0, topRight: 6, bottomRight: 6 }
+        : (dataset.borderRadius !== undefined ? dataset.borderRadius : { topLeft: 6, topRight: 6, bottomLeft: 2, bottomRight: 2 });
+      dataset.hoverBackgroundColor = "rgba(148, 163, 184, 0.28)";
+    } else {
+      dataset.borderColor = dataset.borderColor || "#ef4444";
+      dataset.backgroundColor = "transparent";
+      dataset.borderDash = dataset.borderDash || [6, 4];
+      dataset.borderWidth = 2;
+      dataset.fill = false;
+      dataset.pointRadius = 0;
+      dataset.pointHoverRadius = 0;
+    }
+    return dataset;
+  }
+
+  const palette = CATEGORY_PALETTES[category] || PREMIUM_COLOR_PALETTE;
+  const colorCfg = palette[datasetIndex % palette.length] || PREMIUM_COLOR_PALETTE[datasetIndex % PREMIUM_COLOR_PALETTE.length];
+  const strokeColor = dataset.borderColor || colorCfg.stroke;
+  dataset._chAccent = strokeColor;
+  const canvasHeight = ctx.canvas?.clientHeight || (ctx.canvas?.height ? ctx.canvas.height / (window.devicePixelRatio || 1) : 180);
+  const canvasWidth = ctx.canvas?.clientWidth || (ctx.canvas?.width ? ctx.canvas.width / (window.devicePixelRatio || 1) : 320);
+
+  if (chartType === "line" || dataset.type === "line") {
+    dataset.borderColor = strokeColor;
+    dataset.borderWidth = 3;
+    dataset.tension = dataset.tension !== undefined ? dataset.tension : 0.42;
+    dataset.cubicInterpolationMode = "monotone";
+    dataset.pointBackgroundColor = "#ffffff";
+    dataset.pointBorderColor = strokeColor;
+    dataset.pointBorderWidth = 2.5;
+    dataset.pointRadius = dataset.pointRadius !== undefined ? dataset.pointRadius : 4;
+    dataset.pointHoverRadius = 7;
+    dataset.pointHoverBackgroundColor = strokeColor;
+    dataset.pointHoverBorderColor = "#ffffff";
+    dataset.pointHoverBorderWidth = 3;
+
+    if (dataset.fill) {
+      const grad = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      grad.addColorStop(0, hexToRgba(strokeColor, 0.32));
+      grad.addColorStop(0.55, hexToRgba(strokeColor, 0.08));
+      grad.addColorStop(1, hexToRgba(strokeColor, 0.0));
+      dataset.backgroundColor = grad;
+    } else {
+      dataset.backgroundColor = "transparent";
+    }
+  } else if (chartType === "bar" || dataset.type === "bar") {
+    const barRadius = isHorizontalBar
+      ? { topLeft: 0, bottomLeft: 0, topRight: 8, bottomRight: 8 }
+      : { topLeft: 8, topRight: 8, bottomLeft: 2, bottomRight: 2 };
+    dataset.borderRadius = dataset.borderRadius !== undefined ? dataset.borderRadius : barRadius;
+    dataset.borderSkipped = false;
+    dataset.maxBarThickness = isHorizontalBar ? 22 : 42;
+
+    if (Array.isArray(dataset.backgroundColor)) {
+      const rawColors = [...dataset.backgroundColor];
+      dataset._chAccents = rawColors;
+      dataset.backgroundColor = rawColors.map((color) => {
+        const itemGrad = isHorizontalBar
+          ? ctx.createLinearGradient(0, 0, canvasWidth, 0)
+          : ctx.createLinearGradient(0, 0, 0, canvasHeight);
+        itemGrad.addColorStop(0, color);
+        itemGrad.addColorStop(1, hexToRgba(color, 0.55));
+        return itemGrad;
+      });
+      dataset.hoverBackgroundColor = rawColors.map((color) => hexToRgba(color, 0.92));
+    } else {
+      const grad = isHorizontalBar
+        ? ctx.createLinearGradient(0, 0, canvasWidth, 0)
+        : ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      grad.addColorStop(0, colorCfg.start);
+      grad.addColorStop(0.65, colorCfg.end);
+      grad.addColorStop(1, hexToRgba(colorCfg.end, 0.72));
+      dataset.backgroundColor = grad;
+      dataset.hoverBackgroundColor = ctx.createLinearGradient
+        ? (() => {
+            const hov = isHorizontalBar
+              ? ctx.createLinearGradient(0, 0, canvasWidth, 0)
+              : ctx.createLinearGradient(0, 0, 0, canvasHeight);
+            hov.addColorStop(0, hexToRgba(colorCfg.start, 1));
+            hov.addColorStop(1, hexToRgba(colorCfg.end, 0.85));
+            return hov;
+          })()
+        : colorCfg.start;
+    }
+
+    dataset.borderWidth = 0;
+  } else if (isRadial) {
+    if (chartType === "radar") {
+      dataset.borderColor = strokeColor;
+      dataset.borderWidth = 2.5;
+      dataset.pointBackgroundColor = "#ffffff";
+      dataset.pointBorderColor = strokeColor;
+      dataset.pointBorderWidth = 2;
+      dataset.pointRadius = 4;
+      dataset.pointHoverRadius = 6;
+      dataset.backgroundColor = hexToRgba(strokeColor, 0.18);
+    } else {
+      dataset.borderRadius = 6;
+      dataset.spacing = 4;
+      dataset.borderWidth = 2.5;
+      dataset.borderColor = "#ffffff";
+      dataset.hoverOffset = chartType === "doughnut" ? 16 : 12;
+      dataset.hoverBorderWidth = 3;
+      dataset.hoverBorderColor = "#ffffff";
+
+      if (!dataset.backgroundColor || !Array.isArray(dataset.backgroundColor) || dataset.backgroundColor.length === 0 || dataset.backgroundColor.every(c => c === "#000000" || c === "transparent" || c === "#3b82f6" || c === "#00000000")) {
+        const sliceColors = PREMIUM_COLOR_PALETTE.map(c => c.start);
+        dataset.backgroundColor = sliceColors;
+        dataset._chAccents = sliceColors;
+      } else {
+        dataset._chAccents = [...dataset.backgroundColor];
+      }
+      dataset.hoverBackgroundColor = PREMIUM_COLOR_PALETTE.map(c => c.end);
+    }
+  }
+
+  return dataset;
+}
+
+function styleDatasets(ctx, datasets, category, chartType, chartOptions = {}) {
+  if (!datasets || !Array.isArray(datasets)) return [];
+  return datasets.map((ds, i) => applyPremiumDatasetStyling(ctx, ds, category, i, datasets.length, chartType, chartOptions));
+}
+
+function getPremiumChartOptions(type, category, baseOptions = {}) {
+  const isRadial = ["pie", "doughnut", "polarArea", "radar"].includes(type);
+  const isDoughnut = type === "doughnut";
+
+  const hoverValueTypes = type === "radar" || type === "polarArea";
+
+  const tooltipOptions = {
+    enabled: true,
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    titleColor: "#0f172a",
+    bodyColor: "#334155",
+    borderColor: "rgba(226, 232, 240, 0.95)",
+    borderWidth: 1,
+    padding: 12,
+    boxPadding: 6,
+    cornerRadius: 10,
+    usePointStyle: true,
+    titleFont: { family: "'DM Sans', sans-serif", weight: "bold", size: 12 },
+    bodyFont: { family: "'DM Sans', sans-serif", size: 12 },
+    footerFont: { family: "'DM Sans', sans-serif", size: 11 },
+    displayColors: true,
+    caretSize: 6,
+    caretPadding: 8,
+    ...(hoverValueTypes ? {
+      callbacks: {
+        label(ctx) {
+          const val = ctx.parsed?.r ?? ctx.parsed?.y ?? ctx.raw;
+          const n = typeof val === "number" && Number.isFinite(val) ? val : Number(val) || 0;
+          const formatted = formatChartValue(n, ctx);
+          return ctx.dataset.label ? ` ${ctx.dataset.label}: ${formatted}` : ` ${formatted}`;
+        },
+      },
+    } : {}),
+  };
+
+  const datalabelDefaults = buildPremiumDatalabels(baseOptions, type);
+
+  const opt = {
+    ...baseOptions,
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    layout: {
+      padding: {
+        top: isRadial ? 8 : 24,
+        right: 12,
+        bottom: 8,
+        left: 8,
+        ...(baseOptions.layout?.padding || {}),
+      },
+    },
+    animation: getTypeAnimationConfig(type),
+    elements: {
+      bar: { borderRadius: 8, borderSkipped: false },
+      line: { borderCapStyle: "round", borderJoinStyle: "round", tension: 0.42 },
+      point: { hoverBorderWidth: 3, hitRadius: 12 },
+      arc: { borderWidth: 2.5, hoverOffset: type === "doughnut" ? 16 : 12 },
+    },
+    ...(isDoughnut ? { cutout: "58%" } : {}),
+    plugins: {
+      ...baseOptions.plugins,
+      tooltip: baseOptions.plugins?.tooltip
+        ? { ...tooltipOptions, ...baseOptions.plugins.tooltip, callbacks: { ...tooltipOptions.callbacks, ...baseOptions.plugins.tooltip.callbacks } }
+        : tooltipOptions,
+      legend: baseOptions.plugins?.legend !== undefined && baseOptions.plugins.legend !== false && baseOptions.plugins.legend?.display !== false
+        ? {
+            ...baseOptions.plugins.legend,
+            position: baseOptions.plugins.legend.position || "top",
+            align: baseOptions.plugins.legend.align || "end",
+            labels: {
+              ...baseOptions.plugins.legend.labels,
+              color: "#475569",
+              usePointStyle: true,
+              pointStyle: "circle",
+              padding: 16,
+              boxWidth: 8,
+              boxHeight: 8,
+              font: { family: "'DM Sans', sans-serif", size: 10, weight: 600 },
+            },
+          }
+        : baseOptions.plugins?.legend?.display === true
+          ? {
+              display: true,
+              position: "top",
+              align: "end",
+              labels: {
+                color: "#475569",
+                usePointStyle: true,
+                pointStyle: "circle",
+                padding: 16,
+                boxWidth: 8,
+                font: { family: "'DM Sans', sans-serif", size: 10, weight: 600 },
+              },
+            }
+          : { display: false },
+      datalabels: baseOptions.plugins?.datalabels
+        ? { ...datalabelDefaults, ...baseOptions.plugins.datalabels }
+        : datalabelDefaults,
+    },
+  };
+
+  if (isRadial) {
+    if (type === "pie" || type === "doughnut") {
+      delete opt.scales;
+    }
+    if (type === "radar") {
+      opt.scales = {
+        r: {
+          grid: { color: "rgba(226, 232, 240, 0.75)", circular: true },
+          angleLines: { color: "rgba(226, 232, 240, 0.75)" },
+          pointLabels: { color: "#64748b", font: { family: "'DM Sans', sans-serif", size: 10, weight: 600 } },
+          ticks: { backdropColor: "rgba(255,255,255,0.85)", color: "#64748b", font: { size: 9 }, showLabelBackdrop: true },
+          ...baseOptions.scales?.r,
+        },
+      };
+    }
+    if (type === "polarArea") {
+      opt.scales = {
+        r: {
+          beginAtZero: true,
+          grid: { color: "rgba(226, 232, 240, 0.7)" },
+          ticks: { backdropColor: "rgba(255,255,255,0.85)", color: "#64748b", font: { size: 9 } },
+          ...baseOptions.scales?.r,
+        },
+      };
+    }
+  } else {
+    opt.scales = {
+      x: {
+        grid: { display: false, drawBorder: false },
+        border: { display: false },
+        ticks: {
+          color: "#64748b",
+          font: { family: "'DM Sans', sans-serif", size: 9, weight: 500 },
+          maxRotation: 45,
+          autoSkip: true,
+        },
+      },
+      y: {
+        grid: {
+          color: "rgba(226, 232, 240, 0.55)",
+          borderDash: [4, 6],
+          drawBorder: false,
+        },
+        border: { display: false },
+        grace: baseOptions.scales?.y?.grace ?? (baseOptions.indexAxis === "y" ? "8%" : "16%"),
+        ticks: {
+          color: "#64748b",
+          font: { family: "'DM Sans', sans-serif", size: 9, weight: 500 },
+        },
+      },
+    };
+
+    if (baseOptions.scales) {
+      if (baseOptions.scales.y) {
+        opt.scales.y = {
+          ...opt.scales.y,
+          ...baseOptions.scales.y,
+          grid: { ...opt.scales.y.grid, ...baseOptions.scales.y.grid },
+          ticks: { ...opt.scales.y.ticks, ...baseOptions.scales.y.ticks },
+          border: { ...opt.scales.y.border, ...baseOptions.scales.y.border },
+          grace: baseOptions.scales.y.grace ?? opt.scales.y.grace,
+        };
+      }
+      if (baseOptions.scales.x) {
+        opt.scales.x = {
+          ...opt.scales.x,
+          ...baseOptions.scales.x,
+          grid: { ...opt.scales.x.grid, ...baseOptions.scales.x.grid },
+          ticks: { ...opt.scales.x.ticks, ...baseOptions.scales.x.ticks },
+          border: { ...opt.scales.x.border, ...baseOptions.scales.x.border },
+          grace: baseOptions.scales.x.grace ?? (baseOptions.indexAxis === "y" ? "10%" : undefined),
+        };
+      }
+    }
+  }
+
+  return opt;
 }
 
 // ─── Filter Dropdown ──────────────────────────────────────────
@@ -495,72 +1062,208 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
             data.labels = mapLabelsWithYear(data.labels, data.fy);
           }
           if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+          const ctx = canvasRef.current.getContext("2d");
           
-          // ... existing chart logic ...
-          if (def.id === "sales-1") chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: { labels: data.labels || [], datasets: [{ label: "PO Value (₹L)", data: data.po || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Sales Value (₹L)", data: data.sales || [], backgroundColor: "#10b981", borderRadius: 4 }] }, options: { ...def.config.options } });
-          else if (def.id === "sales-2") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: "OTD % Actual", data: data.data || [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 90%", data: Array(12).fill(90), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
-          else if (def.id === "quality-1") chartRef.current = new Chart(canvasRef.current, { type: "pie", data: { labels: data.labels || [], datasets: [{ label: "Complaint Count", data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }] }, options: { ...def.config.options } });
-          else if (def.id === "quality-2") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: "Rejection Count", data: data.data || [], borderColor: "#ec4899", backgroundColor: "rgba(236,72,153,0.1)", tension: 0.4, fill: true, pointRadius: 3 }] }, options: { ...def.config.options } });
-          else if (def.id === "quality-3") chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: "Rework Items", data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor, borderRadius: 4 }] }, options: { ...def.config.options } });
-          else if (def.id === "quality-4") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: "Actual PPM", data: data.data || [], borderColor: "#f97316", backgroundColor: "rgba(249,115,22,0.1)", tension: 0.4, fill: true, pointRadius: 3 }] }, options: { ...def.config.options, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => val.toLocaleString() + ' PPM' } } } } });
-          else if (def.id === "production-1") chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: `${selectedOpr || 'Operator'} Efficiency %`, data: data.data || [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }] }, options: { ...def.config.options, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
-          else if (def.id === "production-2") chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: "Overall Efficiency %", data: data.data || [], backgroundColor: "#06b6d4", borderRadius: 4 }] }, options: { ...def.config.options, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
-          else if (def.id === "production-3") {
-            const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
-            chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: (data.labels || []).map((_, i) => palette[i % palette.length]), borderRadius: 3 }] }, options: { ...machineIdleBarChartOptions(), layout: { padding: { top: 2, bottom: 2, left: 0, right: 2 } } } });
-          } 
-          // ✅ NEW: production-4 Machine Efficiency
-          else if (def.id === "production-4") {
+          if (def.id === "sales-1") {
+            const ds = [
+              { label: "PO Value (₹L)", data: data.po || [] },
+              { label: "Sales Value (₹L)", data: data.sales || [] }
+            ];
             chartRef.current = new Chart(canvasRef.current, {
-              type: "line",
-              data: {
-                labels: data.labels || [],
-                datasets: [{
-                  label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`,
-                  data: data.data || [],
-                  borderColor: "#3b82f6",
-                  backgroundColor: "rgba(59,130,246,0.1)",
-                  tension: 0.4, fill: true, pointRadius: 3
-                }]
-              },
-              options: {
-                ...def.config.options,
-                plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } },
-                scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } }
-              }
+              type: def.config.type,
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, def.config.type, def.config.options) },
+              options: getPremiumChartOptions(def.config.type, def.category, def.config.options)
             });
           }
-          // ✅ NEW: purchase-2 Supplier Rating
-          else if (def.id === "purchase-2") {
-            const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
+          else if (def.id === "sales-2") {
+            const ds = [
+              { label: "OTD % Actual", data: data.data || [], fill: true },
+              { label: "Target 90%", data: Array(data.labels?.length || 12).fill(90) }
+            ];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, def.config.options)
+            });
+          }
+          else if (def.id === "quality-1") {
+            const ds = [{ label: "Complaint Count", data: data.data || [] }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "pie",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "pie", def.config.options) },
+              options: getPremiumChartOptions("pie", def.category, def.config.options)
+            });
+          }
+          else if (def.id === "quality-2") {
+            const ds = [{ label: "Rejection Count", data: data.data || [], fill: true }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, def.config.options)
+            });
+          }
+          else if (def.id === "quality-3") {
+            const ds = [{ label: "Rework Items", data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "bar",
-              data: {
-                labels: data.labels || [],
-                datasets: [{
-                  label: "Final Supplier Rating",
-                  data: data.data || [],
-                  backgroundColor: (data.data || []).map(v => getRatingColor(v)),
-                  borderRadius: 5
-                }]
-              },
-              options: {
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, def.config.options)
+            });
+          }
+          else if (def.id === "quality-4") {
+            const ds = [{ label: "Actual PPM", data: data.data || [], fill: true }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, {
                 ...def.config.options,
-                plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }
-              }
+                scales: {
+                  ...def.config.options.scales,
+                  y: { ticks: { font: { size: 9 }, callback: val => val.toLocaleString() + ' PPM' } }
+                }
+              })
+            });
+          }
+          else if (def.id === "production-1") {
+            const ds = [{ label: `${selectedOpr || 'Operator'} Efficiency %`, data: data.data || [], fill: true }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, {
+                ...def.config.options,
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } }
+                }
+              })
+            });
+          }
+          else if (def.id === "production-2") {
+            const ds = [{ label: "Overall Efficiency %", data: data.data || [] }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "bar",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, {
+                ...def.config.options,
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } }
+                }
+              })
+            });
+          }
+          else if (def.id === "production-3") {
+            const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
+            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "bar",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, {
+                ...machineIdleBarChartOptions(),
+                layout: { padding: { top: 2, bottom: 2, left: 0, right: 2 } }
+              })
+            });
+          } 
+          else if (def.id === "production-4") {
+            const ds = [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, {
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                },
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } }
+                }
+              })
+            });
+          }
+          else if (def.id === "purchase-2") {
+            const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
+            const ds = [{ label: "Final Supplier Rating", data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "bar",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, {
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                }
+              })
             });
           }
           else if (def.id === "operations-1") {
-            chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: [{ label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.1)", tension: 0.4, fill: true, pointRadius: 3 }, { label: "Target 88%", data: Array(12).fill(88), borderColor: "#ef4444", backgroundColor: "transparent", borderDash: [6,3], tension: 0, fill: false, pointRadius: 0 }] }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } } });
+            const ds = [
+              { label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true },
+              { label: "Target 88%", data: Array(data.labels?.length || 12).fill(88) }
+            ];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, {
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                },
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } }
+                }
+              })
+            });
           }
           else if (def.id === "operations-2") {
-            chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [ { label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [], backgroundColor: "#10b981", borderRadius: 4 }, { label: "Target (₹L)", data: data.target || [], backgroundColor: "rgba(59,130,246,0.35)", borderRadius: 4 }, ], }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => `₹${val}L` } } }, } });
+            const ds = [
+              { label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [] },
+              { label: "Target (₹L)", data: data.target || [], backgroundColor: "rgba(59,130,246,0.35)" }
+            ];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "bar",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, {
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                },
+                scales: {
+                  ...def.config.options.scales,
+                  y: { ticks: { font: { size: 9 }, callback: val => `₹${val}L` } }
+                }
+              })
+            });
           }
           else if (def.id === "purchase-1") {
-            chartRef.current = new Chart(canvasRef.current, { type: "bar", data: { labels: data.labels || [], datasets: [ { label: "Raw Material (₹L)", data: data.raw_material || [], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Store Material (₹L)", data: data.store_material || [], backgroundColor: "#06b6d4", borderRadius: 4 }, { label: "General / Service (₹L)", data: data.general_service || [], backgroundColor: "#f97316", borderRadius: 4 } ] }, options: { ...def.config.options } });
+            const ds = [
+              { label: "Raw Material (₹L)", data: data.raw_material || [] },
+              { label: "Store Material (₹L)", data: data.store_material || [] },
+              { label: "General / Service (₹L)", data: data.general_service || [] }
+            ];
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "bar",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
+              options: getPremiumChartOptions("bar", def.category, def.config.options)
+            });
           }
           else if (def.id === "vendor-2") {
-            chartRef.current = new Chart(canvasRef.current, { type: "line", data: { labels: data.labels || [], datasets: normalizeVendorRejectionChartDatasets(data.datasets) }, options: { ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } } });
+            const normalized = normalizeVendorRejectionChartDatasets(data.datasets);
+            chartRef.current = new Chart(canvasRef.current, {
+              type: "line",
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, normalized, def.category, "line", def.config.options) },
+              options: getPremiumChartOptions("line", def.category, {
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                }
+              })
+            });
           }
         })
         .catch(err => {
@@ -571,7 +1274,16 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         });
       return () => { ac.abort(); if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
     } else {
-      chartRef.current = new Chart(canvasRef.current, { type: def.config.type, data: JSON.parse(JSON.stringify(def.config.data)), options: { ...def.config.options } });
+      const ctx = canvasRef.current.getContext("2d");
+      const clonedData = JSON.parse(JSON.stringify(def.config.data));
+      chartRef.current = new Chart(canvasRef.current, {
+        type: def.config.type,
+        data: {
+          ...clonedData,
+          datasets: styleDatasets(ctx, clonedData.datasets, def.category, def.config.type, def.config.options)
+        },
+        options: getPremiumChartOptions(def.config.type, def.category, def.config.options)
+      });
     }
   }, [def, dateRange, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length]); // ✅ Updated deps
 
@@ -580,8 +1292,9 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
     const link = document.createElement("a"); link.href = canvasRef.current.toDataURL("image/png"); link.download = def.filename; link.click();
   };
   const catColor = CAT_META[def.category]?.color || "#3b82f6";
+  const catGlow = hexToRgba(catColor, 0.16);
   return (
-    <div className="ch-card" style={{ "--cat-color": catColor, animationDelay: `${0.04 + idx * 0.045}s` }}>
+    <div className="ch-card" style={{ "--cat-color": catColor, "--cat-glow": catGlow, animationDelay: `${0.04 + idx * 0.045}s` }}>
       <div className="ch-card__accent" />
       <div className="ch-card__hd">
         <div className="ch-card__hd-left"><span className="ch-card__title">{def.title}</span>{def.id === "production-1" && selectedOpr && (<span className="ch-card__subtitle">· {selectedOpr}</span>)}</div>
@@ -598,9 +1311,14 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         </span>
         {def.status === "archived" && <span className="ch-tag ch-tag--archived">Archived</span>}
       </div>
-      {loading && (<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.75)", borderRadius: 12, zIndex: 5 }}><div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>⏳ Loading chart…</div></div>)}
+      {loading && (
+        <div className="ch-card__loader">
+          <div className="ch-card__loader-ring" />
+          <span className="ch-card__loader-text">Loading chart…</span>
+        </div>
+      )}
       {error && !loading && (<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.9)", borderRadius: 12, zIndex: 5, padding: 16 }}><div style={{ display: "flex", alignItems: "center" }}><AlertTriangle size={24} style={{ color: "#ef4444" }} /></div><div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, textAlign: "center" }}>{error}</div></div>)}
-      <div className="ch-canvas-wrap"><canvas ref={canvasRef} /></div>
+      <div className={`ch-canvas-wrap ch-canvas-wrap--${def.type}`} data-category={def.category}><canvas ref={canvasRef} /></div>
       <div className="ch-card__actions">
         <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
         <button className="ch-action-btn ch-action-btn--download" onClick={handleDownload}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7,10 12,15 17,10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>Download</button>
@@ -646,11 +1364,54 @@ const mapLabelsWithYear = (labels, fy) => {
   });
 };
 
+// ─── Modal chart type compatibility ───────────────────────────
+const MODAL_TYPE_META = {
+  bar: { label: "Bar Chart", icon: BarChart3 },
+  line: { label: "Line Chart", icon: LineChart },
+  combo: { label: "Combo Chart", icon: Layers },
+  stepped: { label: "Stepped Chart", icon: Activity },
+  pie: { label: "Pie Chart", icon: PieChart },
+  doughnut: { label: "Doughnut Chart", icon: PieChart },
+  polarArea: { label: "Polar Area Chart", icon: PieChart },
+  radar: { label: "Radar Chart", icon: BarChart3 },
+};
+
+const ALL_MODAL_TYPES = ["bar", "line", "combo", "stepped", "pie", "doughnut", "polarArea", "radar"];
+
+function resolveModalChartType(requestedType, fallbackType = "bar") {
+  if (ALL_MODAL_TYPES.includes(requestedType)) return requestedType;
+  if (ALL_MODAL_TYPES.includes(fallbackType)) return fallbackType;
+  return "bar";
+}
+
+function getModalBaseChartType(modalChartType) {
+  if (modalChartType === "combo") return "bar";
+  if (modalChartType === "stepped") return "line";
+  return modalChartType;
+}
+
 // ─── clean options / datasets helper for modal chart type toggle ───
 const cleanModalChartOptions = (options, type) => {
   const isRadial = ["pie", "doughnut", "polarArea", "radar"].includes(type);
   const clean = { ...options };
-  if (isRadial) {
+  if (type === "doughnut") {
+    clean.cutout = "58%";
+  }
+  if (type === "polarArea") {
+    clean.scales = { r: { beginAtZero: true, grid: { color: "rgba(226, 232, 240, 0.7)" }, ticks: { backdropColor: "rgba(255,255,255,0.85)", color: "#64748b", font: { size: 9 } } } };
+  }
+  if (type === "radar") {
+    clean.scales = {
+      r: {
+        beginAtZero: true,
+        grid: { color: "rgba(226, 232, 240, 0.75)", circular: true },
+        angleLines: { color: "rgba(226, 232, 240, 0.75)" },
+        pointLabels: { color: "#64748b", font: { family: "'DM Sans', sans-serif", size: 9, weight: 600 } },
+        ticks: { backdropColor: "rgba(255,255,255,0.85)", color: "#64748b", font: { size: 9 }, showLabelBackdrop: true },
+      },
+    };
+  }
+  if (isRadial && type !== "radar" && type !== "polarArea") {
     if (clean.scales) {
       delete clean.scales;
     }
@@ -666,7 +1427,10 @@ const cleanModalChartOptions = (options, type) => {
 };
 
 const cleanModalChartDatasets = (datasets, type) => {
-  return datasets.map((ds, i) => {
+  const radialSingle = ["pie", "doughnut", "polarArea"].includes(type);
+  const source = radialSingle ? [datasets[0]].filter(Boolean) : datasets;
+
+  return source.map((ds, i) => {
     const cleanDs = { ...ds };
     if (type === "stepped") {
       cleanDs.type = "line";
@@ -676,7 +1440,7 @@ const cleanModalChartDatasets = (datasets, type) => {
       cleanDs.pointRadius = 4;
       if (cleanDs.backgroundColor && !cleanDs.borderColor) {
         cleanDs.borderColor = cleanDs.backgroundColor;
-        cleanDs.backgroundColor = cleanDs.backgroundColor + "1c"; // ~11% opacity
+        cleanDs.backgroundColor = cleanDs.backgroundColor + "1c";
       }
     } else if (type === "combo") {
       if (i === 0) {
@@ -698,7 +1462,7 @@ const cleanModalChartDatasets = (datasets, type) => {
       cleanDs.pointRadius = 3;
       if (cleanDs.backgroundColor && !cleanDs.borderColor) {
         cleanDs.borderColor = cleanDs.backgroundColor;
-        cleanDs.backgroundColor = cleanDs.backgroundColor + "1c"; // ~11% opacity
+        cleanDs.backgroundColor = cleanDs.backgroundColor + "1c";
       }
     } else if (type === "bar") {
       cleanDs.type = "bar";
@@ -706,12 +1470,28 @@ const cleanModalChartDatasets = (datasets, type) => {
       delete cleanDs.tension;
       delete cleanDs.fill;
       delete cleanDs.pointRadius;
+    } else if (type === "radar") {
+      delete cleanDs.type;
+      cleanDs.tension = 0.25;
+      cleanDs.fill = true;
+      cleanDs.pointRadius = 3;
+      cleanDs.borderWidth = 2.5;
+      delete cleanDs.borderRadius;
+      delete cleanDs.stepped;
+    } else if (radialSingle) {
+      delete cleanDs.type;
+      delete cleanDs.tension;
+      delete cleanDs.fill;
+      delete cleanDs.pointRadius;
+      delete cleanDs.borderRadius;
+      delete cleanDs.stepped;
+      delete cleanDs.borderDash;
     }
     return cleanDs;
   });
 };
 
-function ModalTypeDropdown({ value, onChange }) {
+function ModalTypeDropdown({ value, onChange, allowedTypes = ALL_MODAL_TYPES }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState({});
   const ref = useRef(null);
@@ -743,18 +1523,11 @@ function ModalTypeDropdown({ value, onChange }) {
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
   }, [open]);
 
-  const options = {
-    bar: { label: "Bar Chart", icon: BarChart3 },
-    line: { label: "Line Chart", icon: LineChart },
-    combo: { label: "Combo Chart", icon: Layers },
-    stepped: { label: "Stepped Chart", icon: Activity },
-    pie: { label: "Pie Chart", icon: PieChart },
-    doughnut: { label: "Doughnut Chart", icon: PieChart },
-    polarArea: { label: "Polar Area Chart", icon: PieChart },
-    radar: { label: "Radar Chart", icon: BarChart3 }
-  };
+  const options = Object.fromEntries(
+    allowedTypes.map(key => [key, MODAL_TYPE_META[key]]).filter(([, meta]) => meta)
+  );
 
-  const current = options[value] || options.bar;
+  const current = options[value] || options[allowedTypes[0]] || MODAL_TYPE_META.bar;
   const CurrentIcon = current.icon;
 
   return (
@@ -788,7 +1561,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
   const [operators, setOperators] = useState([]);
   const [oprLoading, setOprLoading] = useState(() => def?.id === "production-1");
   const [closing, setClosing] = useState(false);
-  const [modalChartType, setModalChartType] = useState(def.config.type);
+  const [modalChartType, setModalChartType] = useState(() => resolveModalChartType(def.config.type, "bar"));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loaderText, setLoaderText] = useState("Loading chart data...");
@@ -803,7 +1576,6 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
 
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
-
 
   useEffect(() => {
     if (def.id === "production-1") {
@@ -898,95 +1670,95 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
             data.labels = mapLabelsWithYear(data.labels, data.fy);
           }
           if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+          const ctx = canvasRef.current.getContext("2d");
           
-          const baseType = modalChartType === "combo" ? "bar" : (modalChartType === "stepped" ? "line" : modalChartType);
+          const baseType = getModalBaseChartType(modalChartType);
 
-          // ... dynamically typed modal chart logic ...
           if (def.id === "sales-1") {
             const ds = [
-              { label: `PO Value (₹L) — ${data.fy || ""}`, data: data.po || [], backgroundColor: "#3b82f6" },
-              { label: `Sales Value (₹L) — ${data.fy || ""}`, data: data.sales || [], backgroundColor: "#10b981" }
+              { label: `PO Value (₹L) — ${data.fy || ""}`, data: data.po || [] },
+              { label: `Sales Value (₹L) — ${data.fy || ""}`, data: data.sales || [] }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `${data.company || ""} · ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `${data.company || ""} · ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "sales-2") {
             const ds = [
-              { label: `OTD % Actual — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#3b82f6" },
-              { label: "Target 90%", data: Array(12).fill(90), backgroundColor: "#ef4444", borderDash: [6,3] }
+              { label: `OTD % Actual — ${data.fy || ""}`, data: data.data || [], fill: true },
+              { label: "Target 90%", data: Array(data.labels?.length || 12).fill(90) }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `OTD Report ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `OTD Report ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "quality-1") {
             const ds = [{ label: `Complaints — ${data.fy || ""}`, data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Complaint Distribution ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Complaint Distribution ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "quality-2") {
-            const ds = [{ label: `Rejections — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#ec4899" }];
+            const ds = [{ label: `Rejections — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Rejection Trend ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Rejection Trend ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "quality-3") {
             const ds = [{ label: `Rework Items — ${data.fy || ""}`, data: data.data || [], backgroundColor: def.config.data.datasets[0].backgroundColor }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Rework Trend ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Rework Trend ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "quality-4") {
-            const ds = [{ label: `Actual PPM — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#f97316" }];
+            const ds = [{ label: `Actual PPM — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Internal Mac Rejection PPM ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => val.toLocaleString() + ' PPM' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Internal Mac Rejection PPM ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "production-1") {
-            const ds = [{ label: `${modalOperator || 'Operator'} Efficiency % — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#3b82f6" }];
+            const ds = [{ label: `${modalOperator || 'Operator'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Operator Efficiency: ${modalOperator || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Operator Efficiency: ${modalOperator || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "production-2") {
-            const ds = [{ label: `Overall Efficiency % — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#06b6d4" }];
+            const ds = [{ label: `Overall Efficiency % — ${data.fy || ""}`, data: data.data || [] }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Operator Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Operator Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "production-3") {
             const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
-            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: (data.labels || []).map((_, i) => palette[i % palette.length]) }];
+            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...machineIdleBarChartOptions(), plugins: { ...machineIdleBarChartOptions().plugins, title: { display: true, text: `Machine Idle Time ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...machineIdleBarChartOptions(), plugins: { ...machineIdleBarChartOptions().plugins, title: { display: true, text: `Machine Idle Time ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           } 
           else if (def.id === "production-4") {
-            const ds = [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#3b82f6" }];
+            const ds = [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "purchase-2") {
@@ -994,49 +1766,50 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
             const ds = [{ label: "Final Supplier Rating", data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "operations-1") {
             const ds = [
-              { label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], backgroundColor: "#10b981" },
-              { label: "Target 88%", data: Array(12).fill(88), backgroundColor: "#ef4444" }
+              { label: `Actual Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true },
+              { label: "Target 88%", data: Array(data.labels?.length || 12).fill(88) }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "operations-2") {
             const ds = [
-              { label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [], backgroundColor: "#10b981" },
+              { label: `Actual (₹L) — ${data.fy || ""}`, data: data.actual || [] },
               { label: "Target (₹L)", data: data.target || [], backgroundColor: "rgba(59,130,246,0.35)" }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } }, scales: { ...def.config.options.scales, y: { ticks: { font: { size: 9 }, callback: val => `₹${val}L` } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Production Value ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "purchase-1") {
             const ds = [
-              { label: "Raw Material (₹L)", data: data.raw_material || [], backgroundColor: "#3b82f6" },
-              { label: "Store Material (₹L)", data: data.store_material || [], backgroundColor: "#06b6d4" },
-              { label: "General / Service (₹L)", data: data.general_service || [], backgroundColor: "#f97316" }
+              { label: "Raw Material (₹L)", data: data.raw_material || [] },
+              { label: "Store Material (₹L)", data: data.store_material || [] },
+              { label: "General / Service (₹L)", data: data.general_service || [] }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(ds, modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Purchase Report Monthwise ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Purchase Report Monthwise ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "vendor-2") {
+            const normalized = normalizeVendorRejectionChartDatasets(data.datasets);
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
-              data: { labels: data.labels || [], datasets: cleanModalChartDatasets(normalizeVendorRejectionChartDatasets(data.datasets), modalChartType) },
-              options: cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType)
+              data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(normalized, modalChartType), def.category, baseType, def.config.options) },
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Vendor Rejections ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           setLoading(false);
@@ -1051,10 +1824,19 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
       return () => { ac.abort(); if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
     } else {
       if (chartRef.current) chartRef.current.destroy();
-      const baseType = modalChartType === "combo" ? "bar" : (modalChartType === "stepped" ? "line" : modalChartType);
-      chartRef.current = new Chart(canvasRef.current, { type: baseType, data: { ...def.config.data, datasets: cleanModalChartDatasets(def.config.data.datasets, modalChartType) }, options: cleanModalChartOptions(def.config.options, modalChartType) });
+      const baseType = getModalBaseChartType(modalChartType);
+      const cleanedDs = cleanModalChartDatasets(def.config.data.datasets, modalChartType);
+      const ctx = canvasRef.current.getContext("2d");
+      chartRef.current = new Chart(canvasRef.current, {
+        type: baseType,
+        data: {
+          ...def.config.data,
+          datasets: styleDatasets(ctx, cleanedDs, def.category, baseType, def.config.options)
+        },
+        options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions(def.config.options, modalChartType))
+      });
     }
-  }, [def, modalDateRange, modalOperator, oprLoading, operators.length, selectedMac, macLoading, machines.length, modalChartType]); // ✅ Updated deps with modalChartType
+  }, [def, modalDateRange, modalOperator, oprLoading, operators.length, selectedMac, macLoading, machines.length, modalChartType]);
 
   const handleDownload = () => {
     if (!canvasRef.current || !chartRef.current) return;
@@ -1148,7 +1930,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
           <ModalTypeDropdown value={modalChartType} onChange={setModalChartType} />
           {modalDateRange.from && (<span style={{ fontSize: "11px", color: "#94a3b8", whiteSpace: "nowrap" }}>{modalDateRange.to ? `${Math.round(Math.abs(modalDateRange.to - modalDateRange.from) / 86_400_000) + 1} days selected` : "Pick end date"}</span>)}
         </div>
-        <div className="ch-modal__canvas-wrap" style={{ backgroundColor: "#ffffff" }}>
+        <div className={`ch-modal__canvas-wrap ch-modal__canvas-wrap--${modalChartType === "combo" || modalChartType === "stepped" ? "bar" : modalChartType}`} style={{ backgroundColor: "#ffffff" }}>
           {loading && (
             <div className="ch-modal__loader-overlay">
               <div className="ch-modal__loader-glow" />
