@@ -143,9 +143,6 @@ function SectionHeader({ icon, title, badge, badgeCls }) {
     );
 }
 
-// ─────────────────────────────────────────────
-//  Main Component
-// ─────────────────────────────────────────────
 /* ── sessionStorage filter helpers ── */
 function readFilterSession(key, defaults) {
     try {
@@ -970,7 +967,7 @@ export default function PurchaseAnalysis() {
                         const typeLower = (r.po_type || "").toLowerCase();
                         const isSrv = typeLower.includes("service") || typeLower.includes("srv") || typeLower.includes("se");
                         if (!isSrv) return false;
-                        
+
                         let mKey = "";
                         try {
                             const parts = r.po_date.split("-");
@@ -982,7 +979,7 @@ export default function PurchaseAnalysis() {
                                     mKey = `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][parseInt(slashParts[1], 10) - 1]} ${slashParts[2]}`;
                                 }
                             }
-                        } catch(e){}
+                        } catch (e) { }
                         return mKey === item.month;
                     })
                     .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
@@ -1001,7 +998,7 @@ export default function PurchaseAnalysis() {
                                     mKey = `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][parseInt(slashParts[1], 10) - 1]} ${slashParts[2]}`;
                                 }
                             }
-                        } catch(e){}
+                        } catch (e) { }
                         return mKey === item.month;
                     })
                     .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
@@ -1028,33 +1025,33 @@ export default function PurchaseAnalysis() {
         const rawMap = {};
         const storeMap = {};
         const serviceMap = {};
-        
+
         filteredPoRows.forEach(r => {
             const val = Number(r.value || 0);
             const name = r.material || "Unknown Product";
             const code = r.material_code || "";
             const typeLower = (r.po_type || "").toLowerCase();
-            
+
             let targetMap = storeMap;
             if (typeLower.includes("raw") || typeLower.includes("rm")) {
                 targetMap = rawMap;
             } else if (typeLower.includes("service") || typeLower.includes("srv") || typeLower.includes("se")) {
                 targetMap = serviceMap;
             }
-            
+
             if (!targetMap[name]) {
                 targetMap[name] = { name, code, totalValue: 0, qty: 0 };
             }
             targetMap[name].totalValue += val;
             targetMap[name].qty += Number(r.qty || 0);
         });
-        
+
         const getSortedTop5 = (map) => {
             return Object.values(map)
                 .sort((a, b) => b.totalValue - a.totalValue)
                 .slice(0, 5);
         };
-        
+
         return {
             raw: getSortedTop5(rawMap),
             store: getSortedTop5(storeMap),
@@ -2473,7 +2470,7 @@ export default function PurchaseAnalysis() {
 
             {/* ── Short Close & Price Trend (Dual Column Row) ── */}
             <div className="pa2-two-col pa2-animate pa2-delay-4" style={{ marginTop: "1.4rem" }}>
-                
+
                 {/* Short Close Details */}
                 <div className="pa2-card pa2-card-premium">
                     <SectionHeader
