@@ -20,7 +20,9 @@ from .views_dashboard1 import (
     dashboard1_sales_kpi, dashboard1_purchase_kpi, dashboard1_production_kpi, dashboard1_quality_value_kpi, dashboard1_sales_projections, dashboard1_purchase_projections, dashboard1_oa_efficiency_weekly, dashboard1_quality_rejections_weekly,
 )
 from .views_plantperformance import (
-    plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories, plant_performance_customer_po_vs_sales, plant_performance_grn_value, plant_performance_sales_analysis, plant_performance_purchase_value, plant_performance_efficiency, plant_performance_oee, plant_performance_rejection, plant_performance_rework, plant_performance_customer_complaint, plant_performance_capa, plant_performance_operator_efficiency, plant_performance_daily_production, plant_performance_production_value, plant_performance_machine_efficiency,
+    plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories, plant_performance_customer_po_vs_sales, plant_performance_grn_value, plant_performance_fg_value, plant_performance_sales_analysis, plant_performance_purchase_value, plant_performance_efficiency, plant_performance_oee, plant_performance_rejection, plant_performance_rework, plant_performance_customer_complaint, plant_performance_capa, plant_performance_operator_efficiency, plant_performance_daily_production, plant_performance_production_value, plant_performance_machine_efficiency, plant_performance_supplier_rating, plant_performance_vendor_rating, plant_performance_target_vs_actual,
+    supplier_rating_kpi_view, supplier_rating_chart_view, supplier_rating_registry_view, supplier_rating_actions_view,
+    plant_performance_store_stock_value
 )
 from .views_eapproval import (
     eapproval_list, eapproval_stats, eapproval_detail, eapproval_approve, eapproval_modify,
@@ -132,6 +134,7 @@ urlpatterns = [
     path('plant-performance/top-defect-categories/', plant_performance_top_defect_categories, name='plant_performance_top_defect_categories'),
     path('plant-performance/customer-po-vs-sales/', plant_performance_customer_po_vs_sales, name='plant_performance_customer_po_vs_sales'),
     path('plant-performance/grn-value/', plant_performance_grn_value, name='plant_performance_grn_value'),
+    path('plant-performance/fg-value/', plant_performance_fg_value, name='plant_performance_fg_value'),
     path('plant-performance/sales-analysis/', plant_performance_sales_analysis, name='plant_performance_sales_analysis'),
     path('plant-performance/purchase-value/', plant_performance_purchase_value, name='plant_performance_purchase_value'),
     path('plant-performance/efficiency/', plant_performance_efficiency, name='plant_performance_efficiency'),
@@ -144,6 +147,14 @@ urlpatterns = [
     path('plant-performance/daily-production/', plant_performance_daily_production, name='plant_performance_daily_production'),
     path('plant-performance/production-value/', plant_performance_production_value, name='plant_performance_production_value'),
     path('plant-performance/machine-efficiency/', plant_performance_machine_efficiency, name='plant_performance_machine_efficiency'),
+    path('plant-performance/supplier-rating/', plant_performance_supplier_rating, name='plant_performance_supplier_rating'),
+    path('plant-performance/vendor-rating/', plant_performance_vendor_rating, name='plant_performance_vendor_rating'),
+    path('plant-performance/target-vs-actual/', plant_performance_target_vs_actual, name='plant_performance_target_vs_actual'),
+    path('plant-performance/store-stock/', plant_performance_store_stock_value, name='plant_performance_store_stock_value'),
+    path('plant-performance/supplier-rating/kpi/', supplier_rating_kpi_view, name='supplier_rating_kpi_view'),
+    path('plant-performance/supplier-rating/chart/', supplier_rating_chart_view, name='supplier_rating_chart_view'),
+    path('plant-performance/supplier-rating/registry/', supplier_rating_registry_view, name='supplier_rating_registry_view'),
+    path('plant-performance/supplier-rating/actions/', supplier_rating_actions_view, name='supplier_rating_actions_view'),
 
     # ── Dashboard1 ────────────────────────────────────────────────────
     path('dashboard1/sales-kpi/', dashboard1_sales_kpi, name='dashboard1_sales_kpi'),

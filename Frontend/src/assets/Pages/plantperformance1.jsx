@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import "./plantperformance1.css";
 import PlantPerformance1DatePicker from "./plantperformance1DatePicker";
+import PlantPerformance1ProductionDataView from "./plantperformance1ProductionDataView";
 import {
   Scale,
   ClipboardCheck,
@@ -195,6 +196,31 @@ function buildMachEffUrl(from, to, machine, effLimit, fullFy = 0) {
   const el = (effLimit || "").trim();
   if (el) url += `&effLimit=${encodeURIComponent(el)}`;
   return url;
+}
+
+function buildSupplierRatingUrl(from, to, filters) {
+  let url = buildUrl("/api/plant-performance/supplier-rating/", from, to);
+  if (filters?.supplier && filters.supplier.length > 0) {
+    url += `&supplier=${encodeURIComponent(filters.supplier.join(","))}`;
+  }
+  return url;
+}
+
+function buildVendorRatingUrl(from, to, filters) {
+  let url = buildUrl("/api/plant-performance/vendor-rating/", from, to);
+  if (filters?.vendor && filters.vendor.length > 0) {
+    url += `&name=${encodeURIComponent(filters.vendor.join(","))}`;
+  }
+  return url;
+}
+
+function buildFgValueUrl() {
+  return "/api/plant-performance/fg-value/";
+}
+
+function buildTargetVsActualUrl(from, to) {
+  const fy = currentFinancialYearRange();
+  return buildUrl("/api/plant-performance/target-vs-actual/", from || fy.from, to || fy.to);
 }
 
 function buildDailyProdUrl(from, to, machineNo) {
@@ -4482,124 +4508,124 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                         </td>
                       );
                     }
-                    const colLower = columns[ci].toLowerCase();
-                    const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
-                    const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
-                    const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
-                    const isAgeDays = colLower.includes("age days");
-                    const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
-                    const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
-                    const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
+                      const colLower = columns[ci].toLowerCase();
+                      const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
+                      const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
+                      const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
+                      const isAgeDays = colLower.includes("age days");
+                      const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
+                      const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
+                      const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
 
-                    if (isAgeDays) {
-                      const pctVal = parseFloat(cell) || 0;
-                      let badgeBg = "rgba(16, 185, 129, 0.1)";
-                      let badgeColor = "#10b981";
-                      let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
+                      if (isAgeDays) {
+                        const pctVal = parseFloat(cell) || 0;
+                        let badgeBg = "rgba(16, 185, 129, 0.1)";
+                        let badgeColor = "#10b981";
+                        let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
 
-                      if (pctVal <= 15) {
-                        badgeBg = "rgba(16, 185, 129, 0.08)";
-                        badgeColor = "#10b981";
-                        badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
-                      } else if (pctVal <= 40) {
-                        badgeBg = "rgba(245, 158, 11, 0.08)";
-                        badgeColor = "#d97706";
-                        badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
-                      } else {
-                        badgeBg = "rgba(239, 68, 68, 0.08)";
-                        badgeColor = "#ef4444";
-                        badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
+                        if (pctVal <= 15) {
+                          badgeBg = "rgba(16, 185, 129, 0.08)";
+                          badgeColor = "#10b981";
+                          badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
+                        } else if (pctVal <= 40) {
+                          badgeBg = "rgba(245, 158, 11, 0.08)";
+                          badgeColor = "#d97706";
+                          badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
+                        } else {
+                          badgeBg = "rgba(239, 68, 68, 0.08)";
+                          badgeColor = "#ef4444";
+                          badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
+                        }
+
+                        const cellStr = String(cell);
+                        const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
+
+                        return (
+                          <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
+                            <span style={{
+                              display: "inline-block",
+                              background: badgeBg,
+                              color: badgeColor,
+                              border: badgeBorder,
+                              padding: "4px 10px",
+                              borderRadius: "12px",
+                              fontSize: "10.5px",
+                              fontWeight: 750,
+                              textAlign: "center",
+                              minWidth: "68px",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
+                              transition: "all 0.2s ease"
+                            }}>
+                              {displayVal}
+                            </span>
+                          </td>
+                        );
                       }
 
-                      const cellStr = String(cell);
-                      const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
+                      if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
+                        const pctVal = parseFloat(cell) || 0;
+                        let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                        let barWidthPct = 0;
 
-                      return (
-                        <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
-                          <span style={{
-                            display: "inline-block",
-                            background: badgeBg,
-                            color: badgeColor,
-                            border: badgeBorder,
-                            padding: "4px 10px",
-                            borderRadius: "12px",
-                            fontSize: "10.5px",
-                            fontWeight: 750,
-                            textAlign: "center",
-                            minWidth: "68px",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
-                            transition: "all 0.2s ease"
-                          }}>
-                            {displayVal}
-                          </span>
-                        </td>
-                      );
-                    }
-
-                    if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
-                      const pctVal = parseFloat(cell) || 0;
-                      let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
-                      let barWidthPct = 0;
-
-                      if (isRejectionPct) {
-                        barWidthPct = Math.min(100, pctVal * 3.33);
-                        if (pctVal > 12) {
-                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
-                        } else if (pctVal > 5) {
-                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
+                        if (isRejectionPct) {
+                          barWidthPct = Math.min(100, pctVal * 3.33);
+                          if (pctVal > 12) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                          } else if (pctVal > 5) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
+                          }
+                        } else if (isReworkPct) {
+                          barWidthPct = Math.min(100, pctVal * 5.0);
+                          if (pctVal > 8) {
+                            barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
+                          } else if (pctVal > 1.5) {
+                            barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
+                          } else {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
+                          }
+                        } else if (isOtdPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 95) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
+                          } else if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
+                          }
+                        } else if (isLossPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal > 25) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
+                          } else if (pctVal > 15) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
+                          }
+                        } else if (isOperatorPct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 75) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                          }
+                        } else if (isMachinePct) {
+                          barWidthPct = Math.min(100, pctVal);
+                          if (pctVal >= 90) {
+                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                          } else if (pctVal >= 85) {
+                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                          } else if (pctVal >= 75) {
+                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                          } else {
+                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                          }
                         }
-                      } else if (isReworkPct) {
-                        barWidthPct = Math.min(100, pctVal * 5.0);
-                        if (pctVal > 8) {
-                          barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
-                        } else if (pctVal > 1.5) {
-                          barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
-                        } else {
-                          barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
-                        }
-                      } else if (isOtdPct) {
-                        barWidthPct = Math.min(100, pctVal);
-                        if (pctVal >= 95) {
-                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
-                        } else if (pctVal >= 90) {
-                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                        } else if (pctVal >= 85) {
-                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
-                        } else {
-                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
-                        }
-                      } else if (isLossPct) {
-                        barWidthPct = Math.min(100, pctVal);
-                        if (pctVal > 25) {
-                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
-                        } else if (pctVal > 15) {
-                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
-                        } else {
-                          barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
-                        }
-                      } else if (isOperatorPct) {
-                        barWidthPct = Math.min(100, pctVal);
-                        if (pctVal >= 90) {
-                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                        } else if (pctVal >= 85) {
-                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                        } else if (pctVal >= 75) {
-                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                        } else {
-                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                        }
-                      } else if (isMachinePct) {
-                        barWidthPct = Math.min(100, pctVal);
-                        if (pctVal >= 90) {
-                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                        } else if (pctVal >= 85) {
-                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                        } else if (pctVal >= 75) {
-                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                        } else {
-                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                        }
-                      }
 
                       return (
                         <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
@@ -6066,21 +6092,21 @@ function PurchaseValueBottomTable({ data, filters }) {
                 <tr><td colSpan={columns2.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
                 sortedSummaryRows.map((row, ri) => (
-                  <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td style={pvWrapCell}>{ri + 1}</td>
-                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
-                    <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
-                      <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                        {row.poNo}
-                      </span>
-                    </td>
-                    <td style={pvNoWrapCell}>{row.poDate}</td>
-                    <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
-                    <td style={pvWrapCell}>{row.name}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
-                  </tr>
+                <tr key={ri} className="pp1-cc-tbl__tr">
+                  <td style={pvWrapCell}>{ri + 1}</td>
+                  <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
+                  <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
+                    <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      {row.poNo}
+                    </span>
+                  </td>
+                  <td style={pvNoWrapCell}>{row.poDate}</td>
+                  <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
+                  <td style={pvWrapCell}>{row.name}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
+                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
+                </tr>
                 ))
               )}
             </tbody>
@@ -9907,9 +9933,9 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-        const p = d.split("-");
-        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-      })
+          const p = d.split("-");
+          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+        })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -10797,9 +10823,9 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-        const p = d.split("-");
-        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-      })
+          const p = d.split("-");
+          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+        })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -13238,9 +13264,21 @@ function ReworkReportBottomTable({ data, filters, xAxisGroup }) {
   return <PremiumDashboardBottomTable title={title} columns={finalColumns} rows={finalRows} />;
 }
 
-function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+function buildStoreStockUrl(from, to, filters) {
+  let url = buildUrl("/api/plant-performance/store-stock/", from, to);
+  if (filters?.category && filters.category.length > 0) {
+    url += `&category=${encodeURIComponent(filters.category.join(","))}`;
+  }
+  if (filters?.itemCode) {
+    url += `&itemCode=${encodeURIComponent(filters.itemCode)}`;
+  }
+  return url;
+}
+
+function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onClose, targetConfig, onStockData }) {
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [itemCodeOpen, setItemCodeOpen] = React.useState(false);
+  const [stockLive, setStockLive] = React.useState(null);
 
   const categoryRef = React.useRef(null);
   const itemCodeRef = React.useRef(null);
@@ -13260,8 +13298,16 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     };
   }, []);
 
-  const pickerFrom = React.useMemo(() => filters?.fromDate ? new Date(filters.fromDate) : null, [filters?.fromDate]);
-  const pickerTo = React.useMemo(() => filters?.toDate ? new Date(filters.toDate) : null, [filters?.toDate]);
+  const pickerFrom = React.useMemo(() => {
+    if (filters?.fromDate) return new Date(filters.fromDate);
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, [filters?.fromDate]);
+
+  const pickerTo = React.useMemo(() => {
+    if (filters?.toDate) return new Date(filters.toDate);
+    return new Date();
+  }, [filters?.toDate]);
 
   const handlePickerChange = ({ from, to }) => {
     const formatDate = (d) => {
@@ -13282,16 +13328,23 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
+  const stockSource = stockLive || data?.storeStockValue;
+
+  const groupsList = React.useMemo(() => {
+    return Array.isArray(stockSource?.filterOptions?.groups) ? stockSource.filterOptions.groups : [];
+  }, [stockSource?.filterOptions?.groups]);
+
+  const itemCodesList = React.useMemo(() => {
+    return Array.isArray(stockSource?.filterOptions?.itemCodes) ? stockSource.filterOptions.itemCodes : [];
+  }, [stockSource?.filterOptions?.itemCodes]);
+
   const toggleGroup = (g) => {
     const current = filters.category || [];
     const next = current.includes(g) ? current.filter(x => x !== g) : [...current, g];
     onFilterChange(prev => ({ ...prev, category: next }));
   };
 
-  const groupsList = ["Raw Materials", "Consumables", "Finished Goods", "Semi-Finished"];
-  const itemCodesList = ["P-1001", "P-1002", "P-1003", "P-1004", "P-1005", "P-1006", "P-1007", "P-1008", "P-1009", "P-1010"];
-
-  const isAllSelected = (filters.category || []).length === groupsList.length;
+  const isAllSelected = (filters.category || []).length === groupsList.length && groupsList.length > 0;
 
   const toggleSelectAll = () => {
     onFilterChange(prev => ({
@@ -13310,33 +13363,35 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     });
   };
 
-  const chartData = React.useMemo(() => {
-    let offset = 0;
-    if (filters?.category && filters.category.length > 0) {
-      const totalHash = filters.category.reduce((acc, cat) => {
-        return acc + cat.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      }, 0);
-      offset += (totalHash % 6) - 3;
-    }
-    if (filters?.itemCode) {
-      offset += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 4 : -4;
-    }
-    if (filters?.status) {
-      offset += filters.status === "In Stock" ? 5 : filters.status === "Low Stock" ? -5 : -10;
-    }
-    if (filters?.fromDate) offset += 1.5;
-    if (filters?.toDate) offset -= 1.5;
+  React.useEffect(() => {
+    if (!filters.fromDate || !filters.toDate) return;
+    const ctrl = new AbortController();
+    fetch(buildStoreStockUrl(filters.fromDate, filters.toDate, filters), {
+      signal: ctrl.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json && !json.error) {
+          setStockLive(json);
+          onStockData?.(json);
+        }
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [filters.fromDate, filters.toDate, filters.category, filters.itemCode, onStockData]);
 
-    const baseMonths = ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25"];
-    const baseValues = [45.0, 48.2, 41.0, 43.5, 42.5];
+  const chartLabels = React.useMemo(() => {
+    return Array.isArray(stockSource?.chart?.labels) ? stockSource.chart.labels : [];
+  }, [stockSource?.chart?.labels]);
 
-    const values = baseValues.map(v => Math.max(5.0, Math.min(100.0, v + offset)));
+  const chartValues = React.useMemo(() => {
+    return Array.isArray(stockSource?.chart?.values) ? stockSource.chart.values : [];
+  }, [stockSource?.chart?.values]);
 
-    return {
-      labels: baseMonths,
-      values: values
-    };
-  }, [filters]);
+  const totalValLakhs = stockSource?.kpi?.totalStockValueLakhs ?? 0;
+  const kpis = React.useMemo(() => [
+    { label: "Total Store Stock Value", value: `₹${totalValLakhs.toFixed(2)}L`, icon: Coins, color: "#059669" }
+  ], [totalValLakhs]);
 
   const setupChart = React.useCallback((canvas) => {
     const stockLimit = targetConfig?.store_stock_value?.maxStockValueL ?? 50.0;
@@ -13344,12 +13399,12 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
     return new Chart(canvas, {
       type: "bar",
       data: {
-        labels: chartData.labels,
+        labels: chartLabels,
         datasets: [
           {
             type: "bar",
             label: "Stock Value (₹ Lakhs)",
-            data: chartData.values,
+            data: chartValues,
             backgroundColor: "rgba(5, 150, 105, 0.75)",
             borderColor: "#059669",
             borderWidth: 1.5,
@@ -13358,7 +13413,7 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
           {
             type: "line",
             label: "Max Stock Limit (₹ Lakhs)",
-            data: (chartData.labels || []).map(() => stockLimit),
+            data: (chartLabels || []).map(() => stockLimit),
             borderColor: "rgba(239, 68, 68, 0.85)",
             borderDash: [5, 5],
             borderWidth: 2,
@@ -13379,14 +13434,14 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
           legend: {
             position: "bottom",
             labels: {
-              font: { size: 9, family: "'Inter', sans-serif", weight: 600 },
+              font: { size: 9, family: "'Outfit', 'Inter', sans-serif", weight: 600 },
               boxWidth: 10
             }
           },
           tooltip: {
             backgroundColor: "rgba(15, 23, 42, 0.95)",
-            titleFont: { family: "'Inter', sans-serif", size: 11, weight: "bold" },
-            bodyFont: { family: "'Inter', sans-serif", size: 11 },
+            titleFont: { family: "'Outfit', 'Inter', sans-serif", size: 11, weight: "bold" },
+            bodyFont: { family: "'Outfit', 'Inter', sans-serif", size: 11 },
             padding: 8,
             cornerRadius: 6,
             callbacks: {
@@ -13401,7 +13456,7 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
+            ticks: { font: { size: 10, family: "'Outfit', 'Inter', sans-serif" } }
           },
           y: {
             type: "linear",
@@ -13410,10 +13465,10 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
               display: true,
               text: "Stock Value (₹ Lakhs)",
               color: "#059669",
-              font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
+              font: { family: "'Outfit', 'Inter', sans-serif", size: 10, weight: 700 }
             },
             ticks: {
-              font: { size: 10, family: "'Inter', sans-serif" },
+              font: { size: 10, family: "'Outfit', 'Inter', sans-serif" },
               callback: (v) => `₹${v}L`
             },
             grid: { color: "rgba(0,0,0,0.05)" }
@@ -13421,17 +13476,20 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
         }
       }
     });
-  }, [chartData, targetConfig]);
+  }, [chartLabels, chartValues, targetConfig]);
+
+  const rebuildToken = `store-stock-chart|${targetConfig?.store_stock_value?.maxStockValueL ?? 50.0}|${JSON.stringify(chartValues)}|${JSON.stringify(chartLabels)}`;
 
   return (
     <PremiumDashboardView
       title="Store Stock Value"
       icon={Coins}
       color="#059669"
-      kpis={null}
+      kpis={kpis}
       setupChart={setupChart}
       rangeHint="Month Wise Stock Value"
       onClose={onClose}
+      rebuildToken={rebuildToken}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -13517,7 +13575,7 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
               <ChevronDown size={12} className="pp1-custom-select-caret" />
             </button>
             {itemCodeOpen && (
-              <div className="pp1-custom-select-options">
+              <div className="pp1-custom-select-options" style={{ maxHeight: "250px", overflowY: "auto" }}>
                 <div
                   className={`pp1-custom-select-option ${!filters?.itemCode ? "selected" : ""}`}
                   onClick={() => { handleInputChange("itemCode", ""); setItemCodeOpen(false); }}
@@ -13552,73 +13610,32 @@ function StoreStockValueReportDashboardView({ filters, onFilterChange, onClose, 
   );
 }
 
-function StoreStockValueReportBottomTable({ filters }) {
-  const offset = React.useMemo(() => {
-    let off = 0;
-    if (filters?.category && filters.category.length > 0) {
-      const totalHash = filters.category.reduce((acc, cat) => {
-        return acc + cat.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      }, 0);
-      off += (totalHash % 6) - 3;
-    }
-    if (filters?.itemCode) {
-      off += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 1 : -1;
-    }
-    if (filters?.fromDate) off += 1;
-    if (filters?.toDate) off -= 1;
-    return off;
-  }, [filters]);
-
-  const allRows = [
-    { month: "Apr-25", partNum: "P-1001", desc: "CNC Turning Tool", group: "Consumables", qty: "250", price: "₹1,200" },
-    { month: "May-25", partNum: "P-1002", desc: "Aluminium Alloy Rod", group: "Raw Materials", qty: "1,200", price: "₹450" },
-    { month: "Jun-25", partNum: "P-1003", desc: "Stainless Steel Shaft", group: "Raw Materials", qty: "80", price: "₹2,500" },
-    { month: "Jul-25", partNum: "P-1004", desc: "Finished Gear Box v2", group: "Finished Goods", qty: "15", price: "₹25,000" },
-    { month: "Aug-25", partNum: "P-1005", desc: "Hydraulic Cylinder", group: "Semi-Finished", qty: "45", price: "₹8,500" },
-    { month: "Apr-25", partNum: "P-1006", desc: "Lubricant Oil 20L", group: "Consumables", qty: "5", price: "₹3,200" },
-    { month: "May-25", partNum: "P-1007", desc: "Coolant Liquid 50L", group: "Consumables", qty: "12", price: "₹4,800" },
-    { month: "Jun-25", partNum: "P-1008", desc: "M12 Bolt & Nut Set", group: "Consumables", qty: "5,000", price: "₹12" },
-    { month: "Jul-25", partNum: "P-1009", desc: "Casting Base Plate", group: "Raw Materials", qty: "120", price: "₹4,200" },
-    { month: "Aug-25", partNum: "P-1010", desc: "Sub-Assembly Block C", group: "Semi-Finished", qty: "30", price: "₹15,000" }
-  ];
+function StoreStockValueReportBottomTable({ data, filters }) {
+  const sourceRows = React.useMemo(() => {
+    return Array.isArray(data?.storeStockValue?.rows) ? data.storeStockValue.rows : [];
+  }, [data?.storeStockValue?.rows]);
 
   const rows = React.useMemo(() => {
-    let list = allRows;
+    let list = sourceRows;
     if (filters?.category && filters.category.length > 0) {
       list = list.filter(r => filters.category.includes(r.group));
     }
     if (filters?.itemCode) {
-      list = list.filter(r => r.partNum === filters.itemCode);
+      list = list.filter(r => r.partNo === filters.itemCode);
     }
 
-    const grouped = {};
-    list.forEach(row => {
-      const baseQty = parseInt(row.qty.replace(/,/g, ""), 10);
-      const unitPriceVal = parseInt(row.price.replace(/[₹,]/g, ""), 10);
-
-      const newQty = Math.max(0, baseQty + Math.round(offset * (baseQty > 100 ? 20 : 2)));
-      const newValue = newQty * unitPriceVal;
-
-      const key = `${row.month} | ${row.group}`;
-      if (!grouped[key]) {
-        grouped[key] = {
-          month: row.month,
-          group: row.group,
-          totalValue: 0
-        };
-      }
-      grouped[key].totalValue += newValue;
-    });
-
-    return Object.values(grouped).map((g, idx) => [
+    return list.map((r, idx) => [
       String(idx + 1),
-      g.month,
-      g.group,
-      `₹${g.totalValue.toLocaleString()}`
+      r.group || "—",
+      r.partNo || "—",
+      r.description || "—",
+      fmtNum(r.qty),
+      r.rate != null ? `₹${Number(r.rate).toLocaleString("en-IN")}` : "—",
+      r.stockValue != null ? `₹${Number(r.stockValue).toLocaleString("en-IN")}` : "—"
     ]);
-  }, [filters, offset]);
+  }, [sourceRows, filters?.category, filters?.itemCode]);
 
-  const columns = ["Sl.No", "Month", "Group", "Total Value"];
+  const columns = ["Sl.No", "Group", "Part No", "Description", "Total Qty", "Rate", "Stock Value"];
 
   return <PremiumDashboardBottomTable title="Store Stock Registry" columns={columns} rows={rows} />;
 }
@@ -13664,12 +13681,43 @@ function OtdReportBottomTable({ data, filters }) {
 }
 
 /* ── Supplier Rating View (UI Alone) ────────────────────────────────── */
-function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onClose, targetConfig, onSrData }) {
+  const [srLive, setSrLive] = useState(null);
+  const srSource = srLive || data?.supplierRating;
+
+  useEffect(() => {
+    if (!filters.fromDate || !filters.toDate) return;
+    const ctrl = new AbortController();
+    fetch(buildSupplierRatingUrl(filters.fromDate, filters.toDate, filters), {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.error) {
+          setSrLive(json);
+          onSrData?.(json);
+        }
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [filters.fromDate, filters.toDate, filters.supplier, onSrData]);
+
+  const chartData = Array.isArray(srSource?.data) ? srSource.data : [];
+  const chartLabels = Array.isArray(srSource?.labels) ? srSource.labels : [];
+  const avgRating = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
+  
+  const kpiData = srSource?.kpis || {};
+  const avgRatingVal = kpiData.avg_rating != null ? `${kpiData.avg_rating}%` : `${avgRating}%`;
+  const onTimeSupplyVal = kpiData.on_time_supply != null ? `${kpiData.on_time_supply}%` : "94.2%";
+  const qualityComplianceVal = kpiData.quality_compliance != null ? `${kpiData.quality_compliance}%` : "98.1%";
+  const activeSuppliersVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
+
   const kpis = [
-    { label: "Avg Rating", value: "92.5%", icon: Star, color: "#eab308" },
-    { label: "On-Time Supply", value: "94.2%", icon: Truck, color: "#3b82f6" },
-    { label: "Quality Compliance", value: "98.1%", icon: CheckCircle2, color: "#10b981" },
-    { label: "Active Suppliers", value: "12", icon: Users, color: "#8b5cf6" }
+    { label: "Avg Rating", value: avgRatingVal, icon: Star, color: "#eab308" },
+    { label: "On-Time Supply", value: onTimeSupplyVal, icon: Truck, color: "#3b82f6" },
+    { label: "Quality Compliance", value: qualityComplianceVal, icon: CheckCircle2, color: "#10b981" },
+    { label: "Active Suppliers", value: activeSuppliersVal, icon: Users, color: "#8b5cf6" }
   ];
 
   const [suppOpen, setSuppOpen] = useState(false);
@@ -13679,7 +13727,9 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
   const chartTypeRef = useRef(null);
   const [suppSearch, setSuppSearch] = useState("");
 
-  const allSuppliers = ["Anims Parts Ltd", "Virrudh Tech", "Star Logistics", "Srinivasa Castings", "Royal Packaging"];
+  const allSuppliers = Array.isArray(srSource?.filterOptions?.suppliers)
+    ? srSource.filterOptions.suppliers 
+    : [];
 
   const filteredSuppliers = useMemo(() => {
     const q = suppSearch.trim().toLowerCase();
@@ -13763,10 +13813,9 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
       const targetVal = targetConfig?.supplier_rating?.minRating ?? 90;
       const ctx = canvas.getContext("2d");
 
-      const baseData = [88.5, 89.2, 91.0, 90.5, 93.1, 92.5];
       let mainDataset = {
         label: "Supplier Performance Score (%)",
-        data: baseData,
+        data: chartData,
         order: 2
       };
 
@@ -13777,7 +13826,7 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
         datasets.push({
           type: chartType === "radar" ? "radar" : "line",
           label: `Target ${targetVal}%`,
-          data: Array(6).fill(targetVal),
+          data: Array(Math.max(1, chartLabels.length)).fill(targetVal),
           borderColor: "#ef4444",
           borderDash: [6, 3],
           backgroundColor: "transparent",
@@ -13896,7 +13945,7 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
       return new Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
-          labels: ["Jan-26", "Feb-26", "Mar-26", "Apr-26", "May-26", "Jun-26"],
+          labels: chartLabels,
           datasets: datasets
         },
         options: {
@@ -13948,19 +13997,20 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
                 color: "#64748b",
                 backdropColor: "transparent"
               },
-              suggestedMin: chartType === "polarArea" ? 0 : 50,
+              suggestedMin: 0,
               suggestedMax: 100
             }
           } : {
             x: {
               grid: { display: false, drawBorder: false },
               ticks: {
+                display: false,
                 font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
                 color: "#64748b"
               }
             },
             y: {
-              min: 50,
+              min: 0,
               max: 100,
               grid: {
                 color: "rgba(226, 232, 240, 0.6)",
@@ -13977,10 +14027,10 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
         }
       });
     },
-    [targetConfig?.supplier_rating?.minRating, chartType]
+    [targetConfig?.supplier_rating?.minRating, chartType, chartData, chartLabels]
   );
 
-  const rebuildToken = `supplier-rating-chart|${targetConfig?.supplier_rating?.minRating ?? 90}|${chartType}`;
+  const rebuildToken = `supplier-rating-chart|${targetConfig?.supplier_rating?.minRating ?? 90}|${chartType}|${JSON.stringify(chartData)}|${JSON.stringify(chartLabels)}`;
 
   return (
     <PremiumDashboardView
@@ -14190,7 +14240,7 @@ function SupplierRatingReportDashboardView({ filters, onFilterChange, onClose, t
   );
 }
 
-function SupplierRatingBottomTable({ filters }) {
+function SupplierRatingBottomTable({ data, filters }) {
   const columns = [
     "Sl.No",
     "Supplier Name",
@@ -14202,13 +14252,22 @@ function SupplierRatingBottomTable({ filters }) {
     "Status"
   ];
 
-  const allRows = [
-    { supplier: "Anims Parts Ltd", partNo: "BRK-PAD-M1", date: "2026-06-10", cols: ["Anims Parts Ltd", "Raw Materials", "150", "95%", "98%", "96.5%", "Excellent"] },
-    { supplier: "Virrudh Tech", partNo: "ROT-DSC-X4", date: "2026-06-12", cols: ["Virrudh Tech", "Machinery", "40", "92%", "97%", "94.5%", "Good"] },
-    { supplier: "Star Logistics", partNo: "GBX-HNG-S2", date: "2026-06-14", cols: ["Star Logistics", "Services", "85", "88%", "99%", "93.5%", "Good"] },
-    { supplier: "Srinivasa Castings", partNo: "ENG-MNT-H1", date: "2026-06-15", cols: ["Srinivasa Castings", "Raw Materials", "120", "82%", "94%", "88.0%", "Average"] },
-    { supplier: "Royal Packaging", partNo: "TRK-AXL-L9", date: "2026-06-18", cols: ["Royal Packaging", "Packaging", "65", "91%", "98%", "94.5%", "Good"] }
-  ];
+  const allRows = Array.isArray(data?.supplierRating?.rows)
+    ? data.supplierRating.rows.map(r => ({
+        supplier: r.supplierName,
+        partNo: "",
+        date: "",
+        cols: [
+          r.supplierName,
+          r.category || "—",
+          r.totalOrders != null ? String(r.totalOrders) : "—",
+          r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
+          r.qualityPass != null ? `${r.qualityPass}%` : "—",
+          r.overallRating != null ? `${r.overallRating}%` : "—",
+          r.status || "—"
+        ]
+      }))
+    : [];
 
   const rows = React.useMemo(() => {
     let list = allRows;
@@ -14218,28 +14277,53 @@ function SupplierRatingBottomTable({ filters }) {
     if (filters?.partNo) {
       list = list.filter(r => r.partNo.toLowerCase().includes(filters.partNo.toLowerCase()));
     }
-    if (filters?.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
     return list.map((r, idx) => [
       String(idx + 1),
       ...r.cols
     ]);
-  }, [filters]);
+  }, [allRows, filters?.supplier, filters?.partNo]);
 
   return <PremiumDashboardBottomTable title="Supplier Rating Registry" columns={columns} rows={rows} />;
 }
 
-/* ── Vendor Rating View (UI Alone) ────────────────────────────────── */
-function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+/* ── Vendor Rating View (Real Data Integration) ───────────────────── */
+function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClose, targetConfig, onVrData }) {
+  const [vrLive, setVrLive] = useState(null);
+  const vrSource = vrLive || data?.vendorRating;
+
+  useEffect(() => {
+    if (!filters.fromDate || !filters.toDate) return;
+    const ctrl = new AbortController();
+    fetch(buildVendorRatingUrl(filters.fromDate, filters.toDate, filters), {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.error) {
+          setVrLive(json);
+          onVrData?.(json);
+        }
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [filters.fromDate, filters.toDate, filters.vendor, onVrData]);
+
+  const chartData   = Array.isArray(vrSource?.data)   ? vrSource.data   : [];
+  const chartLabels = Array.isArray(vrSource?.labels) ? vrSource.labels : [];
+  const avgRating   = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
+
+  const kpiData = vrSource?.kpis || {};
+  const avgRatingVal         = kpiData.avg_rating         != null ? `${kpiData.avg_rating}%`         : `${avgRating}%`;
+  const onTimeSupplyVal      = kpiData.on_time_supply     != null ? `${kpiData.on_time_supply}%`     : "—";
+  const qualityComplianceVal = kpiData.quality_compliance != null ? `${kpiData.quality_compliance}%` : "—";
+  const activeVendorsVal     = kpiData.active_suppliers   != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
+
   const kpis = [
-    { label: "Avg Rating", value: "94.0%", icon: Award, color: "#3b82f6" },
-    { label: "On-Time Supply", value: "95.1%", icon: Truck, color: "#10b981" },
-    { label: "Quality Compliance", value: "97.8%", icon: CheckCircle2, color: "#8b5cf6" },
-    { label: "Active Vendors", value: "8", icon: Users, color: "#eab308" }
+    { label: "Avg Rating",          value: avgRatingVal,         icon: Award,        color: "#3b82f6" },
+    { label: "On-Time Supply",       value: onTimeSupplyVal,      icon: Truck,        color: "#10b981" },
+    { label: "Quality Compliance",   value: qualityComplianceVal, icon: CheckCircle2, color: "#8b5cf6" },
+    { label: "Active Vendors",       value: activeVendorsVal,     icon: Users,        color: "#eab308" }
   ];
 
   const [vendOpen, setVendOpen] = useState(false);
@@ -14249,13 +14333,15 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
   const chartTypeRef = useRef(null);
   const [vendSearch, setVendSearch] = useState("");
 
-  const allVendors = ["Super Tech Industries", "Precision Castings", "Dynamic Logistics", "Apex Fasteners", "Elite Tooling"];
+  const allVendors = Array.isArray(vrSource?.filterOptions?.vendors)
+    ? vrSource.filterOptions.vendors
+    : [];
 
   const filteredVendors = useMemo(() => {
     const q = vendSearch.trim().toLowerCase();
     if (!q) return allVendors;
     return allVendors.filter(v => v.toLowerCase().includes(q));
-  }, [vendSearch]);
+  }, [vendSearch, allVendors]);
 
   const toggleVendor = (v) => {
     const current = filters.vendor || [];
@@ -14263,7 +14349,7 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
     onFilterChange(prev => ({ ...prev, vendor: next }));
   };
 
-  const isAllVendSelected = (filters.vendor || []).length === allVendors.length;
+  const isAllVendSelected = allVendors.length > 0 && (filters.vendor || []).length === allVendors.length;
   const toggleSelectAllVend = () => {
     onFilterChange(prev => ({
       ...prev,
@@ -14313,10 +14399,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
     }));
   }, [onFilterChange]);
 
-  const handleInputChange = (field, val) => {
-    onFilterChange(prev => ({ ...prev, [field]: val }));
-  };
-
   const handleReset = () => {
     onFilterChange({
       fromDate: "",
@@ -14333,21 +14415,19 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
       const targetVal = targetConfig?.vendor_rating?.minRating ?? 90;
       const ctx = canvas.getContext("2d");
 
-      const baseData = [89.0, 91.5, 93.0, 92.0, 95.5, 94.0];
       let mainDataset = {
         label: "Vendor Performance Score (%)",
-        data: baseData,
+        data: chartData,
         order: 2
       };
 
       let datasets = [];
 
-      // 1. Target line (always present except in Polar Area chart)
       if (chartType !== "polarArea") {
         datasets.push({
           type: chartType === "radar" ? "radar" : "line",
           label: `Target ${targetVal}%`,
-          data: Array(6).fill(targetVal),
+          data: Array(Math.max(1, chartLabels.length)).fill(targetVal),
           borderColor: "#ef4444",
           borderDash: [6, 3],
           backgroundColor: "transparent",
@@ -14358,7 +14438,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         });
       }
 
-      // 2. Custom styling based on active chartType
       if (chartType === "line") {
         mainDataset = {
           ...mainDataset,
@@ -14380,7 +14459,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         const gradient = ctx.createLinearGradient(0, 0, 0, 200);
         gradient.addColorStop(0, "rgba(59, 130, 246, 0.35)");
         gradient.addColorStop(1, "rgba(59, 130, 246, 0.0)");
-
         mainDataset = {
           ...mainDataset,
           type: "line",
@@ -14397,7 +14475,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         };
         datasets.push(mainDataset);
       } else if (chartType === "radar") {
-        // Radar (Radial Spider) Chart
         mainDataset = {
           ...mainDataset,
           type: "radar",
@@ -14413,7 +14490,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         };
         datasets.push(mainDataset);
       } else if (chartType === "polarArea") {
-        // Polar Area Chart
         const opacities = [0.45, 0.53, 0.61, 0.69, 0.77, 0.85];
         mainDataset = {
           ...mainDataset,
@@ -14428,7 +14504,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         const gradient = ctx.createLinearGradient(0, 0, 0, 200);
         gradient.addColorStop(0, "rgba(59, 130, 246, 0.2)");
         gradient.addColorStop(1, "rgba(59, 130, 246, 0.0)");
-
         mainDataset = {
           ...mainDataset,
           type: "line",
@@ -14445,11 +14520,9 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
         };
         datasets.push(mainDataset);
       } else {
-        // Bar Chart (Default)
         const gradient = ctx.createLinearGradient(0, 0, 0, 250);
         gradient.addColorStop(0, "rgba(59, 130, 246, 0.85)");
         gradient.addColorStop(1, "rgba(59, 130, 246, 0.2)");
-
         mainDataset = {
           ...mainDataset,
           type: "bar",
@@ -14466,24 +14539,19 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
       return new Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
-          labels: ["Jan-26", "Feb-26", "Mar-26", "Apr-26", "May-26", "Jun-26"],
+          labels: chartLabels,
           datasets: datasets
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          interaction: {
-            mode: "index",
-            intersect: false,
-          },
+          interaction: { mode: "index", intersect: false },
           plugins: {
             legend: {
               display: true,
               position: "top",
               labels: {
-                boxWidth: 10,
-                boxHeight: 10,
-                usePointStyle: true,
+                boxWidth: 10, boxHeight: 10, usePointStyle: true,
                 font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
                 color: "#475569"
               }
@@ -14492,65 +14560,43 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
               backgroundColor: "rgba(15, 23, 42, 0.95)",
               titleFont: { family: "Outfit, Inter, sans-serif", size: 11, weight: "600" },
               bodyFont: { family: "Outfit, Inter, sans-serif", size: 11 },
-              padding: 10,
-              cornerRadius: 8,
-              displayColors: true,
-              boxWidth: 7,
-              boxHeight: 7,
-              usePointStyle: true,
-              borderColor: "rgba(255, 255, 255, 0.1)",
-              borderWidth: 1,
+              padding: 10, cornerRadius: 8, displayColors: true,
+              boxWidth: 7, boxHeight: 7, usePointStyle: true,
+              borderColor: "rgba(255, 255, 255, 0.1)", borderWidth: 1,
             }
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
-              angleLines: {
-                display: chartType === "radar",
-                color: "rgba(226, 232, 240, 0.8)"
-              },
-              grid: {
-                circular: true,
-                color: "rgba(226, 232, 240, 0.6)"
-              },
+              angleLines: { display: chartType === "radar", color: "rgba(226, 232, 240, 0.8)" },
+              grid: { circular: true, color: "rgba(226, 232, 240, 0.6)" },
               ticks: {
                 display: true,
                 font: { family: "Outfit, Inter, sans-serif", size: 9, weight: "500" },
-                color: "#64748b",
-                backdropColor: "transparent"
+                color: "#64748b", backdropColor: "transparent"
               },
-              suggestedMin: chartType === "polarArea" ? 0 : 50,
-              suggestedMax: 100
+              suggestedMin: 0, suggestedMax: 100
             }
           } : {
             x: {
               grid: { display: false, drawBorder: false },
-              ticks: {
-                font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
-                color: "#64748b"
-              }
+              ticks: { display: false, font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" }, color: "#64748b" }
             },
             y: {
-              min: 50,
-              max: 100,
-              grid: {
-                color: "rgba(226, 232, 240, 0.6)",
-                borderDash: [4, 4],
-                drawBorder: false
-              },
+              min: 0, max: 100,
+              grid: { color: "rgba(226, 232, 240, 0.6)", borderDash: [4, 4], drawBorder: false },
               ticks: {
                 callback: (val) => `${val}%`,
-                font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
-                color: "#64748b"
+                font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" }, color: "#64748b"
               }
             }
           }
         }
       });
     },
-    [targetConfig?.vendor_rating?.minRating, chartType]
+    [targetConfig?.vendor_rating?.minRating, chartType, chartData, chartLabels]
   );
 
-  const rebuildToken = `vendor-rating-chart|${targetConfig?.vendor_rating?.minRating ?? 90}|${chartType}`;
+  const rebuildToken = `vendor-rating-chart|${targetConfig?.vendor_rating?.minRating ?? 90}|${chartType}|${JSON.stringify(chartData)}|${JSON.stringify(chartLabels)}`;
 
   return (
     <PremiumDashboardView
@@ -14560,7 +14606,7 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint="Month Wise Rating Score"
+      rangeHint="Vendor Wise Rating Score"
       onClose={onClose}
       rebuildToken={rebuildToken}
     >
@@ -14595,7 +14641,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
 
             {vendOpen && (
               <div className="pp1-multiselect-menu">
-                {/* Search Bar */}
                 <div style={{ padding: "2px 4px 6px 4px" }}>
                   <input
                     type="text"
@@ -14608,7 +14653,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
                   />
                 </div>
 
-                {/* Select All Option */}
                 <div
                   className={`pp1-multiselect-option pp1-multiselect-option--all ${isAllVendSelected ? 'pp1-multiselect-option--selected' : ''}`}
                   onClick={toggleSelectAllVend}
@@ -14623,7 +14667,6 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
                   <span>Select All ({allVendors.length})</span>
                 </div>
 
-                {/* Individual Options */}
                 {filteredVendors.length === 0 ? (
                   <div style={{ padding: "8px", textAlign: "center", fontSize: "10.5px", color: "#94a3b8" }}>No results found</div>
                 ) : (
@@ -14652,7 +14695,7 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
           </div>
         </div>
 
-        {/* Chart Type Dropdown Filter */}
+        {/* Chart Type Dropdown */}
         <div className="pp1-filter-group" ref={chartTypeRef} style={{ maxWidth: "120px" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-part-autocomplete-wrap">
@@ -14681,66 +14724,23 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
 
             {chartTypeOpen && (
               <div className="pp1-part-suggestions pp1-dropdown-menu">
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "line" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("line");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <LucideLineChart size={12} />
-                  <span>Line Chart</span>
-                </div>
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "bar" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("bar");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <BarChart2 size={12} />
-                  <span>Bar Chart</span>
-                </div>
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "area" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("area");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <AreaChart size={12} />
-                  <span>Area Chart</span>
-                </div>
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "radar" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("radar");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <Radar size={12} />
-                  <span>Radar Chart</span>
-                </div>
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "polarArea" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("polarArea");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <PieChart size={12} />
-                  <span>Polar Area Chart</span>
-                </div>
-                <div
-                  className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === "stepped" ? "selected" : ""}`}
-                  onClick={() => {
-                    setChartType("stepped");
-                    setChartTypeOpen(false);
-                  }}
-                >
-                  <Activity size={12} />
-                  <span>Stepped Chart</span>
-                </div>
+                {[
+                  { key: "line",      icon: <LucideLineChart size={12} />, label: "Line Chart" },
+                  { key: "bar",       icon: <BarChart2 size={12} />,       label: "Bar Chart" },
+                  { key: "area",      icon: <AreaChart size={12} />,       label: "Area Chart" },
+                  { key: "radar",     icon: <Radar size={12} />,           label: "Radar Chart" },
+                  { key: "polarArea", icon: <PieChart size={12} />,        label: "Polar Area" },
+                  { key: "stepped",   icon: <Activity size={12} />,        label: "Stepped Chart" },
+                ].map(({ key, icon, label }) => (
+                  <div
+                    key={key}
+                    className={`pp1-part-suggestion-item pp1-dropdown-item ${chartType === key ? "selected" : ""}`}
+                    onClick={() => { setChartType(key); setChartTypeOpen(false); }}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -14760,51 +14760,57 @@ function VendorRatingReportDashboardView({ filters, onFilterChange, onClose, tar
   );
 }
 
-function VendorRatingBottomTable({ filters }) {
+function VendorRatingBottomTable({ data, filters }) {
   const columns = [
     "Sl.No",
     "Vendor Name",
-    "Category",
-    "Total Orders",
+    "Total Job Orders",
     "On-Time Delivery %",
     "Quality Pass %",
     "Overall Rating",
-    "Status"
+    "Quality Status",
+    "Delivery Status",
+    "Total Status",
+    "Action To Be Taken"
   ];
 
-  const allRows = [
-    { vendor: "Super Tech Industries", partNo: "BRK-PAD-M1", date: "2026-06-10", cols: ["Super Tech Industries", "Raw Materials", "180", "96%", "98%", "97.0%", "Excellent"] },
-    { vendor: "Precision Castings", partNo: "ROT-DSC-X4", date: "2026-06-12", cols: ["Precision Castings", "Machinery", "50", "94%", "97%", "95.5%", "Excellent"] },
-    { vendor: "Dynamic Logistics", partNo: "GBX-HNG-S2", date: "2026-06-14", cols: ["Dynamic Logistics", "Services", "95", "90%", "99%", "94.5%", "Good"] },
-    { vendor: "Apex Fasteners", partNo: "ENG-MNT-H1", date: "2026-06-15", cols: ["Apex Fasteners", "Raw Materials", "140", "85%", "95%", "90.0%", "Good"] },
-    { vendor: "Elite Tooling", partNo: "TRK-AXL-L9", date: "2026-06-18", cols: ["Elite Tooling", "Packaging", "80", "92%", "98%", "95.0%", "Excellent"] }
-  ];
+  const allRows = Array.isArray(data?.vendorRating?.rows)
+    ? data.vendorRating.rows.map(r => ({
+        vendor: r.vendorName,
+        cols: [
+          r.vendorName || "—",
+          r.totalOrders  != null ? String(r.totalOrders)  : "—",
+          r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
+          r.qualityPass  != null ? `${r.qualityPass}%`  : "—",
+          r.overallRating!= null ? `${r.overallRating}%`: "—",
+          r.qualityStatus|| "—",
+          r.deliveryStatus || "—",
+          r.totalStatus  || "—",
+          r.actionToBeTaken || "—",
+        ]
+      }))
+    : [];
 
   const rows = React.useMemo(() => {
     let list = allRows;
     if (filters?.vendor && filters.vendor.length > 0) {
       list = list.filter(r => filters.vendor.includes(r.vendor));
     }
-    if (filters?.partNo) {
-      list = list.filter(r => r.partNo.toLowerCase().includes(filters.partNo.toLowerCase()));
-    }
-    if (filters?.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
     return list.map((r, idx) => [
       String(idx + 1),
       ...r.cols
     ]);
-  }, [filters]);
+  }, [allRows, filters?.vendor]);
 
   return <PremiumDashboardBottomTable title="Vendor Rating Registry" columns={columns} rows={rows} />;
 }
 
-/* ── FG Value View (UI Alone) ────────────────────────────────────── */
-function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+/* ── FG Value View (Real Data Integration) ────────────────────────── */
+function FgValueReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onFgValueData }) {
+  const [fgValueLive, setFgValueLive] = React.useState(null);
+  const [fgValueLoading, setFgValueLoading] = React.useState(false);
+  const fgValueSource = fgValueLive || data?.fgValueCompare;
+
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const [itemCodeOpen, setItemCodeOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("line");
@@ -14834,54 +14840,120 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
     };
   }, []);
 
-  const pickerFrom = React.useMemo(() => filters?.fromDate ? new Date(filters.fromDate) : null, [filters?.fromDate]);
-  const pickerTo = React.useMemo(() => filters?.toDate ? new Date(filters.toDate) : null, [filters?.toDate]);
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setFgValueLoading(true);
+    fetch(buildFgValueUrl(), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "FG Value load failed");
+        setFgValueLive(json);
+        onFgValueData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setFgValueLive(null);
+        onFgValueData?.(data?.fgValueCompare || null);
+      })
+      .finally(() => setFgValueLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onFgValueData, data?.fgValueCompare]);
 
-  const handlePickerChange = ({ from, to }) => {
-    const formatDate = (d) => {
-      if (!d) return "";
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    };
+  const fgRows = React.useMemo(() => {
+    const rawRows = Array.isArray(fgValueSource?.rows) ? fgValueSource.rows : [];
+    return rawRows.filter(r => (Number(r.finalInspQty) || 0) > 0 || (Number(r.dcQty) || 0) > 0);
+  }, [fgValueSource?.rows]);
+
+  const filteredRows = React.useMemo(() => {
+    let list = fgRows;
+    if (filters?.customer && filters.customer.length > 0) {
+      list = list.filter(r => filters.customer.includes(r.customerName));
+    }
+    if (filters?.itemCode) {
+      list = list.filter(r => r.partNo === filters.itemCode);
+    }
+    return list;
+  }, [fgRows, filters?.customer, filters?.itemCode]);
+
+  const allCustomers = React.useMemo(() => {
+    const list = Array.isArray(fgRows) ? fgRows.map(r => r.customerName) : [];
+    return [...new Set(list)].filter(Boolean).sort();
+  }, [fgRows]);
+
+  const allItemCodes = React.useMemo(() => {
+    const list = Array.isArray(fgRows) ? fgRows.map(r => r.partNo) : [];
+    return [...new Set(list)].filter(Boolean).sort();
+  }, [fgRows]);
+
+  const filteredCustomers = React.useMemo(() => {
+    const q = custSearch.trim().toLowerCase();
+    if (!q) return allCustomers;
+    return allCustomers.filter(c => c.toLowerCase().includes(q));
+  }, [custSearch, allCustomers]);
+
+  const toggleCustomer = (c) => {
+    const current = filters.customer || [];
+    const next = current.includes(c) ? current.filter(x => x !== c) : [...current, c];
+    onFilterChange(prev => ({ ...prev, customer: next }));
+  };
+
+  const isAllCustSelected = (filters.customer || []).length === allCustomers.length && allCustomers.length > 0;
+  const toggleSelectAllCust = () => {
     onFilterChange(prev => ({
       ...prev,
-      fromDate: formatDate(from),
-      toDate: formatDate(to)
+      customer: isAllCustSelected ? [] : [...allCustomers]
     }));
   };
 
-  const handleInputChange = (field, val) => {
-    onFilterChange(prev => ({ ...prev, [field]: val }));
-  };
+  const itemSuggestions = React.useMemo(() => {
+    if (!filters.itemCode) return allItemCodes;
+    return allItemCodes.filter(i => i.toLowerCase().includes(filters.itemCode.toLowerCase()));
+  }, [filters.itemCode, allItemCodes]);
 
-  const handleReset = () => {
-    onFilterChange({
-      fromDate: "",
-      toDate: "",
-      customer: [],
-      itemCode: "",
-      ageDays: ""
+  const kpis = React.useMemo(() => {
+    const totalValRub = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0), 0);
+    const totalValLakhs = totalValRub / 100000.0;
+    
+    const uniqueItems = new Set(filteredRows.map(r => r.partNo)).size;
+    const uniqueCusts = new Set(filteredRows.map(r => r.customerName)).size;
+    const totalQty = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspQty) || 0) + (Number(r.dcQty) || 0), 0);
+
+    return [
+      { label: "Total FG Value", value: `₹${totalValLakhs.toFixed(2)}L`, icon: Package, color: "#ec4899" },
+      { label: "Available Items", value: String(uniqueItems), icon: ClipboardList, color: "#10b981" },
+      { label: "FG Customers", value: String(uniqueCusts), icon: Users, color: "#3b82f6" },
+      { label: "Total Qty", value: totalQty.toLocaleString(), icon: ClipboardList, color: "#eab308" }
+    ];
+  }, [filteredRows]);
+
+  const currentMonthName = React.useMemo(() => {
+    const today = new Date();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[today.getMonth()];
+    const year = String(today.getFullYear()).slice(-2);
+    return `${month}-${year}`;
+  }, []);
+
+  const customerChartData = React.useMemo(() => {
+    const map = {};
+    filteredRows.forEach(r => {
+      const c = r.customerName || "—";
+      const val = (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
+      map[c] = (map[c] || 0) + val;
     });
-    setChartType("line");
-    setCustSearch("");
-  };
+    const entries = Object.entries(map).map(([cust, val]) => ({
+      customer: cust,
+      value: Number((val / 100000.0).toFixed(2))
+    })).sort((a, b) => b.value - a.value);
 
-  const chartData = React.useMemo(() => {
-    let offset = 0;
-    if (filters?.customer && filters.customer.length > 0) {
-      const totalHash = filters.customer.reduce((acc, cust) => {
-        return acc + cust.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      }, 0);
-      offset += (totalHash % 6) - 3;
-    }
-    if (filters?.itemCode) {
-      offset += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 4 : -3;
-    }
-    const baseValues = [45.2, 47.8, 51.5, 49.0, 53.2, 48.5];
-    return baseValues.map(v => Math.max(10, v + offset));
-  }, [filters]);
+    return {
+      labels: entries.map(e => e.customer),
+      data: entries.map(e => e.value)
+    };
+  }, [filteredRows]);
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -14890,7 +14962,7 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
 
       let mainDataset = {
         label: "FG Value (₹ Lakhs)",
-        data: chartData,
+        data: customerChartData.data,
         order: 2
       };
 
@@ -14900,7 +14972,7 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
       if (chartType !== "polarArea") {
         datasets.push({
           label: `Limit ₹${targetVal}L`,
-          data: Array(6).fill(targetVal),
+          data: Array(customerChartData.labels.length).fill(targetVal),
           borderColor: "#ef4444",
           borderDash: [5, 5],
           pointRadius: 0,
@@ -14948,7 +15020,6 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
         };
         datasets.push(mainDataset);
       } else if (chartType === "radar") {
-        // Radar (Radial Spider) Chart
         mainDataset = {
           ...mainDataset,
           type: "radar",
@@ -14964,12 +15035,11 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
         };
         datasets.push(mainDataset);
       } else if (chartType === "polarArea") {
-        // Polar Area Chart
         const opacities = [0.45, 0.53, 0.61, 0.69, 0.77, 0.85];
         mainDataset = {
           ...mainDataset,
           type: "polarArea",
-          backgroundColor: opacities.map(o => `rgba(236, 72, 153, ${o})`),
+          backgroundColor: opacities.map((o, i) => `rgba(236, 72, 153, ${opacities[i % opacities.length]})`),
           borderColor: "#ec4899",
           borderWidth: 1.5,
           hoverBackgroundColor: "#ec4899"
@@ -14996,7 +15066,6 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
         };
         datasets.push(mainDataset);
       } else {
-        // Pure Line Chart (Default)
         mainDataset = {
           ...mainDataset,
           type: "line",
@@ -15018,7 +15087,7 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
       return new Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
-          labels: ["Jan-26", "Feb-26", "Mar-26", "Apr-26", "May-26", "Jun-26"],
+          labels: customerChartData.labels,
           datasets: datasets
         },
         options: {
@@ -15052,6 +15121,16 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
               usePointStyle: true,
               borderColor: "rgba(255, 255, 255, 0.1)",
               borderWidth: 1,
+              callbacks: {
+                title: (context) => {
+                  const idx = context[0].dataIndex;
+                  return customerChartData.labels[idx] || "";
+                },
+                label: (context) => {
+                  const val = context.raw;
+                  return `FG Value: ₹${val}L`;
+                }
+              }
             }
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
@@ -15099,45 +15178,23 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
         }
       });
     },
-    [chartData, targetConfig?.fg_value?.maxStockValueL, chartType]
+    [customerChartData, targetConfig?.fg_value?.maxStockValueL, chartType]
   );
 
-  const allCustomers = ["Virrudheeswara Eng", "Anims Parts Ltd", "Star Logistics", "Srinivasa Castings", "Royal Packaging"];
-  const allItemCodes = ["P-1001", "P-1002", "P-1003", "P-1004", "P-1005", "P-1006"];
-
-  const filteredCustomers = React.useMemo(() => {
-    const q = custSearch.trim().toLowerCase();
-    if (!q) return allCustomers;
-    return allCustomers.filter(c => c.toLowerCase().includes(q));
-  }, [custSearch]);
-
-  const toggleCustomer = (c) => {
-    const current = filters.customer || [];
-    const next = current.includes(c) ? current.filter(x => x !== c) : [...current, c];
-    onFilterChange(prev => ({ ...prev, customer: next }));
+  const handleInputChange = (field, val) => {
+    onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
-  const isAllCustSelected = (filters.customer || []).length === allCustomers.length;
-  const toggleSelectAllCust = () => {
-    onFilterChange(prev => ({
-      ...prev,
-      customer: isAllCustSelected ? [] : [...allCustomers]
-    }));
+  const handleReset = () => {
+    onFilterChange({
+      customer: [],
+      itemCode: ""
+    });
+    setChartType("line");
+    setCustSearch("");
   };
 
-  const itemSuggestions = React.useMemo(() => {
-    if (!filters.itemCode) return allItemCodes;
-    return allItemCodes.filter(i => i.toLowerCase().includes(filters.itemCode.toLowerCase()));
-  }, [filters.itemCode]);
-
-  const kpis = [
-    { label: "Total FG Value", value: "₹48.5L", icon: Package, color: "#ec4899" },
-    { label: "Available Items", value: "45", icon: ClipboardList, color: "#10b981" },
-    { label: "FG Customers", value: "5", icon: Users, color: "#3b82f6" },
-    { label: "Long Age Days", value: "60 Days", icon: Calendar, color: "#eab308" }
-  ];
-
-  const rebuildToken = `fg-value-chart|${targetConfig?.fg_value?.maxStockValueL ?? 60.0}|${JSON.stringify(chartData)}|${chartType}`;
+  const rebuildToken = `fg-value-chart|${targetConfig?.fg_value?.maxStockValueL ?? 60.0}|${JSON.stringify(customerChartData.data)}|${chartType}`;
 
   return (
     <PremiumDashboardView
@@ -15147,21 +15204,12 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint="Month Wise FG Stock Value"
+      rangeHint={`Customer Wise FG Stock Value — ${currentMonthName}`}
       onClose={onClose}
       rebuildToken={rebuildToken}
+      loading={loading || fgValueLoading}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
-        {/* Date Range Picker */}
-        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ maxWidth: "230px" }}>
-          <label className="pp1-filter-label">Date Range</label>
-          <PlantPerformance1DatePicker
-            from={pickerFrom}
-            to={pickerTo}
-            onChange={handlePickerChange}
-          />
-        </div>
-
         {/* Customer Multi-Select Dropdown */}
         <div className="pp1-filter-group" ref={customerRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#ec4899' }}>
           <label className="pp1-filter-label">Customer Name</label>
@@ -15282,22 +15330,6 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
           </div>
         </div>
 
-        {/* Age Days Filter */}
-        <div className="pp1-filter-group" style={{ maxWidth: "100px" }}>
-          <label className="pp1-filter-label">Age Days</label>
-          <div className="pp1-age-input-wrapper">
-            <Calendar size={12} className="pp1-age-input-icon" />
-            <input
-              type="number"
-              className="pp1-filter-input pp1-age-input"
-              placeholder="Min Days..."
-              value={filters.ageDays}
-              onChange={e => handleInputChange("ageDays", e.target.value)}
-              min="0"
-            />
-          </div>
-        </div>
-
         {/* Chart Type Dropdown Filter */}
         <div className="pp1-filter-group" ref={chartTypeRef} style={{ maxWidth: "120px" }}>
           <label className="pp1-filter-label">Chart Type</label>
@@ -15406,72 +15438,53 @@ function FgValueReportDashboardView({ filters, onFilterChange, onClose, targetCo
   );
 }
 
-function FgValueReportBottomTable({ filters }) {
-  const offset = React.useMemo(() => {
-    let off = 0;
-    if (filters?.customer && filters.customer.length > 0) {
-      const totalHash = filters.customer.reduce((acc, cust) => {
-        return acc + cust.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      }, 0);
-      off += (totalHash % 6) - 3;
-    }
-    if (filters?.itemCode) {
-      off += filters.itemCode.endsWith("2") || filters.itemCode.endsWith("4") ? 1 : -1;
-    }
-    return off;
-  }, [filters]);
-
-  const allRows = [
-    { date: "2026-04-10", customer: "Anims Parts Ltd", partNum: "P-1001", desc: "FG Brake Pad Set A", qty: "300", price: "₹2,500", ageDays: 12 },
-    { date: "2026-05-12", customer: "Virrudheeswara Eng", partNum: "P-1002", desc: "FG Rotor Disc Premium", qty: "1,500", price: "₹1,800", ageDays: 32 },
-    { date: "2026-06-14", customer: "Star Logistics", partNum: "P-1003", desc: "FG Axle assembly L9", qty: "120", price: "₹12,500", ageDays: 5 },
-    { date: "2026-07-02", customer: "Srinivasa Castings", partNum: "P-1004", desc: "FG Gear Box Assembly", qty: "25", price: "₹45,000", ageDays: 19 },
-    { date: "2026-08-15", customer: "Royal Packaging", partNum: "P-1005", desc: "FG Engine Assembly M1", qty: "10", price: "₹1,50,000", ageDays: 45 },
-    { date: "2026-04-18", customer: "Anims Parts Ltd", partNum: "P-1006", desc: "FG Transmission block", qty: "18", price: "₹38,000", ageDays: 60 }
-  ];
+function FgValueReportBottomTable({ data, filters }) {
+  const fgRows = React.useMemo(
+    () => (Array.isArray(data?.fgValueCompare?.rows) ? data.fgValueCompare.rows : []),
+    [data?.fgValueCompare?.rows]
+  );
 
   const rows = React.useMemo(() => {
-    let list = allRows;
+    let list = fgRows;
     if (filters?.customer && filters.customer.length > 0) {
-      list = list.filter(r => filters.customer.includes(r.customer));
+      list = list.filter(r => filters.customer.includes(r.customerName));
     }
     if (filters?.itemCode) {
-      list = list.filter(r => r.partNum === filters.itemCode);
-    }
-    if (filters?.fromDate) {
-      list = list.filter(r => r.date >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(r => r.date <= filters.toDate);
-    }
-    if (filters?.ageDays) {
-      const minAge = parseInt(filters.ageDays, 10);
-      if (!isNaN(minAge)) {
-        list = list.filter(r => r.ageDays >= minAge);
-      }
+      list = list.filter(r => r.partNo === filters.itemCode);
     }
 
     return list.map((row, idx) => {
-      const baseQty = parseInt(row.qty.replace(/,/g, ""), 10);
-      const unitPriceVal = parseInt(row.price.replace(/[₹,]/g, ""), 10);
-
-      const newQty = Math.max(0, baseQty + Math.round(offset * (baseQty > 100 ? 25 : 3)));
-      const newValue = newQty * unitPriceVal;
-
+      const finalInspVal = Number(row.finalInspectionValue) || 0;
+      const dispatchVal = Number(row.dispatchValue) || 0;
+      const totalVal = finalInspVal + dispatchVal;
+      
       return [
         String(idx + 1),
-        row.date,
-        row.customer,
-        `${row.partNum} - ${row.desc}`,
-        newQty.toLocaleString(),
-        `₹${unitPriceVal.toLocaleString()}`,
-        `₹${newValue.toLocaleString()}`,
-        String(row.ageDays)
+        row.customerName || "—",
+        row.partNo || "—",
+        row.description || "—",
+        (Number(row.finalInspQty) || 0).toLocaleString(),
+        (Number(row.dcQty) || 0).toLocaleString(),
+        `₹${(Number(row.rate) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        `₹${finalInspVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        `₹${dispatchVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        `₹${totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       ];
     });
-  }, [filters, offset]);
+  }, [fgRows, filters?.customer, filters?.itemCode]);
 
-  const columns = ["Sl.No", "Date", "Customer Name", "Part-Description", "Qty In Stock", "Unit Price", "Total Value", "Age Days"];
+  const columns = [
+    "Sl.No", 
+    "Customer Name", 
+    "Part Number", 
+    "Description", 
+    "Final Insp. Qty", 
+    "Dispatch Qty", 
+    "Rate", 
+    "Final Insp. Value", 
+    "Dispatch Value",
+    "Total Value"
+  ];
 
   return <PremiumDashboardBottomTable title="Finished Goods (FG) Registry" columns={columns} rows={rows} />;
 }
@@ -15849,8 +15862,12 @@ function DailyProductionBottomTable({ data, filters, targetConfig }) {
   return <PremiumDashboardBottomTable title="Machine Capacity Registry" columns={columns} rows={rows} />;
 }
 
-/* ── Target Vs Actual View (UI Alone) ────────────────────────────────── */
-function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetConfig }) {
+/* ── Target Vs Actual View ────────────────────────────────── */
+function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onTargetVsActualData }) {
+  const [targetVsActualLive, setTargetVsActualLive] = React.useState(null);
+  const [targetVsActualLoading, setTargetVsActualLoading] = React.useState(false);
+  const targetVsActualSource = targetVsActualLive || data?.targetVsActualCompare;
+
   const [customerOpen, setCustomerOpen] = React.useState(false);
   const customerRef = React.useRef(null);
 
@@ -15896,58 +15913,98 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
     });
   };
 
-  const rawData = [
-    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, dispatchQty: 300, status: "Pending", date: "2026-06-25" },
-    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, dispatchQty: 1080, status: "Pending", date: "2026-06-25" },
-    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, dispatchQty: 560, status: "Pending", date: "2026-06-26" },
-    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, dispatchQty: 210, status: "Pending", date: "2026-06-26" },
-    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, dispatchQty: 150, status: "Completed", date: "2026-06-26" }
-  ];
+  React.useEffect(() => {
+    const ctrl = new AbortController();
+    setTargetVsActualLoading(true);
+    const fy = currentFinancialYearRange();
+    fetch(buildTargetVsActualUrl(filters?.fromDate || fy.from, filters?.toDate || fy.to), {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || json?.error) throw new Error(json?.error || "Target vs Actual load failed");
+        setTargetVsActualLive(json);
+        onTargetVsActualData?.(json);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setTargetVsActualLive(null);
+        onTargetVsActualData?.(data?.targetVsActualCompare || null);
+      })
+      .finally(() => setTargetVsActualLoading(false));
+    return () => ctrl.abort();
+  }, [uid, onTargetVsActualData, data?.targetVsActualCompare, filters?.fromDate, filters?.toDate]);
 
-  const customersList = ["Star Logistics", "Anims Parts Ltd", "Virrudheeswara Eng", "Srinivasa Castings", "Royal Packaging"];
+  const rawRows = React.useMemo(
+    () => (Array.isArray(targetVsActualSource?.rows) ? targetVsActualSource.rows : []),
+    [targetVsActualSource?.rows]
+  );
+
+  const customersList = React.useMemo(() => {
+    const list = rawRows.map(r => r.customerName);
+    return [...new Set(list)].filter(Boolean).sort();
+  }, [rawRows]);
 
   const custSuggestions = React.useMemo(() => {
     if (!filters.customer) return customersList;
     return customersList.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer]);
+  }, [filters.customer, customersList]);
 
   const filteredData = React.useMemo(() => {
-    let list = rawData;
+    let list = rawRows;
     if (filters?.customer) {
-      list = list.filter(d => d.customer.toLowerCase().includes(filters.customer.toLowerCase()));
-    }
-    if (filters?.fromDate) {
-      list = list.filter(d => d.date >= filters.fromDate);
-    }
-    if (filters?.toDate) {
-      list = list.filter(d => d.date <= filters.toDate);
+      list = list.filter(d => d.customerName.toLowerCase().includes(filters.customer.toLowerCase()));
     }
     return list;
-  }, [filters?.customer, filters?.fromDate, filters?.toDate]);
+  }, [rawRows, filters?.customer]);
 
-  const totalPlan = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.planQty, 0), [filteredData]);
-  const totalAvailable = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.availableQty, 0), [filteredData]);
-  const totalReq = React.useMemo(() => filteredData.reduce((acc, r) => acc + r.planReqQty, 0), [filteredData]);
+  const totalPlan = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.planQty) || 0), 0), [filteredData]);
+  const totalAvailable = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.availableQty) || 0), 0), [filteredData]);
+  const totalReq = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.planReqQty) || 0), 0), [filteredData]);
 
   const avgFulfillment = React.useMemo(() => {
     if (totalPlan === 0) return 0;
     return ((totalAvailable / totalPlan) * 100).toFixed(1);
   }, [totalPlan, totalAvailable]);
 
-  const chartLabels = React.useMemo(() => filteredData.map(r => r.customer), [filteredData]);
-  const planDataPoints = React.useMemo(() => filteredData.map(r => r.planQty), [filteredData]);
-  const availableDataPoints = React.useMemo(() => filteredData.map(r => r.availableQty), [filteredData]);
+  // Aggregate by customer for the bar chart
+  const customerChartData = React.useMemo(() => {
+    const map = {};
+    filteredData.forEach(r => {
+      const c = r.customerName || "—";
+      if (!map[c]) {
+        map[c] = { planQty: 0, availableQty: 0, dispatchQty: 0 };
+      }
+      map[c].planQty += Number(r.planQty) || 0;
+      map[c].availableQty += Number(r.availableQty) || 0;
+      map[c].dispatchQty += Number(r.dispatchQty) || 0;
+    });
+    const entries = Object.entries(map).map(([cust, val]) => ({
+      customer: cust,
+      planQty: val.planQty,
+      availableQty: val.availableQty,
+      dispatchQty: val.dispatchQty
+    })).sort((a, b) => b.planQty - a.planQty);
+
+    return {
+      labels: entries.map(e => e.customer),
+      planQty: entries.map(e => e.planQty),
+      availableQty: entries.map(e => e.availableQty),
+      dispatchQty: entries.map(e => e.dispatchQty)
+    };
+  }, [filteredData]);
 
   const setupChart = React.useCallback(
     (canvas) => {
       return new Chart(canvas, {
         type: "bar",
         data: {
-          labels: chartLabels,
+          labels: customerChartData.labels,
           datasets: [
             {
               label: "Plan Qty (Target)",
-              data: planDataPoints,
+              data: customerChartData.planQty,
               backgroundColor: "#6366f1",
               borderColor: "#4f46e5",
               borderWidth: 1,
@@ -15955,11 +16012,19 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
             },
             {
               label: "Available Qty (Actual)",
-              data: availableDataPoints,
+              data: customerChartData.availableQty,
               backgroundColor: "#10b981",
               borderColor: "#059669",
               borderWidth: 1,
               order: 3
+            },
+            {
+              label: "Dispatched Qty",
+              data: customerChartData.dispatchQty,
+              backgroundColor: "#f59e0b",
+              borderColor: "#d97706",
+              borderWidth: 1,
+              order: 4
             }
           ]
         },
@@ -15970,15 +16035,13 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
             legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
           },
           scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: "Quantity", font: { size: 10 } }
-            }
+            y: { beginAtZero: true, ticks: { font: { size: 9 } } },
+            x: { ticks: { font: { size: 9 } } }
           }
         }
       });
     },
-    [chartLabels, planDataPoints, availableDataPoints]
+    [customerChartData]
   );
 
   const kpis = [
@@ -15988,7 +16051,7 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
     { label: "Fulfillment Rate", value: `${avgFulfillment}%`, icon: Target, color: "#eab308" }
   ];
 
-  const rebuildToken = `target-vs-actual-chart|${targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0}|${JSON.stringify(filteredData)}`;
+  const rebuildToken = `target-vs-actual-chart|${targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0}|${JSON.stringify(customerChartData)}`;
 
   return (
     <PremiumDashboardView
@@ -16001,6 +16064,7 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
       rangeHint="Customer Plan vs Available Quantity"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      loading={loading || targetVsActualLoading}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -16069,21 +16133,18 @@ function TargetVsActualDashboardView({ filters, onFilterChange, onClose, targetC
   );
 }
 
-function TargetVsActualBottomTable({ filters, targetConfig }) {
+function TargetVsActualBottomTable({ data, filters, targetConfig }) {
   const minFulfillment = targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0;
 
-  const rawData = [
-    { customer: "Star Logistics", partNo: "P-1001", desc: "Brake Pad Set A", planQty: 500, availableQty: 350, planReqQty: 150, dispatchQty: 300, status: "Pending", date: "2026-06-25" },
-    { customer: "Anims Parts Ltd", partNo: "P-1002", desc: "Rotor Disc Premium", planQty: 1200, availableQty: 1100, planReqQty: 100, dispatchQty: 1080, status: "Pending", date: "2026-06-25" },
-    { customer: "Virrudheeswara Eng", partNo: "P-1003", desc: "Axle Assembly L9", planQty: 800, availableQty: 600, planReqQty: 200, dispatchQty: 560, status: "Pending", date: "2026-06-26" },
-    { customer: "Srinivasa Castings", partNo: "P-1004", desc: "Gear Box Assembly", planQty: 300, availableQty: 240, planReqQty: 60, dispatchQty: 210, status: "Pending", date: "2026-06-26" },
-    { customer: "Royal Packaging", partNo: "P-1005", desc: "Engine Assembly M1", planQty: 150, availableQty: 150, planReqQty: 0, dispatchQty: 150, status: "Completed", date: "2026-06-26" }
-  ];
+  const rawRows = React.useMemo(
+    () => (Array.isArray(data?.targetVsActualCompare?.rows) ? data.targetVsActualCompare.rows : []),
+    [data?.targetVsActualCompare?.rows]
+  );
 
   const rows = React.useMemo(() => {
-    let list = rawData;
+    let list = rawRows;
     if (filters?.customer) {
-      list = list.filter(r => r.customer.toLowerCase().includes(filters.customer.toLowerCase()));
+      list = list.filter(r => r.customerName.toLowerCase().includes(filters.customer.toLowerCase()));
     }
     if (filters?.fromDate) {
       list = list.filter(r => r.date >= filters.fromDate);
@@ -16093,10 +16154,12 @@ function TargetVsActualBottomTable({ filters, targetConfig }) {
     }
 
     return list.map((row, idx) => {
-      const dispatchPct = row.planQty > 0 ? (row.dispatchQty / row.planQty) * 100 : 0;
+      const planQty = Number(row.planQty) || 0;
+      const dispatchQty = Number(row.dispatchQty) || 0;
+      const dispatchPct = planQty > 0 ? (dispatchQty / planQty) * 100 : 0;
       const isLowDispatch = dispatchPct < minFulfillment;
 
-      const statusBaseText = row.status === "Completed" || dispatchPct >= 100
+      const statusBaseText = row.dispatchStatus === "Completed" || dispatchPct >= 100
         ? "Completed"
         : isLowDispatch
           ? "Low Fulfillment"
@@ -16106,17 +16169,17 @@ function TargetVsActualBottomTable({ filters, targetConfig }) {
 
       return [
         String(idx + 1),
-        row.date,
-        row.customer,
-        `${row.partNo} - ${row.desc}`,
-        row.planQty.toLocaleString(),
-        row.availableQty.toLocaleString(),
-        row.planReqQty.toLocaleString(),
-        row.dispatchQty.toLocaleString(),
+        row.date || "—",
+        row.customerName || "—",
+        `${row.partNo || "—"} - ${row.description || "—"}`,
+        planQty.toLocaleString(),
+        (Number(row.availableQty) || 0).toLocaleString(),
+        (Number(row.planReqQty) || 0).toLocaleString(),
+        dispatchQty.toLocaleString(),
         badgeText
       ];
     });
-  }, [filters, minFulfillment]);
+  }, [rawRows, filters, minFulfillment]);
 
   const columns = ["Sl.No", "Date", "Customer Name", "PartNo - Description", "Plan Qty", "Available Qty", "Plan Req Qty", "Dispatch Qty", "Dispatch Status"];
 
@@ -16495,18 +16558,18 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
                 height: "28px"
               }}
             />
-            <ChevronDown
-              size={14}
+            <ChevronDown 
+              size={14} 
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{
-                position: "absolute",
-                right: "8px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                opacity: 0.6,
+              style={{ 
+                position: "absolute", 
+                right: "8px", 
+                top: "50%", 
+                transform: "translateY(-50%)", 
+                opacity: 0.6, 
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }}
+              }} 
             />
 
             {effLimitOpen && (
@@ -16691,7 +16754,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
         const macs = json?.filterOptions?.machines;
         if (Array.isArray(macs) && macs.length) setAllMachineNames(macs);
       })
-      .catch(() => { });
+      .catch(() => {});
     return () => ctrl.abort();
   }, [uid]);
 
@@ -16900,18 +16963,18 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
                 height: "28px"
               }}
             />
-            <ChevronDown
-              size={14}
+            <ChevronDown 
+              size={14} 
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{
-                position: "absolute",
-                right: "8px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                opacity: 0.6,
+              style={{ 
+                position: "absolute", 
+                right: "8px", 
+                top: "50%", 
+                transform: "translateY(-50%)", 
+                opacity: 0.6, 
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }}
+              }} 
             />
 
             {effLimitOpen && (
@@ -18347,6 +18410,11 @@ export default function PlantPerformance1() {
   const [machEffPanelData, setMachEffPanelData] = useState(null);
   const [dailyProdPanelData, setDailyProdPanelData] = useState(null);
   const [prodValuePanelData, setProdValuePanelData] = useState(null);
+  const [fgValuePanelData, setFgValuePanelData] = useState(null);
+  const [targetVsActualPanelData, setTargetVsActualPanelData] = useState(null);
+  const [srPanelData, setSrPanelData] = useState(null);
+  const [vrPanelData, setVrPanelData] = useState(null);
+  const [stockPanelData, setStockPanelData] = useState(null);
   const [supplierFilters, setSupplierFilters] = useState({
     fromDate: defaultFrom,
     toDate: defaultTo,
@@ -18360,11 +18428,8 @@ export default function PlantPerformance1() {
     partNo: "",
   });
   const [fgFilters, setFgFilters] = useState({
-    fromDate: defaultFrom,
-    toDate: defaultTo,
     customer: [],
     itemCode: "",
-    ageDays: "",
   });
   const [dailyProductionFilters, setDailyProductionFilters] = useState({
     fromDate: defaultFrom,
@@ -18737,6 +18802,8 @@ export default function PlantPerformance1() {
       setOpEffPanelData(null);
       setDailyProdPanelData(null);
       setProdValuePanelData(null);
+      setFgValuePanelData(null);
+      setTargetVsActualPanelData(null);
       const errs = json.errors ? Object.entries(json.errors) : [];
       const hasAny = Object.values(json.data).some((v) => v != null);
       if (!hasAny && errs.some(([, msg]) => String(msg).includes("Session expired"))) {
@@ -18768,6 +18835,11 @@ export default function PlantPerformance1() {
     if (dateRange.from && dateRange.to) {
       const fromStr = formatLocalYmd(dateRange.from);
       const toStr = formatLocalYmd(dateRange.to);
+      setSupplierFilters(prev => ({
+        ...prev,
+        fromDate: fromStr,
+        toDate: toStr
+      }));
       setMachineEfficiencyFilters(prev => ({
         ...prev,
         fromDate: fromStr,
@@ -19183,7 +19255,7 @@ export default function PlantPerformance1() {
     }
 
     // Store Stock Value trend calculation
-    const stockVal = 42.5; // Lakhs (mock actual stock value)
+    const stockVal = data?.storeStockValue?.kpi?.totalStockValueLakhs ?? 0.0;
     const stockLimit = targetConfig.store_stock_value?.maxStockValueL ?? 50.0;
     const stockOk = stockVal <= stockLimit;
     const stockDiff = stockLimit > 0 ? (((stockLimit - stockVal) / stockLimit) * 100).toFixed(1) : "0.0";
@@ -19213,10 +19285,13 @@ export default function PlantPerformance1() {
     }
 
     // Supplier Rating trend calculation (UI alone)
-    const supplierRating = 92.5;
+    const _srData = data?.supplierRating?.data;
+    const supplierRating = Array.isArray(_srData) && _srData.length > 0 
+      ? Number((_srData.reduce((a, b) => a + b, 0) / _srData.length).toFixed(1)) 
+      : 0;
     const supplierTarget = targetConfig.supplier_rating?.minRating ?? 90;
     const supplierOk = supplierRating >= supplierTarget;
-    const supplierDiff = (((supplierRating - supplierTarget) / supplierTarget) * 100).toFixed(1);
+    const supplierDiff = supplierRating > 0 ? (((supplierRating - supplierTarget) / supplierTarget) * 100).toFixed(1) : "0.0";
     map["supplier_rating_report_dashboard"] = {
       type: supplierOk ? "up" : "down",
       value: `${supplierOk ? "+" : ""}${supplierDiff}%`,
@@ -19226,11 +19301,18 @@ export default function PlantPerformance1() {
       priority: supplierOk ? "medium" : "high"
     };
 
-    // Vendor Rating trend calculation (UI alone)
-    const vendorRating = 94.0;
+    // Vendor Rating trend calculation (from live API data)
+    const _vrData = vrPanelData || data?.vendorRating;
+    const _vrChartData = Array.isArray(_vrData?.data) && _vrData.data.length > 0 ? _vrData.data : null;
+    const _vrKpi = _vrData?.kpis;
+    const vendorRating = _vrKpi?.avg_rating != null
+      ? Number(_vrKpi.avg_rating)
+      : _vrChartData
+        ? Number((_vrChartData.reduce((a, b) => a + b, 0) / _vrChartData.length).toFixed(1))
+        : 0;
     const vendorTarget = targetConfig.vendor_rating?.minRating ?? 90;
-    const vendorOk = vendorRating >= vendorTarget;
-    const vendorDiff = (((vendorRating - vendorTarget) / vendorTarget) * 100).toFixed(1);
+    const vendorOk = vendorRating > 0 && vendorRating >= vendorTarget;
+    const vendorDiff = vendorRating > 0 && vendorTarget > 0 ? (((vendorRating - vendorTarget) / vendorTarget) * 100).toFixed(1) : "0.0";
     map["vendor_rating_report_dashboard"] = {
       type: vendorOk ? "up" : "down",
       value: `${vendorOk ? "+" : ""}${vendorDiff}%`,
@@ -19399,7 +19481,7 @@ export default function PlantPerformance1() {
     }
 
     return map;
-  }, [targetConfig, data, dateRange, otdPanelData, effPanelData, oeePanelData, rejPanelData, rewPanelData, compPanelData, capaPanelData, opEffPanelData, dailyProdPanelData, prodValuePanelData, poFilters, purFilters, salesFilters, purchaseValueFilters, effFilters, oeeCompFilters, rejFilters, rewFilters, compFilters, capaFilters, operatorEfficiencyFilters, dailyProductionFilters, prodFilters, reworkXAxisGroup, defaultFrom, defaultTo]);
+  }, [targetConfig, data, dateRange, otdPanelData, effPanelData, oeePanelData, rejPanelData, rewPanelData, compPanelData, capaPanelData, opEffPanelData, dailyProdPanelData, prodValuePanelData, vrPanelData, poFilters, purFilters, salesFilters, purchaseValueFilters, effFilters, oeeCompFilters, rejFilters, rewFilters, compFilters, capaFilters, operatorEfficiencyFilters, dailyProductionFilters, prodFilters, vendorFilters, reworkXAxisGroup, defaultFrom, defaultTo]);
 
   // actionItems = only cards whose computed trend is "down" (needs action)
   const actionItems = useMemo(() => {
@@ -20496,7 +20578,7 @@ export default function PlantPerformance1() {
           <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-              <CenterTransitionWrapper uid={centerKey} loading={loading}>
+<CenterTransitionWrapper uid={centerKey} loading={loading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
                     <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
@@ -20508,6 +20590,8 @@ export default function PlantPerformance1() {
                     <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
                   ) : selectionId === "production_analysis_report_dashboard" ? (
                     <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
+                  ) : selectionId === "supplier_rating_report_dashboard" ? (
+                    <SupplierRatingReportDashboardView data={data} filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setSrPanelData(null); }} targetConfig={targetConfig} onSrData={setSrPanelData} />
                   ) : selectionId === "idle_hours_report_dashboard" ? (
                     <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
@@ -20521,19 +20605,17 @@ export default function PlantPerformance1() {
                   ) : selectionId === "rework_report_dashboard" ? (
                     <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
                   ) : selectionId === "store_stock_value_report_dashboard" ? (
-                    <StoreStockValueReportDashboardView filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    <StoreStockValueReportDashboardView data={data} filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setStockPanelData(null); }} targetConfig={targetConfig} onStockData={setStockPanelData} />
                   ) : selectionId === "otd_report_dashboard" ? (
                     <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
-                  ) : selectionId === "supplier_rating_report_dashboard" ? (
-                    <SupplierRatingReportDashboardView filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
                   ) : selectionId === "vendor_rating_report_dashboard" ? (
-                    <VendorRatingReportDashboardView filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    <VendorRatingReportDashboardView data={data} filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setVrPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onVrData={setVrPanelData} />
                   ) : selectionId === "fg_value_report_dashboard" ? (
-                    <FgValueReportDashboardView filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    <FgValueReportDashboardView data={data} loading={loading} filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setFgValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onFgValueData={setFgValuePanelData} />
                   ) : selectionId === "daily_production_report_dashboard" ? (
                     <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
                   ) : selectionId === "target_vs_actual_report_dashboard" ? (
-                    <TargetVsActualDashboardView filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    <TargetVsActualDashboardView data={data} loading={loading} filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setTargetVsActualPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onTargetVsActualData={setTargetVsActualPanelData} />
                   ) : selectionId === "operator_efficiency_report_dashboard" ? (
                     <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
                   ) : selectionId === "machine_efficiency_report_dashboard" ? (
@@ -20811,7 +20893,7 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-        <DashboardErrorBoundary>
+<DashboardErrorBoundary>
           {selectionId === "customer_po_vs_sales_analysis" ? (
             <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
           ) : selectionId === "purchase_report_dashboard" ? (
@@ -20835,19 +20917,20 @@ export default function PlantPerformance1() {
           ) : selectionId === "rework_report_dashboard" ? (
             <ReworkReportBottomTable data={{ reworkCompare: rewPanelData || data?.reworkCompare }} filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
           ) : selectionId === "store_stock_value_report_dashboard" ? (
-            <StoreStockValueReportBottomTable filters={stockFilters} />
+            <StoreStockValueReportBottomTable data={{ storeStockValue: stockPanelData || data?.storeStockValue }} filters={stockFilters} />
           ) : selectionId === "otd_report_dashboard" ? (
             <OtdReportBottomTable data={{ otd: otdPanelData || data?.otd }} filters={otdFilters} />
           ) : selectionId === "supplier_rating_report_dashboard" ? (
-            <SupplierRatingBottomTable filters={supplierFilters} />
+            <SupplierRatingBottomTable data={{ supplierRating: srPanelData || data?.supplierRating }} filters={supplierFilters} />
           ) : selectionId === "vendor_rating_report_dashboard" ? (
-            <VendorRatingBottomTable filters={vendorFilters} />
+            <VendorRatingBottomTable data={{ vendorRating: vrPanelData || data?.vendorRating }} filters={vendorFilters} />
+
           ) : selectionId === "fg_value_report_dashboard" ? (
-            <FgValueReportBottomTable filters={fgFilters} />
+            <FgValueReportBottomTable data={{ fgValueCompare: fgValuePanelData || data?.fgValueCompare }} filters={fgFilters} />
           ) : selectionId === "daily_production_report_dashboard" ? (
             <DailyProductionBottomTable data={{ dailyProductionCompare: dailyProdPanelData || data?.dailyProductionCompare }} filters={dailyProductionFilters} targetConfig={targetConfig} />
           ) : selectionId === "target_vs_actual_report_dashboard" ? (
-            <TargetVsActualBottomTable filters={targetVsActualFilters} targetConfig={targetConfig} />
+            <TargetVsActualBottomTable data={{ targetVsActualCompare: targetVsActualPanelData || data?.targetVsActualCompare }} filters={targetVsActualFilters} targetConfig={targetConfig} />
           ) : selectionId === "operator_efficiency_report_dashboard" ? (
             <OperatorEfficiencyBottomTable data={{ operatorEfficiencyCompare: opEffPanelData || data?.operatorEfficiencyCompare }} filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
           ) : selectionId === "machine_efficiency_report_dashboard" ? (

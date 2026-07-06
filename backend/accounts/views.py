@@ -726,26 +726,128 @@ def supplier_rating_monthwise(request):
         cursor = conn.cursor()
         # Using exact provided SQL logic, parameterized for dates, grouped by Supplier
         sql = """
+        WITH POScope AS (
+            SELECT DISTINCT PM.pono, PM.cid
+            FROM POMas PM
+            WHERE PM.deleted = 0
+              AND PM.cid LIKE 'S%'
+              AND PM.podate BETWEEN ? AND ?
+        ),
+        ScheduleTotals AS (
+            SELECT
+                S.pono,
+                SUM(S.shdQty)   AS TotalSchedQty,
+                MAX(S.shddate)  AS LastSchedDate
+            FROM iss_podet_ShdQty S
+            INNER JOIN POScope P ON P.pono = S.pono
+            WHERE S.deleted = 0
+            GROUP BY S.pono
+        ),
+        GRNTotals AS (
+            SELECT
+                G.pono,
+                SUM(G.qty)      AS TotalGRNQty,
+                MAX(GM.grndate) AS LastGRNDate
+            FROM grninsubdet G
+            INNER JOIN POScope P ON P.pono = G.pono
+            INNER JOIN grn_mas GM ON GM.grnno = G.grnno
+            WHERE G.deleted = 0
+            GROUP BY G.pono
+        ),
+        POStatus AS (
+            SELECT
+                P.pono,
+                P.cid,
+                ST.TotalSchedQty,
+                ST.LastSchedDate,
+                ISNULL(GT.TotalGRNQty, 0)  AS TotalGRNQty,
+                GT.LastGRNDate,
+                CASE
+                    WHEN ST.TotalSchedQty IS NULL THEN 'OnTime'
+                    WHEN ISNULL(GT.TotalGRNQty, 0) < ST.TotalSchedQty THEN 'Pending'
+                    WHEN GT.LastGRNDate <= ST.LastSchedDate THEN 'OnTime'
+                    ELSE 'Delayed'
+                END AS POStatus
+            FROM POScope P
+            LEFT JOIN ScheduleTotals ST ON ST.pono = P.pono
+            LEFT JOIN GRNTotals GT      ON GT.pono = P.pono
+        ),
+        DeliveryBySupplier AS (
+            SELECT
+                cid,
+                COUNT(*)                                            AS POsProduced,
+                SUM(CASE WHEN POStatus = 'OnTime'  THEN 1 ELSE 0 END) AS OnTimePOs,
+                SUM(CASE WHEN POStatus = 'Delayed' THEN 1 ELSE 0 END) AS DelayedPOs,
+                SUM(CASE WHEN POStatus = 'Pending' THEN 1 ELSE 0 END) AS PendingPOs
+            FROM POStatus
+            GROUP BY cid
+        ),
+        DeliveryCalc AS (
+            SELECT
+                cid,
+                POsProduced,
+                OnTimePOs,
+                DelayedPOs,
+                PendingPOs,
+                CASE WHEN POsProduced > 0
+                     THEN ROUND(OnTimePOs * 100.0 / POsProduced, 2)
+                     ELSE 0 END AS OnTimePct
+            FROM DeliveryBySupplier
+        ),
+        InspectionBase AS (
+            SELECT
+                G.pono,
+                P.cid,
+                ID.grnqty,
+                ID.okqty,
+                ID.matrej,
+                ID.macrej
+            FROM inspdet ID
+            INNER JOIN inspmas IM ON IM.irno = ID.irno
+            INNER JOIN grninsubdet G ON G.grnno = IM.grnno
+            INNER JOIN POScope P ON P.pono = G.pono
+            WHERE ID.deleted = 0
+              AND G.deleted = 0
+        ),
+        QualityCalc AS (
+            SELECT
+                cid,
+                SUM(grnqty) AS ItemsPurchased,
+                SUM(okqty)  AS ItemsAccepted,
+                SUM(matrej) + SUM(macrej) AS ItemsRejected,
+                CASE WHEN SUM(grnqty) > 0
+                     THEN ROUND(SUM(okqty) * 100.0 / SUM(grnqty), 2)
+                     ELSE 0 END AS AcceptancePct
+            FROM InspectionBase
+            GROUP BY cid
+        ),
+        VendorLookup AS (
+            SELECT DISTINCT 
+                P.cid, 
+                LTRIM(RTRIM(ISNULL(CA.CName, CM.CName))) AS SupplierName
+            FROM POScope P
+            LEFT JOIN CustMast CM      ON CM.Id = P.cid
+            LEFT JOIN CustAliasMast CA ON CA.Id = P.cid
+        ),
+        SupplierSummary AS (
+            SELECT
+                VL.SupplierName,
+                ISNULL(QR.RatingFor, 0) + ISNULL(DR.RatingFor, 0)   AS TotalSupplierRating
+            FROM VendorLookup VL
+            LEFT JOIN DeliveryCalc DC ON DC.cid = VL.cid
+            LEFT JOIN QualityCalc QC  ON QC.cid = VL.cid
+            LEFT JOIN DeliveryRating DR
+                ON DR.dtype = 'Supplier'
+               AND ISNULL(DC.OnTimePct, 0) BETWEEN DR.RatingFrom AND DR.RatingTo
+            LEFT JOIN QualityRating QR
+                ON QR.dtype = 'Supplier'
+               AND ISNULL(QC.AcceptancePct, 0) BETWEEN QR.RatingFrom AND QR.RatingTo
+        )
         SELECT 
-            cm.CName AS SupplierName,
-            AVG(CAST(ISNULL(dr.RatingFor,0) + ISNULL(qr.RatingFor,0) AS FLOAT)) AS AvgFinalRating
+            SupplierName,
+            TotalSupplierRating AS AvgFinalRating
         FROM 
-            grninsubdet gs
-        INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
-        INNER JOIN pomas pm ON gs.pono = pm.pono
-        INNER JOIN iss_podet_ShdQty isp ON gs.pono = isp.pono AND gs.rmname = isp.icode
-        INNER JOIN inspmas im ON gm.grnno = im.grnno
-        INNER JOIN inspdet id ON id.irno = im.irno AND id.partno = gs.rmname
-        INNER JOIN CustMast cm ON cm.Id = pm.cid
-        LEFT JOIN DeliveryRating dr ON dr.dtype = 'Supplier' 
-            AND CAST((ISNULL(gs.qty,0) * 100.0) / NULLIF(ISNULL(isp.shdQty,0),0) AS DECIMAL(10,2)) BETWEEN dr.RatingFrom AND dr.RatingTo
-        LEFT JOIN QualityRating qr ON qr.dtype = 'Supplier' 
-            AND CAST((ISNULL(id.okqty,0) * 100.0) / NULLIF(ISNULL(id.okqty,0) + ISNULL(id.matrej,0) + ISNULL(id.macrej,0),0) AS DECIMAL(10,2)) BETWEEN qr.RatingFrom AND qr.RatingTo
-        WHERE 
-            gs.deleted = 0 
-            AND pm.podate BETWEEN ? AND ?
-        GROUP BY 
-            cm.CName
+            SupplierSummary
         ORDER BY 
             AvgFinalRating DESC
         """
@@ -769,7 +871,7 @@ def supplier_rating_monthwise(request):
         })
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
-
+        
 # ─────────────────────────────────────────────────────────────
 #  VENDOR - REJECTION MONTHWISE
 # ─────────────────────────────────────────────────────────────

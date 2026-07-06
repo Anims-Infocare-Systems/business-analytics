@@ -324,6 +324,371 @@ dashboard3_grn_value = dashboard2_grn_value
 
 
 @api_view(["GET"])
+def dashboard2_fg_value(request):
+    """Plant Performance — FG Value based on RouteCardStock and LATEST_RATE."""
+    try:
+        from .views import get_tenant_connection
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    sql = """
+;WITH PART_CUSTOMER AS
+(
+    SELECT
+        WM.PartNo,
+        WM.Cid AS CID
+    FROM WithMatMas WM
+    WHERE WM.Deleted = 0
+
+    UNION
+
+    SELECT
+        PM.PartNo,
+        PM.Cid AS CID
+    FROM ProductMast PM
+    WHERE PM.Deleted = 0
+
+    UNION
+
+    SELECT
+        CJ.partno AS PartNo,
+        CJ.cid AS CID
+    FROM CustJobRawMat CJ
+    WHERE CJ.deleted = 0
+),
+
+PART_DESCRIPTION AS
+(
+    SELECT
+        WM.PartNo,
+        WM.Description
+    FROM WithMatMas WM
+    WHERE WM.Deleted = 0
+
+    UNION
+
+    SELECT
+        PM.PartNo,
+        PM.Description
+    FROM ProductMast PM
+    WHERE PM.Deleted = 0
+
+    UNION
+
+    SELECT
+        CJ.partno AS PartNo,
+        CJ.description AS Description
+    FROM CustJobRawMat CJ
+    WHERE CJ.deleted = 0
+),
+
+LATEST_RATE AS
+(
+    SELECT
+        PartNo,
+        CASE
+            WHEN ISNULL(NetRate,0) > 0 THEN NetRate
+            ELSE BaseRate
+        END AS Rate,
+        ROW_NUMBER() OVER
+        (
+            PARTITION BY PartNo
+            ORDER BY BReffdt DESC
+        ) AS RN
+    FROM Commer_BaseRateDet
+    WHERE Deleted = 0
+)
+
+SELECT
+    R.PartNo,
+    MAX(PD.Description) AS Description,
+    MAX(CM.CName) AS CustomerName,
+    SUM(ISNULL(R.FinalInspQty,0)) AS FinalInspQty,
+    SUM(ISNULL(R.DCQty,0)) AS DCQty,
+    ISNULL(MAX(LR.Rate),0) AS Rate,
+    CAST(SUM(ISNULL(R.FinalInspQty,0)) * ISNULL(MAX(LR.Rate),0) AS DECIMAL(18,2))
+        AS FinalInspectionValue,
+    CAST(SUM(ISNULL(R.DCQty,0)) * ISNULL(MAX(LR.Rate),0) AS DECIMAL(18,2))
+        AS DispatchValue
+FROM RouteCardStock R
+
+LEFT JOIN PART_DESCRIPTION PD
+ON PD.PartNo = R.PartNo
+
+LEFT JOIN PART_CUSTOMER PC
+ON PC.PartNo = R.PartNo
+
+LEFT JOIN CustMast CM
+ON CM.ID = PC.CID
+AND CM.Deleted = 0
+
+LEFT JOIN LATEST_RATE LR
+ON LR.PartNo = R.PartNo
+AND LR.RN = 1
+
+WHERE
+(
+    ISNULL(R.FinalInspQty,0) > 0
+    OR
+    ISNULL(R.DCQty,0) > 0
+)
+
+GROUP BY
+    R.PartNo
+
+ORDER BY
+    CustomerName,
+    R.PartNo;
+    """
+
+    rows = []
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        for row in cursor.fetchall() or []:
+            part_no = str(row[0]) if row[0] else ""
+            description = str(row[1]) if row[1] else ""
+            customer_name = str(row[2]) if row[2] else "—"
+            final_insp_qty = float(row[3] or 0)
+            dc_qty = float(row[4] or 0)
+            rate = float(row[5] or 0)
+            final_insp_value = float(row[6] or 0)
+            dispatch_value = float(row[7] or 0)
+
+            rows.append({
+                "partNo": part_no,
+                "description": description,
+                "customerName": customer_name,
+                "finalInspQty": final_insp_qty,
+                "dcQty": dc_qty,
+                "rate": rate,
+                "finalInspectionValue": final_insp_value,
+                "dispatchValue": dispatch_value
+            })
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows
+    })
+
+
+@api_view(["GET"])
+def dashboard2_target_vs_actual(request):
+    """Plant Performance — Target Vs Actual (DailyDcPlan vs DC)."""
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    sql = """
+;WITH PART_DESCRIPTION AS
+(
+    SELECT
+        WM.PartNo,
+        WM.Description
+    FROM WithMatMas WM
+    WHERE WM.Deleted = 0
+
+    UNION
+
+    SELECT
+        PM.PartNo,
+        PM.Description
+    FROM ProductMast PM
+    WHERE PM.Deleted = 0
+
+    UNION
+
+    SELECT
+        CJ.partno AS PartNo,
+        CJ.description AS Description
+    FROM CustJobRawMat CJ
+    WHERE CJ.deleted = 0
+),
+
+UNIQUE_COMBINATIONS AS
+(
+    SELECT
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE) AS ComboDate
+    FROM DailyDcPlan_Det DPD
+    INNER JOIN DailyDcPlan_Mas DPM
+        ON DPM.dplno = DPD.dplno
+    WHERE
+        DPM.deleted = 0
+        AND DPD.deleted = 0
+        AND DPM.dpldate BETWEEN ? AND ?
+
+    UNION
+
+    SELECT
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE) AS ComboDate
+    FROM DC_Det DD
+    INNER JOIN DC_Mas DM
+        ON DM.dcno = DD.dcno
+    WHERE
+        DM.deleted = 0
+        AND DD.deleted = 0
+        AND DM.dcdate BETWEEN ? AND ?
+),
+
+PLAN_DATA AS
+(
+    SELECT
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE) AS PlanDate,
+        SUM(ISNULL(DPD.PlanQty,0)) AS PlanQty,
+        SUM(ISNULL(DPD.PlanReqQty,0)) AS PlanReqQty,
+        SUM(ISNULL(DPD.AvailQty,0)) AS AvailableQty
+    FROM DailyDcPlan_Det DPD
+    INNER JOIN DailyDcPlan_Mas DPM
+        ON DPM.dplno = DPD.dplno
+    WHERE
+        DPM.deleted = 0
+        AND DPD.deleted = 0
+        AND DPM.dpldate BETWEEN ? AND ?
+    GROUP BY
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE)
+),
+
+DISPATCH_DATA AS
+(
+    SELECT
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE) AS DcDate,
+        SUM(ISNULL(DD.okqty,0)) AS DispatchQty
+    FROM DC_Det DD
+    INNER JOIN DC_Mas DM
+        ON DM.dcno = DD.dcno
+    WHERE
+        DM.deleted = 0
+        AND DD.deleted = 0
+        AND DM.dcdate BETWEEN ? AND ?
+    GROUP BY
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE)
+)
+
+SELECT
+    UC.CID,
+    ISNULL(CM.CName, N'—') AS CustomerName,
+    UC.PartNo,
+    MAX(ISNULL(PD.Description, N'')) AS Description,
+    UC.ComboDate AS PlanDate,
+    SUM(ISNULL(P.PlanQty,0)) AS PlanQty,
+    SUM(ISNULL(P.AvailableQty,0)) AS AvailableQty,
+    SUM(ISNULL(P.PlanReqQty,0)) AS PlanReqQty,
+    SUM(ISNULL(D.DispatchQty,0)) AS DispatchQty,
+
+    CASE
+        WHEN SUM(ISNULL(P.PlanQty,0)) = 0 THEN 0
+        ELSE ROUND(SUM(ISNULL(D.DispatchQty,0)) * 100.0 / SUM(ISNULL(P.PlanQty,0)),2)
+    END AS DispatchPercentage,
+
+    CASE
+        WHEN SUM(ISNULL(D.DispatchQty,0)) >= SUM(ISNULL(P.PlanQty,0)) AND SUM(ISNULL(P.PlanQty,0)) > 0 THEN 'Completed'
+        WHEN SUM(ISNULL(D.DispatchQty,0)) > 0 THEN 'Partial'
+        ELSE 'Pending'
+    END AS DispatchStatus
+
+FROM UNIQUE_COMBINATIONS UC
+
+LEFT JOIN PLAN_DATA P
+    ON P.CID = UC.CID
+   AND P.PartNo = UC.PartNo
+   AND P.PlanDate = UC.ComboDate
+
+LEFT JOIN DISPATCH_DATA D
+    ON D.CID = UC.CID
+   AND D.PartNo = UC.PartNo
+   AND D.DcDate = UC.ComboDate
+
+LEFT JOIN CustMast CM
+    ON CM.ID = UC.CID
+   AND CM.Deleted = 0
+
+LEFT JOIN PART_DESCRIPTION PD
+    ON PD.PartNo = UC.PartNo
+
+GROUP BY
+    UC.CID,
+    CM.CName,
+    UC.PartNo,
+    UC.ComboDate
+
+ORDER BY
+    CustomerName,
+    UC.PartNo,
+    PlanDate;
+"""
+
+    rows = []
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, [
+            start_date, end_date, start_date, end_date,
+            start_date, end_date, start_date, end_date
+        ])
+        for row in cursor.fetchall() or []:
+            cid = str(row[0]) if row[0] else ""
+            customer_name = str(row[1]) if row[1] else "—"
+            part_no = str(row[2]) if row[2] else ""
+            description = str(row[3]) if row[3] else ""
+            plan_date = str(row[4])[:10] if row[4] else ""
+            plan_qty = float(row[5] or 0)
+            avail_qty = float(row[6] or 0)
+            plan_req_qty = float(row[7] or 0)
+            dispatch_qty = float(row[8] or 0)
+            dispatch_pct = float(row[9] or 0)
+            dispatch_status = str(row[10]) if row[10] else "Pending"
+
+            rows.append({
+                "cid": cid,
+                "customerName": customer_name,
+                "partNo": part_no,
+                "description": description,
+                "date": plan_date,
+                "planQty": plan_qty,
+                "availableQty": avail_qty,
+                "planReqQty": plan_req_qty,
+                "dispatchQty": dispatch_qty,
+                "dispatchPercentage": dispatch_pct,
+                "dispatchStatus": dispatch_status
+            })
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows
+    })
+
+
+@api_view(["GET"])
 def dashboard2_sales_analysis(request):
     """Plant Performance — Sales Analysis (Bill_Mas invoices, same pattern as customer_po_vs_sales)."""
     try:
@@ -2621,6 +2986,7 @@ plant_performance_grn_pending_pipeline = dashboard2_grn_pending_pipeline
 plant_performance_inspection_pending_snapshot = dashboard2_inspection_pending_snapshot
 plant_performance_customer_po_vs_sales = dashboard2_customer_po_vs_sales
 plant_performance_grn_value = dashboard2_grn_value
+plant_performance_fg_value = dashboard2_fg_value
 plant_performance_sales_analysis = dashboard2_sales_analysis
 plant_performance_purchase_value = dashboard2_purchase_value
 plant_performance_efficiency = dashboard2_efficiency
@@ -2633,6 +2999,930 @@ plant_performance_operator_efficiency = dashboard2_operator_efficiency
 plant_performance_daily_production = dashboard2_daily_production
 plant_performance_production_value = dashboard2_production_value
 plant_performance_machine_efficiency = dashboard2_machine_efficiency
+
+def get_supplier_rating_base_cte():
+    return """
+    WITH POScope AS (
+        SELECT DISTINCT PM.pono, PM.cid, PM.dtype
+        FROM POMas PM
+        WHERE PM.deleted = 0
+          AND PM.cid LIKE 'S%'
+          AND PM.podate BETWEEN ? AND ?
+    ),
+    ScheduleTotals AS (
+        SELECT
+            S.pono,
+            SUM(S.shdQty)   AS TotalSchedQty,
+            MAX(S.shddate)  AS LastSchedDate
+        FROM iss_podet_ShdQty S
+        INNER JOIN POScope P ON P.pono = S.pono
+        WHERE S.deleted = 0
+        GROUP BY S.pono
+    ),
+    GRNTotals AS (
+        SELECT
+            G.pono,
+            SUM(G.qty)      AS TotalGRNQty,
+            MAX(GM.grndate) AS LastGRNDate
+        FROM grninsubdet G
+        INNER JOIN POScope P ON P.pono = G.pono
+        INNER JOIN grn_mas GM ON GM.grnno = G.grnno
+        WHERE G.deleted = 0
+        GROUP BY G.pono
+    ),
+    POStatus AS (
+        SELECT
+            P.pono,
+            P.cid,
+            ST.TotalSchedQty,
+            ST.LastSchedDate,
+            ISNULL(GT.TotalGRNQty, 0)  AS TotalGRNQty,
+            GT.LastGRNDate,
+            CASE
+                WHEN ST.TotalSchedQty IS NULL THEN 'OnTime'
+                WHEN ISNULL(GT.TotalGRNQty, 0) < ST.TotalSchedQty THEN 'Pending'
+                WHEN GT.LastGRNDate <= ST.LastSchedDate THEN 'OnTime'
+                ELSE 'Delayed'
+            END AS POStatus
+        FROM POScope P
+        LEFT JOIN ScheduleTotals ST ON ST.pono = P.pono
+        LEFT JOIN GRNTotals GT      ON GT.pono = P.pono
+    ),
+    DeliveryBySupplier AS (
+        SELECT
+            cid,
+            COUNT(*)                                            AS POsProduced,
+            SUM(CASE WHEN POStatus = 'OnTime'  THEN 1 ELSE 0 END) AS OnTimePOs,
+            SUM(CASE WHEN POStatus = 'Delayed' THEN 1 ELSE 0 END) AS DelayedPOs,
+            SUM(CASE WHEN POStatus = 'Pending' THEN 1 ELSE 0 END) AS PendingPOs
+        FROM POStatus
+        GROUP BY cid
+    ),
+    DeliveryCalc AS (
+        SELECT
+            cid,
+            POsProduced,
+            OnTimePOs,
+            DelayedPOs,
+            PendingPOs,
+            CASE WHEN POsProduced > 0
+                 THEN ROUND(OnTimePOs * 100.0 / POsProduced, 2)
+                 ELSE 0 END AS OnTimePct
+        FROM DeliveryBySupplier
+    ),
+    InspectionBase AS (
+        SELECT
+            G.pono,
+            P.cid,
+            ID.grnqty,
+            ID.okqty,
+            ID.matrej,
+            ID.macrej
+        FROM inspdet ID
+        INNER JOIN inspmas IM ON IM.irno = ID.irno
+        INNER JOIN grninsubdet G ON G.grnno = IM.grnno
+        INNER JOIN POScope P ON P.pono = G.pono
+        WHERE ID.deleted = 0
+          AND G.deleted = 0
+    ),
+    QualityCalc AS (
+        SELECT
+            cid,
+            SUM(grnqty) AS ItemsPurchased,
+            SUM(okqty)  AS ItemsAccepted,
+            SUM(matrej) + SUM(macrej) AS ItemsRejected,
+            CASE WHEN SUM(grnqty) > 0
+                 THEN ROUND(SUM(okqty) * 100.0 / SUM(grnqty), 2)
+                 ELSE 0 END AS AcceptancePct
+        FROM InspectionBase
+        GROUP BY cid
+    ),
+    VendorLookup AS (
+        SELECT 
+            P.cid, 
+            LTRIM(RTRIM(ISNULL(CA.CName, CM.CName))) AS SupplierName,
+            MAX(P.dtype) AS Category
+        FROM POScope P
+        LEFT JOIN CustMast CM      ON CM.Id = P.cid
+        LEFT JOIN CustAliasMast CA ON CA.Id = P.cid
+        GROUP BY P.cid, LTRIM(RTRIM(ISNULL(CA.CName, CM.CName)))
+    ),
+    SupplierSummary AS (
+        SELECT
+            VL.cid                                              AS SupplierId,
+            VL.SupplierName,
+            VL.Category,
+            ISNULL(QC.ItemsPurchased, 0)                        AS NoOfItemsPurchased,
+            ISNULL(QC.ItemsAccepted, 0)                         AS NoOfItemsAccepted,
+            ISNULL(QC.ItemsRejected, 0)                         AS NoOfItemsRejected,
+            ISNULL(QC.AcceptancePct, 0)                         AS PctOfAcceptance,
+            QR.RatingFor                                        AS QualityRating,
+            QR.RatingStatus                                     AS QualityGrade,
+            DC.POsProduced                                      AS NoOfPurchaseOrdersProduced,
+            ISNULL(DC.OnTimePOs, 0)                             AS OnTimeDeliveryPOs,
+            ISNULL(DC.DelayedPOs, 0)                            AS DeliveryDelayPOs,
+            ISNULL(DC.PendingPOs, 0)                            AS PendingPOs,
+            ISNULL(DC.OnTimePct, 0)                             AS PctOfOnTimeDeliveryPOs,
+            DR.RatingFor                                        AS DeliveryRating,
+            DR.RatingStatus                                     AS DeliveryGrade,
+            ISNULL(QR.RatingFor, 0) + ISNULL(DR.RatingFor, 0)   AS TotalSupplierRating
+        FROM VendorLookup VL
+        LEFT JOIN DeliveryCalc DC ON DC.cid = VL.cid
+        LEFT JOIN QualityCalc QC  ON QC.cid = VL.cid
+        LEFT JOIN DeliveryRating DR
+            ON DR.dtype = 'Supplier'
+           AND ISNULL(DC.OnTimePct, 0) BETWEEN DR.RatingFrom AND DR.RatingTo
+        LEFT JOIN QualityRating QR
+            ON QR.dtype = 'Supplier'
+           AND ISNULL(QC.AcceptancePct, 0) BETWEEN QR.RatingFrom AND QR.RatingTo
+    )
+    """
+
+def get_kpi_data(conn, start_date, end_date, supplier_param):
+    cursor = conn.cursor()
+    extra_where = ""
+    params = [start_date, end_date]
+    if supplier_param:
+        suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()]
+        if suppliers:
+            placeholders = ",".join(["?"] * len(suppliers))
+            extra_where = f" AND SupplierName IN ({placeholders})"
+            params.extend(suppliers)
+            
+    sql = f"""
+    {get_supplier_rating_base_cte()}
+    SELECT
+        ROUND(AVG(CAST(TotalSupplierRating AS FLOAT)), 2) AS AvgRating,
+        ROUND(AVG(CAST(PctOfOnTimeDeliveryPOs AS FLOAT)), 2) AS OnTimeSupply,
+        ROUND(AVG(CAST(PctOfAcceptance AS FLOAT)), 2) AS QualityCompliance,
+        COUNT(DISTINCT SupplierId) AS ActiveSuppliers
+    FROM SupplierSummary
+    WHERE 1=1 {extra_where}
+    """
+    cursor.execute(sql, params)
+    row = cursor.fetchone()
+    cursor.close()
+    if row:
+        return {
+            "avg_rating": round(float(row[0] or 0), 2),
+            "on_time_supply": round(float(row[1] or 0), 2),
+            "quality_compliance": round(float(row[2] or 0), 2),
+            "active_suppliers": int(row[3] or 0)
+        }
+    return {
+        "avg_rating": 0.0,
+        "on_time_supply": 0.0,
+        "quality_compliance": 0.0,
+        "active_suppliers": 0
+    }
+
+def get_chart_data(conn, start_date, end_date, supplier_param):
+    cursor = conn.cursor()
+    extra_where = ""
+    params = [start_date, end_date]
+    if supplier_param:
+        suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()]
+        if suppliers:
+            placeholders = ",".join(["?"] * len(suppliers))
+            extra_where = f" AND SupplierName IN ({placeholders})"
+            params.extend(suppliers)
+            
+    sql = f"""
+    {get_supplier_rating_base_cte()}
+    SELECT
+        SupplierName,
+        ROUND(CAST(TotalSupplierRating AS FLOAT), 2) AS AvgFinalRating
+    FROM SupplierSummary
+    WHERE 1=1 {extra_where}
+    ORDER BY AvgFinalRating DESC;
+    """
+    cursor.execute(sql, params)
+    rows = cursor.fetchall() or []
+    cursor.close()
+    
+    labels = []
+    data = []
+    for row in rows:
+        labels.append(str(row[0]).strip() if row[0] else "")
+        data.append(round(float(row[1] or 0), 2))
+        
+    return {
+        "labels": labels,
+        "data": data
+    }
+
+def get_registry_data(conn, start_date, end_date, supplier_param):
+    cursor = conn.cursor()
+    extra_where = ""
+    params = [start_date, end_date]
+    if supplier_param:
+        suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()]
+        if suppliers:
+            placeholders = ",".join(["?"] * len(suppliers))
+            extra_where = f" AND SupplierName IN ({placeholders})"
+            params.extend(suppliers)
+            
+    sql = f"""
+    {get_supplier_rating_base_cte()}
+    SELECT
+        SupplierName,
+        Category,
+        NoOfPurchaseOrdersProduced AS TotalOrders,
+        PctOfOnTimeDeliveryPOs AS OnTimeDelivery,
+        PctOfAcceptance AS QualityPass,
+        TotalSupplierRating AS OverallRating,
+        CASE
+            WHEN TotalSupplierRating >= 95 THEN 'Excellent'
+            WHEN TotalSupplierRating >= 90 THEN 'Good'
+            WHEN TotalSupplierRating >= 80 THEN 'Average'
+            ELSE 'Poor'
+        END AS Status
+    FROM SupplierSummary
+    WHERE 1=1 {extra_where}
+    ORDER BY OverallRating DESC;
+    """
+    cursor.execute(sql, params)
+    rows = cursor.fetchall() or []
+    cursor.close()
+    
+    out_rows = []
+    for idx, row in enumerate(rows):
+        out_rows.append({
+            "id": idx + 1,
+            "supplierName": str(row[0]).strip() if row[0] else "",
+            "category": str(row[1]).strip() if row[1] else "",
+            "totalOrders": int(row[2] or 0),
+            "onTimeDelivery": round(float(row[3] or 0), 2),
+            "qualityPass": round(float(row[4] or 0), 2),
+            "overallRating": round(float(row[5] or 0), 2),
+            "avgRating": round(float(row[5] or 0), 2),
+            "status": str(row[6]).strip() if row[6] else ""
+        })
+    return out_rows
+
+def get_actions_data(conn, start_date, end_date, supplier_param):
+    cursor = conn.cursor()
+    extra_where = ""
+    params = [start_date, end_date]
+    if supplier_param:
+        suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()]
+        if suppliers:
+            placeholders = ",".join(["?"] * len(suppliers))
+            extra_where = f" AND SupplierName IN ({placeholders})"
+            params.extend(suppliers)
+            
+    sql = f"""
+    {get_supplier_rating_base_cte()}
+    SELECT
+        SupplierName,
+        TotalSupplierRating AS Rating
+    FROM SupplierSummary
+    WHERE TotalSupplierRating < 90 {extra_where}
+    ORDER BY Rating
+    """
+    cursor.execute(sql, params)
+    rows = cursor.fetchall() or []
+    cursor.close()
+    
+    out_rows = []
+    for idx, row in enumerate(rows):
+        out_rows.append({
+            "id": idx + 1,
+            "supplierName": str(row[0]).strip() if row[0] else "",
+            "rating": round(float(row[1] or 0), 2)
+        })
+    return out_rows
+
+@api_view(["GET"])
+def supplier_rating_kpi_view(request):
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+    start_date, end_date = parse_date_range(request)
+    supplier_param = request.GET.get("supplier", "").strip()
+    try:
+        data = get_kpi_data(conn, start_date, end_date, supplier_param)
+        return Response(data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    finally:
+        conn.close()
+
+@api_view(["GET"])
+def supplier_rating_chart_view(request):
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+    start_date, end_date = parse_date_range(request)
+    supplier_param = request.GET.get("supplier", "").strip()
+    try:
+        data = get_chart_data(conn, start_date, end_date, supplier_param)
+        return Response(data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    finally:
+        conn.close()
+
+@api_view(["GET"])
+def supplier_rating_registry_view(request):
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+    start_date, end_date = parse_date_range(request)
+    supplier_param = request.GET.get("supplier", "").strip()
+    try:
+        data = get_registry_data(conn, start_date, end_date, supplier_param)
+        return Response(data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    finally:
+        conn.close()
+
+@api_view(["GET"])
+def supplier_rating_actions_view(request):
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+    start_date, end_date = parse_date_range(request)
+    supplier_param = request.GET.get("supplier", "").strip()
+    try:
+        data = get_actions_data(conn, start_date, end_date, supplier_param)
+        return Response(data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    finally:
+        conn.close()
+
+@api_view(["GET"])
+def dashboard2_supplier_rating(request):
+    """Plant Performance — Supplier Rating Consolidated."""
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
+    start_date, end_date = parse_date_range(request)
+    supplier_param = request.GET.get("supplier", "").strip()
+    
+    try:
+        kpis = get_kpi_data(conn, start_date, end_date, supplier_param)
+        chart = get_chart_data(conn, start_date, end_date, supplier_param)
+        registry_rows = get_registry_data(conn, start_date, end_date, supplier_param)
+        actions = get_actions_data(conn, start_date, end_date, supplier_param)
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT cm.CName FROM CustMast cm WHERE cm.CName IS NOT NULL ORDER BY cm.CName")
+        suppliers_list = [str(r[0]).strip() for r in cursor.fetchall() if r[0]]
+        cursor.close()
+        
+        fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
+        fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+        
+        return Response({
+            "company": tenant.get("company_name", ""),
+            "fy": fy_label,
+            "from": str(start_date),
+            "to": str(end_date),
+            "labels": chart["labels"],
+            "data": chart["data"],
+            "rows": registry_rows,
+            "kpis": kpis,
+            "actions": actions,
+            "filterOptions": {
+                "suppliers": suppliers_list
+            }
+        })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+    finally:
+        conn.close()
+
+plant_performance_supplier_rating = dashboard2_supplier_rating
+
+
+# ── Vendor Rating (Job-based, cid LIKE 'V%') ────────────────────────────────
+
+@api_view(["GET"])
+def plant_performance_vendor_rating(request):
+    """
+    Plant Performance — Vendor Rating Report.
+    Logic reverse-engineered from the ERP Summary screen.
+    Uses Job_mas / JobIncomeDetInsp / InJob_Mas to determine
+    received / accepted / rejected quantities and on-time delivery per vendor.
+    Joins QualityRating / DeliveryRating / OverAllRating for grade lookup.
+    """
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    name_filter = (request.GET.get("name") or "").strip()
+
+    sql = """
+DECLARE @FromDate DATE = ?;
+DECLARE @ToDate   DATE = ?;
+
+;WITH JobQuality AS (
+    SELECT
+        jm.jbno,
+        jm.cid,
+        jm.expdate,
+        SUM(ji.Qty)                                                    AS ReceivedQty,
+        SUM(ji.Qty - ISNULL(ji.RejQty,0) - ISNULL(ji.RwQty,0))       AS AcceptedQty,
+        SUM(ISNULL(ji.RejQty,0))                                       AS RejectedQty
+    FROM Job_mas jm
+    INNER JOIN JobIncomeDetInsp ji ON ji.JbNo = jm.jbno
+    WHERE jm.deleted = 0
+      AND jm.cid LIKE 'V%'
+      AND jm.jbdate BETWEEN @FromDate AND @ToDate
+    GROUP BY jm.jbno, jm.cid, jm.expdate
+),
+JobDelivery AS (
+    SELECT
+        jq.jbno,
+        jq.cid,
+        jq.expdate,
+        jq.ReceivedQty,
+        jq.AcceptedQty,
+        jq.RejectedQty,
+        jd_dc.LastDcDate,
+        CASE
+            WHEN jd_dc.LastDcDate IS NOT NULL
+                 AND jd_dc.LastDcDate <= jq.expdate THEN 'ONTIME'
+            WHEN jq.expdate < CAST(GETDATE() AS DATE)  THEN 'DELAY'
+            ELSE 'PENDING'
+        END AS DeliveryBucket
+    FROM JobQuality jq
+    OUTER APPLY (
+        SELECT MAX(im.dcdate) AS LastDcDate
+        FROM JobIncomeDetInsp ji
+        INNER JOIN InJob_Mas im ON im.jino = ji.JiNo
+        WHERE ji.JbNo = jq.jbno
+    ) jd_dc
+),
+VendorAgg AS (
+    SELECT
+        jd.cid,
+        SUM(jd.ReceivedQty)                                                AS TotalReceived,
+        SUM(jd.AcceptedQty)                                                AS TotalAccepted,
+        SUM(jd.RejectedQty)                                                AS TotalRejected,
+        COUNT(*)                                                            AS JobOrdersProduced,
+        SUM(CASE WHEN jd.DeliveryBucket = 'ONTIME'  THEN 1 ELSE 0 END)    AS OnTimeJobs,
+        SUM(CASE WHEN jd.DeliveryBucket = 'DELAY'   THEN 1 ELSE 0 END)    AS DelayJobs,
+        SUM(CASE WHEN jd.DeliveryBucket = 'PENDING' THEN 1 ELSE 0 END)    AS PendingJobs
+    FROM JobDelivery jd
+    GROUP BY jd.cid
+),
+VendorScored AS (
+    SELECT
+        va.*,
+        CASE WHEN va.TotalReceived = 0 THEN NULL
+             ELSE (va.TotalAccepted * 100.0) / va.TotalReceived
+        END AS AcceptancePct,
+        CASE WHEN (va.JobOrdersProduced - va.PendingJobs) = 0 THEN NULL
+             ELSE (va.OnTimeJobs * 100.0) / (va.JobOrdersProduced - va.PendingJobs)
+        END AS OnTimeDeliveryPct
+    FROM VendorAgg va
+),
+VendorGraded AS (
+    SELECT
+        vs.*,
+        qr.RatingFor    AS QualityRating,
+        qr.RatingStatus AS QualityStatus,
+        dr.RatingFor    AS DeliveryRating,
+        dr.RatingStatus AS DeliveryStatus,
+        ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
+    FROM VendorScored vs
+    LEFT JOIN QualityRating qr
+           ON qr.dtype = 'Vendor'
+          AND vs.AcceptancePct IS NOT NULL
+          AND vs.AcceptancePct BETWEEN qr.RatingFrom AND qr.RatingTo
+    LEFT JOIN DeliveryRating dr
+           ON dr.dtype = 'Vendor'
+          AND vs.OnTimeDeliveryPct IS NOT NULL
+          AND vs.OnTimeDeliveryPct BETWEEN dr.RatingFrom AND dr.RatingTo
+)
+SELECT
+    vg.cid                                  AS [CID],
+    cm.CName                                AS [NAME],
+    vg.TotalReceived                        AS [NO OF ITEMS RECEIVED],
+    vg.TotalAccepted                        AS [NO OF ITEMS ACCEPTED],
+    vg.TotalRejected                        AS [NO OF ITEMS REJECTED],
+    ROUND(vg.AcceptancePct, 2)              AS [PCT OF ACCEPTANCE],
+    vg.QualityRating                        AS [QUALITY RATING],
+    vg.QualityStatus                        AS [QUALITY STATUS],
+    vg.JobOrdersProduced                    AS [JOB ORDERS PRODUCED],
+    vg.OnTimeJobs                           AS [ON TIME JOBS],
+    vg.DelayJobs                            AS [DELAY JOBS],
+    vg.PendingJobs                          AS [PENDING JOBS],
+    ROUND(vg.OnTimeDeliveryPct, 2)          AS [PCT ON TIME DELIVERY],
+    vg.DeliveryRating                       AS [DELIVERY RATING],
+    vg.DeliveryStatus                       AS [DELIVERY STATUS],
+    ROUND(vg.TotalRating, 2)                AS [TOTAL RATING],
+    oar.RatingStatus                        AS [TOTAL STATUS],
+    oar.ActToBeTaken                        AS [ACTION TO BE TAKEN]
+FROM VendorGraded vg
+INNER JOIN CustMast cm ON cm.Id = vg.cid
+LEFT JOIN OverAllRating oar
+       ON oar.dtype = 'Vendor'
+      AND vg.TotalRating BETWEEN oar.RatingFrom AND oar.RatingTo
+WHERE (? = '' OR cm.CName LIKE '%' + ? + '%')
+ORDER BY cm.CName;
+"""
+
+    rows_out = []
+    labels = []
+    chart_data = []
+    vendor_names = []
+    total_ratings_sum = 0.0
+    total_on_time_sum = 0.0
+    total_acceptance_sum = 0.0
+    count = 0
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, [start_date, end_date, name_filter, name_filter])
+        db_rows = cursor.fetchall() or []
+
+        for idx, row in enumerate(db_rows):
+            cid             = str(row[0]).strip()  if row[0] else ""
+            name            = str(row[1]).strip()  if row[1] else "—"
+            received        = int(row[2]  or 0)
+            accepted        = int(row[3]  or 0)
+            rejected        = int(row[4]  or 0)
+            acceptance_pct  = round(float(row[5]  or 0), 2)
+            quality_rating  = round(float(row[6]  or 0), 2) if row[6] is not None else None
+            quality_status  = str(row[7]).strip()  if row[7] else "—"
+            job_orders      = int(row[8]  or 0)
+            on_time_jobs    = int(row[9]  or 0)
+            delay_jobs      = int(row[10] or 0)
+            pending_jobs    = int(row[11] or 0)
+            on_time_pct     = round(float(row[12] or 0), 2) if row[12] is not None else None
+            delivery_rating = round(float(row[13] or 0), 2) if row[13] is not None else None
+            delivery_status = str(row[14]).strip() if row[14] else "—"
+            total_rating    = round(float(row[15] or 0), 2) if row[15] is not None else 0.0
+            total_status    = str(row[16]).strip() if row[16] else "—"
+            action_to_take  = str(row[17]).strip() if row[17] else "—"
+
+            # Determine a simple status for the registry table
+            if total_rating >= 95:
+                status_label = "Excellent"
+            elif total_rating >= 90:
+                status_label = "Good"
+            elif total_rating >= 80:
+                status_label = "Average"
+            elif total_rating > 0:
+                status_label = "Poor"
+            else:
+                status_label = total_status or "—"
+
+            rows_out.append({
+                "id":              idx + 1,
+                "cid":             cid,
+                "vendorName":      name,
+                "totalReceived":   received,
+                "totalAccepted":   accepted,
+                "totalRejected":   rejected,
+                "acceptancePct":   acceptance_pct,
+                "qualityRating":   quality_rating,
+                "qualityStatus":   quality_status,
+                "jobOrdersProduced": job_orders,
+                "onTimeJobs":      on_time_jobs,
+                "delayJobs":       delay_jobs,
+                "pendingJobs":     pending_jobs,
+                "onTimeDeliveryPct": on_time_pct,
+                "deliveryRating":  delivery_rating,
+                "deliveryStatus":  delivery_status,
+                "totalRating":     total_rating,
+                "totalStatus":     total_status,
+                "actionToBeTaken": action_to_take,
+                # registry-table friendly aliases
+                "overallRating":   total_rating,
+                "onTimeDelivery":  on_time_pct,
+                "qualityPass":     acceptance_pct,
+                "status":          status_label,
+                "totalOrders":     job_orders,
+            })
+
+            labels.append(name)
+            chart_data.append(total_rating)
+            vendor_names.append(name)
+            total_ratings_sum += total_rating
+            total_on_time_sum += (on_time_pct or 0.0)
+            total_acceptance_sum += acceptance_pct
+            count += 1
+
+        # KPI aggregates
+        avg_rating   = round(total_ratings_sum / count, 2) if count else 0.0
+        avg_on_time  = round(total_on_time_sum / count, 2) if count else 0.0
+        avg_quality  = round(total_acceptance_sum / count, 2) if count else 0.0
+
+        # Vendor name list for filter dropdown
+        cursor.execute(
+            "SELECT DISTINCT cm.CName FROM CustMast cm "
+            "WHERE cm.CName IS NOT NULL AND cm.Id LIKE 'V%' ORDER BY cm.CName"
+        )
+        all_vendor_names = [str(r[0]).strip() for r in cursor.fetchall() if r[0]]
+
+        fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
+        fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+
+        return Response({
+            "company": tenant.get("company_name", ""),
+            "fy":      fy_label,
+            "from":    str(start_date),
+            "to":      str(end_date),
+            "labels":  labels,
+            "data":    chart_data,
+            "rows":    rows_out,
+            "kpis": {
+                "avg_rating":         avg_rating,
+                "on_time_supply":     avg_on_time,
+                "quality_compliance": avg_quality,
+                "active_suppliers":   count,
+            },
+            "filterOptions": {
+                "vendors": all_vendor_names,
+            },
+        })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        conn.close()
+
+
+@api_view(["GET"])
+def plant_performance_store_stock_value(request):
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
+    start_date, end_date = parse_date_range(request)
+    category_param = (request.GET.get("category") or "").strip()
+    item_code_param = (request.GET.get("itemCode") or "").strip()
+
+    extra_where = ""
+    kpi_params = []
+    
+    if category_param:
+        categories = [c.strip() for c in category_param.split(",") if c.strip()]
+        if categories:
+            placeholders = ",".join(["?"] * len(categories))
+            extra_where += f" AND RPM.SGroup IN ({placeholders})"
+            kpi_params.extend(categories)
+            
+    if item_code_param:
+        extra_where += " AND ID.partno = ?"
+        kpi_params.append(item_code_param)
+
+    # 1. KPI Value Query
+    kpi_sql = f"""
+    ;WITH LatestRate AS (
+        SELECT
+            PartNo,
+            BaseRate,
+            NetRate,
+            ROW_NUMBER() OVER (
+                PARTITION BY PartNo
+                ORDER BY BReffdt DESC
+            ) AS RN
+        FROM Commer_BaseRateDet
+        WHERE deleted = 0
+    )
+    SELECT
+        SUM(
+            ISNULL(ID.okqty,0) *
+            (
+                CASE
+                    WHEN ISNULL(LR.NetRate,0)=0
+                         THEN ISNULL(LR.BaseRate,0)
+                    ELSE LR.NetRate
+                END
+            )
+        ) AS TotalStoreStockValue
+    FROM inspdet ID
+    INNER JOIN inspmas IM
+        ON IM.irno = ID.irno
+        AND IM.deleted = 0
+    LEFT JOIN RawProdMast RPM
+        ON RPM.Codeno = ID.partno
+        AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR
+        ON LR.PartNo = ID.partno
+        AND LR.RN = 1
+    WHERE ID.deleted = 0
+      AND ID.dtype = 'Stores Material'
+      AND IM.irdate BETWEEN ? AND ?
+      {extra_where}
+    """
+    
+    # 2. Chart Query (Month Wise) — structure mirrors KPI query exactly
+    chart_sql = f"""
+    ;WITH LatestRate AS (
+        SELECT
+            PartNo,
+            BaseRate,
+            NetRate,
+            ROW_NUMBER() OVER (
+                PARTITION BY PartNo
+                ORDER BY BReffdt DESC
+            ) AS RN
+        FROM Commer_BaseRateDet
+        WHERE deleted = 0
+    )
+    SELECT
+        FORMAT(IM.irdate,'MMM-yy') AS Month,
+        SUM(
+            ISNULL(ID.okqty,0) *
+            (
+                CASE
+                    WHEN ISNULL(LR.NetRate,0)=0
+                        THEN ISNULL(LR.BaseRate,0)
+                    ELSE LR.NetRate
+                END
+            )
+        ) AS StockValue
+    FROM inspdet ID
+    INNER JOIN inspmas IM
+        ON IM.irno = ID.irno
+        AND IM.deleted = 0
+    LEFT JOIN RawProdMast RPM
+        ON RPM.Codeno = ID.partno
+        AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR
+        ON LR.PartNo = ID.partno
+        AND LR.RN = 1
+    WHERE ID.deleted = 0
+      AND ID.dtype = 'Stores Material'
+      AND IM.irdate BETWEEN ? AND ?
+      {extra_where}
+    GROUP BY
+        YEAR(IM.irdate),
+        MONTH(IM.irdate),
+        FORMAT(IM.irdate,'MMM-yy')
+    ORDER BY
+        YEAR(IM.irdate),
+        MONTH(IM.irdate)
+    """
+
+
+    # 3. Table Query
+    table_sql = f"""
+    ;WITH LatestRate AS (
+        SELECT
+            PartNo,
+            BaseRate,
+            NetRate,
+            BReffdt,
+            ROW_NUMBER() OVER (
+                PARTITION BY PartNo
+                ORDER BY BReffdt DESC
+            ) AS RN
+        FROM Commer_BaseRateDet
+        WHERE deleted = 0
+    )
+    SELECT
+        RPM.SGroup AS [Group],
+        ID.partno,
+        RPM.Description,
+        SUM(ISNULL(ID.okqty,0)) AS TotalQty,
+        CASE
+            WHEN ISNULL(LR.NetRate,0)=0
+                THEN ISNULL(LR.BaseRate,0)
+            ELSE LR.NetRate
+        END AS Rate,
+        SUM(
+            ISNULL(ID.okqty,0) *
+            (
+                CASE
+                    WHEN ISNULL(LR.NetRate,0)=0
+                        THEN ISNULL(LR.BaseRate,0)
+                    ELSE LR.NetRate
+                END
+            )
+        ) AS StockValue
+    FROM inspdet ID
+    INNER JOIN inspmas IM
+        ON IM.irno = ID.irno
+        AND IM.deleted = 0
+    LEFT JOIN RawProdMast RPM
+        ON RPM.Codeno = ID.partno
+        AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR
+        ON LR.PartNo = ID.partno
+        AND LR.RN = 1
+    WHERE ID.deleted = 0
+      AND ID.dtype = 'Stores Material'
+      AND IM.irdate BETWEEN ? AND ?
+      {extra_where}
+    GROUP BY
+        RPM.SGroup,
+        ID.partno,
+        RPM.Description,
+        LR.BaseRate,
+        LR.NetRate
+    ORDER BY
+        RPM.SGroup,
+        ID.partno
+    """
+
+    try:
+        cursor = conn.cursor()
+        
+        # KPI
+        cursor.execute(kpi_sql, [start_date, end_date] + kpi_params)
+        kpi_row = cursor.fetchone()
+        total_val = float(kpi_row[0] or 0) if kpi_row else 0.0
+        total_val_lakhs = round(total_val / 100000.0, 2)
+        
+        # Chart
+        cursor.execute(chart_sql, [start_date, end_date] + kpi_params)
+        chart_labels = []
+        chart_values = []
+        for r in cursor.fetchall() or []:
+            chart_labels.append(str(r[0]))
+            chart_values.append(round(float(r[1] or 0) / 100000.0, 2))
+            
+        # Table Rows
+        cursor.execute(table_sql, [start_date, end_date] + kpi_params)
+        table_rows = []
+        for idx, r in enumerate(cursor.fetchall() or []):
+            grp = str(r[0]).strip() if r[0] else "—"
+            part_no = str(r[1]).strip() if r[1] else "—"
+            desc = str(r[2]).strip() if r[2] else "—"
+            qty = float(r[3] or 0)
+            rate = float(r[4] or 0)
+            val = float(r[5] or 0)
+            
+            table_rows.append({
+                "id": idx + 1,
+                "group": grp,
+                "partNo": part_no,
+                "description": desc,
+                "qty": qty,
+                "rate": rate,
+                "stockValue": val
+            })
+            
+        # Filter Options
+        cursor.execute("""
+            SELECT DISTINCT LTRIM(RTRIM(SGroup)) 
+            FROM RawProdMast 
+            WHERE Deleted = 0 AND SGroup IS NOT NULL AND SGroup <> '' 
+            ORDER BY LTRIM(RTRIM(SGroup))
+        """)
+        groups_opt = [str(r[0]) for r in cursor.fetchall() if r[0]]
+        
+        cursor.execute("""
+            SELECT DISTINCT LTRIM(RTRIM(partno)) 
+            FROM inspdet 
+            WHERE deleted = 0 AND dtype = 'Stores Material' AND partno IS NOT NULL AND partno <> '' 
+            ORDER BY LTRIM(RTRIM(partno))
+        """)
+        items_opt = [str(r[0]) for r in cursor.fetchall() if r[0]]
+        
+        cursor.close()
+        
+        return Response({
+            "kpi": {
+                "totalStockValue": total_val,
+                "totalStockValueLakhs": total_val_lakhs
+            },
+            "chart": {
+                "labels": chart_labels,
+                "values": chart_values
+            },
+            "rows": table_rows,
+            "filterOptions": {
+                "groups": groups_opt,
+                "itemCodes": items_opt
+            }
+        })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+    finally:
+        conn.close()
+
+plant_performance_target_vs_actual = dashboard2_target_vs_actual
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Dashboard3 aliases (same handlers — use either naming in urls/imports)
@@ -2653,6 +3943,7 @@ dashboard3_final_inspection_org_rej_rwk = plant_performance_final_inspection_org
 dashboard3_top_defect_categories = plant_performance_top_defect_categories
 dashboard3_customer_po_vs_sales = plant_performance_customer_po_vs_sales
 dashboard3_grn_value = plant_performance_grn_value
+dashboard3_fg_value = plant_performance_fg_value
 dashboard3_sales_analysis = plant_performance_sales_analysis
 dashboard3_purchase_value = plant_performance_purchase_value
 dashboard3_efficiency = plant_performance_efficiency
@@ -2665,6 +3956,9 @@ dashboard3_operator_efficiency = plant_performance_operator_efficiency
 dashboard3_daily_production = plant_performance_daily_production
 dashboard3_production_value = plant_performance_production_value
 dashboard3_machine_efficiency = plant_performance_machine_efficiency
+dashboard3_supplier_rating = plant_performance_supplier_rating
+dashboard3_vendor_rating = plant_performance_vendor_rating
+dashboard3_target_vs_actual = plant_performance_target_vs_actual
 
 # Keys match Dashboard3.jsx `data` state property names
 _BUNDLE_VIEWS = (
@@ -2684,6 +3978,7 @@ _BUNDLE_VIEWS = (
     ("otd", plant_performance_otd),
     ("customerPoCompare", plant_performance_customer_po_vs_sales),
     ("grnValueCompare", plant_performance_grn_value),
+    ("fgValueCompare", plant_performance_fg_value),
     ("salesAnalysisCompare", plant_performance_sales_analysis),
     ("purchaseValueCompare", plant_performance_purchase_value),
     ("efficiencyCompare", plant_performance_efficiency),
@@ -2696,12 +3991,18 @@ _BUNDLE_VIEWS = (
     ("dailyProductionCompare", plant_performance_daily_production),
     ("productionValueCompare", plant_performance_production_value),
     ("machineEfficiencyCompare", plant_performance_machine_efficiency),
+    ("supplierRating", plant_performance_supplier_rating),
+    ("supplierRatingCompare", plant_performance_supplier_rating),
+    ("vendorRating", plant_performance_vendor_rating),
+    ("targetVsActualCompare", plant_performance_target_vs_actual),
+    ("storeStockValue", plant_performance_store_stock_value),
 )
 
 
 _COMPARE_BUNDLE_KEYS = frozenset({
     "customerPoCompare",
     "grnValueCompare",
+    "fgValueCompare",
     "salesAnalysisCompare",
     "purchaseValueCompare",
     "efficiencyCompare",
@@ -2714,6 +4015,7 @@ _COMPARE_BUNDLE_KEYS = frozenset({
     "dailyProductionCompare",
     "productionValueCompare",
     "machineEfficiencyCompare",
+    "targetVsActualCompare",
 })
 
 
@@ -2843,11 +4145,19 @@ __all__ = [
     "plant_performance_machine_efficiency",
     "dashboard2_machine_efficiency",
     "dashboard3_machine_efficiency",
+    "dashboard2_supplier_rating",
+    "plant_performance_supplier_rating",
+    "dashboard3_supplier_rating",
+    "plant_performance_vendor_rating",
+    "dashboard3_vendor_rating",
     "dashboard2_rejection",
     "dashboard2_rework",
     "dashboard2_purchase_value",
     "dashboard2_grn_value",
     "dashboard2_sales_analysis",
+    "dashboard2_fg_value",
+    "plant_performance_fg_value",
+    "dashboard3_fg_value",
     "plant_performance_bundle",
     "dashboard3_kpis",
     "dashboard3_production_by_shift",
@@ -2868,5 +4178,10 @@ __all__ = [
     "dashboard3_grn_value",
     "dashboard3_sales_analysis",
     "dashboard3_purchase_value",
+    "dashboard3_fg_value",
     "dashboard3_bundle",
+    "plant_performance_target_vs_actual",
+    "dashboard2_target_vs_actual",
+    "dashboard3_target_vs_actual",
+    "plant_performance_store_stock_value",
 ]
