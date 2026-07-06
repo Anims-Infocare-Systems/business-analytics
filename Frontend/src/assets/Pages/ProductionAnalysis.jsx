@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { FiCpu, FiUser, FiLayers, FiCompass, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus } from "react-icons/fi";
+import { FiCpu, FiUser, FiLayers, FiCompass, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
@@ -287,6 +287,241 @@ function PremiumSelect({ label, value, options, onChange, placeholder = "Select.
   );
 }
 
+function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Select..." }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const toggleOption = (optVal) => {
+    if (!optVal) {
+      onChange([]);
+      return;
+    }
+    const idx = value.indexOf(optVal);
+    if (idx >= 0) {
+      const next = value.filter(v => v !== optVal);
+      onChange(next);
+    } else {
+      onChange([...value, optVal]);
+    }
+  };
+
+  const filteredOpts = options.filter(opt => {
+    if (!opt.value) return false;
+    return opt.label.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const allSelected = value.length === 0;
+
+  let triggerText = placeholder;
+  if (value.length > 0) {
+    if (value.length === 1) {
+      triggerText = options.find(o => o.value === value[0])?.label || placeholder;
+    } else {
+      triggerText = `${value.length} Selected`;
+    }
+  }
+
+  return (
+    <div className="pa2-fg" ref={containerRef} style={{ minWidth: '200px' }}>
+      <label>{label}</label>
+      <div className="pa2-ps-wrap">
+        <button
+          type="button"
+          className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value.length > 0 ? "pa2-ps-trigger--selected" : ""}`}
+          onClick={() => setOpen(o => !o)}
+          style={{ width: '100%' }}
+        >
+          <span className="pa2-ps-txt" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '145px' }}>
+            {triggerText}
+          </span>
+          <svg className="pa2-ps-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {open && (
+          <div className="pa2-ps-menu" style={{ width: '220px', padding: '8px', zIndex: 999, minWidth: '220px' }}>
+            <div style={{ position: 'relative', marginBottom: '8px' }}>
+              <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 26px 6px 26px',
+                  fontSize: '0.75rem',
+                  borderRadius: '6px',
+                  border: '1.5px solid #e2e8f0',
+                  background: '#f8fafc',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  fontFamily: 'Poppins',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#2d6de8';
+                  e.target.style.background = '#ffffff';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(45, 109, 232, 0.12)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.background = '#f8fafc';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setSearch(""); }}
+                  style={{
+                    position: 'absolute',
+                    right: '6px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#94a3b8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2px'
+                  }}
+                >
+                  <FiX size={10} style={{ strokeWidth: 3 }} />
+                </button>
+              )}
+            </div>
+
+            <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {!search && (
+                <button
+                  type="button"
+                  className={`pa2-ps-item ${allSelected ? "pa2-ps-item--active" : ""}`}
+                  onClick={() => toggleOption("")}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    width: '100%',
+                    background: allSelected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    color: allSelected ? '#2d6de8' : '#475569',
+                    fontWeight: allSelected ? 700 : 500,
+                    fontFamily: 'Poppins',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '3.5px',
+                      border: allSelected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                      background: allSelected ? '#2d6de8' : 'transparent',
+                      transition: 'all 0.18s ease',
+                      flexShrink: 0
+                    }}
+                  >
+                    {allSelected && (
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{options[0]?.label || "All"}</span>
+                </button>
+              )}
+
+              {filteredOpts.map(opt => {
+                const selected = value.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`pa2-ps-item ${selected ? "pa2-ps-item--active" : ""}`}
+                    onClick={() => toggleOption(opt.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      textAlign: 'left',
+                      padding: '8px 10px',
+                      width: '100%',
+                      background: selected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      color: selected ? '#2d6de8' : '#475569',
+                      fontWeight: selected ? 700 : 500,
+                      fontFamily: 'Poppins',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '3.5px',
+                        border: selected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                        background: selected ? '#2d6de8' : 'transparent',
+                        transition: 'all 0.18s ease',
+                        flexShrink: 0
+                      }}
+                    >
+                      {selected && (
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
+
+              {filteredOpts.length === 0 && search && (
+                <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: 'Poppins' }}>
+                  No matches found
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function writeFilterSession(key, data) {
   try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
@@ -295,12 +530,12 @@ export default function ProductionAnalysis() {
   const _dflt = { from: new Date(2026, 1, 1), to: new Date(2026, 1, 28) };
   const _saved = readFilterSession("ba_filter_production", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
-  const [filterMachine, setFilterMachine] = useState("");
+  const [filterMachine, setFilterMachine] = useState([]);
   const [filterShift, setFilterShift] = useState("");
   const [filterProcess, setFilterProcess] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterOperator, setFilterOperator] = useState("");
+  const [filterOperator, setFilterOperator] = useState([]);
   const [filterMacType, setFilterMacType] = useState("");
   const [filterMacGroup, setFilterMacGroup] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -577,9 +812,9 @@ export default function ProductionAnalysis() {
 
   const handleResetFilters = () => {
     setSearchQuery("");
-    setFilterMachine("");
+    setFilterMachine([]);
     setFilterShift("");
-    setFilterOperator("");
+    setFilterOperator([]);
     setFilterMacType("");
     setFilterMacGroup("");
   };
@@ -1326,7 +1561,7 @@ export default function ProductionAnalysis() {
       }
     }
     // 2. Machine Name
-    if (filterMachine && row.Machine !== filterMachine) {
+    if (filterMachine && filterMachine.length > 0 && !filterMachine.includes(row.Machine)) {
       return false;
     }
     // 3. Shift
@@ -1334,7 +1569,7 @@ export default function ProductionAnalysis() {
       return false;
     }
     // 4. Operator
-    if (filterOperator && row.Operator !== filterOperator) {
+    if (filterOperator && filterOperator.length > 0 && !filterOperator.includes(row.Operator)) {
       return false;
     }
     // 5. Machine Type
@@ -1377,9 +1612,19 @@ export default function ProductionAnalysis() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="pa2-search-clear-btn"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                >
+                  <FiX size={14} style={{ strokeWidth: 3 }} />
+                </button>
+              )}
             </div>
           </div>
-          <PremiumSelect
+          <PremiumSelectMulti
             label="Mac Name"
             value={filterMachine}
             onChange={setFilterMachine}
@@ -1408,7 +1653,7 @@ export default function ProductionAnalysis() {
               { value: "C", label: "Shift C" },
             ]}
           />
-          <PremiumSelect
+          <PremiumSelectMulti
             label="Operator"
             value={filterOperator}
             onChange={setFilterOperator}
@@ -1529,6 +1774,17 @@ export default function ProductionAnalysis() {
                 onChange={e => setSearchMacQuery(e.target.value)}
                 className="pa2-macdetail-search-input"
               />
+              {searchMacQuery && (
+                <button
+                  type="button"
+                  className="pa2-search-clear-btn"
+                  style={{ right: "6px" }}
+                  onClick={() => setSearchMacQuery("")}
+                  aria-label="Clear machine search"
+                >
+                  <FiX size={12} style={{ strokeWidth: 3 }} />
+                </button>
+              )}
             </div>
             <div className="pa2-macdetail-tabs">
               {["All", "CNC Turning", "Milling", "Special Purpose", "Broaching", "Conventional"].map((tab) => (

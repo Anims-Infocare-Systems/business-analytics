@@ -303,7 +303,7 @@ function SectionLabel({ label }) {
   );
 }
 
-function Card({ title, badge, badgeColor, badgeBg, accentColor, children }) {
+function Card({ title, badge, badgeColor, badgeBg, accentColor, extra, children }) {
   const accent = accentColor || "#2563eb";
   return (
     <div
@@ -313,32 +313,35 @@ function Card({ title, badge, badgeColor, badgeBg, accentColor, children }) {
         borderTop: `3px solid ${accent}`,
       }}
     >
-      <div className="itr-card-header">
-        <span className="itr-card-title">
-          {/* Accent glow dot */}
-          <span style={{
-            display: "inline-block",
-            width: 8, height: 8,
-            borderRadius: "50%",
-            background: accent,
-            boxShadow: `0 0 6px 2px ${accent}44`,
-            flexShrink: 0,
-            marginRight: 2,
-          }} />
-          {title}
-        </span>
-        {badge && (
-          <span
-            className="itr-card-badge"
-            style={{
-              background: badgeBg || "#eff6ff",
-              color: badgeColor || "#2563eb",
-              boxShadow: `0 2px 8px ${accent}22`,
-            }}
-          >
-            {badge}
+      <div className="itr-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', width: '100%', borderBottom: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="itr-card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{
+              display: "inline-block",
+              width: 8, height: 8,
+              borderRadius: "50%",
+              background: accent,
+              boxShadow: `0 0 6px 2px ${accent}44`,
+              flexShrink: 0,
+              marginRight: 2,
+            }} />
+            {title}
           </span>
-        )}
+          {badge && (
+            <span
+              className="itr-card-badge"
+              style={{
+                background: badgeBg || "#eff6ff",
+                color: badgeColor || "#2563eb",
+                boxShadow: `0 2px 8px ${accent}22`,
+                marginLeft: '8px'
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+        {extra && <div className="itr-card-extra">{extra}</div>}
       </div>
       {children}
     </div>
@@ -488,6 +491,249 @@ function SearchableSelect({ value, options, onChange, placeholder = "Search..." 
   );
 }
 
+function SearchableMultiSelect({ value, options, onChange, placeholder = "Search..." }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const allLabel = options[0] || "All Machines";
+  const isAllSelected = !value || value === allLabel || value === "";
+  
+  const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
+
+  const toggleOption = (opt) => {
+    if (opt === allLabel) {
+      onChange(allLabel);
+      return;
+    }
+    
+    let nextList;
+    const idx = selectedList.indexOf(opt);
+    if (idx >= 0) {
+      nextList = selectedList.filter(item => item !== opt);
+    } else {
+      nextList = [...selectedList, opt];
+    }
+    
+    if (nextList.length === 0) {
+      onChange(allLabel);
+    } else {
+      onChange(nextList.join(", "));
+    }
+  };
+
+  const filteredOptions = options.filter(opt => {
+    if (opt === allLabel) return false;
+    return opt.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const isDefault = isAllSelected;
+  let triggerText = allLabel;
+  if (!isDefault) {
+    if (selectedList.length === 1) {
+      triggerText = selectedList[0];
+    } else {
+      triggerText = `${selectedList.length} Selected`;
+    }
+  }
+
+  return (
+    <div className="itr-custom-select-container" ref={dropdownRef}>
+      <button
+        type="button"
+        className={`itr-custom-select-trigger ${isOpen ? "itr-custom-select-trigger--open" : ""} ${!isDefault ? "itr-custom-select-trigger--active" : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ fontFamily: 'Poppins' }}
+      >
+        <span className="itr-custom-select-trigger-text" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+          {triggerText}
+        </span>
+        <span className="itr-custom-select-trigger-arrow" />
+      </button>
+
+      {isOpen && (
+        <div className="itr-custom-select-dropdown" style={{ width: '220px', padding: '8px', zIndex: 999, boxSizing: 'border-box' }}>
+          <div style={{ position: 'relative', marginBottom: '8px' }}>
+            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 26px 6px 26px',
+                fontSize: '0.75rem',
+                borderRadius: '6px',
+                border: '1.5px solid #e2e8f0',
+                background: '#f8fafc',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontFamily: 'Poppins',
+                transition: 'all 0.2s ease'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#2d6de8';
+                e.target.style.background = '#ffffff';
+                e.target.style.boxShadow = '0 0 0 3px rgba(45, 109, 232, 0.12)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e2e8f0';
+                e.target.style.background = '#f8fafc';
+                e.target.style.boxShadow = 'none';
+              }}
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setSearch(""); }}
+                style={{
+                  position: 'absolute',
+                  right: '6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '2px'
+                }}
+              >
+                <FiX size={10} style={{ strokeWidth: 3 }} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {!search && (
+              <button
+                type="button"
+                className={`itr-custom-select-option ${isDefault ? "itr-custom-select-option--selected" : ""}`}
+                onClick={() => toggleOption(allLabel)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  width: '100%',
+                  background: isDefault ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  color: isDefault ? '#2d6de8' : '#475569',
+                  fontWeight: isDefault ? 700 : 500,
+                  fontFamily: 'Poppins',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '3.5px',
+                    border: isDefault ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                    background: isDefault ? '#2d6de8' : 'transparent',
+                    transition: 'all 0.18s ease',
+                    flexShrink: 0
+                  }}
+                >
+                  {isDefault && (
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span>{allLabel}</span>
+              </button>
+            )}
+
+            {filteredOptions.map(opt => {
+              const selected = selectedList.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`itr-custom-select-option ${selected ? "itr-custom-select-option--selected" : ""}`}
+                  onClick={() => toggleOption(opt)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    width: '100%',
+                    background: selected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    color: selected ? '#2d6de8' : '#475569',
+                    fontWeight: selected ? 700 : 500,
+                    fontFamily: 'Poppins',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '3.5px',
+                      border: selected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                      background: selected ? '#2d6de8' : 'transparent',
+                      transition: 'all 0.18s ease',
+                      flexShrink: 0
+                    }}
+                  >
+                    {selected && (
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{opt}</span>
+                </button>
+              );
+            })}
+
+            {filteredOptions.length === 0 && search && (
+              <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: 'Poppins' }}>
+                No matches found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════ */
@@ -521,6 +767,7 @@ export default function IdleTimeReport() {
   const [acceptedIdle, setAcceptedIdle] = useState({ chart: [0, 0], hours_display: ["0:00:00", "0:00:00"], tiles: [] });
   const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [] });
   const [daywiseChart, setDaywiseChart] = useState({ labels: [], data: [], isSunday: [] });
+  const [idleChartType, setIdleChartType] = useState("daily");
   const [totalStats, setTotalStats] = useState(() => buildTotalStats({}));
   const [shiftTiles, setShiftTiles] = useState([]);
   const [shiftChart, setShiftChart] = useState({ labels: [], datasets: [] });
@@ -950,27 +1197,102 @@ export default function IdleTimeReport() {
     const canvas = cnv.daywise.current;
     if (!canvas) return kill;
 
-    const hrs = daywiseChart.data.map(v => Number(v) || 0);
     const ctx2d = canvas.getContext("2d");
+    const activeColor = 
+      idleChartType === "daily" ? "#2563eb" :
+      idleChartType === "weekly" ? "#4f46e5" : "#0891b2";
+      
     const areaGrad = ctx2d.createLinearGradient(0, 0, 0, 260);
-    areaGrad.addColorStop(0, "rgba(37,99,235,0.22)");
-    areaGrad.addColorStop(1, "rgba(37,99,235,0.01)");
+    if (idleChartType === "daily") {
+      areaGrad.addColorStop(0, "rgba(37,99,235,0.25)");
+      areaGrad.addColorStop(1, "rgba(37,99,235,0.01)");
+    } else if (idleChartType === "weekly") {
+      areaGrad.addColorStop(0, "rgba(79,70,229,0.25)");
+      areaGrad.addColorStop(1, "rgba(79,70,229,0.01)");
+    } else {
+      areaGrad.addColorStop(0, "rgba(8,145,178,0.25)");
+      areaGrad.addColorStop(1, "rgba(8,145,178,0.01)");
+    }
+
+    let labels = [];
+    let dataPoints = [];
+    let titleCallback = () => "";
+    let labelCallback = () => "";
+    let pointBgColor = "#fff";
+    let pointBorderColor = activeColor;
+    
+    if (idleChartType === "daily") {
+      labels = daywiseChart.labels;
+      dataPoints = daywiseChart.data.map(v => Number(v) || 0);
+      pointBgColor = dataPoints.map((v, i) => (daywiseChart.isSunday[i] ? "#16a34a" : "#fff"));
+      pointBorderColor = dataPoints.map((v, i) => (daywiseChart.isSunday[i] ? "#16a34a" : "#2563eb"));
+      titleCallback = items => {
+        const idx = items[0]?.dataIndex ?? 0;
+        return `Day ${labels[idx] ?? ""}`;
+      };
+      labelCallback = ctx => {
+        const idx = ctx.dataIndex;
+        const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
+        return daywiseChart.isSunday[idx] ? "  Sunday / Holiday" : `  ${v.toFixed(2)} hrs idle`;
+      };
+    } else if (idleChartType === "weekly") {
+      const getWeeklyData = () => {
+        const dailyLabels = daywiseChart.labels;
+        const dailyData = daywiseChart.data;
+        const wLabels = [];
+        const wData = [];
+        
+        for (let i = 0; i < dailyLabels.length; i += 7) {
+          const sliceLabels = dailyLabels.slice(i, i + 7);
+          const sliceData = dailyData.slice(i, i + 7);
+          const totalHours = sliceData.reduce((sum, v) => sum + (Number(v) || 0), 0);
+          const startLabel = sliceLabels[0] || "";
+          const endLabel = sliceLabels[sliceLabels.length - 1] || "";
+          const weekLabel = startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`;
+          wLabels.push(`W${Math.floor(i / 7) + 1} (${weekLabel})`);
+          wData.push(totalHours);
+        }
+        return { labels: wLabels, data: wData };
+      };
+      const wObj = getWeeklyData();
+      labels = wObj.labels;
+      dataPoints = wObj.data;
+      titleCallback = items => {
+        const idx = items[0]?.dataIndex ?? 0;
+        return labels[idx] ?? "";
+      };
+      labelCallback = ctx => {
+        const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
+        return `  Weekly Idle: ${v.toFixed(2)} hrs`;
+      };
+    } else {
+      labels = monthwiseChart.labels;
+      dataPoints = monthwiseChart.hours.map(v => Number(v) || 0);
+      titleCallback = items => {
+        const idx = items[0]?.dataIndex ?? 0;
+        return `Month: ${labels[idx] ?? ""}`;
+      };
+      labelCallback = ctx => {
+        const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
+        return `  Monthly Idle: ${v.toFixed(2)} hrs`;
+      };
+    }
 
     kill();
     charts.current.daywise = new Chart(canvas, {
       type: "line",
       data: {
-        labels: daywiseChart.labels,
+        labels: labels,
         datasets: [{
-          label: "Daily Idle Hours",
-          data: hrs,
-          borderColor: "#2563eb",
+          label: idleChartType === "daily" ? "Daily Idle Hours" : idleChartType === "weekly" ? "Weekly Idle Hours" : "Monthly Idle Hours",
+          data: dataPoints,
+          borderColor: activeColor,
           backgroundColor: areaGrad,
           fill: true,
           borderWidth: 2.5,
           tension: 0.42,
-          pointBackgroundColor: hrs.map(v => v === 0 ? "#16a34a" : "#fff"),
-          pointBorderColor: hrs.map(v => v === 0 ? "#16a34a" : "#2563eb"),
+          pointBackgroundColor: pointBgColor,
+          pointBorderColor: pointBorderColor,
           pointBorderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 7,
@@ -978,31 +1300,29 @@ export default function IdleTimeReport() {
       },
       options: {
         devicePixelRatio: Math.max(window.devicePixelRatio, 2),
-        responsive: true, maintainAspectRatio: false,
+        responsive: true,
+        maintainAspectRatio: false,
         animation: { duration: 900, easing: "easeOutQuart" },
         plugins: {
           legend: { display: false },
           tooltip: {
             ...TOOLTIP_BASE,
             callbacks: {
-              title: items => {
-                const idx = items[0]?.dataIndex ?? 0;
-                return `Day ${daywiseChart.labels[idx] ?? ""}`;
-              },
-              label: ctx => {
-                const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
-                return v === 0 ? "  Sunday / Holiday" : `  ${v.toFixed(2)} hrs idle`;
-              },
+              title: titleCallback,
+              label: labelCallback,
             },
           },
           datalabels: {
             display: ctx => {
               const v = ctx.dataset.data[ctx.dataIndex];
-              return v > 0 && ctx.dataIndex % 3 === 0;
+              if (idleChartType === "daily") {
+                return v > 0 && ctx.dataIndex % 3 === 0;
+              }
+              return v > 0;
             },
             anchor: "end",
             align: "top",
-            color: "#2563eb",
+            color: activeColor,
             font: { size: 9, weight: "800", family: CHART_FONT },
             formatter: v => `${Number(v).toFixed(0)}h`,
           },
@@ -1014,7 +1334,7 @@ export default function IdleTimeReport() {
       },
     });
     return kill;
-  }, [daywiseChart]);
+  }, [daywiseChart, monthwiseChart, idleChartType]);
 
   useEffect(() => {
     const kill = () => {
@@ -1498,14 +1818,23 @@ export default function IdleTimeReport() {
               ["Shift", "shift", filterOptions.shifts],
               ["Reason", "reason", filterOptions.reasons],
             ].map(([label, field, opts]) => (
-              <div key={field} className="itr-filter-group">
+              <div key={field} className="itr-filter-group" style={field === "machine" ? { minWidth: '190px' } : {}}>
                 <label className="itr-filter-label">{label}</label>
-                <SearchableSelect
-                  value={filters[field]}
-                  options={opts}
-                  onChange={val => hc(field, val)}
-                  placeholder={`Search ${label.toLowerCase()}...`}
-                />
+                {field === "machine" ? (
+                  <SearchableMultiSelect
+                    value={filters[field]}
+                    options={opts}
+                    onChange={val => hc(field, val)}
+                    placeholder={`Search ${label.toLowerCase()}...`}
+                  />
+                ) : (
+                  <SearchableSelect
+                    value={filters[field]}
+                    options={opts}
+                    onChange={val => hc(field, val)}
+                    placeholder={`Search ${label.toLowerCase()}...`}
+                  />
+                )}
               </div>
             ))}
 
@@ -1655,14 +1984,51 @@ export default function IdleTimeReport() {
           </Card>
         </div>
 
-        {/* ── Daily Idle Hours — Full Width ── */}
-        <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCalendar size={16} /> Daily Idle Hours</span>} badge={`${daywiseChart.labels.length} Days`} badgeBg="#ecfeff" badgeColor="#0891b2" accentColor="#0891b2">
+        {/* ── Daily / Weekly / Monthly Idle Hours — Full Width ── */}
+        <Card 
+          title={
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <FiCalendar size={16} /> 
+              {idleChartType === "daily" ? "Daily Idle Hours" : idleChartType === "weekly" ? "Weekly Idle Hours" : "Monthly Idle Hours"}
+            </span>
+          } 
+          badge={
+            idleChartType === "daily" ? `${daywiseChart.labels.length} Days` :
+            idleChartType === "weekly" ? `${Math.ceil(daywiseChart.labels.length / 7)} Weeks` :
+            `${monthwiseChart.labels.length} Months`
+          } 
+          badgeBg="#ecfeff" 
+          badgeColor="#0891b2" 
+          accentColor={
+            idleChartType === "daily" ? "#2563eb" :
+            idleChartType === "weekly" ? "#4f46e5" : "#0891b2"
+          }
+          extra={
+            <div className="itr-chart-type-toggle">
+              {[
+                { key: "daily", label: "Daily View" },
+                { key: "weekly", label: "Weekly View" },
+                { key: "monthly", label: "Monthly View" },
+              ].map(item => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`itr-toggle-btn ${idleChartType === item.key ? "itr-toggle-btn--active" : ""}`}
+                  style={idleChartType === item.key ? { color: idleChartType === "weekly" ? "#4f46e5" : idleChartType === "monthly" ? "#0891b2" : "#2563eb" } : {}}
+                  onClick={() => setIdleChartType(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
           {daywiseChart.labels.length === 0 ? (
-            <EmptyState message="No daily breakdown available for this selection." />
+            <EmptyState message="No breakdown available for this selection." />
           ) : (
             <>
               <p style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600, marginBottom: 8 }}>
-                ● Green dots = Sundays / Holidays &nbsp;|&nbsp; Hover for detail
+                {idleChartType === "daily" ? "● Green dots = Sundays / Holidays  |  Hover for detail" : "● Hover points for details"}
               </p>
               <div className="itr-chart--lg"><canvas ref={cnv.daywise} /></div>
             </>

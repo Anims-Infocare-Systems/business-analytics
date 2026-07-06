@@ -2046,4 +2046,37 @@
         grid-template-columns: 1fr !important;
         gap: 1rem;
     }
+}
+
+/* Premium chart toggle buttons for Purchase Value Trend */
+.pa2-chart-type-toggle {
+    display: flex;
+    background: rgba(45, 109, 232, 0.05);
+    padding: 4px;
+    border-radius: 20px;
+    border: 1px solid rgba(45, 109, 232, 0.1);
+    gap: 2px;
+}
+
+.pa2-toggle-btn {
+    background: transparent;
+    border: none;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #2d6de8;
+    padding: 6px 14px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.pa2-toggle-btn:hover {
+    background: rgba(45, 109, 232, 0.08);
+}
+
+.pa2-toggle-btn.active {
+    background: #2d6de8;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(45, 109, 232, 0.35);
 }

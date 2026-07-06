@@ -269,11 +269,13 @@ const getColStyle = (h) => {
 // ─────────────────────────────────────────────
 function SectionHead({ icon: Icon, iconColor = "#2d6de8", title, badge, badgeCls, extra }) {
     return (
-        <div className="qa2-section-head" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {Icon && <Icon size={18} className="qa2-section-icon" style={{ color: iconColor, strokeWidth: 2.25, display: 'flex', alignItems: 'center' }} />}
-            <span className="qa2-section-title">{title}</span>
-            {extra}
-            {badge && <span className={`qa2-badge ${badgeCls || ""}`}>{badge}</span>}
+        <div className="qa2-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', width: '100%', padding: '10px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
+                {Icon && <Icon size={18} className="qa2-section-icon" style={{ color: iconColor, strokeWidth: 2.25, display: 'flex', alignItems: 'center' }} />}
+                <span className="qa2-section-title">{title}</span>
+                {badge && <span className={`qa2-badge ${badgeCls || ""}`}>{badge}</span>}
+            </div>
+            {extra && <div className="qa2-section-extra">{extra}</div>}
         </div>
     );
 }
@@ -352,6 +354,7 @@ export default function QualityAnalysis() {
     const [selectedType, setSelectedType] = useState("ALL");
     const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
     const [animated, setAnimated] = useState(false);
+    const [weeklyChartType, setWeeklyChartType] = useState("stack");
 
     // API state data
     const [summaryData, setSummaryData] = useState(null);
@@ -466,6 +469,18 @@ export default function QualityAnalysis() {
         const ppmData = chartsData?.mac_rejection_ppm || PPM_DATA;
         const paretoData = chartsData?.pareto || PARETO_DATA;
 
+        const trendLabels = trendData.labels || [];
+        const rejectDataset = trendData.datasets?.find(d =>
+            d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
+        );
+        const reworkDataset = trendData.datasets?.find(d =>
+            d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
+        );
+        const rejectDataPoints = rejectDataset ? rejectDataset.data : [];
+        const reworkDataPoints = reworkDataset ? reworkDataset.data : [];
+
+
+
         // ── Rejection Gradient ──
         const rejectionCanvas = rejectionRef.current;
         let rejectionGradient = "rgba(239, 68, 68, 0.1)";
@@ -492,28 +507,206 @@ export default function QualityAnalysis() {
             }
         }
 
-        // ── Extract datasets ──
-        const trendLabels = trendData.labels || [];
-        const rejectDataset = trendData.datasets?.find(d =>
-            d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
-        );
-        const reworkDataset = trendData.datasets?.find(d =>
-            d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
-        );
+        const labels = trendData.labels || [];
+        const datasets = [];
 
-        const rejectDataPoints = rejectDataset ? rejectDataset.data : [];
-        const reworkDataPoints = reworkDataset ? reworkDataset.data : [];
+        const passData = trendData.datasets?.[0]?.data || [];
+        const reworkData = trendData.datasets?.[1]?.data || [];
+        const rejectData = trendData.datasets?.[2]?.data || [];
 
-        mk(trendRef, trendChart, "bar", trendData, {
-            responsive: true, maintainAspectRatio: false,
+        // ── Weekly Trend Canvas Gradients ──
+        const trendCanvas = trendRef.current;
+        let passGrad = "rgba(16, 185, 129, 0.25)";
+        let rewGrad = "rgba(245, 166, 35, 0.25)";
+        let rejGrad = "rgba(239, 68, 68, 0.25)";
+
+        if (trendCanvas) {
+            const ctx = trendCanvas.getContext("2d");
+            if (ctx) {
+                // Pass gradient (Green)
+                const g1 = ctx.createLinearGradient(0, 0, 0, 240);
+                g1.addColorStop(0, "rgba(16, 185, 129, 0.8)");
+                g1.addColorStop(1, "rgba(16, 185, 129, 0.15)");
+                passGrad = g1;
+
+                // Rework gradient (Amber)
+                const g2 = ctx.createLinearGradient(0, 0, 0, 240);
+                g2.addColorStop(0, "rgba(245, 166, 35, 0.8)");
+                g2.addColorStop(1, "rgba(245, 166, 35, 0.15)");
+                rewGrad = g2;
+
+                // Reject gradient (Red)
+                const g3 = ctx.createLinearGradient(0, 0, 0, 240);
+                g3.addColorStop(0, "rgba(239, 68, 68, 0.8)");
+                g3.addColorStop(1, "rgba(239, 68, 68, 0.15)");
+                rejGrad = g3;
+            }
+        }
+
+        if (weeklyChartType === "stack") {
+            datasets.push(
+                {
+                    label: "Pass",
+                    data: passData,
+                    backgroundColor: passGrad,
+                    borderColor: "#10b981",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    hoverBackgroundColor: "rgba(16, 185, 129, 0.95)",
+                    hoverBorderColor: "#ffffff",
+                    hoverBorderWidth: 2,
+                },
+                {
+                    label: "Rework",
+                    data: reworkData,
+                    backgroundColor: rewGrad,
+                    borderColor: "#f5a623",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    hoverBackgroundColor: "rgba(245, 166, 35, 0.95)",
+                    hoverBorderColor: "#ffffff",
+                    hoverBorderWidth: 2,
+                },
+                {
+                    label: "Reject",
+                    data: rejectData,
+                    backgroundColor: rejGrad,
+                    borderColor: "#ef4444",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    hoverBackgroundColor: "rgba(239, 68, 68, 0.95)",
+                    hoverBorderColor: "#ffffff",
+                    hoverBorderWidth: 2,
+                }
+            );
+        } else if (weeklyChartType === "line") {
+            datasets.push(
+                {
+                    label: "Pass",
+                    data: passData,
+                    borderColor: "#10b981",
+                    backgroundColor: passGrad,
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#10b981",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line"
+                },
+                {
+                    label: "Rework",
+                    data: reworkData,
+                    borderColor: "#f5a623",
+                    backgroundColor: rewGrad,
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#f5a623",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line"
+                },
+                {
+                    label: "Reject",
+                    data: rejectData,
+                    borderColor: "#ef4444",
+                    backgroundColor: rejGrad,
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#ef4444",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line"
+                }
+            );
+        } else if (weeklyChartType === "defect") {
+            datasets.push(
+                {
+                    label: "Rework",
+                    data: reworkData,
+                    borderColor: "#f5a623",
+                    backgroundColor: rewGrad,
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#f5a623",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line"
+                },
+                {
+                    label: "Reject",
+                    data: rejectData,
+                    borderColor: "#ef4444",
+                    backgroundColor: rejGrad,
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#ef4444",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line"
+                }
+            );
+        }
+
+        mk(trendRef, trendChart, weeklyChartType === "stack" ? "bar" : "line", { labels, datasets }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 1000,
+                easing: "easeOutQuart"
+            },
+            interaction: {
+                mode: "index",
+                intersect: false
+            },
             plugins: {
-                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                legend: {
+                    position: "top",
+                    labels: {
+                        font: { family: "Poppins", size: 11, weight: "600" },
+                        boxWidth: 12,
+                        padding: 16,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: { size: 11, weight: "700", family: "Poppins" },
+                    bodyFont: { size: 11, family: "Poppins" },
+                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderWidth: 1,
+                    callbacks: {
+                        label: (ctx) => `  ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} units`,
+                    }
+                },
                 datalabels: {
                     display: true,
                     anchor: "end",
                     align: "top",
                     offset: 2,
                     formatter: (value, context) => {
+                        if (weeklyChartType !== "stack") {
+                            return value > 0 ? value.toLocaleString() : "";
+                        }
                         const index = context.dataIndex;
                         const datasets = context.chart.data.datasets;
                         let topDatasetIndex = -1;
@@ -529,13 +722,22 @@ export default function QualityAnalysis() {
                         }
                         return "";
                     },
-                    font: { size: 9.5, weight: "700", family: "Poppins" },
-                    color: "#1e293b"
+                    font: { size: 9.5, weight: "750", family: "Poppins" },
+                    color: "#475569"
                 }
             },
             scales: {
-                x: { stacked: true, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
-                y: { stacked: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                x: {
+                    stacked: weeklyChartType === "stack",
+                    grid: { display: false },
+                    ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 }
+                },
+                y: {
+                    stacked: weeklyChartType === "stack",
+                    grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
+                    ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 },
+                    border: { dash: [4, 4], color: "transparent" }
+                },
             },
         });
 
@@ -731,7 +933,7 @@ export default function QualityAnalysis() {
         return () => {
             [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart].forEach(c => c.current?.destroy());
         };
-    }, [chartsData]);
+    }, [chartsData, weeklyChartType]);
 
     const resetFilters = () => {
         const today = new Date();
@@ -1426,7 +1628,33 @@ export default function QualityAnalysis() {
             <div className="qa2-animate qa2-d3" style={{ marginBottom: "1.3rem" }}>
                 <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ marginBottom: 0 }}>
                     <SectionHead icon={TrendingUp} iconColor="#3b82f6" title="Weekly Inspection Trend"
-                        badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue" />
+                        badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue"
+                        extra={
+                            <div className="qa2-chart-type-toggle">
+                                <button
+                                    type="button"
+                                    className={`qa2-toggle-btn ${weeklyChartType === "stack" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("stack")}
+                                >
+                                    Stack View
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`qa2-toggle-btn ${weeklyChartType === "line" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("line")}
+                                >
+                                    Line View
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`qa2-toggle-btn ${weeklyChartType === "defect" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("defect")}
+                                >
+                                    Defect View
+                                </button>
+                            </div>
+                        }
+                    />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
@@ -1875,53 +2103,57 @@ export default function QualityAnalysis() {
 
             {/* ── Full Inspection Table ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <div className="qa2-table-header">
-                    <SectionHead icon={FileText} iconColor="#3b82f6" title="Inspection Records — All Transactions" />
-                    <div className="qa2-tag-row">
-                        <span
-                            className={`qa2-badge qa2-badge-blue qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "INTER" ? "qa2-badge-inactive" : ""} ${selectedType === "INTER" ? "qa2-badge-active-blue" : ""}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => setSelectedType(prev => prev === "INTER" ? "ALL" : "INTER")}
-                        >
-                            <Activity size={10} style={{ strokeWidth: 3 }} /> Inter Insp: {interInspCount}
-                        </span>
-                        <span
-                            className={`qa2-badge qa2-badge-teal qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "FINAL" ? "qa2-badge-inactive" : ""} ${selectedType === "FINAL" ? "qa2-badge-active-teal" : ""}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => setSelectedType(prev => prev === "FINAL" ? "ALL" : "FINAL")}
-                        >
-                            <CheckCircle size={10} style={{ strokeWidth: 3 }} /> Final Insp: {finalInspCount}
-                        </span>
-                        <span
-                            className={`qa2-badge qa2-badge-purple qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "JOB" ? "qa2-badge-inactive" : ""} ${selectedType === "JOB" ? "qa2-badge-active-purple" : ""}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => setSelectedType(prev => prev === "JOB" ? "ALL" : "JOB")}
-                        >
-                            <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
-                        </span>
-                        {selectedType !== "ALL" && (
-                            <button
-                                className="qa2-clear-type-filter-btn"
-                                onClick={() => setSelectedType("ALL")}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#2d6de8',
-                                    fontSize: '0.68rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '2px',
-                                    padding: '0 4px',
-                                    marginLeft: '4px'
-                                }}
+                <SectionHead
+                    icon={FileText}
+                    iconColor="#3b82f6"
+                    title="Inspection Records — All Transactions"
+                    extra={
+                        <div className="qa2-tag-row" style={{ paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span
+                                className={`qa2-badge qa2-badge-blue qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "INTER" ? "qa2-badge-inactive" : ""} ${selectedType === "INTER" ? "qa2-badge-active-blue" : ""}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setSelectedType(prev => prev === "INTER" ? "ALL" : "INTER")}
                             >
-                                <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
-                            </button>
-                        )}
-                    </div>
-                </div>
+                                <Activity size={10} style={{ strokeWidth: 3 }} /> Inter Insp: {interInspCount}
+                            </span>
+                            <span
+                                className={`qa2-badge qa2-badge-teal qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "FINAL" ? "qa2-badge-inactive" : ""} ${selectedType === "FINAL" ? "qa2-badge-active-teal" : ""}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setSelectedType(prev => prev === "FINAL" ? "ALL" : "FINAL")}
+                            >
+                                <CheckCircle size={10} style={{ strokeWidth: 3 }} /> Final Insp: {finalInspCount}
+                            </span>
+                            <span
+                                className={`qa2-badge qa2-badge-purple qa2-badge-interactive ${selectedType !== "ALL" && selectedType !== "JOB" ? "qa2-badge-inactive" : ""} ${selectedType === "JOB" ? "qa2-badge-active-purple" : ""}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setSelectedType(prev => prev === "JOB" ? "ALL" : "JOB")}
+                            >
+                                <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
+                            </span>
+                            {selectedType !== "ALL" && (
+                                <button
+                                    className="qa2-clear-type-filter-btn"
+                                    onClick={() => setSelectedType("ALL")}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#2d6de8',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        padding: '0 4px',
+                                        marginLeft: '4px'
+                                    }}
+                                >
+                                    <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
+                                </button>
+                            )}
+                        </div>
+                    }
+                />
                 {recordsLoading ? (
                     <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1.5rem" }}>
                         {[1, 2, 3, 4, 5].map(i => (
@@ -2015,60 +2247,64 @@ export default function QualityAnalysis() {
 
             {/* ── Rejection & Rework Summary (Full Width) ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <div className="qa2-table-header">
-                    <SectionHead icon={XCircle} iconColor="#ef4444" title="Rejection & Rework Summary" />
-                    <div className="qa2-tag-row">
-                        <span
-                            className="qa2-badge"
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                background: '#f1f5f9',
-                                color: '#475569',
-                                border: '1px solid #e2e8f0',
-                                fontWeight: 600
-                            }}
-                        >
-                            {activeRejectionRows.length} Record{activeRejectionRows.length !== 1 ? 's' : ''}
-                        </span>
-                        <span
-                            className={`qa2-badge qa2-badge-red qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REJECTION" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REJECTION" ? "qa2-badge-active-red" : ""}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => setSelectedDispFilter(prev => prev === "REJECTION" ? "ALL" : "REJECTION")}
-                        >
-                            <XCircle size={10} style={{ strokeWidth: 3 }} /> Rejection: {rejectionCount}
-                        </span>
-                        <span
-                            className={`qa2-badge qa2-badge-orange qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REWORK" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REWORK" ? "qa2-badge-active-orange" : ""}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => setSelectedDispFilter(prev => prev === "REWORK" ? "ALL" : "REWORK")}
-                        >
-                            <Wrench size={10} style={{ strokeWidth: 3 }} /> Rework: {reworkCount}
-                        </span>
-                        {selectedDispFilter !== "ALL" && (
-                            <button
-                                className="qa2-clear-type-filter-btn"
-                                onClick={() => setSelectedDispFilter("ALL")}
+                <SectionHead
+                    icon={XCircle}
+                    iconColor="#ef4444"
+                    title="Rejection & Rework Summary"
+                    extra={
+                        <div className="qa2-tag-row" style={{ paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span
+                                className="qa2-badge"
                                 style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#2d6de8',
-                                    fontSize: '0.68rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    display: 'flex',
+                                    display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '2px',
-                                    padding: '0 4px',
-                                    marginLeft: '4px'
+                                    gap: '4px',
+                                    background: '#f1f5f9',
+                                    color: '#475569',
+                                    border: '1px solid #e2e8f0',
+                                    fontWeight: 600
                                 }}
                             >
-                                <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
-                            </button>
-                        )}
-                    </div>
-                </div>
+                                {activeRejectionRows.length} Record{activeRejectionRows.length !== 1 ? 's' : ''}
+                            </span>
+                            <span
+                                className={`qa2-badge qa2-badge-red qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REJECTION" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REJECTION" ? "qa2-badge-active-red" : ""}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setSelectedDispFilter(prev => prev === "REJECTION" ? "ALL" : "REJECTION")}
+                            >
+                                <XCircle size={10} style={{ strokeWidth: 3 }} /> Rejection: {rejectionCount}
+                            </span>
+                            <span
+                                className={`qa2-badge qa2-badge-orange qa2-badge-interactive ${selectedDispFilter !== "ALL" && selectedDispFilter !== "REWORK" ? "qa2-badge-inactive" : ""} ${selectedDispFilter === "REWORK" ? "qa2-badge-active-orange" : ""}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setSelectedDispFilter(prev => prev === "REWORK" ? "ALL" : "REWORK")}
+                            >
+                                <Wrench size={10} style={{ strokeWidth: 3 }} /> Rework: {reworkCount}
+                            </span>
+                            {selectedDispFilter !== "ALL" && (
+                                <button
+                                    className="qa2-clear-type-filter-btn"
+                                    onClick={() => setSelectedDispFilter("ALL")}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#2d6de8',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        padding: '0 4px',
+                                        marginLeft: '4px'
+                                    }}
+                                >
+                                    <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
+                                </button>
+                            )}
+                        </div>
+                    }
+                />
                 {recordsLoading ? (
                     <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1rem" }}>
                         {[1, 2, 3, 4].map(i => (

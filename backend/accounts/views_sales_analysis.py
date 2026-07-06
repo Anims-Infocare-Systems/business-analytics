@@ -754,7 +754,7 @@ def sales_analysis_revenue_charts(request):
         cust_labels, cust_pcts = _pie_slices(
             cust_rows, total_revenue, label_key=0, value_key=1, top_n=4,
         )
-        customer_ranking = _customer_ranking(cust_rows, total_revenue, top_n=5)
+        customer_ranking = _customer_ranking(cust_rows, total_revenue, top_n=None)
 
         part_key, part_col_name = _bill_det_partno_expr(cursor, "d")
         missing_partno_by_btype = []
@@ -1220,7 +1220,7 @@ def sales_analysis_top_products(request):
         cursor = conn.cursor()
         cursor.execute(
             f"""
-            SELECT TOP 5
+            SELECT
                 LTRIM(RTRIM(ISNULL(d.itcode, N''))) AS part_no,
                 MAX(LTRIM(RTRIM(ISNULL(d.itdesc, N'')))) AS description,
                 MAX(LTRIM(RTRIM(ISNULL(d.uom, N'')))) AS uom,

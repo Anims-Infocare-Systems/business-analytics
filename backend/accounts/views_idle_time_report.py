@@ -158,7 +158,9 @@ def _parse_machine(value):
     v = (value or "").strip()
     if not v or v.lower() == "all machines":
         return None
-    return v
+    if "," in v:
+        return [item.strip() for item in v.split(",") if item.strip()]
+    return [v]
 
 
 def _parse_shift(value):
@@ -209,8 +211,13 @@ def _build_outer_filters(machine, shift, reason):
     clauses = []
     params = []
     if machine:
-        clauses.append("AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = ?")
-        params.append(machine)
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            clauses.append(f"AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN ({placeholders})")
+            params.extend(machine)
+        else:
+            clauses.append("AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = ?")
+            params.append(machine)
     if shift:
         clauses.append("AND LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))) = ?")
         params.append(shift)
@@ -569,8 +576,13 @@ def _build_productive_filters(machine, shift):
     clauses = []
     params = []
     if machine:
-        clauses.append("AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?")
-        params.append(machine)
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            clauses.append(f"AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) IN ({placeholders})")
+            params.extend(machine)
+        else:
+            clauses.append("AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?")
+            params.append(machine)
     if shift:
         clauses.append("AND LTRIM(RTRIM(CAST(shift AS NVARCHAR(128)))) = ?")
         params.append(shift)
@@ -1015,10 +1027,13 @@ def _build_utilization_filters(machine, shift):
     clauses = []
     params = []
     if machine:
-        clauses.append(
-            "AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) = ?"
-        )
-        params.append(machine)
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            clauses.append(f"AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN ({placeholders})")
+            params.extend(machine)
+        else:
+            clauses.append("AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) = ?")
+            params.append(machine)
     if shift:
         clauses.append(
             "AND LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128)))) = ?"
@@ -1167,8 +1182,13 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
         shift_clause_exp = "AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) = ?"
         shift_clause_rec = "AND LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) = ?"
     if machine:
-        machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
-        machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            machine_clause_exp = f"AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) IN ({placeholders})"
+            machine_clause_rec = f"AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) IN ({placeholders})"
+        else:
+            machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
+            machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
 
     sql = f"""
     WITH Dates AS (
@@ -1222,12 +1242,18 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
     if shift:
         params.append(shift)
     if machine:
-        params.append(machine)
+        if isinstance(machine, list):
+            params.extend(machine)
+        else:
+            params.append(machine)
     params.extend([start_date, end_date])
     if shift:
         params.append(shift)
     if machine:
-        params.append(machine)
+        if isinstance(machine, list):
+            params.extend(machine)
+        else:
+            params.append(machine)
 
     cursor.execute(sql, params)
     row = cursor.fetchone()
@@ -1258,10 +1284,17 @@ def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift
     clauses = []
     params = []
     if machine:
-        clauses.append(
-            f"AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) = ?"
-        )
-        params.append(machine)
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            clauses.append(
+                f"AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) IN ({placeholders})"
+            )
+            params.extend(machine)
+        else:
+            clauses.append(
+                f"AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) = ?"
+            )
+            params.append(machine)
     if shift:
         clauses.append(
             f"AND LTRIM(RTRIM(CAST({shift_col} AS NVARCHAR(128)))) = ?"
@@ -1294,8 +1327,13 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
         shift_clause_exp = "AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) = ?"
         shift_clause_rec = "AND LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) = ?"
     if machine:
-        machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
-        machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            machine_clause_exp = f"AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) IN ({placeholders})"
+            machine_clause_rec = f"AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) IN ({placeholders})"
+        else:
+            machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
+            machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
 
     idle_slot_sql, idle_slot_params = _build_slot_filter_clauses(
         machine, shift, mac_col="A.MacNo", shift_col="A.Shift",
@@ -1448,7 +1486,10 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
     if shift:
         params.append(shift)
     if machine:
-        params.append(machine)
+        if isinstance(machine, list):
+            params.extend(machine)
+        else:
+            params.append(machine)
     params.extend(date_params)
     params.extend(idle_slot_params)
     params.extend(prod_date_params)
@@ -1459,7 +1500,10 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
     if shift:
         params.append(shift)
     if machine:
-        params.append(machine)
+        if isinstance(machine, list):
+            params.extend(machine)
+        else:
+            params.append(machine)
 
     cursor.execute(sql, params)
 

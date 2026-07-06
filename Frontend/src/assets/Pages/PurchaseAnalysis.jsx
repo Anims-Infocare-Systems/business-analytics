@@ -134,12 +134,15 @@ function StatPill({ value, label, color }) {
     );
 }
 
-function SectionHeader({ icon, title, badge, badgeCls }) {
+function SectionHeader({ icon, title, badge, badgeCls, extra }) {
     return (
-        <div className="pa2-section-head">
-            <span className="pa2-section-icon" style={{ display: "inline-flex", alignItems: "center" }}>{icon}</span>
-            <span className="pa2-section-title">{title}</span>
-            {badge && <span className={`pa2-badge ${badgeCls || ""}`}>{badge}</span>}
+        <div className="pa2-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '10px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flex: 1, minWidth: '200px' }}>
+                <span className="pa2-section-icon" style={{ display: "inline-flex", alignItems: "center" }}>{icon}</span>
+                <span className="pa2-section-title" style={{ flex: 'none' }}>{title}</span>
+                {badge && <span className={`pa2-badge ${badgeCls || ""}`}>{badge}</span>}
+            </div>
+            {extra && <div className="pa2-section-extra">{extra}</div>}
         </div>
     );
 }
@@ -207,6 +210,7 @@ export default function PurchaseAnalysis() {
     const [poSummary, setPoSummary] = useState(null);
     const [poLoading, setPoLoading] = useState(false);
     const [weeklyTrend, setWeeklyTrend] = useState(null);
+    const [weeklyChartType, setWeeklyChartType] = useState("combo");
 
     const filteredPoRows = useMemo(() => {
         return poRows.filter(r => {
@@ -847,7 +851,7 @@ export default function PurchaseAnalysis() {
         return () => ratingChart.current?.destroy();
     }, [supplierRatingData]);
 
-    // ── Redraw trend chart whenever weeklyTrend changes ─────────────
+    // ── Redraw trend chart whenever weeklyTrend or weeklyChartType changes ─────────────
     useEffect(() => {
         if (!trendRef.current) return;
         trendChart.current?.destroy();
@@ -855,73 +859,166 @@ export default function PurchaseAnalysis() {
         const poVals = weeklyTrend?.po_value ?? [];
         const grnVals = weeklyTrend?.grn_received ?? [];
         const fmtL = v => `₹${Number(v).toFixed(2)}L`;
-        const maxVal = Math.max(0, ...poVals, ...grnVals);
+        
+        let maxVal = 0;
+        if (weeklyChartType === "combo") {
+            maxVal = Math.max(0, ...poVals, ...grnVals);
+        } else if (weeklyChartType === "po") {
+            maxVal = Math.max(0, ...poVals);
+        } else {
+            maxVal = Math.max(0, ...grnVals);
+        }
         // Extra 35% headroom so datalabels never clip at the top
         const yMax = maxVal > 0 ? Math.ceil(maxVal * 1.35 * 10) / 10 : undefined;
 
+        const ctx = trendRef.current.getContext("2d");
+
+        // Blue gradient for PO Area
+        const blueGradient = ctx.createLinearGradient(0, 0, 0, 250);
+        blueGradient.addColorStop(0, "rgba(45, 109, 232, 0.35)");
+        blueGradient.addColorStop(1, "rgba(45, 109, 232, 0.00)");
+
+        // Green gradient for GRN Area
+        const greenGradient = ctx.createLinearGradient(0, 0, 0, 250);
+        greenGradient.addColorStop(0, "rgba(16, 185, 129, 0.35)");
+        greenGradient.addColorStop(1, "rgba(16, 185, 129, 0.00)");
+
+        // Blue gradient for PO Bars
+        const barGradient = ctx.createLinearGradient(0, 0, 0, 250);
+        barGradient.addColorStop(0, "rgba(45, 109, 232, 0.85)");
+        barGradient.addColorStop(1, "rgba(45, 109, 232, 0.25)");
+
+        const datasets = [];
+
+        if (weeklyChartType === "combo") {
+            datasets.push(
+                {
+                    label: "PO Value (L)",
+                    data: poVals,
+                    backgroundColor: barGradient,
+                    borderColor: "#2d6de8",
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    type: "bar",
+                    yAxisID: "y",
+                    datalabels: {
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
+                        align: (ctx) => {
+                            const val = ctx.dataset.data[ctx.dataIndex];
+                            return val < 6.0 ? "top" : "bottom";
+                        },
+                        anchor: "end",
+                        formatter: (v) => `₹${v.toFixed(1)}L`,
+                        font: { size: 9.5, weight: "800", family: "Poppins" },
+                        color: "#ffffff",
+                        backgroundColor: "#2d6de8",
+                        borderColor: "#1d4ed8",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                        offset: 4
+                    }
+                },
+                {
+                    label: "GRN Received (L)",
+                    data: grnVals,
+                    borderColor: "#10b981",
+                    backgroundColor: "rgba(16,185,129,0.10)",
+                    borderWidth: 2.5,
+                    tension: 0.42,
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: "#10b981",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    type: "line",
+                    yAxisID: "y",
+                    datalabels: {
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
+                        align: "top",
+                        anchor: "end",
+                        formatter: (v) => `₹${v.toFixed(1)}L`,
+                        font: { size: 9.5, weight: "800", family: "Poppins" },
+                        color: "#ffffff",
+                        backgroundColor: "#10b981",
+                        borderColor: "#047857",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                        offset: 6
+                    }
+                }
+            );
+        } else if (weeklyChartType === "po") {
+            datasets.push({
+                label: "PO Value (L)",
+                data: poVals,
+                borderColor: "#2d6de8",
+                backgroundColor: blueGradient,
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "#2d6de8",
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+                type: "line",
+                yAxisID: "y",
+                datalabels: {
+                    display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
+                    align: "top",
+                    anchor: "end",
+                    formatter: (v) => `₹${v.toFixed(1)}L`,
+                    font: { size: 9.5, weight: "800", family: "Poppins" },
+                    color: "#ffffff",
+                    backgroundColor: "#2d6de8",
+                    borderColor: "#1d4ed8",
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                    offset: 6
+                }
+            });
+        } else if (weeklyChartType === "grn") {
+            datasets.push({
+                label: "GRN Received (L)",
+                data: grnVals,
+                borderColor: "#10b981",
+                backgroundColor: greenGradient,
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "#10b981",
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+                type: "line",
+                yAxisID: "y",
+                datalabels: {
+                    display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
+                    align: "top",
+                    anchor: "end",
+                    formatter: (v) => `₹${v.toFixed(1)}L`,
+                    font: { size: 9.5, weight: "800", family: "Poppins" },
+                    color: "#ffffff",
+                    backgroundColor: "#10b981",
+                    borderColor: "#047857",
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                    offset: 6
+                }
+            });
+        }
+
         trendChart.current = new Chart(trendRef.current, {
-            type: "bar",
+            type: weeklyChartType === "combo" ? "bar" : "line",
             data: {
                 labels,
-                datasets: [
-                    {
-                        label: "PO Value (L)",
-                        data: poVals,
-                        backgroundColor: "rgba(45,109,232,0.18)",
-                        borderColor: "#2d6de8",
-                        borderWidth: 2,
-                        borderRadius: 6,
-                        type: "bar",
-                        yAxisID: "y",
-                        datalabels: {
-                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
-                            align: (ctx) => {
-                                const val = ctx.dataset.data[ctx.dataIndex];
-                                return val < 6.0 ? "top" : "bottom";
-                            },
-                            anchor: "end",
-                            formatter: (v) => `₹${v.toFixed(1)}L`,
-                            font: { size: 9.5, weight: "800", family: "Poppins" },
-                            color: "#ffffff",
-                            backgroundColor: "#2d6de8",
-                            borderColor: "#1d4ed8",
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                            offset: 4
-                        }
-                    },
-                    {
-                        label: "GRN Received (L)",
-                        data: grnVals,
-                        borderColor: "#10b981",
-                        backgroundColor: "rgba(16,185,129,0.10)",
-                        borderWidth: 2.5,
-                        tension: 0.42,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        pointBackgroundColor: "#10b981",
-                        pointBorderColor: "#fff",
-                        pointBorderWidth: 2,
-                        type: "line",
-                        yAxisID: "y",
-                        datalabels: {
-                            display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 2.0,
-                            align: "top",
-                            anchor: "end",
-                            formatter: (v) => `₹${v.toFixed(1)}L`,
-                            font: { size: 9.5, weight: "800", family: "Poppins" },
-                            color: "#ffffff",
-                            backgroundColor: "#10b981",
-                            borderColor: "#047857",
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                            offset: 6
-                        }
-                    },
-                ],
+                datasets
             },
             options: {
                 responsive: true,
@@ -948,7 +1045,7 @@ export default function PurchaseAnalysis() {
                             label: ctx => `  ${ctx.dataset.label}: ${fmtL(ctx.parsed.y ?? 0)}`,
                         },
                     },
-                    datalabels: { display: false }, // per-dataset overrides above
+                    datalabels: { display: false },
                 },
                 scales: {
                     y: {
@@ -973,7 +1070,7 @@ export default function PurchaseAnalysis() {
             },
         });
         return () => trendChart.current?.destroy();
-    }, [weeklyTrend]);
+    }, [weeklyTrend, weeklyChartType]);
 
     const monthlyData = useMemo(() => {
         const groups = {};
@@ -2054,6 +2151,31 @@ export default function PurchaseAnalysis() {
                         title="Purchase Value Trend — Weekly"
                         badge={weeklyTrend?.period ?? (filters.poType !== "All Types" ? filters.poType : "")}
                         badgeCls="pa2-badge-blue"
+                        extra={
+                            <div className="pa2-chart-type-toggle">
+                                <button
+                                    type="button"
+                                    className={`pa2-toggle-btn ${weeklyChartType === "combo" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("combo")}
+                                >
+                                    Combo View
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`pa2-toggle-btn ${weeklyChartType === "po" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("po")}
+                                >
+                                    PO Spend View
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`pa2-toggle-btn ${weeklyChartType === "grn" ? "active" : ""}`}
+                                    onClick={() => setWeeklyChartType("grn")}
+                                >
+                                    GRN Trend View
+                                </button>
+                            </div>
+                        }
                     />
                     {trendLoading ? (
                         <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "280px" }}>
