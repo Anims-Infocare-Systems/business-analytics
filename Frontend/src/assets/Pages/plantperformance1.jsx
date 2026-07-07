@@ -9057,6 +9057,9 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   const [reasonOpen, setReasonOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const [liveLogs, setLiveLogs] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [filterOptions, setFilterOptions] = React.useState({ machines: [], reasons: [] });
   const chartTypeRef = React.useRef(null);
   const machRef = React.useRef(null);
   const operRef = React.useRef(null);
@@ -9147,14 +9150,63 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     return `${year}-${month}-${day}`;
   }, [pickerTo]);
 
+  React.useEffect(() => {
+    if (!activeFromStr || !activeToStr) return;
+    setIsLoading(true);
+    const params = new URLSearchParams({
+      from: activeFromStr,
+      to: activeToStr,
+      machine: filters.machine || "",
+      reason: filters.idleReason || "",
+    });
+    const ctrl = new AbortController();
+    fetch(`/api/idle-time-report/?${params}`, {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json) {
+          if (json.filter_options) {
+            setFilterOptions({
+              machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
+              reasons: Array.isArray(json.filter_options.reasons) ? json.filter_options.reasons : [],
+            });
+          }
+          if (Array.isArray(json.rows)) {
+            const mapped = json.rows.map(row => ({
+              date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+              machine: row.mac_no || "",
+              operator: "",
+              reason: row.reason || "",
+              shift: row.shift || "",
+              duration: Number(row.total_idle_hours_decimal) || 0,
+              ratePerHour: Number(row.rate_per_hour) || 500,
+            }));
+            setLiveLogs(mapped);
+          } else {
+            setLiveLogs([]);
+          }
+        } else {
+          setLiveLogs([]);
+        }
+      })
+      .catch(() => {
+        setLiveLogs([]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [activeFromStr, activeToStr, filters.machine, filters.idleReason]);
+
   const filteredLogs = React.useMemo(() => {
-    let list = MOCK_IDLE_LOGS;
-    list = list.filter(r => r.date >= activeFromStr && r.date <= activeToStr);
+    let list = liveLogs;
     if (filters.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters.idleReason) list = list.filter(r => r.reason === filters.idleReason);
     return list;
-  }, [filters, activeFromStr, activeToStr]);
+  }, [liveLogs, filters.operator, filters.machine, filters.idleReason]);
 
   const kpis = React.useMemo(() => {
     const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
@@ -9479,8 +9531,20 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   }, [chart1Data, targetConfig, chartType]);
 
   const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K", "Sankar"];
-  const machines = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
-  const idleReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+
+  const machines = React.useMemo(() => {
+    if (filterOptions.machines && filterOptions.machines.length > 0) {
+      return filterOptions.machines.filter(m => m !== "All Machines");
+    }
+    return ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
+  }, [filterOptions.machines]);
+
+  const idleReasons = React.useMemo(() => {
+    if (filterOptions.reasons && filterOptions.reasons.length > 0) {
+      return filterOptions.reasons.filter(r => r !== "All Reasons");
+    }
+    return ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+  }, [filterOptions.reasons]);
 
   const carouselControls = (
     <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
@@ -9923,6 +9987,8 @@ function IdleHoursReportBottomTable({ filters }) {
 
 function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onClose, targetConfig }) {
   const [dateOpen, setDateOpen] = React.useState(false);
+  const [liveLogs, setLiveLogs] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(false);
   const dateRangeRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -9973,15 +10039,61 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
     return "Select Date Range...";
   };
 
+  React.useEffect(() => {
+    const today = new Date();
+    const defaultFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+    const defaultTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    
+    const activeFrom = filters?.fromDate || defaultFrom;
+    const activeTo = filters?.toDate || defaultTo;
+
+    setIsLoading(true);
+    const params = new URLSearchParams({
+      from: activeFrom,
+      to: activeTo,
+      machine: filters?.machine || "",
+      reason: filters?.reason || "",
+    });
+    const ctrl = new AbortController();
+    fetch(`/api/idle-time-report/?${params}`, {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json && Array.isArray(json.rows)) {
+          const mapped = json.rows.map(row => ({
+            date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+            machine: row.mac_no || "",
+            reason: row.reason || "",
+            shift: row.shift || "",
+            duration: Number(row.total_idle_hours_decimal) || 0,
+            ratePerHour: Number(row.rate_per_hour) || 500,
+            isAccepted: row.is_accepted ?? true,
+          }));
+          setLiveLogs(mapped);
+        } else {
+          setLiveLogs([]);
+        }
+      })
+      .catch(() => {
+        setLiveLogs([]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [filters?.fromDate, filters?.toDate, filters?.machine, filters?.reason]);
+
   const filteredLogs = React.useMemo(() => {
-    let list = MOCK_NON_ACCEPTED_LOSS_LOGS;
+    let list = liveLogs;
     if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
     if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
     if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters?.team) list = list.filter(r => r.team === filters.team);
     if (filters?.reason) list = list.filter(r => r.reason === filters.reason);
     return list;
-  }, [filters]);
+  }, [liveLogs, filters]);
 
   const kpis = React.useMemo(() => {
     const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
@@ -10015,7 +10127,10 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
   }, [filteredLogs]);
 
   const chartData = React.useMemo(() => {
-    const reasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+    const defaultReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
+    const foundReasons = Array.from(new Set(filteredLogs.map(r => r.reason).filter(Boolean)));
+    const reasons = Array.from(new Set([...defaultReasons, ...foundReasons])).sort();
+
     const aggregated = {};
     reasons.forEach(r => {
       aggregated[r] = {
@@ -10177,9 +10292,17 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
     });
   }, [chartData, targetConfig]);
 
-  const machines = ["CNC-01", "CNC-02", "VMC-01", "VMC-02", "Grinding-01"];
+  const machines = React.useMemo(() => {
+    const set = new Set(liveLogs.map(r => r.machine).filter(Boolean));
+    return Array.from(set).sort();
+  }, [liveLogs]);
+
+  const nonAcceptedReasons = React.useMemo(() => {
+    const set = new Set(liveLogs.map(r => r.reason).filter(Boolean));
+    return Array.from(set).sort();
+  }, [liveLogs]);
+
   const teams = ["Team A", "Team B", "Team C", "Team D"];
-  const nonAcceptedReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
 
   return (
     <PremiumDashboardView
@@ -10192,6 +10315,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
       rangeHint="Accepted vs Non Accepted Production Loss"
       onClose={onClose}
       noData={filteredLogs.length === 0}
+      loading={isLoading}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -14805,7 +14929,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       rangeHint="Month Wise Stock Value"
       onClose={onClose}
       rebuildToken={rebuildToken}
-      noData={filteredRows.length === 0}
+      noData={chartLabels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}

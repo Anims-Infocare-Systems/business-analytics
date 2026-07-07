@@ -261,7 +261,15 @@ def _machine_options(distinct_machines):
 
 
 def _row_to_dict(row):
-    entry_date, shift, mac_no, reason, total_hms, total_decimal = row
+    if len(row) >= 8:
+        entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour, is_accepted = row[:8]
+    elif len(row) == 7:
+        entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour = row[:7]
+        is_accepted = 1
+    else:
+        entry_date, shift, mac_no, reason, total_hms, total_decimal = row
+        rate_per_hour = 0
+        is_accepted = 1
     return {
         "entry_date": entry_date.isoformat() if hasattr(entry_date, "isoformat") else str(entry_date or ""),
         "shift": (str(shift).strip() if shift is not None else ""),
@@ -269,6 +277,8 @@ def _row_to_dict(row):
         "reason": (str(reason).strip() if reason is not None else ""),
         "total_idle_hours": (str(total_hms).strip() if total_hms is not None else ""),
         "total_idle_hours_decimal": float(total_decimal or 0),
+        "rate_per_hour": float(rate_per_hour or 0),
+        "is_accepted": bool(is_accepted),
     }
 
 
@@ -1675,7 +1685,48 @@ def idle_time_report(request):
             if rs is not None:
                 reason_set.append(rs)
 
-        report_sql = _IDLE_REPORT_SQL.format(outer_filters=outer_sql)
+        mac_join = ""
+        rate_select = "CAST(0 AS FLOAT) AS RatePerHr"
+        if table_exists(cursor, "MacMaster"):
+            mac_join = """
+            LEFT JOIN MacMaster MM
+                ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512))))
+                 = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512))))
+                AND ISNULL(MM.deleted, 0) = 0
+            """
+            rate_select = "ISNULL(MAX(MM.RatePerHr), 0) AS RatePerHr"
+
+        report_sql_template = f"""
+        SELECT
+            A.EntryDate,
+            A.Shift,
+            A.MacNo,
+            A.Reason,
+            CONVERT(VARCHAR(8), DATEADD(SECOND, SUM(A.IdleSeconds), 0), 108) AS TotalIdleHours,
+            CAST(SUM(A.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS TotalIdleHours_Decimal,
+            {rate_select},
+            ISNULL(MAX(CAST(IR.IsAccept AS INT)), 1) AS IsAccepted
+        FROM (
+            {_IDLE_UNION_SQL}
+        ) A
+        {mac_join}
+        LEFT JOIN IdleReasons IR
+            ON LTRIM(RTRIM(A.Reason)) = LTRIM(RTRIM(IR.IdleReasons))
+            AND ISNULL(IR.deleted, 0) = 0
+        WHERE 1 = 1
+        {{outer_filters}}
+        GROUP BY
+            A.EntryDate,
+            A.Shift,
+            A.MacNo,
+            A.Reason
+        ORDER BY
+            A.EntryDate,
+            A.Shift,
+            A.MacNo,
+            A.Reason
+        """
+        report_sql = report_sql_template.format(outer_filters=outer_sql)
         report_params = date_params + outer_params
         cursor.execute(report_sql, report_params)
         data_rows = [_row_to_dict(r) for r in (cursor.fetchall() or [])]
