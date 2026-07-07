@@ -4507,124 +4507,124 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                         </td>
                       );
                     }
-                      const colLower = columns[ci].toLowerCase();
-                      const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
-                      const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
-                      const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
-                      const isAgeDays = colLower.includes("age days");
-                      const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
-                      const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
-                      const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
+                    const colLower = columns[ci].toLowerCase();
+                    const isRejectionPct = colLower.includes("rejection %") || colLower === "rej %";
+                    const isReworkPct = colLower.includes("rework %") || colLower === "rwk %";
+                    const isOtdPct = colLower.includes("on-time delivery %") || colLower.includes("delivery %") || colLower === "otd %";
+                    const isAgeDays = colLower.includes("age days");
+                    const isLossPct = colLower.includes("production loss %") || colLower === "loss %";
+                    const isOperatorPct = colLower.includes("operator %") || colLower === "operator%";
+                    const isMachinePct = colLower.includes("machine %") || colLower === "machine%";
 
-                      if (isAgeDays) {
-                        const pctVal = parseFloat(cell) || 0;
-                        let badgeBg = "rgba(16, 185, 129, 0.1)";
-                        let badgeColor = "#10b981";
-                        let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
+                    if (isAgeDays) {
+                      const pctVal = parseFloat(cell) || 0;
+                      let badgeBg = "rgba(16, 185, 129, 0.1)";
+                      let badgeColor = "#10b981";
+                      let badgeBorder = "1px solid rgba(16, 185, 129, 0.15)";
 
-                        if (pctVal <= 15) {
-                          badgeBg = "rgba(16, 185, 129, 0.08)";
-                          badgeColor = "#10b981";
-                          badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
-                        } else if (pctVal <= 40) {
-                          badgeBg = "rgba(245, 158, 11, 0.08)";
-                          badgeColor = "#d97706";
-                          badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
-                        } else {
-                          badgeBg = "rgba(239, 68, 68, 0.08)";
-                          badgeColor = "#ef4444";
-                          badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
-                        }
-
-                        const cellStr = String(cell);
-                        const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
-
-                        return (
-                          <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
-                            <span style={{
-                              display: "inline-block",
-                              background: badgeBg,
-                              color: badgeColor,
-                              border: badgeBorder,
-                              padding: "4px 10px",
-                              borderRadius: "12px",
-                              fontSize: "10.5px",
-                              fontWeight: 750,
-                              textAlign: "center",
-                              minWidth: "68px",
-                              boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
-                              transition: "all 0.2s ease"
-                            }}>
-                              {displayVal}
-                            </span>
-                          </td>
-                        );
+                      if (pctVal <= 15) {
+                        badgeBg = "rgba(16, 185, 129, 0.08)";
+                        badgeColor = "#10b981";
+                        badgeBorder = "1px solid rgba(16, 185, 129, 0.18)";
+                      } else if (pctVal <= 40) {
+                        badgeBg = "rgba(245, 158, 11, 0.08)";
+                        badgeColor = "#d97706";
+                        badgeBorder = "1px solid rgba(245, 158, 11, 0.18)";
+                      } else {
+                        badgeBg = "rgba(239, 68, 68, 0.08)";
+                        badgeColor = "#ef4444";
+                        badgeBorder = "1px solid rgba(239, 68, 68, 0.18)";
                       }
 
-                      if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
-                        const pctVal = parseFloat(cell) || 0;
-                        let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
-                        let barWidthPct = 0;
+                      const cellStr = String(cell);
+                      const displayVal = !cellStr.toLowerCase().includes("days") ? `${cellStr} Days` : cellStr;
 
-                        if (isRejectionPct) {
-                          barWidthPct = Math.min(100, pctVal * 3.33);
-                          if (pctVal > 12) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
-                          } else if (pctVal > 5) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
-                          }
-                        } else if (isReworkPct) {
-                          barWidthPct = Math.min(100, pctVal * 5.0);
-                          if (pctVal > 8) {
-                            barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
-                          } else if (pctVal > 1.5) {
-                            barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
-                          } else {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
-                          }
-                        } else if (isOtdPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 95) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
-                          } else if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
-                          }
-                        } else if (isLossPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal > 25) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
-                          } else if (pctVal > 15) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
-                          }
-                        } else if (isOperatorPct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 75) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                          }
-                        } else if (isMachinePct) {
-                          barWidthPct = Math.min(100, pctVal);
-                          if (pctVal >= 90) {
-                            barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
-                          } else if (pctVal >= 85) {
-                            barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
-                          } else if (pctVal >= 75) {
-                            barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
-                          } else {
-                            barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
-                          }
+                      return (
+                        <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
+                          <span style={{
+                            display: "inline-block",
+                            background: badgeBg,
+                            color: badgeColor,
+                            border: badgeBorder,
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            fontSize: "10.5px",
+                            fontWeight: 750,
+                            textAlign: "center",
+                            minWidth: "68px",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.01)",
+                            transition: "all 0.2s ease"
+                          }}>
+                            {displayVal}
+                          </span>
+                        </td>
+                      );
+                    }
+
+                    if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
+                      const pctVal = parseFloat(cell) || 0;
+                      let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
+                      let barWidthPct = 0;
+
+                      if (isRejectionPct) {
+                        barWidthPct = Math.min(100, pctVal * 3.33);
+                        if (pctVal > 12) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)";
+                        } else if (pctVal > 5) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)";
                         }
+                      } else if (isReworkPct) {
+                        barWidthPct = Math.min(100, pctVal * 5.0);
+                        if (pctVal > 8) {
+                          barGradient = "linear-gradient(90deg, #ec4899 0%, #ef4444 100%)"; // High: pink to red
+                        } else if (pctVal > 1.5) {
+                          barGradient = "linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%)"; // Medium: purple to indigo
+                        } else {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #8b5cf6 100%)"; // Low: green to purple
+                        }
+                      } else if (isOtdPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 95) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green to emerald
+                        } else if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber to dark amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red to dark red
+                        }
+                      } else if (isLossPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal > 25) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)"; // High loss: amber to red
+                        } else if (pctVal > 15) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #f59e0b 100%)"; // Medium loss: blue to amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)"; // Low loss: green to blue
+                        }
+                      } else if (isOperatorPct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 75) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                        }
+                      } else if (isMachinePct) {
+                        barWidthPct = Math.min(100, pctVal);
+                        if (pctVal >= 90) {
+                          barGradient = "linear-gradient(90deg, #10b981 0%, #059669 100%)"; // Excellent: green
+                        } else if (pctVal >= 85) {
+                          barGradient = "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)"; // Good: blue to green
+                        } else if (pctVal >= 75) {
+                          barGradient = "linear-gradient(90deg, #f59e0b 0%, #d97706 100%)"; // Warning: amber
+                        } else {
+                          barGradient = "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)"; // Critical: red
+                        }
+                      }
 
                       return (
                         <td key={ci} style={{ textAlign: "right", verticalAlign: "middle" }}>
@@ -6091,21 +6091,21 @@ function PurchaseValueBottomTable({ data, filters }) {
                 <tr><td colSpan={columns2.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
                 sortedSummaryRows.map((row, ri) => (
-                <tr key={ri} className="pp1-cc-tbl__tr">
-                  <td style={pvWrapCell}>{ri + 1}</td>
-                  <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
-                  <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
-                    <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {row.poNo}
-                    </span>
-                  </td>
-                  <td style={pvNoWrapCell}>{row.poDate}</td>
-                  <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
-                  <td style={pvWrapCell}>{row.name}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
-                  <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
-                </tr>
+                  <tr key={ri} className="pp1-cc-tbl__tr">
+                    <td style={pvWrapCell}>{ri + 1}</td>
+                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
+                    <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
+                      <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {row.poNo}
+                      </span>
+                    </td>
+                    <td style={pvNoWrapCell}>{row.poDate}</td>
+                    <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
+                    <td style={pvWrapCell}>{row.name}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
+                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -9932,9 +9932,9 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-          const p = d.split("-");
-          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-        })
+        const p = d.split("-");
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+      })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -10822,9 +10822,9 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
     const dayDates = summaries[0]?.dayDates || [];
     labels = dayDates.length
       ? dayDates.map((d) => {
-          const p = d.split("-");
-          return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-        })
+        const p = d.split("-");
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+      })
       : [];
     avgData = dayDates.map((_, idx) => {
       let sum = 0;
@@ -13375,7 +13375,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
           onStockData?.(json);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.category, filters.itemCode, onStockData]);
 
@@ -13698,14 +13698,14 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
           onSrData?.(json);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.supplier, onSrData]);
 
   const chartData = Array.isArray(srSource?.data) ? srSource.data : [];
   const chartLabels = Array.isArray(srSource?.labels) ? srSource.labels : [];
   const avgRating = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
-  
+
   const kpiData = srSource?.kpis || {};
   const avgRatingVal = kpiData.avg_rating != null ? `${kpiData.avg_rating}%` : `${avgRating}%`;
   const onTimeSupplyVal = kpiData.on_time_supply != null ? `${kpiData.on_time_supply}%` : "94.2%";
@@ -13727,7 +13727,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
   const [suppSearch, setSuppSearch] = useState("");
 
   const allSuppliers = Array.isArray(srSource?.filterOptions?.suppliers)
-    ? srSource.filterOptions.suppliers 
+    ? srSource.filterOptions.suppliers
     : [];
 
   const filteredSuppliers = useMemo(() => {
@@ -14253,19 +14253,19 @@ function SupplierRatingBottomTable({ data, filters }) {
 
   const allRows = Array.isArray(data?.supplierRating?.rows)
     ? data.supplierRating.rows.map(r => ({
-        supplier: r.supplierName,
-        partNo: "",
-        date: "",
-        cols: [
-          r.supplierName,
-          r.category || "—",
-          r.totalOrders != null ? String(r.totalOrders) : "—",
-          r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
-          r.qualityPass != null ? `${r.qualityPass}%` : "—",
-          r.overallRating != null ? `${r.overallRating}%` : "—",
-          r.status || "—"
-        ]
-      }))
+      supplier: r.supplierName,
+      partNo: "",
+      date: "",
+      cols: [
+        r.supplierName,
+        r.category || "—",
+        r.totalOrders != null ? String(r.totalOrders) : "—",
+        r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
+        r.qualityPass != null ? `${r.qualityPass}%` : "—",
+        r.overallRating != null ? `${r.overallRating}%` : "—",
+        r.status || "—"
+      ]
+    }))
     : [];
 
   const rows = React.useMemo(() => {
@@ -14304,25 +14304,25 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           onVrData?.(json);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.vendor, onVrData]);
 
-  const chartData   = Array.isArray(vrSource?.data)   ? vrSource.data   : [];
+  const chartData = Array.isArray(vrSource?.data) ? vrSource.data : [];
   const chartLabels = Array.isArray(vrSource?.labels) ? vrSource.labels : [];
-  const avgRating   = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
+  const avgRating = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
 
   const kpiData = vrSource?.kpis || {};
-  const avgRatingVal         = kpiData.avg_rating         != null ? `${kpiData.avg_rating}%`         : `${avgRating}%`;
-  const onTimeSupplyVal      = kpiData.on_time_supply     != null ? `${kpiData.on_time_supply}%`     : "—";
+  const avgRatingVal = kpiData.avg_rating != null ? `${kpiData.avg_rating}%` : `${avgRating}%`;
+  const onTimeSupplyVal = kpiData.on_time_supply != null ? `${kpiData.on_time_supply}%` : "—";
   const qualityComplianceVal = kpiData.quality_compliance != null ? `${kpiData.quality_compliance}%` : "—";
-  const activeVendorsVal     = kpiData.active_suppliers   != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
+  const activeVendorsVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
 
   const kpis = [
-    { label: "Avg Rating",          value: avgRatingVal,         icon: Award,        color: "#3b82f6" },
-    { label: "On-Time Supply",       value: onTimeSupplyVal,      icon: Truck,        color: "#10b981" },
-    { label: "Quality Compliance",   value: qualityComplianceVal, icon: CheckCircle2, color: "#8b5cf6" },
-    { label: "Active Vendors",       value: activeVendorsVal,     icon: Users,        color: "#eab308" }
+    { label: "Avg Rating", value: avgRatingVal, icon: Award, color: "#3b82f6" },
+    { label: "On-Time Supply", value: onTimeSupplyVal, icon: Truck, color: "#10b981" },
+    { label: "Quality Compliance", value: qualityComplianceVal, icon: CheckCircle2, color: "#8b5cf6" },
+    { label: "Active Vendors", value: activeVendorsVal, icon: Users, color: "#eab308" }
   ];
 
   const [vendOpen, setVendOpen] = useState(false);
@@ -14724,12 +14724,12 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
             {chartTypeOpen && (
               <div className="pp1-part-suggestions pp1-dropdown-menu">
                 {[
-                  { key: "line",      icon: <LucideLineChart size={12} />, label: "Line Chart" },
-                  { key: "bar",       icon: <BarChart2 size={12} />,       label: "Bar Chart" },
-                  { key: "area",      icon: <AreaChart size={12} />,       label: "Area Chart" },
-                  { key: "radar",     icon: <Radar size={12} />,           label: "Radar Chart" },
-                  { key: "polarArea", icon: <PieChart size={12} />,        label: "Polar Area" },
-                  { key: "stepped",   icon: <Activity size={12} />,        label: "Stepped Chart" },
+                  { key: "line", icon: <LucideLineChart size={12} />, label: "Line Chart" },
+                  { key: "bar", icon: <BarChart2 size={12} />, label: "Bar Chart" },
+                  { key: "area", icon: <AreaChart size={12} />, label: "Area Chart" },
+                  { key: "radar", icon: <Radar size={12} />, label: "Radar Chart" },
+                  { key: "polarArea", icon: <PieChart size={12} />, label: "Polar Area" },
+                  { key: "stepped", icon: <Activity size={12} />, label: "Stepped Chart" },
                 ].map(({ key, icon, label }) => (
                   <div
                     key={key}
@@ -14775,19 +14775,19 @@ function VendorRatingBottomTable({ data, filters }) {
 
   const allRows = Array.isArray(data?.vendorRating?.rows)
     ? data.vendorRating.rows.map(r => ({
-        vendor: r.vendorName,
-        cols: [
-          r.vendorName || "—",
-          r.totalOrders  != null ? String(r.totalOrders)  : "—",
-          r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
-          r.qualityPass  != null ? `${r.qualityPass}%`  : "—",
-          r.overallRating!= null ? `${r.overallRating}%`: "—",
-          r.qualityStatus|| "—",
-          r.deliveryStatus || "—",
-          r.totalStatus  || "—",
-          r.actionToBeTaken || "—",
-        ]
-      }))
+      vendor: r.vendorName,
+      cols: [
+        r.vendorName || "—",
+        r.totalOrders != null ? String(r.totalOrders) : "—",
+        r.onTimeDelivery != null ? `${r.onTimeDelivery}%` : "—",
+        r.qualityPass != null ? `${r.qualityPass}%` : "—",
+        r.overallRating != null ? `${r.overallRating}%` : "—",
+        r.qualityStatus || "—",
+        r.deliveryStatus || "—",
+        r.totalStatus || "—",
+        r.actionToBeTaken || "—",
+      ]
+    }))
     : [];
 
   const rows = React.useMemo(() => {
@@ -14915,7 +14915,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
   const kpis = React.useMemo(() => {
     const totalValRub = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0), 0);
     const totalValLakhs = totalValRub / 100000.0;
-    
+
     const uniqueItems = new Set(filteredRows.map(r => r.partNo)).size;
     const uniqueCusts = new Set(filteredRows.map(r => r.customerName)).size;
     const totalQty = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspQty) || 0) + (Number(r.dcQty) || 0), 0);
@@ -15456,7 +15456,7 @@ function FgValueReportBottomTable({ data, filters }) {
       const finalInspVal = Number(row.finalInspectionValue) || 0;
       const dispatchVal = Number(row.dispatchValue) || 0;
       const totalVal = finalInspVal + dispatchVal;
-      
+
       return [
         String(idx + 1),
         row.customerName || "—",
@@ -15473,14 +15473,14 @@ function FgValueReportBottomTable({ data, filters }) {
   }, [fgRows, filters?.customer, filters?.itemCode]);
 
   const columns = [
-    "Sl.No", 
-    "Customer Name", 
-    "Part Number", 
-    "Description", 
-    "Final Insp. Qty", 
-    "Dispatch Qty", 
-    "Rate", 
-    "Final Insp. Value", 
+    "Sl.No",
+    "Customer Name",
+    "Part Number",
+    "Description",
+    "Final Insp. Qty",
+    "Dispatch Qty",
+    "Rate",
+    "Final Insp. Value",
     "Dispatch Value",
     "Total Value"
   ];
@@ -16557,18 +16557,18 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
                 height: "28px"
               }}
             />
-            <ChevronDown 
-              size={14} 
+            <ChevronDown
+              size={14}
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{ 
-                position: "absolute", 
-                right: "8px", 
-                top: "50%", 
-                transform: "translateY(-50%)", 
-                opacity: 0.6, 
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                opacity: 0.6,
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }} 
+              }}
             />
 
             {effLimitOpen && (
@@ -16753,7 +16753,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
         const macs = json?.filterOptions?.machines;
         if (Array.isArray(macs) && macs.length) setAllMachineNames(macs);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => ctrl.abort();
   }, [uid]);
 
@@ -16962,18 +16962,18 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
                 height: "28px"
               }}
             />
-            <ChevronDown 
-              size={14} 
+            <ChevronDown
+              size={14}
               onClick={() => setEffLimitOpen(!effLimitOpen)}
-              style={{ 
-                position: "absolute", 
-                right: "8px", 
-                top: "50%", 
-                transform: "translateY(-50%)", 
-                opacity: 0.6, 
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                opacity: 0.6,
                 cursor: "pointer",
                 pointerEvents: "auto"
-              }} 
+              }}
             />
 
             {effLimitOpen && (
@@ -19285,8 +19285,8 @@ export default function PlantPerformance1() {
 
     // Supplier Rating trend calculation (UI alone)
     const _srData = data?.supplierRating?.data;
-    const supplierRating = Array.isArray(_srData) && _srData.length > 0 
-      ? Number((_srData.reduce((a, b) => a + b, 0) / _srData.length).toFixed(1)) 
+    const supplierRating = Array.isArray(_srData) && _srData.length > 0
+      ? Number((_srData.reduce((a, b) => a + b, 0) / _srData.length).toFixed(1))
       : 0;
     const supplierTarget = targetConfig.supplier_rating?.minRating ?? 90;
     const supplierOk = supplierRating >= supplierTarget;
@@ -20577,7 +20577,7 @@ export default function PlantPerformance1() {
           <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-<CenterTransitionWrapper uid={centerKey} loading={loading}>
+              <CenterTransitionWrapper uid={centerKey} loading={loading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
                     <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
@@ -20892,7 +20892,7 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-<DashboardErrorBoundary>
+        <DashboardErrorBoundary>
           {selectionId === "customer_po_vs_sales_analysis" ? (
             <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
           ) : selectionId === "purchase_report_dashboard" ? (
