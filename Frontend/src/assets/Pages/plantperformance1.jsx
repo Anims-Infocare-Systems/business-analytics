@@ -8,7 +8,6 @@ import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import "./plantperformance1.css";
 import PlantPerformance1DatePicker from "./plantperformance1DatePicker";
-import PlantPerformance1ProductionDataView from "./plantperformance1ProductionDataView";
 import {
   Scale,
   ClipboardCheck,
