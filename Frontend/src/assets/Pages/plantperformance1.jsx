@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./plantperformance1.css";
 import PlantPerformance1DatePicker from "./plantperformance1DatePicker";
 import {
@@ -58,7 +59,436 @@ import {
   PanelRightClose
 } from "lucide-react";
 
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
+
+/* Premium chart typography & motion — Plant Performance center charts */
+const PP1_FONT = "'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, sans-serif";
+Chart.defaults.font.family = PP1_FONT;
+Chart.defaults.font.size = 11;
+Chart.defaults.font.weight = "500";
+Chart.defaults.color = "#475569";
+Chart.defaults.plugins.legend.labels.font = { family: PP1_FONT, size: 11, weight: "600" };
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.padding = 14;
+Chart.defaults.animation.duration = 400;
+Chart.defaults.animation.delay = 0;
+Chart.defaults.animation.easing = "easeOutQuart";
+Chart.defaults.plugins.datalabels = { display: false };
+Chart.defaults.responsiveAnimationDuration = 0;
+
+const PP1_DPR = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+
+const pp1ChartTransitions = {
+  active: { animation: { duration: 0 } },
+  resize: { animation: { duration: 0 } },
+  show: { animations: { colors: { duration: 400 }, numbers: { duration: 400 } } },
+  hide: { animations: { colors: { duration: 200 }, numbers: { duration: 200 } } },
+};
+
+function fmtLakhs(val, decimals = 2) {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(decimals);
+}
+
+function fmtLakhsLabel(val) {
+  return `₹${fmtLakhs(val)}L`;
+}
+
+function fmtRupeeCompact(val) {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+  if (Math.abs(n) >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+const pp1PremiumTooltip = {
+  enabled: true,
+  backgroundColor: "rgba(15, 23, 42, 0.94)",
+  titleColor: "#f8fafc",
+  bodyColor: "#e2e8f0",
+  borderColor: "rgba(99, 102, 241, 0.4)",
+  borderWidth: 1,
+  cornerRadius: 10,
+  padding: { top: 10, bottom: 10, left: 12, right: 14 },
+  titleFont: { family: PP1_FONT, size: 12, weight: "700" },
+  bodyFont: { family: PP1_FONT, size: 11, weight: "500" },
+  displayColors: true,
+  boxPadding: 6,
+  caretSize: 6,
+  caretPadding: 8,
+};
+
+const pp1PremiumLegendBottom = {
+  position: "bottom",
+  labels: {
+    color: "#475569",
+    font: { family: PP1_FONT, size: 10, weight: "600" },
+    boxWidth: 8,
+    boxHeight: 8,
+    padding: 14,
+    usePointStyle: true,
+    pointStyle: "circle",
+  },
+};
+
+const pp1PremiumLegendTop = {
+  position: "top",
+  labels: {
+    color: "#475569",
+    font: { family: PP1_FONT, size: 10, weight: "600" },
+    boxWidth: 8,
+    boxHeight: 8,
+    padding: 16,
+    usePointStyle: true,
+    pointStyle: "circle",
+  },
+};
+
+const pp1ChartHoverElements = {
+  point: {
+    radius: 4,
+    hoverRadius: 7,
+    hoverBorderWidth: 2.5,
+    hitRadius: 12,
+  },
+  line: { borderJoinStyle: "round", tension: 0.35 },
+  bar: { borderRadius: 6, borderSkipped: false },
+};
+
+function pp1DataLabelsLakhs({ maxPoints = 18, skipLabels = [] } = {}) {
+  const labelOpts = { skipLabels };
+  return {
+    display: (ctx) => pp1ShouldShowDataLabel(ctx, { maxPoints, skipLabels }),
+    anchor: (ctx) => pp1DataLabelAnchor(ctx, labelOpts),
+    align: (ctx) => pp1DataLabelAlign(ctx, labelOpts),
+    offset: (ctx) => pp1DataLabelOffset(ctx, labelOpts),
+    color: "#ffffff",
+    backgroundColor: (ctx) => {
+      const c = ctx.dataset.borderColor;
+      if (typeof c === "string" && c.startsWith("rgba")) return c.replace(/[\d.]+\)$/, "0.92)");
+      return typeof c === "string" ? c : "rgba(37, 99, 235, 0.92)";
+    },
+    borderRadius: 6,
+    padding: { top: 3, bottom: 3, left: 6, right: 6 },
+    font: (ctx) => {
+      const count = ctx.chart.data.labels?.length || 0;
+      const size = count > 48 ? 6.5 : count > 32 ? 7 : count > 20 ? 7.5 : 8.5;
+      return { family: PP1_FONT, size, weight: "700" };
+    },
+    formatter: (v) => `₹${fmtLakhs(v, 1)}L`,
+    clip: false,
+  };
+}
+
+function pp1DataLabelsRupee({ maxPoints = 14 } = {}) {
+  const skipLabels = ["Min Production Target", "Sales Target"];
+  const labelOpts = { skipLabels };
+  return {
+    display: (ctx) => pp1ShouldShowDataLabel(ctx, { maxPoints, skipLabels }),
+    anchor: (ctx) => pp1DataLabelAnchor(ctx, labelOpts),
+    align: (ctx) => pp1DataLabelAlign(ctx, labelOpts),
+    offset: (ctx) => pp1DataLabelOffset(ctx, labelOpts),
+    color: "#ffffff",
+    backgroundColor: (ctx) => {
+      const label = ctx.dataset.label || "";
+      if (label === "Actual Value") return "rgba(16, 185, 129, 0.92)";
+      if (label === "Total Production Value") return "rgba(139, 92, 246, 0.92)";
+      const c = ctx.dataset.borderColor;
+      if (typeof c === "string" && c.startsWith("rgba")) return c.replace(/[\d.]+\)$/, "0.92)");
+      return "rgba(99, 102, 241, 0.92)";
+    },
+    borderRadius: 6,
+    padding: { top: 3, bottom: 3, left: 6, right: 6 },
+    font: { family: PP1_FONT, size: 8.5, weight: "700" },
+    formatter: (v) => fmtRupeeCompact(v),
+    clip: false,
+  };
+}
+
+function pp1DataLabelsPercent({ maxPoints = 96, skipLabels = [], accentColor = "rgba(234, 179, 8, 0.92)" } = {}) {
+  const labelOpts = { skipLabels };
+  return {
+    display: (ctx) => {
+      const count = ctx.chart.data.labels?.length || 0;
+      if (count > maxPoints) return false;
+      const label = ctx.dataset.label || "";
+      if (skipLabels.includes(label) || pp1IsTargetDataset(label)) return false;
+      const v = Number(ctx.dataset.data[ctx.dataIndex]);
+      return Number.isFinite(v);
+    },
+    anchor: (ctx) => pp1DataLabelAnchor(ctx, labelOpts),
+    align: (ctx) => pp1DataLabelAlign(ctx, labelOpts),
+    offset: (ctx) => pp1DataLabelOffset(ctx, labelOpts),
+    color: "#ffffff",
+    backgroundColor: (ctx) => {
+      const c = ctx.dataset.borderColor || ctx.dataset.backgroundColor;
+      if (typeof c === "string" && c.startsWith("rgba")) return c.replace(/[\d.]+\)$/, "0.92)");
+      return typeof c === "string" ? c : accentColor;
+    },
+    borderRadius: 5,
+    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+    font: (ctx) => {
+      const count = ctx.chart.data.labels?.length || 0;
+      const size = count > 48 ? 6.5 : count > 32 ? 7 : count > 20 ? 7.5 : 8.5;
+      return { family: PP1_FONT, size, weight: "700" };
+    },
+    formatter: (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return "—";
+      return `${n.toFixed(1)}%`;
+    },
+    clip: false,
+  };
+}
+
+function pp1BarGradient(chart, colorStops) {
+  const { ctx, chartArea } = chart;
+  if (!chartArea) return colorStops[0]?.color || "rgba(99, 102, 241, 0.7)";
+  const g = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+  colorStops.forEach(({ offset, color }) => g.addColorStop(offset, color));
+  return g;
+}
+
+const pp1ChartAnimation = {
+  duration: 400,
+  easing: "easeOutQuart",
+  delay: 0,
+};
+
+function pp1LakhsAxisTick(val) {
+  return `₹${Number(val).toFixed(1)}L`;
+}
+
+function pp1IsTargetDataset(label = "") {
+  const l = String(label).toLowerCase();
+  return l.includes("target") || l.includes("threshold") || l.includes("limit");
+}
+
+function pp1ShouldShowDataLabel(ctx, { maxPoints = 18, skipLabels = [] } = {}) {
+  const count = ctx.chart.data.labels?.length || 0;
+  if (count > maxPoints) return false;
+  const label = ctx.dataset.label || "";
+  if (skipLabels.includes(label) || pp1IsTargetDataset(label)) return false;
+  const v = Number(ctx.dataset.data[ctx.dataIndex]);
+  return Number.isFinite(v) && v !== 0;
+}
+
+function pp1DataLabelSlot(ctx, skipLabels = []) {
+  const datasets = ctx.chart.data.datasets || [];
+  let slot = 0;
+  for (let i = 0; i < ctx.datasetIndex; i++) {
+    const label = datasets[i]?.label || "";
+    if (skipLabels.includes(label) || pp1IsTargetDataset(label)) continue;
+    const v = Number(datasets[i]?.data?.[ctx.dataIndex]);
+    if (Number.isFinite(v) && v !== 0) slot++;
+  }
+  return slot;
+}
+
+function pp1DataLabelStackCount(ctx, skipLabels = []) {
+  let count = 0;
+  (ctx.chart.data.datasets || []).forEach((ds) => {
+    const label = ds.label || "";
+    if (skipLabels.includes(label) || pp1IsTargetDataset(label)) return;
+    const v = Number(ds.data?.[ctx.dataIndex]);
+    if (Number.isFinite(v) && v !== 0) count++;
+  });
+  return count;
+}
+
+/** Stagger labels when combo/dual-axis charts share the same x bucket */
+function pp1DataLabelLayout(ctx, { skipLabels = [] } = {}) {
+  const slot = pp1DataLabelSlot(ctx, skipLabels);
+  const stackCount = pp1DataLabelStackCount(ctx, skipLabels);
+  const dsType = ctx.dataset.type || ctx.chart.config?.type || "bar";
+  const stagger = 16;
+
+  if (stackCount <= 1) {
+    if (dsType === "line") return { anchor: "center", align: "top", offset: 6 };
+    return { anchor: "end", align: "end", offset: 4 };
+  }
+
+  return {
+    anchor: "center",
+    align: "top",
+    offset: 8 + slot * stagger,
+  };
+}
+
+function pp1DataLabelAnchor(ctx, opts = {}) {
+  return pp1DataLabelLayout(ctx, opts).anchor;
+}
+
+function pp1DataLabelAlign(ctx, opts = {}) {
+  return pp1DataLabelLayout(ctx, opts).align;
+}
+
+function pp1DataLabelOffset(ctx, opts = {}) {
+  return pp1DataLabelLayout(ctx, opts).offset;
+}
+
+function pp1FormatChartValue(v, ctx, valueMode = "auto") {
+  const label = ctx?.dataset?.label || "";
+  const yAxis = String(ctx?.dataset?.yAxisID || "").toLowerCase();
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  if (valueMode === "hours" || yAxis.includes("idle") || yAxis.includes("hour") || /\bhour/i.test(label)) {
+    return `${n.toFixed(1)}h`;
+  }
+  if (
+    valueMode === "percent"
+    || label.includes("%")
+    || /oee|efficiency|\beff\b/i.test(label)
+    || yAxis.includes("percent")
+  ) {
+    return `${n.toFixed(1)}%`;
+  }
+  if (valueMode === "rupee") return fmtRupeeCompact(n);
+  if (valueMode === "number") return n.toLocaleString("en-IN", { maximumFractionDigits: 1 });
+  if (yAxis.includes("loss") || /loss|lakhs/i.test(label)) return `₹${fmtLakhs(n, 1)}L`;
+  return `₹${fmtLakhs(n, 1)}L`;
+}
+
+function pp1DataLabelsAuto({ maxPoints = 18, valueMode = "auto" } = {}) {
+  const cacheKey = `${maxPoints}|${valueMode}|stack-v1`;
+  if (pp1DataLabelsAuto._cache?.[cacheKey]) return pp1DataLabelsAuto._cache[cacheKey];
+  if (!pp1DataLabelsAuto._cache) pp1DataLabelsAuto._cache = {};
+  const labelOpts = { skipLabels: [] };
+  const cfg = {
+    display: (ctx) => pp1ShouldShowDataLabel(ctx, { maxPoints, skipLabels: [] }),
+    anchor: (ctx) => pp1DataLabelAnchor(ctx, labelOpts),
+    align: (ctx) => pp1DataLabelAlign(ctx, labelOpts),
+    offset: (ctx) => pp1DataLabelOffset(ctx, labelOpts),
+    color: "#ffffff",
+    backgroundColor: (ctx) => {
+      const label = ctx.dataset.label || "";
+      if (/actual/i.test(label)) return "rgba(16, 185, 129, 0.92)";
+      if (/production value|purchase|grn|sales|order/i.test(label) && ctx.dataset.type === "bar") {
+        const c = ctx.dataset.borderColor || ctx.dataset.backgroundColor;
+        if (typeof c === "string" && c.startsWith("rgba")) return c.replace(/[\d.]+\)$/, "0.92)");
+      }
+      const c = ctx.dataset.borderColor || ctx.dataset.backgroundColor;
+      if (typeof c === "string" && c.startsWith("rgba")) return c.replace(/[\d.]+\)$/, "0.92)");
+      return typeof c === "string" ? c : "rgba(37, 99, 235, 0.92)";
+    },
+    borderRadius: 6,
+    padding: { top: 3, bottom: 3, left: 6, right: 6 },
+    font: { family: PP1_FONT, size: 8.5, weight: "700" },
+    formatter: (v, ctx) => pp1FormatChartValue(v, ctx, valueMode),
+    clip: false,
+  };
+  pp1DataLabelsAuto._cache[cacheKey] = cfg;
+  return cfg;
+}
+
+function pp1EnhanceChartConfig(config, {
+  legendPosition = "bottom",
+  valueMode = "auto",
+  enableDatalabels = true,
+} = {}) {
+  const cfg = { ...config, options: { ...(config.options || {}) } };
+  const opts = cfg.options;
+  const rootType = cfg.type || cfg.data?.datasets?.[0]?.type || "bar";
+  const legendBase = legendPosition === "top" ? pp1PremiumLegendTop : pp1PremiumLegendBottom;
+  const existingPlugins = opts.plugins || {};
+  const existingLegend = existingPlugins.legend;
+  const existingTooltip = existingPlugins.tooltip || {};
+  const existingDatalabels = existingPlugins.datalabels;
+  const skipLabels = ["pie", "doughnut", "polarArea"].includes(rootType);
+  const seriesCount = (cfg.data?.datasets || []).filter(
+    (ds) => ds && !pp1IsTargetDataset(ds.label || "")
+  ).length;
+
+  opts.responsive = opts.responsive ?? true;
+  opts.maintainAspectRatio = opts.maintainAspectRatio ?? false;
+  opts.devicePixelRatio = opts.devicePixelRatio ?? PP1_DPR;
+  opts.responsiveAnimationDuration = opts.responsiveAnimationDuration ?? 0;
+  opts.transitions = { ...pp1ChartTransitions, ...(opts.transitions || {}) };
+  opts.interaction = { mode: "index", intersect: false, ...(opts.interaction || {}) };
+  opts.elements = { ...pp1ChartHoverElements, ...(opts.elements || {}) };
+  opts.animation = { ...pp1ChartAnimation, ...(opts.animation || {}) };
+  opts.layout = {
+    ...(opts.layout || {}),
+    padding: {
+      top: 4,
+      right: 6,
+      bottom: 22,
+      left: 4,
+      ...(typeof opts.layout?.padding === "object" ? opts.layout.padding : {}),
+    },
+  };
+
+  opts.plugins = {
+    ...existingPlugins,
+    legend: existingLegend === false
+      ? false
+      : { ...legendBase, ...(typeof existingLegend === "object" ? existingLegend : {}) },
+    tooltip: {
+      ...pp1PremiumTooltip,
+      ...existingTooltip,
+      callbacks: { ...(existingTooltip.callbacks || {}) },
+    },
+    datalabels: existingDatalabels !== undefined
+      ? existingDatalabels
+      : (enableDatalabels && !skipLabels ? pp1DataLabelsAuto({ valueMode }) : false),
+  };
+
+  if (opts.scales && typeof opts.scales === "object") {
+    const labelCount = cfg.data?.labels?.length || 0;
+    Object.entries(opts.scales).forEach(([key, scale]) => {
+      if (!scale || typeof scale !== "object") return;
+      if (key === "x") {
+        pp1ApplyXAxisTicks(scale, labelCount);
+      } else {
+        scale.ticks = {
+          color: "#64748b",
+          font: { family: PP1_FONT, size: 10, weight: "500" },
+          ...(scale.ticks || {}),
+        };
+      }
+      if (key === "y" && valueMode === "lakhs" && !scale.ticks?.callback) {
+        scale.ticks.callback = pp1LakhsAxisTick;
+      }
+      if (key !== "x" && key !== "r" && scale.grace === undefined) {
+        scale.grace = seriesCount > 1 ? "18%" : "10%";
+      }
+      if (scale.title && typeof scale.title === "object") {
+        scale.title.font = { family: PP1_FONT, size: 10, weight: "700", ...(scale.title.font || {}) };
+      }
+    });
+  }
+
+  return cfg;
+}
+
+function pp1ApplyXAxisTicks(scale, labelCount = 0) {
+  const count = Number(labelCount) || 0;
+  const dense = count > 10;
+  const veryDense = count > 16;
+  scale.ticks = {
+    color: "#64748b",
+    font: {
+      family: PP1_FONT,
+      size: veryDense ? 8.5 : dense ? 9 : 10,
+      weight: "600",
+    },
+    maxRotation: dense ? 42 : count > 6 ? 32 : 0,
+    minRotation: dense ? 32 : 0,
+    autoSkip: veryDense,
+    autoSkipPadding: 10,
+    maxTicksLimit: veryDense ? 14 : undefined,
+    padding: 8,
+    ...(scale.ticks || {}),
+  };
+}
+
+/** Premium Chart.js factory — default value pills, tooltip, animation for all center charts */
+function createPp1Chart(canvasOrCtx, config, premiumOpts = {}) {
+  const enhanced = pp1EnhanceChartConfig(config, premiumOpts);
+  return new Chart(canvasOrCtx, enhanced);
+}
 
 const CURRENT_STATE_CARDS = [
   { id: "production_output", title: "Production Output", icon: Settings, color: "#0ea5e9", colorLight: "#e0f7ff" },
@@ -669,19 +1099,45 @@ function buildDowntimeChartSeries(reasons, maxReasons = 12) {
   };
 }
 
-/** Chart.js canvas — same pattern as Dashboard2 ChartCanvas */
-function ChartJsCanvas({ setup, height = 200, rebuildToken = 0 }) {
+/** Chart.js canvas — premium frame; debounced rebuild for filter typing perf */
+function ChartJsCanvas({ setup, height = 200, rebuildToken = 0, className = "pp1-center-chart__frame" }) {
   const ref = useRef(null);
   const chartRef = useRef(null);
   const setupRef = useRef(setup);
+  const hasChartRef = useRef(false);
   setupRef.current = setup;
+
   useEffect(() => {
-    if (!ref.current) return;
-    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-    chartRef.current = setupRef.current(ref.current);
-    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+    if (!ref.current) return undefined;
+    let cancelled = false;
+    const debounceMs = hasChartRef.current ? 120 : 0;
+    const timer = setTimeout(() => {
+      if (cancelled || !ref.current) return;
+      if (chartRef.current) {
+        chartRef.current.destroy();
+        chartRef.current = null;
+      }
+      chartRef.current = setupRef.current(ref.current);
+      hasChartRef.current = true;
+    }, debounceMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [rebuildToken]);
-  return <canvas ref={ref} height={height} />;
+
+  useEffect(() => () => {
+    if (chartRef.current) {
+      chartRef.current.destroy();
+      chartRef.current = null;
+    }
+    hasChartRef.current = false;
+  }, []);
+  return (
+    <div className={`pp1-chart-frame${className ? ` ${className}` : ""}`} style={{ height }}>
+      <canvas ref={ref} height={height} />
+    </div>
+  );
 }
 
 /**
@@ -700,7 +1156,7 @@ function DowntimeReasonView({ data, from, to, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       const { labels, hours } = buildDowntimeChartSeries(reasons);
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels,
@@ -833,7 +1289,7 @@ function QualitySplitView({ data, loading, uid }) {
     (canvas) => {
       let chartData = [ok, rejection, rework];
       if (total <= 0) chartData = [1, 1, 1];
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "doughnut",
         data: {
           labels: ["Final inspection OK", "Rejection", "Rework"],
@@ -933,7 +1389,7 @@ function TopDefectsView({ data, loading, uid }) {
     (canvas) => {
       const labels = rows.length ? rows.map((r) => r.partno || "—") : ["No data"];
       const values = rows.length ? rows.map((r) => Number(r.total_rejection_qty) || 0) : [0];
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels,
@@ -1056,7 +1512,7 @@ function CustomerComplaintsView({ data, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!custLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: custLabels,
@@ -1241,7 +1697,7 @@ function IqcRejectionView({ data, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!chartLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -1406,7 +1862,7 @@ function IdleTimeView({ data, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!chartLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -1559,7 +2015,7 @@ function OeeEfficiencyView({ data, loading, uid, from, to }) {
       if (!chartData.length) return null;
 
       const n = chartLabels.length;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "line",
         data: {
           labels: chartLabels,
@@ -1986,7 +2442,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
     (canvas) => {
       if (!chartLabels.length) return null;
       const n = chartLabels.length;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "line",
         data: {
           labels: chartLabels,
@@ -2330,7 +2786,7 @@ function OperatorEfficiencyView({ loading, uid, from, to }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!chartLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -2473,7 +2929,7 @@ function PurchaseOrderView({ data, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!chartLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -2650,7 +3106,7 @@ function GrnPipelineView({ data, loading, uid }) {
   const setupChart = useCallback(
     (canvas) => {
       if (!chartLabels.length) return null;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -2793,7 +3249,7 @@ const CHART1_BASE = [
   { customer: "Customer D", month: "Jun-26", date: "2026-06-15", orderValue: 15.0, salesValue: 8.0, pendingValue: 7.0, poNumber: "PO-D03", partNumber: "PART-403" }
 ];
 
-function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig, showTargetOnly, setShowTargetOnly }) {
+const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig, showTargetOnly, setShowTargetOnly }) {
   const [custOpen, setCustOpen] = React.useState(false);
   const custRef = React.useRef(null);
   const [partOpen, setPartOpen] = React.useState(false);
@@ -2951,7 +3407,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
 
     // Handle Radar Chart
     if (chartType === "radar") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "radar",
         data: {
           labels,
@@ -3001,34 +3457,33 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              position: "bottom",
-              labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
-            },
+            legend: pp1PremiumLegendBottom,
             tooltip: {
-              backgroundColor: "rgba(15, 23, 42, 0.95)",
-              padding: 8,
+              ...pp1PremiumTooltip,
               callbacks: {
-                label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`
+                label: (context) => ` ${context.dataset.label}: ${fmtLakhsLabel(context.raw)}`
               }
-            }
+            },
+            datalabels: pp1DataLabelsLakhs({ skipLabels: ["Sales Target"] }),
           },
           scales: {
             r: {
               min: 0,
               suggestedMax: Math.max(0, salesTarget, ...orderValues, ...salesValues, ...pendingValues) * 1.1,
-              angleLines: { display: true, color: "rgba(0, 0, 0, 0.05)" },
-              grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
-              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v} L` }
+              angleLines: { display: true, color: "rgba(99, 102, 241, 0.08)" },
+              grid: { circular: true, color: "rgba(99, 102, 241, 0.06)" },
+              pointLabels: { font: { family: PP1_FONT, size: 9, weight: "600" }, color: "#64748b" },
+              ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => fmtLakhsLabel(v) }
             }
-          }
+          },
+          animation: pp1ChartAnimation,
         }
       });
     }
 
     // Handle Polar Area Chart
     if (chartType === "polarArea") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "polarArea",
         data: {
           labels,
@@ -3213,7 +3668,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
       }
     ];
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "line",
       data: {
         labels,
@@ -3235,8 +3690,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
         },
         plugins: {
           legend: {
-            position: "bottom",
-            labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 },
+            ...pp1PremiumLegendBottom,
             onClick: (event, legendItem, legend) => {
               if (legendItem.text === "Sales Target") {
                 setShowTargetOnly(prev => !prev);
@@ -3254,24 +3708,27 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             }
           },
           tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.95)",
-            padding: 8,
+            ...pp1PremiumTooltip,
             callbacks: {
-              label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`
+              label: (context) => ` ${context.dataset.label}: ${fmtLakhsLabel(context.raw)}`
             }
-          }
+          },
+          datalabels: pp1DataLabelsLakhs({ skipLabels: ["Sales Target"] }),
         },
+        elements: pp1ChartHoverElements,
+        animation: pp1ChartAnimation,
         scales: {
           x: {
-            ticks: { color: "#64748b", font: { size: 9, weight: 600 } },
+            ticks: { color: "#64748b", font: { family: PP1_FONT, size: 10, weight: "600" } },
             grid: { display: false }
           },
           y: {
             beginAtZero: true,
+            grace: "8%",
             ticks: {
               color: "#64748b",
-              font: { size: 9 },
-              callback: (val) => `₹${val} L`
+              font: { family: PP1_FONT, size: 10 },
+              callback: pp1LakhsAxisTick
             },
             grid: { color: "rgba(0, 0, 0, 0.05)" }
           }
@@ -3298,20 +3755,19 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
   };
 
   return (
-    <div className="pp1-action-detail" key={uid} style={{ animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-action-detail__header" style={{ "--act-color": "var(--pp1-blue)", padding: "10px 14px", gap: "10px" }}>
-        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "var(--act-color)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="pp1-action-detail pp1-center-premium pp1-ct-reveal pp1-ct-reveal--in" key={uid} style={{ "--act-color": "var(--pp1-blue)" }}>
+      <div className="pp1-action-detail__header pp1-center-premium__header">
+        <div className="pp1-action-detail__icon-box pp1-center-premium__icon" style={{ background: "var(--pp1-blue)" }}>
           <Scale size={16} style={{ color: "#fff" }} />
         </div>
-        <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontWeight: 800, margin: 0 }}>Customer PO vs Sales Value</p>
+        <div className="pp1-action-detail__meta">
+          <p className="pp1-action-detail__title">Customer PO vs Sales Value</p>
         </div>
-        <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
+        <button type="button" className="pp1-action-detail__close pp1-center-premium__close" onClick={onClose}>✕</button>
       </div>
 
-      <div className="pp1-action-detail__body" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px" }}>
-        {/* Filters Bar */}
-        <div className="pp1-filters-bar">
+      <div className="pp1-filters-front">
+        <div className="pp1-filters-bar pp1-filters-bar--standalone">
           {/* Date Range Picker */}
           <div className="pp1-filter-group pp1-filter-group--date-range">
             <label className="pp1-filter-label">Date Range</label>
@@ -3468,7 +3924,9 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
             Reset
           </button>
         </div>
+      </div>
 
+      <div className="pp1-action-detail__body pp1-center-premium__body pp1-center-premium__body--content">
         {/* Chart Carousel */}
         <div className="pp1-chart-carousel">
           <div className="pp1-carousel-header">
@@ -3531,10 +3989,11 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
           </div>
 
           <div className="pp1-carousel-content">
-            <div className="pp1-carousel-chart-wrap">
+            <div className="pp1-carousel-chart-wrap pp1-center-chart__wrap">
               <ChartJsCanvas
                 setup={slides[activeSlide].setup}
-                height={190}
+                height={205}
+                className="pp1-center-chart__frame"
                 rebuildToken={`${activeSlide}|${chart1Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}|${chartType}`}
               />
             </div>
@@ -3543,7 +4002,7 @@ function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, ac
       </div>
     </div>
   );
-}
+});
 
 function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetOnly, targetConfig }) {
   const salesTarget = targetConfig?.customer_po?.salesTarget ?? 25;
@@ -4274,37 +4733,55 @@ function D3TableLoader({ rows = 5, cols = 4 }) {
 }
 
 /* ── Generic Premium Dashboard View & Bottom Table Helpers ── */
-function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, chartHeaderControls, extraBottom, children }) {
+const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, chartHeaderControls, extraBottom, children, trend }) {
   return (
-    <div className="pp1-action-detail pp1-ct-reveal pp1-ct-reveal--in" style={{ "--act-color": color, animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-action-detail__header" style={{ padding: "10px 14px", gap: "10px" }}>
-        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="pp1-action-detail pp1-center-premium pp1-ct-reveal pp1-ct-reveal--in" style={{ "--act-color": color }}>
+      <div className="pp1-action-detail__header pp1-center-premium__header">
+        <div className="pp1-action-detail__icon-box pp1-center-premium__icon" style={{ background: color }}>
           <Icon size={16} style={{ color: "#fff" }} />
         </div>
-        <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontWeight: 800, margin: 0 }}>{title}</p>
+        <div className="pp1-action-detail__meta pp1-center-premium__meta">
+          <p className="pp1-action-detail__title">{title}</p>
+          {trend && (
+            <span className={`pp1-center-trend pp1-center-trend--${trend.type === "up" ? "up" : "down"}`}>
+              {trend.type === "up" ? "▲" : "▼"} {trend.value}
+            </span>
+          )}
         </div>
-        <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
+        <button type="button" className="pp1-action-detail__close pp1-center-premium__close" onClick={onClose}>✕</button>
       </div>
 
-      <div className="pp1-action-detail__body" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px" }}>
-        {children}
-        {/* KPI Strip */}
+      {children ? (
+        <div className="pp1-filters-front">
+          {children}
+        </div>
+      ) : null}
+
+      <div className="pp1-action-detail__body pp1-center-premium__body pp1-center-premium__body--content">
         {kpis && kpis.length > 0 && (
-          <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+          <div className="pp1-detail__strip pp1-center-kpi-strip">
             {kpis.map((k, i) => (
-              <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, "--chip-delay": `${i * 60}ms`, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                <div>
+              <div
+                key={i}
+                className="pp1-detail__chip pp1-center-kpi"
+                style={{ "--chip-color": k.color, "--chip-delay": `${i * 70}ms` }}
+              >
+                <div className="pp1-center-kpi__top">
                   {typeof k.icon === "string" ? (
-                    <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
+                    <span className="pp1-detail__chip-icon">{k.icon}</span>
                   ) : k.icon ? (
-                    <span className="pp1-detail__chip-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: k.color + "20" }}>
-                      <k.icon size={13} style={{ color: k.color }} />
+                    <span className="pp1-detail__chip-icon pp1-center-kpi__icon" style={{ background: k.color + "22", color: k.color }}>
+                      <k.icon size={13} />
                     </span>
                   ) : null}
-                  <p className="pp1-detail__chip-val" style={{ fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
+                  <p
+                    className="pp1-detail__chip-val pp1-kpi-val-premium"
+                    style={{ "--kv-delay": `${i * 70 + 80}ms`, fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : undefined }}
+                  >
+                    {k.value}
+                  </p>
                 </div>
-                <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
+                <p className="pp1-detail__chip-lbl pp1-center-kpi__lbl">{k.label}</p>
               </div>
             ))}
           </div>
@@ -4312,15 +4789,16 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
 
         {chartControls}
 
-        {/* Chart Card */}
         {setupChart && (
-          <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
-            <div className="pp1-dt-card__hd" style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-              <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>{rangeHint.includes("-") && !rangeHint.includes("Breakdown") ? `Trend Analysis (${rangeHint})` : rangeHint}</div>
+          <div className="pp1-dt-card pp1-center-chart">
+            <div className="pp1-dt-card__hd pp1-center-chart__hd">
+              <div className="pp1-dt-card__title pp1-center-chart__title">
+                {rangeHint.includes("-") && !rangeHint.includes("Breakdown") ? `Trend Analysis (${rangeHint})` : rangeHint}
+              </div>
               {chartHeaderControls}
             </div>
-            <div className="pp1-dt-chart-wrap" style={{ height: chartHeight, position: "relative" }}>
-              <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken || title} />
+            <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: chartHeight }}>
+              <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken || title} className="pp1-center-chart__frame" />
             </div>
           </div>
         )}
@@ -4328,7 +4806,7 @@ function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, char
       </div>
     </div>
   );
-}
+});
 
 const parseSortValue = (val) => {
   if (val === undefined || val === null) return "";
@@ -4898,7 +5376,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       },
     };
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       plugins: [grnTargetLinePlugin],
       data: {
@@ -4993,33 +5471,18 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
   }, [grnRows]);
 
   return (
-    <div className="pp1-action-detail" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-action-detail__header" style={{ "--act-color": "#ea580c", padding: "10px 14px", gap: "10px" }}>
-        <div className="pp1-action-detail__icon-box" style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "16px", background: "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Truck size={16} style={{ color: "#fff" }} />
-        </div>
-        <div className="pp1-action-detail__meta" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <p className="pp1-action-detail__title" style={{ fontWeight: 800, margin: 0 }}>GRN Value</p>
-          {trend && (
-            <span style={{
-              fontSize: "11px",
-              fontWeight: 700,
-              color: trend.type === "up" ? "#10b981" : "#ef4444",
-              background: trend.type === "up" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
-              padding: "3px 10px",
-              borderRadius: "9999px",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px"
-            }}>
-              {trend.type === "up" ? "▲" : "▼"} {trend.value}
-            </span>
-          )}
-        </div>
-        <button type="button" className="pp1-action-detail__close" style={{ width: "24px", height: "24px", marginLeft: "auto" }} onClick={onClose}>✕</button>
-      </div>
-
-      <div className="pp1-action-detail__body" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px" }}>
+    <PremiumDashboardView
+      title="GRN Value"
+      icon={Truck}
+      color="#ea580c"
+      kpis={kpis}
+      setupChart={setupChart}
+      chartHeight={220}
+      rangeHint={chartRangeLabel}
+      onClose={onClose}
+      rebuildToken={chartRebuildToken}
+      trend={trend}
+    >
         {/* Filters Bar */}
         <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
           {/* Date Range Picker */}
@@ -5155,38 +5618,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
             Reset
           </button>
         </div>
-
-        <div className="pp1-detail__strip" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
-          {kpis.map((k, i) => (
-            <div key={i} className="pp1-detail__chip" style={{ "--chip-color": k.color, "--chip-delay": `${i * 60}ms`, padding: "8px 12px", borderRadius: "8px", background: k.color + "10", border: `1px solid ${k.color}20`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div>
-                {typeof k.icon === "string" ? (
-                  <span className="pp1-detail__chip-icon" style={{ fontSize: "14px" }}>{k.icon}</span>
-                ) : k.icon ? (
-                  <span className="pp1-detail__chip-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: k.color + "20" }}>
-                    {React.createElement(k.icon, { size: 13, style: { color: k.color } })}
-                  </span>
-                ) : null}
-                <p className="pp1-detail__chip-val" style={{ fontSize: "15px", fontWeight: 700, margin: "2px 0 0 0", lineHeight: 1.2, whiteSpace: "pre-line" }}>{k.value}</p>
-              </div>
-              <p className="pp1-detail__chip-lbl" style={{ fontSize: "9.5px", color: "var(--pp1-text-3)", margin: "4px 0 0 0", textTransform: "uppercase", fontWeight: 600 }}>{k.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Chart Card */}
-        {setupChart && (
-          <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
-            <div className="pp1-dt-card__hd" style={{ marginBottom: "10px" }}>
-              <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>{chartRangeLabel}</div>
-            </div>
-            <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-              <ChartJsCanvas setup={setupChart} height={220} rebuildToken={chartRebuildToken} />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    </PremiumDashboardView>
   );
 }
 
@@ -5564,7 +5996,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
     const totalData = chartData.map((r) => Number(r.total || 0));
     const maxVal = Math.max(0, targetVal, ...totalData);
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels,
@@ -6315,7 +6747,7 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
     const maxVal = Math.max(0, targetVal, ...totalData);
 
     if (chartType === "radar") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "radar",
         data: {
           labels,
@@ -6382,7 +6814,7 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
 
     if (chartType === "polarArea") {
       const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4"];
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "polarArea",
         data: {
           labels,
@@ -6465,7 +6897,7 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
       },
     };
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       plugins: [salesTargetLinePlugin],
       data: {
@@ -7206,7 +7638,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
     const ctx = canvas.getContext("2d");
     const targetValLakhs = targetConfig?.production_analysis?.minProductionValue ?? 12.0;
     const targetVal = targetValLakhs * 100000;
-    return new Chart(ctx, {
+    return createPp1Chart(ctx, {
       type: "bar",
       data: {
         labels: chartData.labels,
@@ -7216,10 +7648,14 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
             label: "Total Production Value",
             data: chartData.values,
             yAxisID: "yRate",
-            backgroundColor: "rgba(139, 92, 246, 0.75)",
+            backgroundColor: (ctx) => pp1BarGradient(ctx.chart, [
+              { offset: 0, color: "rgba(139, 92, 246, 0.45)" },
+              { offset: 1, color: "rgba(139, 92, 246, 0.95)" },
+            ]),
             borderColor: "#8b5cf6",
             borderWidth: 1.5,
-            borderRadius: 4
+            borderRadius: 6,
+            hoverBackgroundColor: "rgba(139, 92, 246, 1)",
           },
           {
             type: "line",
@@ -7229,10 +7665,13 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
             borderColor: "#10b981",
             backgroundColor: "#10b981",
             borderWidth: 3,
-            tension: 0.25,
+            tension: 0.35,
             fill: false,
-            pointRadius: 4,
-            pointHoverRadius: 6
+            pointRadius: 5,
+            pointHoverRadius: 8,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#10b981",
+            pointBorderWidth: 2.5,
           },
           {
             type: "line",
@@ -7256,69 +7695,59 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
           intersect: false
         },
         plugins: {
-          legend: {
-            position: "top",
-            labels: {
-              font: {
-                family: "'Inter', sans-serif",
-                size: 10,
-                weight: 600
-              },
-              usePointStyle: true
-            }
-          },
+          legend: pp1PremiumLegendTop,
           tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.9)",
-            titleFont: { family: "'Inter', sans-serif", size: 11, weight: "bold" },
-            bodyFont: { family: "'Inter', sans-serif", size: 11 },
-            padding: 8,
-            cornerRadius: 6,
+            ...pp1PremiumTooltip,
             callbacks: {
               label: (context) => {
                 const label = context.dataset.label || "";
-                const val = context.raw;
-                return ` ${label}: ₹${Number(val).toLocaleString("en-IN")}`;
+                return ` ${label}: ${fmtRupeeCompact(context.raw)}`;
               }
             }
-          }
+          },
+          datalabels: pp1DataLabelsRupee(),
         },
+        elements: pp1ChartHoverElements,
+        animation: pp1ChartAnimation,
         scales: {
           x: {
             grid: { display: false },
             ticks: {
-              font: { family: "'Inter', sans-serif", size: 10, weight: 600 },
+              font: { family: PP1_FONT, size: 10, weight: "600" },
               color: "#64748b"
             }
           },
           yRate: {
             type: "linear",
             position: "left",
+            grace: "10%",
             title: {
               display: true,
               text: "Total Production Value (₹)",
               color: "#8b5cf6",
-              font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
+              font: { family: PP1_FONT, size: 10, weight: "700" }
             },
             ticks: {
-              font: { family: "'Inter', sans-serif", size: 10 },
+              font: { family: PP1_FONT, size: 10 },
               color: "#64748b",
-              callback: (v) => `₹${v.toLocaleString()}`
+              callback: (v) => fmtRupeeCompact(v)
             },
             grid: { color: "rgba(0, 0, 0, 0.05)" }
           },
           yValue: {
             type: "linear",
             position: "right",
+            grace: "10%",
             title: {
               display: true,
               text: "Actual Value (₹)",
               color: "#10b981",
-              font: { family: "'Inter', sans-serif", size: 10, weight: 700 }
+              font: { family: PP1_FONT, size: 10, weight: "700" }
             },
             ticks: {
-              font: { family: "'Inter', sans-serif", size: 10 },
+              font: { family: PP1_FONT, size: 10 },
               color: "#64748b",
-              callback: (v) => `₹${v.toLocaleString()}`
+              callback: (v) => fmtRupeeCompact(v)
             },
             grid: { drawOnChartArea: false }
           }
@@ -7362,18 +7791,18 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
   );
 
   const chartControls = (
-    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
-      <div className="pp1-dt-card__hd" style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-        <div className="pp1-dt-card__title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--pp1-text-3)" }}>Total Production Value vs Actual Value</div>
+    <div className="pp1-dt-card pp1-center-chart">
+      <div className="pp1-dt-card__hd pp1-center-chart__hd">
+        <div className="pp1-dt-card__title pp1-center-chart__title">Total Production Value vs Actual Value</div>
         {chartHeaderControls}
       </div>
       {!chartBusy && !hasChartData && (
         <p className="pp1-dt-card__empty">No Production Value data for this date range.</p>
       )}
       {(chartBusy || hasChartData) && (
-        <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative", opacity: chartBusy ? 0.5 : 1, transition: "opacity 0.2s" }}>
+        <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 240, opacity: chartBusy ? 0.5 : 1, transition: "opacity 0.2s" }}>
           {hasChartData && (
-            <ChartJsCanvas setup={setupChart} height={220} rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`} />
+            <ChartJsCanvas setup={setupChart} height={240} className="pp1-center-chart__frame" rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`} />
           )}
         </div>
       )}
@@ -8202,7 +8631,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   const setupChart1 = React.useCallback((canvas) => {
     const ctx = canvas.getContext("2d");
     const maxIdleHours = targetConfig?.idle_hours?.maxIdleHours ?? 15;
-    return new Chart(ctx, {
+    return createPp1Chart(ctx, {
       data: {
         labels: chart1Data.labels,
         datasets: [
@@ -8275,7 +8704,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   const idleReasons = ["No Load", "Under Maintenance", "No Operator", "Break Down"];
 
   const carouselControls = (
-    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+    <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
       <div className="pp1-chart-toolbar">
         <div className="pp1-chart-toolbar__title">
           {xAxisGroup === "Month Wise" ? "Month Wise Overall Idle Hours & Loss" : "Monthwise Overall Mac Idle & Loss"}
@@ -8294,7 +8723,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
           ))}
         </div>
       </div>
-      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 220 }}>
         <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`c1-${xAxisGroup}-${JSON.stringify(chart1Data)}`} />
       </div>
     </div>
@@ -8766,7 +9195,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
     const ctx = canvas.getContext("2d");
     const maxNonAcceptedHours = targetConfig?.idle_hours_non_accepted?.maxNonAcceptedHours ?? 5;
     const unplannedLimit = targetConfig?.idle_hours_non_accepted?.unplannedLimit ?? 10;
-    return new Chart(ctx, {
+    return createPp1Chart(ctx, {
       data: {
         labels: chartData.labels,
         datasets: [
@@ -9286,7 +9715,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
   }, [filters]);
 
   const setupChart1 = React.useCallback((canvas) => {
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "pie",
       data: {
         labels: chart1Data.labels,
@@ -9317,7 +9746,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
 
   const setupChart2 = React.useCallback((canvas) => {
     const oeeTarget = targetConfig?.oee ?? 80;
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chart2Data.labels,
@@ -9382,7 +9811,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
   };
 
   const carouselControls = (
-    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+    <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
       <div className="pp1-dt-card__hd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
         <div className="pp1-dt-card__title" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--pp1-text-3)" }}>
           {activeSlide === 0 ? "Machine OEE" : "Average OEE By Machine Type"}
@@ -9427,7 +9856,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
           </button>
         </div>
       </div>
-      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
+      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 220 }}>
         {activeSlide === 0 ? (
           <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`oee1-${JSON.stringify(chart1Data)}`} />
         ) : (
@@ -10168,7 +10597,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       }
     ];
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
@@ -10184,7 +10613,18 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { size: 10, family: PP1_FONT, weight: "600" },
+              color: "#475569",
+              maxRotation: (chart1Data.labels?.length || 0) > 8 ? 40 : 0,
+              minRotation: (chart1Data.labels?.length || 0) > 8 ? 32 : 0,
+              autoSkip: (chart1Data.labels?.length || 0) > 14,
+              autoSkipPadding: 10,
+              padding: 8,
+            },
+          },
           y: {
             min: 0,
             max: 100,
@@ -10197,7 +10637,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
   }, [chart1Data, targetConfig, xAxisGroup]);
 
   const carouselControls = (
-    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+    <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
       <div className="pp1-chart-toolbar">
         <div className="pp1-chart-toolbar__title">
           {(xAxisGroup === "Overall" || xAxisGroup === "Month Wise") && "Overall Month Wise OEE %"}
@@ -10219,8 +10659,8 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
           ))}
         </div>
       </div>
-      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`oee-comp1-${xAxisGroup}-${filteredRows.length}-${JSON.stringify(filters)}`} />
+      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 248 }}>
+        <ChartJsCanvas setup={setupChart1} height={248} rebuildToken={`oee-comp1-${xAxisGroup}-${filteredRows.length}-${JSON.stringify(filters)}`} />
       </div>
     </div>
   );
@@ -11041,7 +11481,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
 
     // Handle Radar Chart
     if (chartType === "radar") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "radar",
         data: {
           labels: chart1Data.labels,
@@ -11087,7 +11527,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
 
     // Handle Polar Area
     if (chartType === "polarArea") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "polarArea",
         data: {
           labels: chart1Data.labels,
@@ -11164,7 +11604,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       }
     ];
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
@@ -11181,7 +11621,18 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { size: 10, family: PP1_FONT, weight: "600" },
+              color: "#475569",
+              maxRotation: (chart1Data.labels?.length || 0) > 8 ? 40 : 0,
+              minRotation: (chart1Data.labels?.length || 0) > 8 ? 32 : 0,
+              autoSkip: (chart1Data.labels?.length || 0) > 14,
+              autoSkipPadding: 10,
+              padding: 8,
+            },
+          },
           y: {
             min: 0,
             max: 100,
@@ -11308,7 +11759,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
   }, [operatorSummaries, monthLabels, targetConfig, xAxisGroup, loading, effLoading, effSource?.kpis]);
 
   const carouselControls = (
-    <div className="pp1-dt-card" style={{ padding: "14px", borderRadius: "10px", border: "1px solid rgba(0,0,0,0.05)", background: "#fff", marginTop: "10px" }}>
+    <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
       <div className="pp1-chart-toolbar">
         <div className="pp1-chart-toolbar__title">
           {(xAxisGroup === "Overall" || xAxisGroup === "Month Wise") && "Overall Month Wise Efficiency %"}
@@ -11330,8 +11781,8 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
           ))}
         </div>
       </div>
-      <div className="pp1-dt-chart-wrap" style={{ height: 220, position: "relative" }}>
-        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`eff1-${xAxisGroup}-${JSON.stringify(filters)}-${chartType}-${operatorSummaries.length}`} />
+      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 248 }}>
+        <ChartJsCanvas setup={setupChart1} height={248} rebuildToken={`eff1-${xAxisGroup}-${JSON.stringify(filters)}-${chartType}-${operatorSummaries.length}`} />
       </div>
     </div>
   );
@@ -12268,7 +12719,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
 
     // Handle Radar Chart
     if (chartType === "radar") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "radar",
         data: {
           labels: chart1Data.labels,
@@ -12322,7 +12773,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
 
     // Handle Polar Area
     if (chartType === "polarArea") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "polarArea",
         data: {
           labels: chart1Data.labels,
@@ -12365,7 +12816,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
     const dataset1Type = isLine || isArea || isStepped ? "line" : "bar";
     const dataset2Type = isBar ? "bar" : "line";
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
@@ -12835,7 +13286,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
 
     // Handle Radar Chart
     if (chartType === "radar") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "radar",
         data: {
           labels: chart1Data.labels,
@@ -12889,7 +13340,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
 
     // Handle Polar Area
     if (chartType === "polarArea") {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "polarArea",
         data: {
           labels: chart1Data.labels,
@@ -12934,7 +13385,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
     const dataset1Type = isLine || isArea || isStepped ? "line" : "bar";
     const dataset2Type = isBar ? "bar" : "line";
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chart1Data.labels,
@@ -13395,7 +13846,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
   const setupChart = React.useCallback((canvas) => {
     const stockLimit = targetConfig?.store_stock_value?.maxStockValueL ?? 50.0;
 
-    return new Chart(canvas, {
+    return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chartLabels,
@@ -13941,7 +14392,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
         datasets.push(mainDataset);
       }
 
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
           labels: chartLabels,
@@ -13978,7 +14429,8 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
               usePointStyle: true,
               borderColor: "rgba(255, 255, 255, 0.1)",
               borderWidth: 1,
-            }
+            },
+            datalabels: pp1DataLabelsPercent({ maxPoints: 96, accentColor: "rgba(234, 179, 8, 0.92)" }),
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
@@ -14535,7 +14987,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
         datasets.push(mainDataset);
       }
 
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
           labels: chartLabels,
@@ -14562,7 +15014,8 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
               padding: 10, cornerRadius: 8, displayColors: true,
               boxWidth: 7, boxHeight: 7, usePointStyle: true,
               borderColor: "rgba(255, 255, 255, 0.1)", borderWidth: 1,
-            }
+            },
+            datalabels: pp1DataLabelsPercent({ maxPoints: 96, accentColor: "rgba(59, 130, 246, 0.92)" }),
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
@@ -15083,7 +15536,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
         datasets.push(mainDataset);
       }
 
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line")),
         data: {
           labels: customerChartData.labels,
@@ -15130,7 +15583,8 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
                   return `FG Value: ₹${val}L`;
                 }
               }
-            }
+            },
+            datalabels: pp1DataLabelsLakhs({ maxPoints: 96 }),
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
@@ -15661,7 +16115,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.daily_production?.maxBalanceHours ?? 4.0;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: chartLabels,
@@ -15996,7 +16450,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
 
   const setupChart = React.useCallback(
     (canvas) => {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "bar",
         data: {
           labels: customerChartData.labels,
@@ -16415,7 +16869,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "line",
         data: {
           labels: monthLabels,
@@ -16820,7 +17274,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0;
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "line",
         data: {
           labels: months,
@@ -17344,7 +17798,7 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
 
   const setupChart = React.useCallback(
     (canvas) => {
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: "doughnut",
         data: {
           labels: ["Closed CAPA", "Open CAPA"],
@@ -17872,7 +18326,7 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
       const maxVal = Math.max(1, ...chart1Data.received, ...chart1Data.open, ...chart1Data.closed);
 
       if (chartType === "polarArea") {
-        return new Chart(canvas, {
+        return createPp1Chart(canvas, {
           type: "polarArea",
           data: {
             labels: ["Received", "Open", "Closed"],
@@ -17959,7 +18413,7 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
         }
       ];
 
-      return new Chart(canvas, {
+      return createPp1Chart(canvas, {
         type: chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : "line"),
         data: {
           labels: chart1Data.labels,
