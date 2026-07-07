@@ -73,6 +73,283 @@ Chart.defaults.plugins.legend.labels.padding = 14;
 Chart.defaults.animation.duration = 400;
 Chart.defaults.animation.delay = 0;
 Chart.defaults.animation.easing = "easeOutQuart";
+
+function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Search...", allLabel = "All Customers", searchPlaceholder = "Search customer..." }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const isAllSelected = !value || value === allLabel || value === "";
+  
+  const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
+
+  const toggleOption = (opt) => {
+    if (opt === allLabel) {
+      onChange("");
+      return;
+    }
+    
+    let nextList;
+    const idx = selectedList.indexOf(opt);
+    if (idx >= 0) {
+      nextList = selectedList.filter(item => item !== opt);
+    } else {
+      nextList = [...selectedList, opt];
+    }
+    
+    if (nextList.length === 0) {
+      onChange("");
+    } else {
+      onChange(nextList.join(", "));
+    }
+  };
+
+  const filteredOptions = options.filter(opt => {
+    return opt.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const isDefault = isAllSelected;
+  let triggerText = allLabel;
+  if (!isDefault) {
+    if (selectedList.length === 1) {
+      triggerText = selectedList[0];
+    } else {
+      triggerText = `${selectedList.length} Selected`;
+    }
+  }
+
+  return (
+    <div className="pp1-custom-select-wrap" ref={dropdownRef} style={{ width: '100%', minWidth: '180px', position: 'relative' }}>
+      <button
+        type="button"
+        className={`pp1-custom-select-trigger ${isOpen ? "open" : ""} ${!isDefault ? "active" : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '8px 12px',
+          background: '#fcfdfe',
+          border: '1.5px solid #d1e2ff',
+          borderRadius: '8px',
+          fontFamily: PP1_FONT,
+          fontSize: '12px',
+          fontWeight: 600,
+          color: '#334155',
+          cursor: 'pointer',
+          transition: 'all 0.22s ease',
+          boxSizing: 'border-box'
+        }}
+      >
+        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+          {triggerText}
+        </span>
+        <ChevronDown size={12} style={{ color: '#94a3b8', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </button>
+
+      {isOpen && (
+        <div 
+          className="pp1-custom-select-options pp1-ct-reveal pp1-ct-reveal--in" 
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            width: '240px',
+            padding: '8px',
+            background: '#ffffff',
+            border: '1.5px solid #e2e8f0',
+            borderRadius: '10px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            zIndex: 99999,
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ position: 'relative', marginBottom: '8px' }}>
+            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 26px 6px 26px',
+                fontSize: '0.75rem',
+                borderRadius: '6px',
+                border: '1.5px solid #e2e8f0',
+                background: '#f8fafc',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontFamily: PP1_FONT,
+                transition: 'all 0.2s ease'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#2d6de8';
+                e.target.style.background = '#ffffff';
+                e.target.style.boxShadow = '0 0 0 3px rgba(45, 109, 232, 0.12)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e2e8f0';
+                e.target.style.background = '#f8fafc';
+                e.target.style.boxShadow = 'none';
+              }}
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setSearch(""); }}
+                style={{
+                  position: 'absolute',
+                  right: '6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '2px'
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {!search && (
+              <button
+                type="button"
+                className={`pp1-custom-select-option ${isDefault ? "selected" : ""}`}
+                onClick={() => toggleOption(allLabel)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  width: '100%',
+                  background: isDefault ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  color: isDefault ? '#2d6de8' : '#475569',
+                  fontWeight: isDefault ? 700 : 500,
+                  fontFamily: PP1_FONT,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '3.5px',
+                    border: isDefault ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                    background: isDefault ? '#2d6de8' : 'transparent',
+                    transition: 'all 0.18s ease',
+                    flexShrink: 0
+                  }}
+                >
+                  {isDefault && (
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span>{allLabel}</span>
+              </button>
+            )}
+
+            {filteredOptions.map(opt => {
+              const selected = selectedList.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`pp1-custom-select-option ${selected ? "selected" : ""}`}
+                  onClick={() => toggleOption(opt)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    width: '100%',
+                    background: selected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    color: selected ? '#2d6de8' : '#475569',
+                    fontWeight: selected ? 700 : 500,
+                    fontFamily: PP1_FONT,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '3.5px',
+                      border: selected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
+                      background: selected ? '#2d6de8' : 'transparent',
+                      transition: 'all 0.18s ease',
+                      flexShrink: 0
+                    }}
+                  >
+                    {selected && (
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{opt}</span>
+                </button>
+              );
+            })}
+
+            {filteredOptions.length === 0 && search && (
+              <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: PP1_FONT }}>
+                No matches found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 Chart.defaults.plugins.datalabels = { display: false };
 Chart.defaults.responsiveAnimationDuration = 0;
 
@@ -2527,6 +2804,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
       rangeHint="Month Wise OTD Trend"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={chartLabels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -3278,6 +3556,14 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     return uniqueNames.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
   }, [filters.customer, data?.customerPoCompare?.rows]);
 
+  const allCustomers = React.useMemo(() => {
+    const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
+      ? data.customerPoCompare.rows
+      : [];
+    const names = source.map(r => r.customer).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [data?.customerPoCompare?.rows]);
+
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (custRef.current && !custRef.current.contains(event.target)) {
@@ -3340,7 +3626,10 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
 
     list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
     if (filters.customer) {
-      list = list.filter(r => r.customer === filters.customer);
+      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+      if (selectedCusts.length > 0) {
+        list = list.filter(r => selectedCusts.includes(r.customer));
+      }
     }
     if (filters.poNumber) {
       list = list.filter(r => r.poNumber && String(r.poNumber).toLowerCase().includes(filters.poNumber.toLowerCase()));
@@ -3618,7 +3907,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
         fill: getFill(),
         stepped: isStepped ? "middle" : false,
         hidden: showTargetOnly,
-        order: getDatasetType("Order Value") === "bar" ? 2 : 1
+        order: 3
       },
       {
         type: getDatasetType("Sales Value"),
@@ -3631,10 +3920,10 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
         tension: getDatasetType("Sales Value") === "bar" ? 0 : 0.3,
         pointBackgroundColor: "rgba(16, 185, 129, 1)",
         pointRadius: getPointRadius("Sales Value"),
-        fill: getFill(),
+        fill: false,
         stepped: isStepped ? "middle" : false,
         hidden: showTargetOnly,
-        order: getDatasetType("Sales Value") === "bar" ? 2 : 1
+        order: 2
       },
       {
         type: getDatasetType("Pending Order Value"),
@@ -3647,10 +3936,10 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
         tension: getDatasetType("Pending Order Value") === "bar" ? 0 : 0.3,
         pointBackgroundColor: "rgba(245, 158, 11, 1)",
         pointRadius: getPointRadius("Pending Order Value"),
-        fill: getFill(),
+        fill: false,
         stepped: isStepped ? "middle" : false,
         hidden: showTargetOnly,
-        order: getDatasetType("Pending Order Value") === "bar" ? 2 : 1
+        order: 1
       },
       {
         type: "line",
@@ -3781,44 +4070,14 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
           {/* Customer Autocomplete */}
           <div className="pp1-filter-group" ref={custRef}>
             <label className="pp1-filter-label">Customer</label>
-            <div className="pp1-part-autocomplete-wrap">
-              <input
-                type="text"
-                className="pp1-filter-input pp1-part-autocomplete-input"
-                placeholder="Customer..."
-                value={filters.customer}
-                onChange={e => {
-                  handleInputChange("customer", e.target.value);
-                  setCustOpen(true);
-                }}
-                onFocus={() => setCustOpen(true)}
-              />
-              {custOpen && custSuggestions.length > 0 && (
-                <div className="pp1-part-suggestions">
-                  <div
-                    className={`pp1-part-suggestion-item ${!filters.customer ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("customer", "");
-                      setCustOpen(false);
-                    }}
-                  >
-                    All Customers
-                  </div>
-                  {custSuggestions.map(c => (
-                    <div
-                      key={c}
-                      className={`pp1-part-suggestion-item ${filters.customer === c ? "selected" : ""}`}
-                      onClick={() => {
-                        handleInputChange("customer", c);
-                        setCustOpen(false);
-                      }}
-                    >
-                      {c}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Pp1SearchableMultiSelect
+              value={filters.customer}
+              options={allCustomers}
+              onChange={val => handleInputChange("customer", val)}
+              placeholder="Search customer..."
+              allLabel="All Customers"
+              searchPlaceholder="Search customer..."
+            />
           </div>
 
           {/* Part Number Autocomplete */}
@@ -3989,14 +4248,18 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
           </div>
 
           <div className="pp1-carousel-content">
-            <div className="pp1-carousel-chart-wrap pp1-center-chart__wrap">
-              <ChartJsCanvas
-                setup={slides[activeSlide].setup}
-                height={205}
-                className="pp1-center-chart__frame"
-                rebuildToken={`${activeSlide}|${chart1Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}|${chartType}`}
-              />
-            </div>
+            {chart1Data.length === 0 ? (
+              <Pp1NoDataOverlay />
+            ) : (
+              <div className="pp1-carousel-chart-wrap pp1-center-chart__wrap">
+                <ChartJsCanvas
+                  setup={slides[activeSlide].setup}
+                  height={205}
+                  className="pp1-center-chart__frame"
+                  rebuildToken={`${activeSlide}|${chart1Data.length}|${JSON.stringify(filters)}|${targetConfig?.customer_po?.salesTarget}|${showTargetOnly}|${chartType}`}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -4050,7 +4313,10 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
 
     list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
     if (filters.customer) {
-      list = list.filter(r => r.customer === filters.customer);
+      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+      if (selectedCusts.length > 0) {
+        list = list.filter(r => selectedCusts.includes(r.customer));
+      }
     }
     if (filters.poNumber) {
       list = list.filter(r => r.poNumber && String(r.poNumber).toLowerCase().includes(filters.poNumber.toLowerCase()));
@@ -4270,20 +4536,28 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((r, idx) => (
-              <tr key={idx} className="pp1-cc-tbl__tr">
-                <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
-                {showTargetOnly ? (
-                  <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
-                ) : (
-                  <>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(r.orderValue || 0).toFixed(2)} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{Number(r.salesValue || 0).toFixed(2)} L</td>
-                    <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{Number(r.pendingValue || 0).toFixed(2)} L</td>
-                  </>
-                )}
+            {sortedRows.length === 0 ? (
+              <tr>
+                <td colSpan={showTargetOnly ? 2 : 4} style={{ padding: 0 }}>
+                  <Pp1NoDataOverlay />
+                </td>
               </tr>
-            ))}
+            ) : (
+              sortedRows.map((r, idx) => (
+                <tr key={idx} className="pp1-cc-tbl__tr">
+                  <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
+                  {showTargetOnly ? (
+                    <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
+                  ) : (
+                    <>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(r.orderValue || 0).toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{Number(r.salesValue || 0).toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{Number(r.pendingValue || 0).toFixed(2)} L</td>
+                    </>
+                  )}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -4732,8 +5006,38 @@ function D3TableLoader({ rows = 5, cols = 4 }) {
   );
 }
 
+/* ── No Data Overlay ── */
+function Pp1NoDataOverlay({ message }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: "10px", padding: "40px 20px", minHeight: "180px", width: "100%"
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: "50%",
+        background: "linear-gradient(135deg, rgba(148,163,184,0.13) 0%, rgba(148,163,184,0.06) 100%)",
+        display: "flex", alignItems: "center", justifyContent: "center"
+      }}>
+        <AlertCircle size={26} style={{ color: "#94a3b8" }} />
+      </div>
+      <span style={{
+        fontWeight: 600, fontSize: "14px", color: "#64748b",
+        fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "center"
+      }}>
+        {message || "No Data found on this Given Period"}
+      </span>
+      <span style={{
+        fontSize: "11.5px", color: "#94a3b8",
+        fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "center"
+      }}>
+        Try selecting another date range or adjusting filters
+      </span>
+    </div>
+  );
+}
+
 /* ── Generic Premium Dashboard View & Bottom Table Helpers ── */
-const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, chartHeaderControls, extraBottom, children, trend }) {
+const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, icon: Icon, color, kpis, setupChart, chartHeight = 220, rangeHint, onClose, rebuildToken, chartControls, chartHeaderControls, extraBottom, children, trend, noData }) {
   return (
     <div className="pp1-action-detail pp1-center-premium pp1-ct-reveal pp1-ct-reveal--in" style={{ "--act-color": color }}>
       <div className="pp1-action-detail__header pp1-center-premium__header">
@@ -4789,7 +5093,19 @@ const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, i
 
         {chartControls}
 
-        {setupChart && (
+        {noData ? (
+          <div className="pp1-dt-card pp1-center-chart">
+            <div className="pp1-dt-card__hd pp1-center-chart__hd">
+              <div className="pp1-dt-card__title pp1-center-chart__title">
+                {rangeHint ? (rangeHint.includes("-") && !rangeHint.includes("Breakdown") ? `Trend Analysis (${rangeHint})` : rangeHint) : title}
+              </div>
+              {chartHeaderControls}
+            </div>
+            <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: chartHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Pp1NoDataOverlay />
+            </div>
+          </div>
+        ) : setupChart ? (
           <div className="pp1-dt-card pp1-center-chart">
             <div className="pp1-dt-card__hd pp1-center-chart__hd">
               <div className="pp1-dt-card__title pp1-center-chart__title">
@@ -4801,7 +5117,7 @@ const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, i
               <ChartJsCanvas setup={setupChart} height={chartHeight} rebuildToken={rebuildToken || title} className="pp1-center-chart__frame" />
             </div>
           </div>
-        )}
+        ) : null}
         {extraBottom}
       </div>
     </div>
@@ -4949,7 +5265,7 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
           </thead>
           <tbody>
             {sortedRows.length === 0 ? (
-              <tr><td colSpan={columns.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
+              <tr><td colSpan={columns.length} style={{ padding: 0 }}><Pp1NoDataOverlay /></td></tr>
             ) : (
               sortedRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
@@ -5160,7 +5476,12 @@ function filterGrnRows(rows, filters, defaultFrom, defaultTo) {
   return source.filter((r) => {
     const grnDate = normalizeGrnDate(r.grnDate);
     if (!grnDate || grnDate < activeFrom || grnDate > activeTo) return false;
-    if (filters.supplier && r.supplierName !== filters.supplier) return false;
+    if (filters.supplier) {
+      const selectedSupps = filters.supplier.split(",").map(s => s.trim()).filter(Boolean);
+      if (selectedSupps.length > 0 && !selectedSupps.includes(r.supplierName)) {
+        return false;
+      }
+    }
     if (filters.partNumber) {
       const pno = String(r.partNo || "").toLowerCase();
       if (!pno.includes(String(filters.partNumber).toLowerCase())) return false;
@@ -5213,6 +5534,9 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
   const catRef = React.useRef(null);
   const [partOpen, setPartOpen] = React.useState(false);
   const partRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   const pickerFrom = React.useMemo(() => filters.fromDate ? new Date(filters.fromDate) : null, [filters.fromDate]);
   const pickerTo = React.useMemo(() => filters.toDate ? new Date(filters.toDate) : null, [filters.toDate]);
@@ -5275,6 +5599,9 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       }
       if (partRef.current && !partRef.current.contains(event.target)) {
         setPartOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -5341,8 +5668,8 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
   }, [chartData]);
 
   const chartRebuildToken = React.useMemo(
-    () => `grn-chart|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.grn_value?.minGrnValueL ?? 100}`,
-    [chartData, filters, targetConfig?.grn_value?.minGrnValueL]
+    () => `grn-chart|${chartType}|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.grn_value?.minGrnValueL ?? 100}`,
+    [chartType, chartData, filters, targetConfig?.grn_value?.minGrnValueL]
   );
 
   const setupChart = React.useCallback((canvas) => {
@@ -5376,18 +5703,155 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       },
     };
 
+    if (chartType === "radar") {
+      return createPp1Chart(canvas, {
+        type: "radar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Total GRN Value",
+              data: totalData,
+              borderColor: "rgba(234, 88, 12, 1)",
+              backgroundColor: "rgba(234, 88, 12, 0.15)",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: true
+            },
+            {
+              label: `Target (₹${grnTarget}L/month)`,
+              data: labels.map(() => grnTarget),
+              borderColor: "rgba(239, 68, 68, 0.85)",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              padding: 8,
+              callbacks: {
+                label: (context) => {
+                  if (context.dataset.label?.startsWith("Target")) {
+                    return ` Target: ₹${grnTarget}L/month`;
+                  }
+                  return ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`;
+                }
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: maxVal * 1.1,
+              angleLines: { display: true, color: "rgba(99, 102, 241, 0.08)" },
+              grid: { circular: true, color: "rgba(99, 102, 241, 0.06)" },
+              pointLabels: { font: { family: PP1_FONT, size: 9, weight: "600" }, color: "#64748b" },
+              ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v} L` }
+            }
+          }
+        }
+      });
+    }
+
+    if (chartType === "polarArea") {
+      return createPp1Chart(canvas, {
+        type: "polarArea",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Total GRN Value",
+              data: totalData,
+              backgroundColor: "rgba(234, 88, 12, 0.6)",
+              borderColor: "rgba(234, 88, 12, 1)",
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              padding: 8,
+              callbacks: {
+                label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: maxVal * 1.1,
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v} L` }
+            }
+          }
+        }
+      });
+    }
+
+    const isLine = chartType === "line";
+    const isBar = chartType === "bar";
+    const isArea = chartType === "area";
+    const isStepped = chartType === "stepped";
+    const isCombo = chartType === "combo";
+
+    const getDatasetType = () => {
+      if (isCombo) return "bar";
+      return isBar ? "bar" : "line";
+    };
+
+    const getFill = () => {
+      return isArea || isStepped || isLine;
+    };
+
+    const getBgColor = (baseColor) => {
+      const type = getDatasetType();
+      if (type === "bar") {
+        return baseColor + "0.85)";
+      }
+      if (isArea) return baseColor + "0.25)";
+      if (isStepped) return baseColor + "0.15)";
+      return baseColor + "0.03)";
+    };
+
     return createPp1Chart(canvas, {
-      type: "bar",
+      type: getDatasetType(),
       plugins: [grnTargetLinePlugin],
       data: {
         labels,
         datasets: [
           {
+            type: getDatasetType(),
             label: "Total GRN Value",
             data: totalData,
-            backgroundColor: "rgba(234, 88, 12, 0.85)",
-            borderRadius: 4,
+            backgroundColor: getBgColor("rgba(234, 88, 12, "),
+            borderColor: "rgba(234, 88, 12, 1)",
+            borderWidth: isBar ? 1.5 : 2.5,
+            borderRadius: isBar ? 4 : 0,
             borderSkipped: false,
+            fill: getFill(),
+            stepped: isStepped ? "middle" : false,
+            pointRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            tension: isLine || isArea ? 0.35 : 0,
             order: 2,
           },
           {
@@ -5446,7 +5910,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
         },
       },
     });
-  }, [chartData, targetConfig]);
+  }, [chartData, targetConfig, chartType]);
 
   const handleReset = () => {
     onFilterChange({
@@ -5459,6 +5923,8 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
     setSuppOpen(false);
     setCatOpen(false);
     setPartOpen(false);
+    setChartType("bar");
+    setChartTypeOpen(false);
   };
 
   const handleInputChange = (field, val) => {
@@ -5482,6 +5948,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       onClose={onClose}
       rebuildToken={chartRebuildToken}
       trend={trend}
+      noData={filteredRows.length === 0}
     >
         {/* Filters Bar */}
         <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
@@ -5498,41 +5965,14 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
           {/* Supplier Dropdown */}
           <div className="pp1-filter-group" ref={suppRef}>
             <label className="pp1-filter-label">Supplier</label>
-            <div className="pp1-custom-select-wrap">
-              <button
-                type="button"
-                className={`pp1-custom-select-trigger ${suppOpen ? "open" : ""}`}
-                onClick={() => setSuppOpen(o => !o)}
-              >
-                <span>{filters.supplier || "All Suppliers"}</span>
-                <ChevronDown size={12} className="pp1-custom-select-caret" />
-              </button>
-              {suppOpen && (
-                <div className="pp1-custom-select-options">
-                  <div
-                    className={`pp1-custom-select-option ${!filters.supplier ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("supplier", "");
-                      setSuppOpen(false);
-                    }}
-                  >
-                    All Suppliers
-                  </div>
-                  {suppliers.map(s => (
-                    <div
-                      key={s}
-                      className={`pp1-custom-select-option ${filters.supplier === s ? "selected" : ""}`}
-                      onClick={() => {
-                        handleInputChange("supplier", s);
-                        setSuppOpen(false);
-                      }}
-                    >
-                      {s}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Pp1SearchableMultiSelect
+              value={filters.supplier}
+              options={suppliers}
+              onChange={val => handleInputChange("supplier", val)}
+              placeholder="Search supplier..."
+              allLabel="All Suppliers"
+              searchPlaceholder="Search supplier..."
+            />
           </div>
 
           {/* Category Dropdown */}
@@ -5601,6 +6041,65 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
                       }}
                     >
                       {p}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chart Type Dropdown Filter */}
+          <div className="pp1-filter-group" ref={chartTypeRef}>
+            <label className="pp1-filter-label">Chart Type</label>
+            <div className="pp1-custom-select-wrap">
+              <button
+                type="button"
+                className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+                onClick={() => setChartTypeOpen(o => !o)}
+                style={{ minWidth: "135px" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {chartType === "bar" ? (
+                    <BarChart2 size={12} style={{ color: "#2d6de8" }} />
+                  ) : chartType === "area" ? (
+                    <AreaChart size={12} style={{ color: "#2d6de8" }} />
+                  ) : chartType === "radar" ? (
+                    <Radar size={12} style={{ color: "#2d6de8" }} />
+                  ) : chartType === "polarArea" ? (
+                    <PieChart size={12} style={{ color: "#2d6de8" }} />
+                  ) : chartType === "stepped" ? (
+                    <Activity size={12} style={{ color: "#2d6de8" }} />
+                  ) : chartType === "combo" ? (
+                    <TrendingUp size={12} style={{ color: "#2d6de8" }} />
+                  ) : (
+                    <LucideLineChart size={12} style={{ color: "#2d6de8" }} />
+                  )}
+                  <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+                </div>
+                <ChevronDown size={12} className="pp1-custom-select-caret" />
+              </button>
+              {chartTypeOpen && (
+                <div className="pp1-custom-select-options">
+                  {[
+                    { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                    { id: "line", label: "Line Chart", icon: LucideLineChart },
+                    { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                    { id: "area", label: "Area Chart", icon: AreaChart },
+                    { id: "radar", label: "Radar Chart", icon: Radar },
+                    { id: "polarArea", label: "Polar Area", icon: PieChart },
+                    { id: "stepped", label: "Stepped Chart", icon: Activity }
+                  ].map(opt => (
+                    <div
+                      key={opt.id}
+                      className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                      onClick={() => {
+                        setChartType(opt.id);
+                        setChartTypeOpen(false);
+                      }}
+                      style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                    >
+                      <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#2d6de8" }} />
+                      <span>{opt.label}</span>
                     </div>
                   ))}
                 </div>
@@ -5806,7 +6305,12 @@ function filterPurchaseRows(rows, filters, defaultFrom, defaultTo) {
   return source.filter((r) => {
     const poDate = normalizePoDate(r.poDate);
     if (!poDate || poDate < activeFrom || poDate > activeTo) return false;
-    if (filters.supplier && r.supplierName !== filters.supplier) return false;
+    if (filters.supplier) {
+      const selectedSupps = filters.supplier.split(",").map(s => s.trim()).filter(Boolean);
+      if (selectedSupps.length > 0 && !selectedSupps.includes(r.supplierName)) {
+        return false;
+      }
+    }
     if (filters.partNumber) {
       const pno = String(r.partNo || "").toLowerCase();
       if (!pno.includes(String(filters.partNumber).toLowerCase())) return false;
@@ -5852,6 +6356,9 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
   const catRef = React.useRef(null);
   const [partOpen, setPartOpen] = React.useState(false);
   const partRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -5863,6 +6370,9 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
       }
       if (partRef.current && !partRef.current.contains(event.target)) {
         setPartOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -5883,6 +6393,8 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
       category: "",
       partNumber: "",
     });
+    setChartType("bar");
+    setChartTypeOpen(false);
   };
 
   const pickerFrom = React.useMemo(() => {
@@ -5996,17 +6508,180 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
     const totalData = chartData.map((r) => Number(r.total || 0));
     const maxVal = Math.max(0, targetVal, ...totalData);
 
+    const purchaseTargetLinePlugin = {
+      id: "purchaseValueTargetLine",
+      afterDraw: (chart) => {
+        const yScale = chart.scales.y;
+        const xScale = chart.scales.x;
+        if (!yScale || !xScale) return;
+
+        const targetIndex = chart.data.datasets.findIndex((ds) => ds.label?.startsWith("Target"));
+        if (targetIndex === -1 || !chart.isDatasetVisible(targetIndex)) return;
+
+        const yPos = yScale.getPixelForValue(targetVal);
+        const ctx = chart.ctx;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.85)";
+        ctx.moveTo(xScale.left, yPos);
+        ctx.lineTo(xScale.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+
+    if (chartType === "radar") {
+      return createPp1Chart(canvas, {
+        type: "radar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Purchase Value",
+              data: totalData,
+              borderColor: "rgba(234, 88, 12, 1)",
+              backgroundColor: "rgba(234, 88, 12, 0.15)",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: true
+            },
+            {
+              label: `Target (₹${targetVal}L/month)`,
+              data: labels.map(() => targetVal),
+              borderColor: "rgba(239, 68, 68, 0.85)",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              padding: 8,
+              callbacks: {
+                label: (context) => {
+                  if (context.dataset.label?.startsWith("Target")) {
+                    return ` Target: ₹${targetVal}L/month`;
+                  }
+                  return ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`;
+                }
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: maxVal * 1.1,
+              angleLines: { display: true, color: "rgba(99, 102, 241, 0.08)" },
+              grid: { circular: true, color: "rgba(99, 102, 241, 0.06)" },
+              pointLabels: { font: { family: PP1_FONT, size: 9, weight: "600" }, color: "#64748b" },
+              ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v} L` }
+            }
+          }
+        }
+      });
+    }
+
+    if (chartType === "polarArea") {
+      return createPp1Chart(canvas, {
+        type: "polarArea",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Purchase Value",
+              data: totalData,
+              backgroundColor: "rgba(234, 88, 12, 0.6)",
+              borderColor: "rgba(234, 88, 12, 1)",
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#475569", font: { size: 9 }, boxWidth: 10, padding: 6 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              padding: 8,
+              callbacks: {
+                label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)} L`
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: maxVal * 1.1,
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v} L` }
+            }
+          }
+        }
+      });
+    }
+
+    const isLine = chartType === "line";
+    const isBar = chartType === "bar";
+    const isArea = chartType === "area";
+    const isStepped = chartType === "stepped";
+    const isCombo = chartType === "combo";
+
+    const getDatasetType = () => {
+      if (isCombo) return "bar";
+      return isBar ? "bar" : "line";
+    };
+
+    const getFill = () => {
+      return isArea || isStepped || isLine;
+    };
+
+    const getBgColor = (baseColor) => {
+      const type = getDatasetType();
+      if (type === "bar") {
+        return baseColor + "0.85)";
+      }
+      if (isArea) return baseColor + "0.25)";
+      if (isStepped) return baseColor + "0.15)";
+      return baseColor + "0.03)";
+    };
+
     return createPp1Chart(canvas, {
-      type: "bar",
+      type: getDatasetType(),
+      plugins: [purchaseTargetLinePlugin],
       data: {
         labels,
         datasets: [
           {
+            type: getDatasetType(),
             label: "Purchase Value",
             data: totalData,
-            backgroundColor: "rgba(234, 88, 12, 0.85)",
-            borderRadius: 4,
+            backgroundColor: getBgColor("rgba(234, 88, 12, "),
+            borderColor: "rgba(234, 88, 12, 1)",
+            borderWidth: isBar ? 1.5 : 2.5,
+            borderRadius: isBar ? 4 : 0,
             borderSkipped: false,
+            fill: getFill(),
+            stepped: isStepped ? "middle" : false,
+            pointRadius: isBar ? 0 : 4,
+            pointHoverRadius: isBar ? 0 : 6,
+            tension: isLine || isArea ? 0.35 : 0,
             order: 2,
           },
           {
@@ -6015,7 +6690,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
             data: labels.map(() => targetVal),
             borderColor: "rgba(239, 68, 68, 0.85)",
             borderDash: [5, 5],
-            borderWidth: 1.5,
+            borderWidth: 0,
             pointRadius: 0,
             pointHitRadius: 20,
             fill: false,
@@ -6065,7 +6740,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         },
       },
     });
-  }, [chartData, targetConfig]);
+  }, [chartData, targetConfig, chartType]);
 
   const suppliersList = React.useMemo(() => {
     const names = purchaseRows.map(r => r.supplierName).filter(s => s && s !== "—");
@@ -6082,10 +6757,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
     return Array.from(new Set(parts)).sort();
   }, [purchaseRows]);
 
-  const filteredSuppliers = React.useMemo(() => {
-    if (!filters.supplier) return suppliersList;
-    return suppliersList.filter(s => s.toLowerCase().includes(filters.supplier.toLowerCase()));
-  }, [filters.supplier, suppliersList]);
+
 
   const filteredCategories = React.useMemo(() => {
     if (!filters.category) return categoriesList;
@@ -6098,8 +6770,8 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
   }, [filters.partNumber, partsList]);
 
   const chartRebuildToken = React.useMemo(
-    () => `purchase-value|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.purchase_value?.minPurchaseValueL ?? 100}`,
-    [chartData, filters, targetConfig?.purchase_value?.minPurchaseValueL]
+    () => `purchase-value|${chartType}|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.purchase_value?.minPurchaseValueL ?? 100}`,
+    [chartType, chartData, filters, targetConfig?.purchase_value?.minPurchaseValueL]
   );
 
   return (
@@ -6113,6 +6785,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
       rangeHint={chartRangeLabel}
       onClose={onClose}
       rebuildToken={chartRebuildToken}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker - exactly like Customer PO vs Sales Value */}
@@ -6125,32 +6798,17 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
           />
         </div>
 
-        {/* Supplier Autocomplete with modern UI */}
-        <div className="pp1-filter-group" ref={suppRef} style={{ maxWidth: "180px" }}>
+        {/* Supplier Dropdown */}
+        <div className="pp1-filter-group" ref={suppRef}>
           <label className="pp1-filter-label">Supplier</label>
-          <div className="pp1-part-autocomplete-wrap" style={{ position: "relative" }}>
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="All Suppliers"
-              value={filters.supplier || ""}
-              onChange={e => {
-                handleInputChange("supplier", e.target.value);
-                setSuppOpen(true);
-              }}
-              onFocus={() => setSuppOpen(true)}
-              style={{ paddingRight: "24px" }}
-            />
-            <ChevronDown size={12} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }} />
-            {suppOpen && filteredSuppliers.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("supplier", ""); setSuppOpen(false); }}>All Suppliers</div>
-                {filteredSuppliers.map(s => (
-                  <div key={s} className={`pp1-part-suggestion-item ${filters.supplier === s ? "selected" : ""}`} onClick={() => { handleInputChange("supplier", s); setSuppOpen(false); }}>{s}</div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.supplier}
+            options={suppliersList}
+            onChange={val => handleInputChange("supplier", val)}
+            placeholder="Search supplier..."
+            allLabel="All Suppliers"
+            searchPlaceholder="Search supplier..."
+          />
         </div>
 
         {/* Material Category Dropdown with modern UI */}
@@ -6203,6 +6861,65 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
                 <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("partNumber", ""); setPartOpen(false); }}>All Parts</div>
                 {filteredParts.map(p => (
                   <div key={p} className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`} onClick={() => { handleInputChange("partNumber", p); setPartOpen(false); }}>{p}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#2d6de8" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#2d6de8" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#2d6de8" }} />
+                    <span>{opt.label}</span>
+                  </div>
                 ))}
               </div>
             )}
@@ -6562,7 +7279,12 @@ function filterSalesRows(rows, filters, defaultFrom, defaultTo) {
   return source.filter((r) => {
     const invDate = normalizeSalesDate(r.date);
     if (!invDate || invDate < activeFrom || invDate > activeTo) return false;
-    if (filters.customer && r.customer !== filters.customer) return false;
+    if (filters.customer) {
+      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+      if (selectedCusts.length > 0 && !selectedCusts.includes(r.customer)) {
+        return false;
+      }
+    }
     return true;
   });
 }
@@ -6596,17 +7318,12 @@ function buildSalesMonthChartData(filteredRows) {
 }
 
 function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, trend }) {
-  const [custOpen, setCustOpen] = React.useState(false);
-  const custRef = React.useRef(null);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (custRef.current && !custRef.current.contains(event.target)) {
-        setCustOpen(false);
-      }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
       }
@@ -6981,7 +7698,7 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
   }, [chartMonths, monthTotalsDataset, targetConfig, chartType]);
 
   return (
-    <PremiumDashboardView title="Sales Analysis" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Total Sales" onClose={onClose} rebuildToken={chartRebuildToken}>
+    <PremiumDashboardView title="Sales Analysis" icon={TrendingUp} color="#10b981" kpis={kpis} setupChart={setupChart} rangeHint="Month Wise Total Sales" onClose={onClose} rebuildToken={chartRebuildToken} noData={filteredRows.length === 0}>
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
         <div className="pp1-filter-group pp1-filter-group--date-range">
@@ -6993,38 +7710,17 @@ function SalesAnalysisReportDashboardView({ data, loading, filters, onFilterChan
           />
         </div>
 
-        {/* Customer — custom button dropdown (same as Customer PO vs Sales Value) */}
-        <div className="pp1-filter-group" ref={custRef}>
+        {/* Customer Dropdown */}
+        <div className="pp1-filter-group">
           <label className="pp1-filter-label">Customer</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${custOpen ? "open" : ""}`}
-              onClick={() => setCustOpen(o => !o)}
-            >
-              <span>{filters.customer || "All Customers"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {custOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.customer ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("customer", ""); setCustOpen(false); }}
-                >
-                  All Customers
-                </div>
-                {customers.map(c => (
-                  <div
-                    key={c}
-                    className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("customer", c); setCustOpen(false); }}
-                  >
-                    {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.customer}
+            options={customers}
+            onChange={val => handleInputChange("customer", val)}
+            placeholder="Search customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
@@ -7797,7 +8493,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
         {chartHeaderControls}
       </div>
       {!chartBusy && !hasChartData && (
-        <p className="pp1-dt-card__empty">No Production Value data for this date range.</p>
+        <Pp1NoDataOverlay />
       )}
       {(chartBusy || hasChartData) && (
         <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 240, opacity: chartBusy ? 0.5 : 1, transition: "opacity 0.2s" }}>
@@ -7819,6 +8515,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       chartControls={chartControls}
       rangeHint="Total Production Value vs Actual Value"
       onClose={onClose}
+      noData={!chartBusy && !hasChartData}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -8343,88 +9040,9 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
   );
 }
 
-const MOCK_IDLE_LOGS = [
-  // June 2026
-  { date: "2026-06-15", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Load", shift: "A Shift", duration: 250, perMonth: 20.83, ratePerHour: 600 },
-  { date: "2026-06-15", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Under Maintenance", shift: "A Shift", duration: 480, perMonth: 40.00, ratePerHour: 750 },
-  { date: "2026-06-14", machine: "CNC2", machineType: "CNC", operator: "Gopikrishnan.R", reason: "No Operator", shift: "B Shift", duration: 950, perMonth: 79.17, ratePerHour: 540 },
-  { date: "2026-06-13", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "No Load", shift: "B Shift", duration: 270, perMonth: 22.50, ratePerHour: 980 },
-  { date: "2026-06-12", machine: "VTL3", machineType: "VTL", operator: "Senthil.K", reason: "Break Down", shift: "C Shift", duration: 320, perMonth: 26.67, ratePerHour: 320 },
-  { date: "2026-06-11", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Operator", shift: "A Shift", duration: 150, perMonth: 20.83, ratePerHour: 600 },
-  { date: "2026-06-10", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Break Down", shift: "C Shift", duration: 180, perMonth: 40.00, ratePerHour: 750 },
-  { date: "2026-06-09", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "Under Maintenance", shift: "B Shift", duration: 310, perMonth: 22.50, ratePerHour: 980 },
+const MOCK_IDLE_LOGS = [];
 
-  // May 2026
-  { date: "2026-05-18", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Load", shift: "A Shift", duration: 210, perMonth: 17.50, ratePerHour: 600 },
-  { date: "2026-05-15", machine: "CNC2", machineType: "CNC", operator: "Gopikrishnan.R", reason: "No Operator", shift: "B Shift", duration: 880, perMonth: 73.33, ratePerHour: 540 },
-  { date: "2026-05-12", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Break Down", shift: "A Shift", duration: 220, perMonth: 18.33, ratePerHour: 750 },
-  { date: "2026-05-08", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "Under Maintenance", shift: "C Shift", duration: 400, perMonth: 33.33, ratePerHour: 980 },
-
-  // April 2026
-  { date: "2026-04-20", machine: "VTL3", machineType: "VTL", operator: "Senthil.K", reason: "Break Down", shift: "C Shift", duration: 450, perMonth: 37.50, ratePerHour: 320 },
-  { date: "2026-04-15", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Operator", shift: "B Shift", duration: 180, perMonth: 15.00, ratePerHour: 600 },
-  { date: "2026-04-10", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Under Maintenance", shift: "A Shift", duration: 520, perMonth: 43.33, ratePerHour: 750 },
-  { date: "2026-04-05", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "No Load", shift: "B Shift", duration: 300, perMonth: 25.00, ratePerHour: 980 },
-
-  // March 2026
-  { date: "2026-03-25", machine: "CNC2", machineType: "CNC", operator: "Gopikrishnan.R", reason: "No Operator", shift: "A Shift", duration: 920, perMonth: 76.67, ratePerHour: 540 },
-  { date: "2026-03-20", machine: "VTL3", machineType: "VTL", operator: "Senthil.K", reason: "No Load", shift: "B Shift", duration: 280, perMonth: 23.33, ratePerHour: 320 },
-  { date: "2026-03-12", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "Under Maintenance", shift: "C Shift", duration: 390, perMonth: 32.50, ratePerHour: 600 },
-  { date: "2026-03-05", machine: "VMC7", machineType: "VMC", operator: "Karthi.S", reason: "Break Down", shift: "A Shift", duration: 310, perMonth: 25.83, ratePerHour: 750 },
-
-  // February 2026
-  { date: "2026-02-22", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "Break Down", shift: "B Shift", duration: 190, perMonth: 15.83, ratePerHour: 980 },
-  { date: "2026-02-15", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Operator", shift: "A Shift", duration: 140, perMonth: 11.67, ratePerHour: 600 },
-  { date: "2026-02-10", machine: "CNC2", machineType: "CNC", operator: "Gopikrishnan.R", reason: "No Load", shift: "C Shift", duration: 310, perMonth: 25.83, ratePerHour: 540 },
-
-  // January 2026
-  { date: "2026-01-20", machine: "VTL3", machineType: "VTL", operator: "Senthil.K", reason: "Under Maintenance", shift: "A Shift", duration: 600, perMonth: 50.00, ratePerHour: 320 },
-  { date: "2026-01-15", machine: "CNC1", machineType: "CNC", operator: "Balamurugan.P", reason: "No Load", shift: "B Shift", duration: 240, perMonth: 20.00, ratePerHour: 600 },
-  { date: "2026-01-08", machine: "HMC9", machineType: "HMC", operator: "Sankar", reason: "No Operator", shift: "C Shift", duration: 420, perMonth: 35.00, ratePerHour: 980 }
-];
-
-const MOCK_NON_ACCEPTED_LOSS_LOGS = [
-  // 1. No Load (Rate 600, Machine CNC-01, Team Team A)
-  { date: "2026-06-15", breakdownId: "BD-2026-101", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "08:00 AM", duration: 40.0, ratePerHour: 600, lossQty: 300, isAccepted: true },
-  { date: "2026-06-14", breakdownId: "BD-2026-102", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "09:30 AM", duration: 50.0, ratePerHour: 600, lossQty: 350, isAccepted: true },
-  { date: "2026-06-13", breakdownId: "BD-2026-103", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "10:00 AM", duration: 30.0, ratePerHour: 600, lossQty: 200, isAccepted: true },
-  { date: "2026-06-12", breakdownId: "BD-2026-104", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "11:30 AM", duration: 45.0, ratePerHour: 600, lossQty: 320, isAccepted: false },
-  { date: "2026-06-11", breakdownId: "BD-2026-105", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "01:00 PM", duration: 50.0, ratePerHour: 600, lossQty: 380, isAccepted: false },
-  { date: "2026-06-10", breakdownId: "BD-2026-106", machine: "CNC-01", team: "Team A", reason: "No Load", breakdownStart: "02:30 PM", duration: 35.0, ratePerHour: 600, lossQty: 250, isAccepted: false },
-
-  // 2. Under Maintenance (Rate 750, Machine VMC-01, Team Team B)
-  { date: "2026-06-09", breakdownId: "BD-2026-107", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "08:30 AM", duration: 80.0, ratePerHour: 750, lossQty: 480, isAccepted: true },
-  { date: "2026-06-08", breakdownId: "BD-2026-108", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "09:45 AM", duration: 90.0, ratePerHour: 750, lossQty: 540, isAccepted: true },
-  { date: "2026-06-07", breakdownId: "BD-2026-109", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "11:00 AM", duration: 60.0, ratePerHour: 750, lossQty: 360, isAccepted: true },
-  { date: "2026-06-06", breakdownId: "BD-2026-110", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "01:15 PM", duration: 100.0, ratePerHour: 750, lossQty: 600, isAccepted: false },
-  { date: "2026-06-05", breakdownId: "BD-2026-111", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "03:00 PM", duration: 90.0, ratePerHour: 750, lossQty: 540, isAccepted: false },
-  { date: "2026-06-04", breakdownId: "BD-2026-112", machine: "VMC-01", team: "Team B", reason: "Under Maintenance", breakdownStart: "04:30 PM", duration: 60.0, ratePerHour: 750, lossQty: 360, isAccepted: false },
-
-  // 3. No Operator (Rate 540, Machine CNC-02, Team Team A)
-  { date: "2026-06-03", breakdownId: "BD-2026-113", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "08:15 AM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: true },
-  { date: "2026-06-02", breakdownId: "BD-2026-114", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "09:30 AM", duration: 120.0, ratePerHour: 540, lossQty: 600, isAccepted: true },
-  { date: "2026-06-01", breakdownId: "BD-2026-115", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "10:45 AM", duration: 80.0, ratePerHour: 540, lossQty: 400, isAccepted: true },
-  { date: "2026-06-15", breakdownId: "BD-2026-116", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "01:00 PM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: true },
-  { date: "2026-06-14", breakdownId: "BD-2026-117", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "02:15 PM", duration: 150.0, ratePerHour: 540, lossQty: 750, isAccepted: false },
-  { date: "2026-06-13", breakdownId: "BD-2026-118", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "03:45 PM", duration: 180.0, ratePerHour: 540, lossQty: 900, isAccepted: false },
-  { date: "2026-06-12", breakdownId: "BD-2026-119", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "05:00 PM", duration: 120.0, ratePerHour: 540, lossQty: 600, isAccepted: false },
-  { date: "2026-06-11", breakdownId: "BD-2026-120", machine: "CNC-02", team: "Team A", reason: "No Operator", breakdownStart: "08:00 AM", duration: 100.0, ratePerHour: 540, lossQty: 500, isAccepted: false },
-
-  // 4. No Load (Rate 980, Machine VMC-02, Team Team D)
-  { date: "2026-06-10", breakdownId: "BD-2026-121", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "09:00 AM", duration: 70.0, ratePerHour: 980, lossQty: 350, isAccepted: true },
-  { date: "2026-06-09", breakdownId: "BD-2026-122", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "10:30 AM", duration: 80.0, ratePerHour: 980, lossQty: 400, isAccepted: true },
-  { date: "2026-06-08", breakdownId: "BD-2026-123", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "12:00 PM", duration: 60.0, ratePerHour: 980, lossQty: 300, isAccepted: true },
-  { date: "2026-06-07", breakdownId: "BD-2026-124", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "02:00 PM", duration: 40.0, ratePerHour: 980, lossQty: 200, isAccepted: false },
-  { date: "2026-06-06", breakdownId: "BD-2026-125", machine: "VMC-02", team: "Team D", reason: "No Load", breakdownStart: "03:30 PM", duration: 20.0, ratePerHour: 980, lossQty: 100, isAccepted: false },
-
-  // 5. Break Down (Rate 320, Machine Grinding-01, Team Team C)
-  { date: "2026-06-05", breakdownId: "BD-2026-126", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "08:30 AM", duration: 60.0, ratePerHour: 320, lossQty: 180, isAccepted: true },
-  { date: "2026-06-04", breakdownId: "BD-2026-127", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "10:00 AM", duration: 70.0, ratePerHour: 320, lossQty: 210, isAccepted: true },
-  { date: "2026-06-03", breakdownId: "BD-2026-128", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "11:30 AM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: true },
-  { date: "2026-06-02", breakdownId: "BD-2026-129", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "01:00 PM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: false },
-  { date: "2026-06-01", breakdownId: "BD-2026-130", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "02:30 PM", duration: 50.0, ratePerHour: 320, lossQty: 150, isAccepted: false },
-  { date: "2026-06-15", breakdownId: "BD-2026-131", machine: "Grinding-01", team: "Team C", reason: "Break Down", breakdownStart: "04:00 PM", duration: 40.0, ratePerHour: 320, lossQty: 120, isAccepted: false }
-];
+const MOCK_NON_ACCEPTED_LOSS_LOGS = [];
 
 const formatLossValue = (val) => {
   if (val >= 100000) {
@@ -8437,6 +9055,9 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   const [machOpen, setMachOpen] = React.useState(false);
   const [operOpen, setOperOpen] = React.useState(false);
   const [reasonOpen, setReasonOpen] = React.useState(false);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
   const machRef = React.useRef(null);
   const operRef = React.useRef(null);
   const reasonRef = React.useRef(null);
@@ -8453,6 +9074,9 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       }
       if (reasonRef.current && !reasonRef.current.contains(event.target)) {
         setReasonOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -8476,6 +9100,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     setMachOpen(false);
     setOperOpen(false);
     setReasonOpen(false);
+    setChartType("bar");
   };
 
   const pickerFrom = React.useMemo(() => {
@@ -8504,15 +9129,32 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     }));
   }, [onFilterChange]);
 
+  const activeFromStr = React.useMemo(() => {
+    const d = pickerFrom;
+    if (!d) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [pickerFrom]);
+
+  const activeToStr = React.useMemo(() => {
+    const d = pickerTo;
+    if (!d) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [pickerTo]);
+
   const filteredLogs = React.useMemo(() => {
     let list = MOCK_IDLE_LOGS;
-    if (filters.fromDate) list = list.filter(r => r.date >= filters.fromDate);
-    if (filters.toDate) list = list.filter(r => r.date <= filters.toDate);
+    list = list.filter(r => r.date >= activeFromStr && r.date <= activeToStr);
     if (filters.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters.idleReason) list = list.filter(r => r.reason === filters.idleReason);
     return list;
-  }, [filters]);
+  }, [filters, activeFromStr, activeToStr]);
 
   const kpis = React.useMemo(() => {
     const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
@@ -8546,15 +9188,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
     const highestLossReason = maxReasonLoss > 0 ? `${maxReason}\n₹${(maxReasonLoss / 100000).toFixed(3)} L` : "—";
 
-    let monthStr = "2026-06"; // default to June 2026
-    if (filters.fromDate) {
-      monthStr = filters.fromDate.substring(0, 7);
-    }
-    let listMonthly = MOCK_IDLE_LOGS.filter(r => r.date.startsWith(monthStr));
-    if (filters.operator) listMonthly = listMonthly.filter(r => r.operator === filters.operator);
-    if (filters.machine) listMonthly = listMonthly.filter(r => r.machine === filters.machine);
-    if (filters.idleReason) listMonthly = listMonthly.filter(r => r.reason === filters.idleReason);
-    const monthlySum = listMonthly.reduce((s, r) => s + (r.duration / 12), 0);
+
 
     return [
       { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: Timer, color: "#ef4444" },
@@ -8631,22 +9265,167 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   const setupChart1 = React.useCallback((canvas) => {
     const ctx = canvas.getContext("2d");
     const maxIdleHours = targetConfig?.idle_hours?.maxIdleHours ?? 15;
+
+    const idleTargetLinePlugin = {
+      id: "idleHoursTargetLine",
+      afterDraw: (chart) => {
+        const yScale = chart.scales.yIdle;
+        const xScale = chart.scales.x;
+        if (!yScale || !xScale) return;
+
+        const targetIndex = chart.data.datasets.findIndex((ds) => ds.label?.startsWith("Max Idle"));
+        if (targetIndex === -1 || !chart.isDatasetVisible(targetIndex)) return;
+
+        const yPos = yScale.getPixelForValue(maxIdleHours);
+        const ctx = chart.ctx;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.85)";
+        ctx.moveTo(xScale.left, yPos);
+        ctx.lineTo(xScale.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+
+    if (chartType === "radar") {
+      return createPp1Chart(ctx, {
+        type: "radar",
+        data: {
+          labels: chart1Data.labels,
+          datasets: [
+            {
+              label: "Idle Hours",
+              data: chart1Data.idleHours,
+              borderColor: "rgba(59, 130, 246, 1)",
+              backgroundColor: "rgba(59, 130, 246, 0.15)",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: true
+            },
+            {
+              label: "Production Loss (Lakhs)",
+              data: chart1Data.loss,
+              borderColor: "rgba(239, 68, 68, 1)",
+              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: true
+            },
+            {
+              label: "Max Idle Hours Target",
+              data: chart1Data.labels.map(() => maxIdleHours),
+              borderColor: "rgba(239, 68, 68, 0.85)",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } }
+          },
+          scales: {
+            r: {
+              min: 0,
+              grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent" }
+            }
+          }
+        }
+      });
+    }
+
+    if (chartType === "polarArea") {
+      return createPp1Chart(ctx, {
+        type: "polarArea",
+        data: {
+          labels: chart1Data.labels,
+          datasets: [
+            {
+              label: "Idle Hours",
+              data: chart1Data.idleHours,
+              backgroundColor: "rgba(59, 130, 246, 0.6)",
+              borderColor: "rgba(59, 130, 246, 1)",
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } }
+          },
+          scales: {
+            r: {
+              min: 0,
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent" }
+            }
+          }
+        }
+      });
+    }
+
+    const isLine = chartType === "line";
+    const isBar = chartType === "bar";
+    const isArea = chartType === "area";
+    const isStepped = chartType === "stepped";
+    const isCombo = chartType === "combo";
+
+    const getIdleType = () => {
+      if (isCombo) return "bar";
+      return isBar ? "bar" : "line";
+    };
+
+    const getLossType = () => {
+      return "line";
+    };
+
+    const getFill = () => {
+      return isArea || isStepped || isLine;
+    };
+
+    const getBgColor = (baseColor) => {
+      const type = getIdleType();
+      if (type === "bar") {
+        return baseColor + "0.75)";
+      }
+      if (isArea) return baseColor + "0.25)";
+      if (isStepped) return baseColor + "0.15)";
+      return baseColor + "0.03)";
+    };
+
     return createPp1Chart(ctx, {
+      type: getIdleType(),
+      plugins: [idleTargetLinePlugin],
       data: {
         labels: chart1Data.labels,
         datasets: [
           {
-            type: "bar",
+            type: getIdleType(),
             label: "Idle Hours",
             data: chart1Data.idleHours,
             yAxisID: "yIdle",
-            backgroundColor: "rgba(59, 130, 246, 0.75)",
+            backgroundColor: getBgColor("rgba(59, 130, 246, "),
             borderColor: "#3b82f6",
-            borderWidth: 1.5,
-            borderRadius: 4
+            borderWidth: getIdleType() === "bar" ? 1.5 : 2.5,
+            borderRadius: getIdleType() === "bar" ? 4 : 0,
+            fill: getFill(),
+            stepped: isStepped ? "middle" : false,
+            pointRadius: getIdleType() === "bar" ? 0 : 4,
+            tension: isLine || isArea ? 0.25 : 0
           },
           {
-            type: "line",
+            type: getLossType(),
             label: "Production Loss (Lakhs)",
             data: chart1Data.loss,
             yAxisID: "yLoss",
@@ -8664,7 +9443,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             yAxisID: "yIdle",
             borderColor: "rgba(239, 68, 68, 0.85)",
             borderDash: [5, 5],
-            borderWidth: 2,
+            borderWidth: 0,
             pointRadius: 0,
             fill: false,
             tension: 0
@@ -8697,7 +9476,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         }
       }
     });
-  }, [chart1Data, targetConfig]);
+  }, [chart1Data, targetConfig, chartType]);
 
   const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K", "Sankar"];
   const machines = ["CNC1", "VMC7", "CNC2", "HMC9", "VTL3"];
@@ -8723,8 +9502,12 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
           ))}
         </div>
       </div>
-      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 220 }}>
-        <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`c1-${xAxisGroup}-${JSON.stringify(chart1Data)}`} />
+      <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+        {chart1Data.labels.length === 0 ? (
+          <Pp1NoDataOverlay />
+        ) : (
+          <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`c1-${chartType}-${xAxisGroup}-${JSON.stringify(chart1Data)}`} />
+        )}
       </div>
     </div>
   );
@@ -8739,6 +9522,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       chartControls={carouselControls}
       rangeHint=""
       onClose={onClose}
+      noData={chart1Data.labels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -8871,6 +9655,65 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
           </div>
         </div>
 
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#ef4444" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#ef4444" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#ef4444" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#ef4444" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#ef4444" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#ef4444" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#ef4444" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#ef4444" }} />
+                    <span>{opt.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Reset Button */}
         <button
           type="button"
@@ -8892,8 +9735,24 @@ function IdleHoursReportBottomTable({ filters }) {
 
   const filteredLogs = React.useMemo(() => {
     let list = MOCK_IDLE_LOGS;
-    if (filters?.fromDate) list = list.filter(r => r.date >= filters.fromDate);
-    if (filters?.toDate) list = list.filter(r => r.date <= filters.toDate);
+
+    let activeFrom = filters?.fromDate;
+    let activeTo = filters?.toDate;
+    if (!activeFrom) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      activeFrom = `${year}-${month}-01`;
+    }
+    if (!activeTo) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const day = String(today.getDate()).padStart(2, "0");
+      activeTo = `${year}-${month}-${day}`;
+    }
+
+    list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
     if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
     if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
     if (filters?.idleReason) list = list.filter(r => r.reason === filters.idleReason);
@@ -9332,6 +10191,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
       rebuildToken={JSON.stringify(chartData)}
       rangeHint="Accepted vs Non Accepted Production Loss"
       onClose={onClose}
+      noData={filteredLogs.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -9882,6 +10742,7 @@ function OeeReportDashboardView({ filters, onFilterChange, activeTab, onActiveTa
       chartControls={carouselControls}
       rangeHint="OEE Analysis Charts"
       onClose={onClose}
+      noData={chart1Data.labels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Month Filter */}
@@ -10682,6 +11543,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       chartControls={carouselControls}
       rangeHint="OEE Parameters Comparison"
       onClose={onClose}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -11805,6 +12667,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       chartControls={carouselControls}
       rangeHint="Efficiency Performance Indicators"
       onClose={onClose}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -12980,6 +13843,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
       rangeHint="Month Wise Rejection"
       onClose={onClose}
       rebuildToken={`rejection-${filteredRows.length}-${JSON.stringify(filters)}-${JSON.stringify(targetConfig?.rejection)}-${chartType}`}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
@@ -13565,6 +14429,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
       onClose={onClose}
       rebuildToken={`rework-${xAxisGroup}-${filteredRows.length}-${chartType}-${JSON.stringify(filters)}`}
       chartHeaderControls={chartHeaderControls}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker */}
@@ -13940,6 +14805,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       rangeHint="Month Wise Stock Value"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -14494,6 +15360,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
       rangeHint="Month Wise Rating Score"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={chartLabels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -15061,6 +15928,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
       rangeHint="Vendor Wise Rating Score"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={chartLabels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -15661,6 +16529,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
       onClose={onClose}
       rebuildToken={rebuildToken}
       loading={loading || fgValueLoading}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Customer Multi-Select Dropdown */}
@@ -16211,6 +17080,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
       rangeHint="Machine Capacity Report - Hrs and Loss"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -16518,6 +17388,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
       onClose={onClose}
       rebuildToken={rebuildToken}
       loading={loading || targetVsActualLoading}
+      noData={customerChartData.labels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -16937,6 +17808,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
       rangeHint="Operator Performance - Produced vs Target"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={filteredData.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -17342,6 +18214,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
       rangeHint="Machine Performance - Produced vs Target"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={filteredData.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -17553,100 +18426,7 @@ function MachineEfficiencyBottomTable({ data, filters, targetConfig }) {
 }
 
 /* ── CAPA Mock Data ──────────────────────────────────────────────────────── */
-const MOCK_CAPA_DATA = [
-  {
-    complNo: "CM250018",
-    complDate: "2025-08-21",
-    complOpenDate: "2025-08-21",
-    customer: "ENGINEERED VALVE PRODUCTS PRIVATE LIMITED",
-    partNo: "D-1-104",
-    description: "6 INCH 150# BODY GRINDING",
-    complDescription: "AS PER DRAWING BODY CENTRE TO TOP",
-    qcIncharge: "VIGNESH",
-    correctiveAction: "1.The affected valve body was identified and quarantined. 2.A review of the CAD model was conducted, and the correct center distance was updated.",
-    permanentAction: "1.Implemented a mandatory CAD model review and approval process involving a second engineer. 2.Scheduled a training session for design engineers on common standards.",
-    actionTaken: "Implemented",
-    status: "Closed",
-    closedDate: "2025-08-21",
-    ageDays: 306,
-    remarks: "The affected valve body was corrected and verified.",
-    repeatedComplaint: "NO",
-    rcWhy1: "An incorrect center distance in the CAD model.",
-    rcWhy2: "The CAD model was not checked by a second engineer.",
-    rcWhy3: "This issue was only discovered at final inspection/assembly.",
-    rcWhy4: "Lack of mandatory design verification workflow.",
-    rcWhy5: "Design checklist was not updated for center distance verification."
-  },
-  {
-    complNo: "CM250019",
-    complDate: "2025-08-12",
-    complOpenDate: "2025-08-12",
-    customer: "ENGINEERED VALVE PRODUCTS PRIVATE LIMITED",
-    partNo: "130460101M",
-    description: "4 INCH FP CLASS 600 NPT",
-    complDescription: "1.BORE OVERSIZE",
-    qcIncharge: "VIGNESH",
-    correctiveAction: "1.The tool wear was corrected and tool offsets adjusted. 2.Gauging frequency increased.",
-    permanentAction: "1.For all similar parts, a pre-machining checklist was introduced. 2.Preventive tool replacement schedule defined.",
-    actionTaken: "Implemented",
-    status: "Closed",
-    closedDate: "2025-08-14",
-    ageDays: 315,
-    remarks: "For all similar parts, offsets must be double-checked.",
-    repeatedComplaint: "NO",
-    rcWhy1: "Tool insert worn out during batch run.",
-    rcWhy2: "Tool life tracker was not reset.",
-    rcWhy3: "Gauging frequency was too low to catch tool wear early.",
-    rcWhy4: "Operator was managing multiple setups simultaneously.",
-    rcWhy5: "Standard operating procedure for batch inspections was missing."
-  },
-  {
-    complNo: "CM250020",
-    complDate: "2026-12-11",
-    complOpenDate: "2026-12-11",
-    customer: "SHANTHI GEARS LIMITED",
-    partNo: "NP0550090878",
-    description: "SPUR GEAR 35T X 4.5M",
-    complDescription: "OD 165.6 - 0.4 MEASURE",
-    qcIncharge: "SATHEESH",
-    correctiveAction: "1.The affected gears were segregated for re-inspection. 2.Tool offset was updated by 0.2mm.",
-    permanentAction: "Permanent countermeasures under review by engineering team.",
-    actionTaken: "Pending review",
-    status: "Open",
-    closedDate: "",
-    ageDays: 194,
-    remarks: "Active investigation underway.",
-    repeatedComplaint: "NO",
-    rcWhy1: "Operator ran production setup with incorrect machine offset.",
-    rcWhy2: "First-piece inspection was not signed off by supervisor.",
-    rcWhy3: "Supervisor was absent during shift transition.",
-    rcWhy4: "Shift handover checklist was skipped.",
-    rcWhy5: "No digital alert for setup verification on CNC controller."
-  },
-  {
-    complNo: "CM250021",
-    complDate: "2025-12-23",
-    complOpenDate: "2025-12-15",
-    customer: "GTN ENGINEERING (INDIA) LTD",
-    partNo: "P1000018215/D",
-    description: "ACT CYLNDR PN-52 LWR",
-    complDescription: "Due to manpower shortage setup error",
-    qcIncharge: "SATHEESH",
-    correctiveAction: "Production priority adjusted to load balance setups. Training given to second-line operators.",
-    permanentAction: "Recruitment plan initiated. Setup verification checklists laminated on machine panels.",
-    actionTaken: "Implemented",
-    status: "Closed",
-    closedDate: "2025-12-23",
-    ageDays: 190,
-    remarks: "Manpower shortage resolved by recruitment and setup templates.",
-    repeatedComplaint: "NO",
-    rcWhy1: "CNC operator set workpiece coordinate incorrectly.",
-    rcWhy2: "Operator was fatigued due to overtime shift.",
-    rcWhy3: "Shortage of skilled operators on that production line.",
-    rcWhy4: "Increased customer demand led to back-to-back production runs.",
-    rcWhy5: "HR recruitment cycle delayed by three weeks."
-  }
-];
+const MOCK_CAPA_DATA = [];
 
 /* ── Quality Action Plan (CAPA) View ─────────────────────────── */
 function filterCapaRows(rows, filters, defaultFrom, defaultTo) {
@@ -17931,6 +18711,7 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
       onClose={onClose}
       rebuildToken={rebuildToken}
       extraBottom={extraBottomContent}
+      noData={filteredCapa.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -18463,6 +19244,7 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
       rangeHint="Month wise complaints chart"
       onClose={onClose}
       rebuildToken={rebuildToken}
+      noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range — PlantPerformance1DatePicker (same as Customer PO vs Sales Value) */}
