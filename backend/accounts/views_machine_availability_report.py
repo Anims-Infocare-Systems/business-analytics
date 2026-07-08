@@ -390,10 +390,11 @@ def _fetch_machine_rows(cursor, start_date, end_date, machine_filter=None):
     extra_params = []
 
     if machine_filter:
-        mf = machine_filter.strip()
-        machine_filter_daily = f"WHERE LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) LIKE ?"
-        extra_params.append(f"%{mf}%")
-        # outer WHERE not needed because filter applied at DailySummary level
+        macs = [m.strip() for m in machine_filter.split(",") if m.strip()]
+        if macs:
+            placeholders = ",".join(["?"] * len(macs))
+            machine_filter_daily = f"WHERE LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) IN ({placeholders})"
+            extra_params.extend(macs)
 
     sql = _MACHINE_AVAIL_SQL.format(
         pe_date=pe_date,
@@ -424,9 +425,11 @@ def _fetch_detail_rows(cursor, start_date, end_date, machine_filter=None):
     extra_params = []
 
     if machine_filter:
-        mf = machine_filter.strip()
-        machine_filter_daily = f"WHERE LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) LIKE ?"
-        extra_params.append(f"%{mf}%")
+        macs = [m.strip() for m in machine_filter.split(",") if m.strip()]
+        if macs:
+            placeholders = ",".join(["?"] * len(macs))
+            machine_filter_daily = f"WHERE LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) IN ({placeholders})"
+            extra_params.extend(macs)
 
     sql = _DETAIL_SQL.format(
         pe_date=pe_date,

@@ -1274,8 +1274,14 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
 
     machine_sql = ""
     if machine_filter:
-        machine_sql = " AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) LIKE ?"
-        params.append(f"%{machine_filter.strip()}%")
+        mac_parts = [p.strip() for p in machine_filter.split(",") if p.strip()]
+        if len(mac_parts) > 1:
+            placeholders = ", ".join(["?" for _ in mac_parts])
+            machine_sql = f" AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) IN ({placeholders})"
+            params.extend(mac_parts)
+        elif len(mac_parts) == 1:
+            machine_sql = " AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) LIKE ?"
+            params.append(f"%{mac_parts[0]}%")
 
     machine_sql_block = f"""
         WITH RUNNINGDATA AS (
@@ -1651,17 +1657,16 @@ def _build_production_value_compare_payload(
             display_machine = _pv_aggregate_machines_from_detail(display_detail)
 
     if machine_filter:
-        mf = machine_filter.strip().lower()
-        display_machine = [
-            r for r in display_machine
-            if mf in str(r.get("machine") or "").lower()
-            or mf in str(r.get("machineName") or "").lower()
-        ]
-        display_detail = [
-            r for r in display_detail
-            if mf in str(r.get("machine") or "").lower()
-            or mf in str(r.get("machineName") or "").lower()
-        ]
+        mac_parts = [p.strip().lower() for p in machine_filter.split(",") if p.strip()]
+        if mac_parts:
+            display_machine = [
+                r for r in display_machine
+                if any(p in str(r.get("machine") or "").lower() or p in str(r.get("machineName") or "").lower() for p in mac_parts)
+            ]
+            display_detail = [
+                r for r in display_detail
+                if any(p in str(r.get("machine") or "").lower() or p in str(r.get("machineName") or "").lower() for p in mac_parts)
+            ]
 
     total_prod = round(sum(float(r.get("productionValue") or 0) for r in display_machine), 2)
     total_actual = round(sum(float(r.get("actualValue") or 0) for r in display_machine), 2)
@@ -2551,14 +2556,17 @@ def dashboard2_purchase_value(request):
 # ── OTD (Charts /otd-report/ logic — schedule completion + CustPoOTDRating) ──
 
 def _otd_filter_clause(customer="", part=""):
-    """Optional customer / part filters for AllSchedules (LIKE match)."""
+    """Optional customer / part filters for AllSchedules (IN / LIKE match)."""
     sql = ""
     params = []
     customer = (customer or "").strip()
     part = (part or "").strip()
     if customer:
-        sql += " AND ISNULL(cm.CName, N'') LIKE ?"
-        params.append(f"%{customer}%")
+        cust_list = [c.strip() for c in customer.split(",") if c.strip()]
+        if cust_list:
+            placeholders = ",".join(["?"] * len(cust_list))
+            sql += f" AND ISNULL(cm.CName, N'') IN ({placeholders})"
+            params.extend(cust_list)
     if part:
         sql += " AND s.itcode LIKE ?"
         params.append(f"%{part}%")

@@ -251,8 +251,14 @@ def _fetch_daily_production_rows(cursor, start_date, end_date, machine_filter=No
 
     machine_sql = ""
     if machine_filter:
-        machine_sql = " AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) LIKE ?"
-        params.append(f"%{machine_filter.strip()}%")
+        if "," in machine_filter:
+            m_list = [x.strip() for x in machine_filter.split(",") if x.strip()]
+            placeholders = ",".join(["?"] * len(m_list))
+            machine_sql = f" AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) IN ({placeholders})"
+            params.extend(m_list)
+        else:
+            machine_sql = " AND LTRIM(RTRIM(CAST(R.MacNo AS NVARCHAR(128)))) LIKE ?"
+            params.append(f"%{machine_filter.strip()}%")
 
     capped_run = """(
         CASE
@@ -552,12 +558,23 @@ def build_daily_production_compare_payload(
     display_rows = scoped if scoped else rows
 
     if machine_filter:
-        mf = machine_filter.strip().lower()
-        display_rows = [
-            r for r in display_rows
-            if mf in str(r.get("machine") or "").lower()
-            or mf in str(r.get("machineName") or "").lower()
-        ]
+        if "," in machine_filter:
+            m_list = [x.strip().lower() for x in machine_filter.split(",") if x.strip()]
+            display_rows = [
+                r for r in display_rows
+                if any(
+                    m in str(r.get("machine") or "").lower()
+                    or m in str(r.get("machineName") or "").lower()
+                    for m in m_list
+                )
+            ]
+        else:
+            mf = machine_filter.strip().lower()
+            display_rows = [
+                r for r in display_rows
+                if mf in str(r.get("machine") or "").lower()
+                or mf in str(r.get("machineName") or "").lower()
+            ]
 
     machine_summary = _aggregate_machine_summary(display_rows)
     machines = sorted({r.get("machine") for r in rows if r.get("machine")})

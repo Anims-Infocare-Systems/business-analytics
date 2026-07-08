@@ -56,7 +56,8 @@ import {
   Radar,
   PieChart,
   PanelLeftClose,
-  PanelRightClose
+  PanelRightClose,
+  X
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -74,7 +75,15 @@ Chart.defaults.animation.duration = 400;
 Chart.defaults.animation.delay = 0;
 Chart.defaults.animation.easing = "easeOutQuart";
 
-function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Search...", allLabel = "All Customers", searchPlaceholder = "Search customer..." }) {
+function Pp1SearchableMultiSelect({
+  value,
+  options,
+  onChange,
+  placeholder = "Search...",
+  allLabel = "All Customers",
+  searchPlaceholder = "Search customer...",
+  accentColor = "#2d6de8"
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef(null);
@@ -91,7 +100,7 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
   }, []);
 
   const isAllSelected = !value || value === allLabel || value === "";
-  
+
   const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
 
   const toggleOption = (opt) => {
@@ -99,7 +108,7 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
       onChange("");
       return;
     }
-    
+
     let nextList;
     const idx = selectedList.indexOf(opt);
     if (idx >= 0) {
@@ -107,7 +116,7 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
     } else {
       nextList = [...selectedList, opt];
     }
-    
+
     if (nextList.length === 0) {
       onChange("");
     } else {
@@ -142,7 +151,7 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
           alignItems: 'center',
           padding: '8px 12px',
           background: '#fcfdfe',
-          border: '1.5px solid #d1e2ff',
+          border: isOpen ? `1.5px solid ${accentColor}` : `1.5px solid ${!isDefault ? accentColor : '#d1e2ff'}`,
           borderRadius: '8px',
           fontFamily: PP1_FONT,
           fontSize: '12px',
@@ -153,15 +162,15 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
           boxSizing: 'border-box'
         }}
       >
-        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px', color: !isDefault ? accentColor : 'inherit' }}>
           {triggerText}
         </span>
-        <ChevronDown size={12} style={{ color: '#94a3b8', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={12} style={{ color: !isDefault ? accentColor : '#94a3b8', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
       </button>
 
       {isOpen && (
-        <div 
-          className="pp1-custom-select-options pp1-ct-reveal pp1-ct-reveal--in" 
+        <div
+          className="pp1-custom-select-options pp1-ct-reveal pp1-ct-reveal--in"
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
@@ -197,15 +206,16 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
                 borderRadius: '6px',
                 border: '1.5px solid #e2e8f0',
                 background: '#f8fafc',
+                color: '#334155',
                 outline: 'none',
                 boxSizing: 'border-box',
                 fontFamily: PP1_FONT,
                 transition: 'all 0.2s ease'
               }}
               onFocus={(e) => {
-                e.target.style.borderColor = '#2d6de8';
+                e.target.style.borderColor = accentColor;
                 e.target.style.background = '#ffffff';
-                e.target.style.boxShadow = '0 0 0 3px rgba(45, 109, 232, 0.12)';
+                e.target.style.boxShadow = `0 0 0 3px ${accentColor}20`;
               }}
               onBlur={(e) => {
                 e.target.style.borderColor = '#e2e8f0';
@@ -253,12 +263,12 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
                   textAlign: 'left',
                   padding: '8px 10px',
                   width: '100%',
-                  background: isDefault ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                  background: isDefault ? `${accentColor}12` : 'transparent',
                   border: 'none',
                   cursor: 'pointer',
                   borderRadius: '6px',
                   fontSize: '0.78rem',
-                  color: isDefault ? '#2d6de8' : '#475569',
+                  color: isDefault ? accentColor : '#475569',
                   fontWeight: isDefault ? 700 : 500,
                   fontFamily: PP1_FONT,
                   transition: 'all 0.15s ease'
@@ -272,8 +282,8 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
                     width: '14px',
                     height: '14px',
                     borderRadius: '3.5px',
-                    border: isDefault ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
-                    background: isDefault ? '#2d6de8' : 'transparent',
+                    border: isDefault ? `1.5px solid ${accentColor}` : '1.5px solid #cbd5e1',
+                    background: isDefault ? accentColor : 'transparent',
                     transition: 'all 0.18s ease',
                     flexShrink: 0
                   }}
@@ -303,12 +313,12 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
                     textAlign: 'left',
                     padding: '8px 10px',
                     width: '100%',
-                    background: selected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
+                    background: selected ? `${accentColor}12` : 'transparent',
                     border: 'none',
                     cursor: 'pointer',
                     borderRadius: '6px',
                     fontSize: '0.78rem',
-                    color: selected ? '#2d6de8' : '#475569',
+                    color: selected ? accentColor : '#475569',
                     fontWeight: selected ? 700 : 500,
                     fontFamily: PP1_FONT,
                     transition: 'all 0.15s ease'
@@ -322,8 +332,8 @@ function Pp1SearchableMultiSelect({ value, options, onChange, placeholder = "Sea
                       width: '14px',
                       height: '14px',
                       borderRadius: '3.5px',
-                      border: selected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
-                      background: selected ? '#2d6de8' : 'transparent',
+                      border: selected ? `1.5px solid ${accentColor}` : '1.5px solid #cbd5e1',
+                      background: selected ? accentColor : 'transparent',
                       transition: 'all 0.18s ease',
                       flexShrink: 0
                     }}
@@ -958,13 +968,19 @@ function filterProdValueDetailRows(rows, filters, defaultFrom, defaultTo) {
     if (activeTo && /^\d{4}-\d{2}-\d{2}$/.test(activeTo) && d > activeTo) return false;
     if (filters?.team && r.team !== filters.team) return false;
     if (filters?.machine) {
-      const mac = String(r.machine || "");
-      const name = String(r.machineName || "");
-      if (mac !== filters.machine && name !== filters.machine) return false;
+      const selectedMachines = filters.machine.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedMachines.length > 0) {
+        const mac = String(r.machine || "").toLowerCase();
+        const name = String(r.machineName || "").toLowerCase();
+        if (!selectedMachines.includes(mac) && !selectedMachines.includes(name)) return false;
+      }
     }
     if (filters?.operator) {
-      const op = String(r.operator || "").toLowerCase();
-      if (!op.includes(String(filters.operator).toLowerCase())) return false;
+      const selectedOperators = filters.operator.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedOperators.length > 0) {
+        const op = String(r.operator || "").toLowerCase();
+        if (!selectedOperators.some(sel => op.includes(sel))) return false;
+      }
     }
     return true;
   });
@@ -2535,10 +2551,11 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
   const [debouncedCustomer, setDebouncedCustomer] = useState("");
   const [debouncedPart, setDebouncedPart] = useState("");
 
-  const [custOpen, setCustOpen] = useState(false);
-  const custRef = useRef(null);
   const [partOpen, setPartOpen] = useState(false);
   const partRef = useRef(null);
+  const [chartType, setChartType] = useState("line");
+  const [chartTypeOpen, setChartTypeOpen] = useState(false);
+  const chartTypeRef = useRef(null);
 
   const otdSource = otdLive || data?.otd;
 
@@ -2575,11 +2592,6 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
     return fromRows.sort((a, b) => a.localeCompare(b));
   }, [filterOptionsCache.parts, otdSource?.filterOptions?.parts, otdSource?.rows]);
 
-  const custSuggestions = useMemo(() => {
-    if (!filters.customer) return allCustomers;
-    return allCustomers.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer, allCustomers]);
-
   const partSuggestions = useMemo(() => {
     if (!filters.partNumber) return allParts;
     return allParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
@@ -2587,11 +2599,11 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (custRef.current && !custRef.current.contains(event.target)) {
-        setCustOpen(false);
-      }
       if (partRef.current && !partRef.current.contains(event.target)) {
         setPartOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -2654,6 +2666,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
       customer: "",
       partNumber: ""
     });
+    setChartType("line");
   };
 
   useEffect(() => {
@@ -2719,23 +2732,149 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
     (canvas) => {
       if (!chartLabels.length) return null;
       const n = chartLabels.length;
+      const targetPct = targetConfig?.otd?.targetPct ?? 90;
+
+      const isCombo = chartType === "combo";
+      const isBar = chartType === "bar";
+      const isLine = chartType === "line" || !chartType;
+      const isArea = chartType === "area";
+      const isStepped = chartType === "stepped";
+      const isRadar = chartType === "radar";
+      const isPolarArea = chartType === "polarArea";
+
+      if (isPolarArea) {
+        return createPp1Chart(canvas, {
+          type: "polarArea",
+          data: {
+            labels: chartLabels,
+            datasets: [
+              {
+                label: `OTD % Actual — ${fy}`,
+                data: chartData,
+                backgroundColor: chartLabels.map((_, i) => {
+                  const colors = [
+                    "rgba(124, 58, 237, 0.6)",
+                    "rgba(14, 165, 233, 0.6)",
+                    "rgba(16, 185, 129, 0.6)",
+                    "rgba(245, 158, 11, 0.6)",
+                    "rgba(236, 72, 153, 0.6)"
+                  ];
+                  return colors[i % colors.length];
+                }),
+                borderColor: "#ffffff",
+                borderWidth: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "right",
+                labels: { font: { size: 9, family: "'Inter', sans-serif" }, boxWidth: 10 }
+              },
+              title: {
+                display: true,
+                text: chartTitle,
+                font: { size: 10 },
+                color: "#64748b",
+                padding: { bottom: 8 }
+              }
+            },
+            scales: {
+              r: {
+                min: 0,
+                max: 100,
+                grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
+                ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `${v}%` }
+              }
+            }
+          }
+        });
+      }
+
+      if (isRadar) {
+        return createPp1Chart(canvas, {
+          type: "radar",
+          data: {
+            labels: chartLabels,
+            datasets: [
+              {
+                label: `OTD % Actual — ${fy}`,
+                data: chartData,
+                borderColor: "#7c3aed",
+                backgroundColor: "rgba(124, 58, 237, 0.15)",
+                borderWidth: 2,
+                pointRadius: 3,
+                fill: true,
+                tension: 0.25
+              },
+              {
+                label: `Target ${targetPct}%`,
+                data: Array(n).fill(targetPct),
+                borderColor: "#ef4444",
+                backgroundColor: "transparent",
+                borderWidth: 1.5,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false,
+                tension: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "top",
+                labels: { font: { size: 9, family: "'Inter', sans-serif" }, boxWidth: 10 }
+              },
+              title: {
+                display: true,
+                text: chartTitle,
+                font: { size: 10 },
+                color: "#64748b",
+                padding: { bottom: 8 }
+              }
+            },
+            scales: {
+              r: {
+                min: 0,
+                max: 100,
+                grid: { color: "rgba(0, 0, 0, 0.05)" },
+                ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `${v}%` }
+              }
+            }
+          }
+        });
+      }
+
+      const mainType = (isCombo || isBar) ? "bar" : "line";
+
       return createPp1Chart(canvas, {
-        type: "line",
+        type: mainType,
         data: {
           labels: chartLabels,
           datasets: [
             {
+              type: mainType,
               label: `OTD % Actual — ${fy}`,
               data: chartData,
-              borderColor: "#3b82f6",
-              backgroundColor: "rgba(59, 130, 246, 0.1)",
-              tension: 0.4,
-              fill: true,
-              pointRadius: 3,
+              borderColor: "#7c3aed",
+              backgroundColor: mainType === "bar" ? "rgba(124, 58, 237, 0.75)" : (isArea ? "rgba(124, 58, 237, 0.15)" : "transparent"),
+              borderWidth: mainType === "bar" ? 1.5 : 2.5,
+              borderRadius: mainType === "bar" ? 4 : 0,
+              fill: isArea,
+              stepped: isStepped ? "middle" : false,
+              pointRadius: mainType === "bar" ? 0 : 3,
+              tension: (isLine || isArea) ? 0.4 : 0,
             },
             {
-              label: `Target ${targetConfig?.otd?.targetPct ?? 90}%`,
-              data: Array(n).fill(targetConfig?.otd?.targetPct ?? 90),
+              type: "line",
+              label: `Target ${targetPct}%`,
+              data: Array(n).fill(targetPct),
               borderColor: "#ef4444",
               backgroundColor: "transparent",
               borderDash: [6, 3],
@@ -2780,10 +2919,10 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chartLabels.join(","), chartData.join(","), fy, chartTitle, targetConfig?.otd?.targetPct]
+    [chartLabels.join(","), chartData.join(","), fy, chartTitle, targetConfig?.otd?.targetPct, chartType]
   );
 
-  const rebuildToken = `${otdReportChartToken(report)}|${targetConfig?.otd?.targetPct ?? 90}`;
+  const rebuildToken = `${otdReportChartToken(report)}|${targetConfig?.otd?.targetPct ?? 90}|${chartType}`;
   const otdKpis = otdSource?.kpis ?? {};
 
   const kpis = [
@@ -2817,47 +2956,17 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
           />
         </div>
 
-        {/* Customer Autocomplete */}
-        <div className="pp1-filter-group" ref={custRef} style={{ maxWidth: "260px" }}>
+        {/* Customer Name Filter */}
+        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Customer..."
-              value={filters.customer}
-              onChange={e => {
-                handleInputChange("customer", e.target.value);
-                setCustOpen(true);
-              }}
-              onFocus={() => setCustOpen(true)}
-            />
-            {custOpen && custSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.customer ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("customer", "");
-                    setCustOpen(false);
-                  }}
-                >
-                  All Customers
-                </div>
-                {custSuggestions.map(c => (
-                  <div
-                    key={c}
-                    className={`pp1-part-suggestion-item ${filters.customer === c ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("customer", c);
-                      setCustOpen(false);
-                    }}
-                  >
-                    {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.customer}
+            options={allCustomers}
+            onChange={val => handleInputChange("customer", val)}
+            placeholder="Search customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
         </div>
 
         {/* Part Number Autocomplete */}
@@ -2896,6 +3005,65 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
                     }}
                   >
                     {p}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#7c3aed" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#7c3aed" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#7c3aed" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#7c3aed" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#7c3aed" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#7c3aed" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#7c3aed" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#7c3aed" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -5950,173 +6118,173 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       trend={trend}
       noData={filteredRows.length === 0}
     >
-        {/* Filters Bar */}
-        <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
-          {/* Date Range Picker */}
-          <div className="pp1-filter-group pp1-filter-group--date-range">
-            <label className="pp1-filter-label">Date Range</label>
-            <PlantPerformance1DatePicker
-              from={pickerFrom}
-              to={pickerTo}
-              onChange={handlePickerChange}
-            />
-          </div>
+      {/* Filters Bar */}
+      <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range">
+          <label className="pp1-filter-label">Date Range</label>
+          <PlantPerformance1DatePicker
+            from={pickerFrom}
+            to={pickerTo}
+            onChange={handlePickerChange}
+          />
+        </div>
 
-          {/* Supplier Dropdown */}
-          <div className="pp1-filter-group" ref={suppRef}>
-            <label className="pp1-filter-label">Supplier</label>
-            <Pp1SearchableMultiSelect
-              value={filters.supplier}
-              options={suppliers}
-              onChange={val => handleInputChange("supplier", val)}
-              placeholder="Search supplier..."
-              allLabel="All Suppliers"
-              searchPlaceholder="Search supplier..."
-            />
-          </div>
+        {/* Supplier Dropdown */}
+        <div className="pp1-filter-group" ref={suppRef}>
+          <label className="pp1-filter-label">Supplier</label>
+          <Pp1SearchableMultiSelect
+            value={filters.supplier}
+            options={suppliers}
+            onChange={val => handleInputChange("supplier", val)}
+            placeholder="Search supplier..."
+            allLabel="All Suppliers"
+            searchPlaceholder="Search supplier..."
+          />
+        </div>
 
-          {/* Category Dropdown */}
-          <div className="pp1-filter-group" ref={catRef}>
-            <label className="pp1-filter-label">GRN Type</label>
-            <div className="pp1-custom-select-wrap">
-              <button
-                type="button"
-                className={`pp1-custom-select-trigger ${catOpen ? "open" : ""}`}
-                onClick={() => setCatOpen(o => !o)}
-              >
-                <span>{filters.category || "All Types"}</span>
-                <ChevronDown size={12} className="pp1-custom-select-caret" />
-              </button>
-              {catOpen && (
-                <div className="pp1-custom-select-options">
+        {/* Category Dropdown */}
+        <div className="pp1-filter-group" ref={catRef}>
+          <label className="pp1-filter-label">GRN Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${catOpen ? "open" : ""}`}
+              onClick={() => setCatOpen(o => !o)}
+            >
+              <span>{filters.category || "All Types"}</span>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {catOpen && (
+              <div className="pp1-custom-select-options">
+                <div
+                  className={`pp1-custom-select-option ${!filters.category ? "selected" : ""}`}
+                  onClick={() => {
+                    handleInputChange("category", "");
+                    setCatOpen(false);
+                  }}
+                >
+                  All Types
+                </div>
+                {categories.map(c => (
                   <div
-                    className={`pp1-custom-select-option ${!filters.category ? "selected" : ""}`}
+                    key={c}
+                    className={`pp1-custom-select-option ${filters.category === c ? "selected" : ""}`}
                     onClick={() => {
-                      handleInputChange("category", "");
+                      handleInputChange("category", c);
                       setCatOpen(false);
                     }}
                   >
-                    All Types
+                    {c}
                   </div>
-                  {categories.map(c => (
-                    <div
-                      key={c}
-                      className={`pp1-custom-select-option ${filters.category === c ? "selected" : ""}`}
-                      onClick={() => {
-                        handleInputChange("category", c);
-                        setCatOpen(false);
-                      }}
-                    >
-                      {c}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Part Number Autocomplete */}
-          <div className="pp1-filter-group" ref={partRef}>
-            <label className="pp1-filter-label">Part Number</label>
-            <div className="pp1-part-autocomplete-wrap">
-              <input
-                type="text"
-                className="pp1-filter-input pp1-part-autocomplete-input"
-                placeholder="Part No..."
-                value={filters.partNumber || ""}
-                onChange={e => {
-                  handleInputChange("partNumber", e.target.value);
-                  setPartOpen(true);
-                }}
-              />
-              {partOpen && partSuggestions.length > 0 && (
-                <div className="pp1-part-suggestions">
-                  {partSuggestions.map(p => (
-                    <div
-                      key={p}
-                      className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
-                      onClick={() => {
-                        handleInputChange("partNumber", p);
-                        setPartOpen(false);
-                      }}
-                    >
-                      {p}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Chart Type Dropdown Filter */}
-          <div className="pp1-filter-group" ref={chartTypeRef}>
-            <label className="pp1-filter-label">Chart Type</label>
-            <div className="pp1-custom-select-wrap">
-              <button
-                type="button"
-                className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
-                onClick={() => setChartTypeOpen(o => !o)}
-                style={{ minWidth: "135px" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  {chartType === "bar" ? (
-                    <BarChart2 size={12} style={{ color: "#2d6de8" }} />
-                  ) : chartType === "area" ? (
-                    <AreaChart size={12} style={{ color: "#2d6de8" }} />
-                  ) : chartType === "radar" ? (
-                    <Radar size={12} style={{ color: "#2d6de8" }} />
-                  ) : chartType === "polarArea" ? (
-                    <PieChart size={12} style={{ color: "#2d6de8" }} />
-                  ) : chartType === "stepped" ? (
-                    <Activity size={12} style={{ color: "#2d6de8" }} />
-                  ) : chartType === "combo" ? (
-                    <TrendingUp size={12} style={{ color: "#2d6de8" }} />
-                  ) : (
-                    <LucideLineChart size={12} style={{ color: "#2d6de8" }} />
-                  )}
-                  <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
-                </div>
-                <ChevronDown size={12} className="pp1-custom-select-caret" />
-              </button>
-              {chartTypeOpen && (
-                <div className="pp1-custom-select-options">
-                  {[
-                    { id: "combo", label: "Combo Chart", icon: TrendingUp },
-                    { id: "line", label: "Line Chart", icon: LucideLineChart },
-                    { id: "bar", label: "Bar Chart", icon: BarChart2 },
-                    { id: "area", label: "Area Chart", icon: AreaChart },
-                    { id: "radar", label: "Radar Chart", icon: Radar },
-                    { id: "polarArea", label: "Polar Area", icon: PieChart },
-                    { id: "stepped", label: "Stepped Chart", icon: Activity }
-                  ].map(opt => (
-                    <div
-                      key={opt.id}
-                      className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
-                      onClick={() => {
-                        setChartType(opt.id);
-                        setChartTypeOpen(false);
-                      }}
-                      style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                    >
-                      <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#2d6de8" }} />
-                      <span>{opt.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Reset Button */}
-          <button
-            type="button"
-            className="pp1-filter-btn pp1-filter-btn--reset"
-            onClick={handleReset}
-            style={{ flexShrink: 0, height: "28px" }}
-          >
-            Reset
-          </button>
         </div>
+
+        {/* Part Number Autocomplete */}
+        <div className="pp1-filter-group" ref={partRef}>
+          <label className="pp1-filter-label">Part Number</label>
+          <div className="pp1-part-autocomplete-wrap">
+            <input
+              type="text"
+              className="pp1-filter-input pp1-part-autocomplete-input"
+              placeholder="Part No..."
+              value={filters.partNumber || ""}
+              onChange={e => {
+                handleInputChange("partNumber", e.target.value);
+                setPartOpen(true);
+              }}
+            />
+            {partOpen && partSuggestions.length > 0 && (
+              <div className="pp1-part-suggestions">
+                {partSuggestions.map(p => (
+                  <div
+                    key={p}
+                    className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
+                    onClick={() => {
+                      handleInputChange("partNumber", p);
+                      setPartOpen(false);
+                    }}
+                  >
+                    {p}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#2d6de8" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#2d6de8" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#2d6de8" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#2d6de8" }} />
+                    <span>{opt.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          type="button"
+          className="pp1-filter-btn pp1-filter-btn--reset"
+          onClick={handleReset}
+          style={{ flexShrink: 0, height: "28px" }}
+        >
+          Reset
+        </button>
+      </div>
     </PremiumDashboardView>
   );
 }
@@ -8106,6 +8274,9 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
   const teamRef = React.useRef(null);
   const machineRef = React.useRef(null);
   const operatorRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("combo");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -8117,6 +8288,9 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       }
       if (operatorRef.current && !operatorRef.current.contains(event.target)) {
         setOperatorOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -8156,6 +8330,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       operator: "",
       customer: ""
     });
+    setChartType("combo");
   };
 
   React.useEffect(() => {
@@ -8204,13 +8379,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
   const filteredDetail = React.useMemo(() => {
     const activeFrom = filters?.fromDate || defaultRange.from;
     const activeTo = filters?.toDate || defaultRange.to;
-    let list = filterProdValueDetailRows(detailRows, filters, activeFrom, activeTo);
-    if (filters?.team) list = list.filter((r) => r.team === filters.team);
-    if (filters?.operator) {
-      const op = String(filters.operator).toLowerCase();
-      list = list.filter((r) => String(r.operator || "").toLowerCase().includes(op));
-    }
-    return list;
+    return filterProdValueDetailRows(detailRows, filters, activeFrom, activeTo);
   }, [detailRows, filters, defaultRange]);
 
   const filteredMachineRows = React.useMemo(() => {
@@ -8222,15 +8391,24 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       if (teamMacs.size) list = list.filter((r) => teamMacs.has(r.machine));
     }
     if (filters?.machine) {
-      list = list.filter((r) => r.machine === filters.machine || r.machineName === filters.machine);
+      const selectedMachines = filters.machine.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedMachines.length > 0) {
+        list = list.filter((r) => 
+          selectedMachines.includes(String(r.machine || "").toLowerCase()) ||
+          selectedMachines.includes(String(r.machineName || "").toLowerCase())
+        );
+      }
     }
     if (filters?.operator) {
-      const opMacs = new Set(
-        filteredDetail.filter((r) =>
-          String(r.operator || "").toLowerCase().includes(String(filters.operator).toLowerCase())
-        ).map((r) => r.machine)
-      );
-      if (opMacs.size) list = list.filter((r) => opMacs.has(r.machine));
+      const selectedOperators = filters.operator.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedOperators.length > 0) {
+        const opMacs = new Set(
+          filteredDetail.filter((r) =>
+            selectedOperators.some(sel => String(r.operator || "").toLowerCase().includes(sel))
+          ).map((r) => r.machine)
+        );
+        if (opMacs.size) list = list.filter((r) => opMacs.has(r.machine));
+      }
     }
     return list;
   }, [machineRows, filteredDetail, filters]);
@@ -8334,123 +8512,153 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
     const ctx = canvas.getContext("2d");
     const targetValLakhs = targetConfig?.production_analysis?.minProductionValue ?? 12.0;
     const targetVal = targetValLakhs * 100000;
-    return createPp1Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: chartData.labels,
-        datasets: [
-          {
-            type: "bar",
-            label: "Total Production Value",
-            data: chartData.values,
-            yAxisID: "yRate",
-            backgroundColor: (ctx) => pp1BarGradient(ctx.chart, [
+
+    const isRadial = chartType === "radar" || chartType === "polarArea";
+
+    const datasets = [
+      {
+        type: chartType === "combo" ? "bar" : (chartType === "radar" ? "radar" : (chartType === "line" || chartType === "stepped" || chartType === "area" ? "line" : "bar")),
+        label: "Total Production Value",
+        data: chartData.values,
+        yAxisID: isRadial ? undefined : "yRate",
+        backgroundColor: chartType === "area" || chartType === "stepped"
+          ? "rgba(139, 92, 246, 0.25)"
+          : (isRadial ? "rgba(139, 92, 246, 0.2)" : (ctx) => pp1BarGradient(ctx.chart, [
               { offset: 0, color: "rgba(139, 92, 246, 0.45)" },
               { offset: 1, color: "rgba(139, 92, 246, 0.95)" },
-            ]),
-            borderColor: "#8b5cf6",
-            borderWidth: 1.5,
-            borderRadius: 6,
-            hoverBackgroundColor: "rgba(139, 92, 246, 1)",
-          },
-          {
-            type: "line",
-            label: "Actual Value",
-            data: chartData.actuals,
-            yAxisID: "yValue",
-            borderColor: "#10b981",
-            backgroundColor: "#10b981",
-            borderWidth: 3,
-            tension: 0.35,
-            fill: false,
-            pointRadius: 5,
-            pointHoverRadius: 8,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#10b981",
-            pointBorderWidth: 2.5,
-          },
-          {
-            type: "line",
-            label: "Min Production Target",
-            data: (chartData.labels || []).map(() => targetVal),
-            yAxisID: "yValue",
-            borderColor: "rgba(239, 68, 68, 0.85)",
-            borderDash: [5, 5],
-            borderWidth: 2,
-            pointRadius: 0,
-            fill: false,
-            tension: 0
-          }
-        ]
+            ])),
+        borderColor: "#8b5cf6",
+        borderWidth: (chartType === "line" || chartType === "combo" || chartType === "area" || chartType === "stepped") ? 2.5 : 1.5,
+        borderRadius: (chartType === "bar" || chartType === "combo") ? 6 : 0,
+        fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+        stepped: chartType === "stepped" ? "middle" : false,
+        pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 3,
+        hoverBackgroundColor: "rgba(139, 92, 246, 1)",
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false
-        },
-        plugins: {
-          legend: pp1PremiumLegendTop,
-          tooltip: {
-            ...pp1PremiumTooltip,
-            callbacks: {
-              label: (context) => {
-                const label = context.dataset.label || "";
-                return ` ${label}: ${fmtRupeeCompact(context.raw)}`;
-              }
+      {
+        type: chartType === "combo" ? "line" : (chartType === "radar" ? "radar" : (chartType === "line" || chartType === "stepped" || chartType === "area" ? "line" : "bar")),
+        label: "Actual Value",
+        data: chartData.actuals,
+        yAxisID: isRadial ? undefined : "yValue",
+        borderColor: "#10b981",
+        backgroundColor: chartType === "area" || chartType === "stepped"
+          ? "rgba(16, 185, 129, 0.25)"
+          : (isRadial ? "rgba(16, 185, 129, 0.2)" : "#10b981"),
+        borderWidth: (chartType === "line" || chartType === "combo" || chartType === "area" || chartType === "stepped") ? 3 : 1.5,
+        tension: 0.35,
+        fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+        stepped: chartType === "stepped" ? "middle" : false,
+        borderRadius: (chartType === "bar" || chartType === "combo") ? 6 : 0,
+        pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 4,
+        pointHoverRadius: 8,
+        pointBackgroundColor: "#ffffff",
+        pointBorderColor: "#10b981",
+        pointBorderWidth: 2.5,
+      },
+      {
+        type: chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : "line"),
+        label: "Min Production Target",
+        data: (chartData.labels || []).map(() => targetVal),
+        yAxisID: isRadial ? undefined : "yValue",
+        borderColor: "rgba(239, 68, 68, 0.85)",
+        backgroundColor: "transparent",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ];
+
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: pp1PremiumLegendTop,
+        tooltip: {
+          ...pp1PremiumTooltip,
+          callbacks: {
+            label: (context) => {
+              const label = context.dataset.label || "";
+              return ` ${label}: ${fmtRupeeCompact(context.raw)}`;
             }
-          },
-          datalabels: pp1DataLabelsRupee(),
+          }
         },
-        elements: pp1ChartHoverElements,
-        animation: pp1ChartAnimation,
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: {
-              font: { family: PP1_FONT, size: 10, weight: "600" },
-              color: "#64748b"
-            }
-          },
-          yRate: {
-            type: "linear",
-            position: "left",
-            grace: "10%",
-            title: {
-              display: true,
-              text: "Total Production Value (₹)",
-              color: "#8b5cf6",
-              font: { family: PP1_FONT, size: 10, weight: "700" }
-            },
-            ticks: {
-              font: { family: PP1_FONT, size: 10 },
-              color: "#64748b",
-              callback: (v) => fmtRupeeCompact(v)
-            },
-            grid: { color: "rgba(0, 0, 0, 0.05)" }
-          },
-          yValue: {
-            type: "linear",
-            position: "right",
-            grace: "10%",
-            title: {
-              display: true,
-              text: "Actual Value (₹)",
-              color: "#10b981",
-              font: { family: PP1_FONT, size: 10, weight: "700" }
-            },
-            ticks: {
-              font: { family: PP1_FONT, size: 10 },
-              color: "#64748b",
-              callback: (v) => fmtRupeeCompact(v)
-            },
-            grid: { drawOnChartArea: false }
+        datalabels: pp1DataLabelsRupee(),
+      },
+      elements: pp1ChartHoverElements,
+      animation: pp1ChartAnimation,
+    };
+
+    if (isRadial) {
+      chartOptions.scales = {
+        r: {
+          angleLines: { display: true },
+          ticks: {
+            font: { size: 8 },
+            callback: (v) => fmtRupeeCompact(v)
           }
         }
-      }
+      };
+    } else {
+      chartOptions.scales = {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { family: PP1_FONT, size: 10, weight: "600" },
+            color: "#64748b"
+          }
+        },
+        yRate: {
+          type: "linear",
+          position: "left",
+          grace: "10%",
+          title: {
+            display: true,
+            text: "Total Production Value (₹)",
+            color: "#8b5cf6",
+            font: { family: PP1_FONT, size: 10, weight: "700" }
+          },
+          ticks: {
+            font: { family: PP1_FONT, size: 10 },
+            color: "#64748b",
+            callback: (v) => fmtRupeeCompact(v)
+          },
+          grid: { color: "rgba(0, 0, 0, 0.05)" }
+        },
+        yValue: {
+          type: "linear",
+          position: "right",
+          grace: "10%",
+          title: {
+            display: true,
+            text: "Actual Value (₹)",
+            color: "#10b981",
+            font: { family: PP1_FONT, size: 10, weight: "700" }
+          },
+          ticks: {
+            font: { family: PP1_FONT, size: 10 },
+            color: "#64748b",
+            callback: (v) => fmtRupeeCompact(v)
+          },
+          grid: { drawOnChartArea: false }
+        }
+      };
+    }
+
+    return createPp1Chart(ctx, {
+      type: chartType === "radar" ? "radar" : (chartType === "polarArea" ? "polarArea" : "bar"),
+      data: {
+        labels: chartData.labels,
+        datasets: datasets
+      },
+      options: chartOptions
     });
-  }, [chartData, targetConfig]);
+  }, [chartData, targetConfig, chartType]);
 
   const teams = React.useMemo(() => {
     const api = prodValueSource?.filterOptions?.teams;
@@ -8498,7 +8706,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       {(chartBusy || hasChartData) && (
         <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 240, opacity: chartBusy ? 0.5 : 1, transition: "opacity 0.2s" }}>
           {hasChartData && (
-            <ChartJsCanvas setup={setupChart} height={240} className="pp1-center-chart__frame" rebuildToken={`${xAxisGroup}-${JSON.stringify(chartData)}`} />
+            <ChartJsCanvas setup={setupChart} height={240} className="pp1-center-chart__frame" rebuildToken={`${xAxisGroup}-${chartType}-${JSON.stringify(chartData)}`} />
           )}
         </div>
       )}
@@ -8563,66 +8771,92 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
         </div>
 
         {/* Machine Dropdown */}
-        <div className="pp1-filter-group" ref={machineRef}>
+        <div className="pp1-filter-group" style={{ minWidth: "160px" }}>
           <label className="pp1-filter-label">Machine</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${machineOpen ? "open" : ""}`}
-              onClick={() => setMachineOpen(o => !o)}
-            >
-              <span>{filters.machine || "All Machines"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {machineOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.machine ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("machine", ""); setMachineOpen(false); }}
-                >
-                  All Machines
-                </div>
-                {machines.map(m => (
-                  <div
-                    key={m}
-                    className={`pp1-custom-select-option ${filters.machine === m ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("machine", m); setMachineOpen(false); }}
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.machine}
+            options={machines}
+            onChange={(val) => handleInputChange("machine", val)}
+            placeholder="Select machine..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
         </div>
 
         {/* Operator Dropdown */}
-        <div className="pp1-filter-group" ref={operatorRef}>
+        <div className="pp1-filter-group" style={{ minWidth: "160px" }}>
           <label className="pp1-filter-label">Operator</label>
+          <Pp1SearchableMultiSelect
+            value={filters.operator}
+            options={operators}
+            onChange={(val) => handleInputChange("operator", val)}
+            placeholder="Select operator..."
+            allLabel="All Operators"
+            searchPlaceholder="Search operator..."
+          />
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
               type="button"
-              className={`pp1-custom-select-trigger ${operatorOpen ? "open" : ""}`}
-              onClick={() => setOperatorOpen(o => !o)}
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "145px" }}
             >
-              <span>{filters.operator || "All Operators"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "combo" ? (
+                  <BarChart2 size={12} style={{ color: "#8b5cf6" }} />
+                ) : (
+                  <TrendingUp size={12} style={{ color: "#8b5cf6" }} />
+                )}
+                <span>
+                  {chartType === "combo" && "Combo Chart"}
+                  {chartType === "line" && "Line Chart"}
+                  {chartType === "bar" && "Bar Chart"}
+                  {chartType === "area" && "Area Chart"}
+                  {chartType === "radar" && "Radar Chart"}
+                  {chartType === "polarArea" && "Polar Area"}
+                  {chartType === "stepped" && "Stepped Chart"}
+                </span>
+              </div>
+              <ChevronDown size={14} className="pp1-select-chevron" />
             </button>
-            {operatorOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.operator ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("operator", ""); setOperatorOpen(false); }}
-                >
-                  All Operators
-                </div>
-                {operators.map(o => (
+
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options" style={{ minWidth: "145px" }}>
+                {[
+                  { id: "combo", label: "Combo Chart", icon: BarChart2 },
+                  { id: "line", label: "Line Chart", icon: TrendingUp },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
                   <div
-                    key={o}
-                    className={`pp1-custom-select-option ${filters.operator === o ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("operator", o); setOperatorOpen(false); }}
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
                   >
-                    {o}
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#8b5cf6" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -9052,32 +9286,17 @@ const formatLossValue = (val) => {
 };
 
 function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
-  const [machOpen, setMachOpen] = React.useState(false);
-  const [operOpen, setOperOpen] = React.useState(false);
-  const [reasonOpen, setReasonOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [liveLogs, setLiveLogs] = React.useState([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [filterOptions, setFilterOptions] = React.useState({ machines: [], reasons: [] });
   const chartTypeRef = React.useRef(null);
-  const machRef = React.useRef(null);
-  const operRef = React.useRef(null);
-  const reasonRef = React.useRef(null);
 
   const activeChart = activeTab === "chart2" ? 1 : 0;
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (machRef.current && !machRef.current.contains(event.target)) {
-        setMachOpen(false);
-      }
-      if (operRef.current && !operRef.current.contains(event.target)) {
-        setOperOpen(false);
-      }
-      if (reasonRef.current && !reasonRef.current.contains(event.target)) {
-        setReasonOpen(false);
-      }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
       }
@@ -9100,9 +9319,6 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       operator: "",
       idleReason: "",
     });
-    setMachOpen(false);
-    setOperOpen(false);
-    setReasonOpen(false);
     setChartType("bar");
   };
 
@@ -9171,13 +9387,14 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             setFilterOptions({
               machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
               reasons: Array.isArray(json.filter_options.reasons) ? json.filter_options.reasons : [],
+              operators: Array.isArray(json.filter_options.operators) ? json.filter_options.operators : [],
             });
           }
           if (Array.isArray(json.rows)) {
             const mapped = json.rows.map(row => ({
               date: row.entry_date ? row.entry_date.slice(0, 10) : "",
               machine: row.mac_no || "",
-              operator: "",
+              operator: row.operator || "",
               reason: row.reason || "",
               shift: row.shift || "",
               duration: Number(row.total_idle_hours_decimal) || 0,
@@ -9202,9 +9419,24 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
 
   const filteredLogs = React.useMemo(() => {
     let list = liveLogs;
-    if (filters.operator) list = list.filter(r => r.operator === filters.operator);
-    if (filters.machine) list = list.filter(r => r.machine === filters.machine);
-    if (filters.idleReason) list = list.filter(r => r.reason === filters.idleReason);
+    if (filters.operator) {
+      const opList = filters.operator.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (opList.length > 0) {
+        list = list.filter(r => opList.includes((r.operator || "").toLowerCase()));
+      }
+    }
+    if (filters.machine) {
+      const macList = filters.machine.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (macList.length > 0) {
+        list = list.filter(r => macList.includes((r.machine || "").toLowerCase()));
+      }
+    }
+    if (filters.idleReason) {
+      const reasonList = filters.idleReason.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (reasonList.length > 0) {
+        list = list.filter(r => reasonList.includes((r.reason || "").toLowerCase()));
+      }
+    }
     return list;
   }, [liveLogs, filters.operator, filters.machine, filters.idleReason]);
 
@@ -9530,7 +9762,12 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
   }, [chart1Data, targetConfig, chartType]);
 
-  const operators = ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K", "Sankar"];
+  const operators = React.useMemo(() => {
+    if (filterOptions.operators && filterOptions.operators.length > 0) {
+      return filterOptions.operators;
+    }
+    return ["Balamurugan.P", "Gopikrishnan.R", "Karthi.S", "Senthil.K", "Sankar"];
+  }, [filterOptions.operators]);
 
   const machines = React.useMemo(() => {
     if (filterOptions.machines && filterOptions.machines.length > 0) {
@@ -9600,123 +9837,42 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         </div>
 
         {/* Machine Dropdown */}
-        <div className="pp1-filter-group" ref={machRef}>
+        <div className="pp1-filter-group">
           <label className="pp1-filter-label">Machine</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${machOpen ? "open" : ""}`}
-              onClick={() => setMachOpen(o => !o)}
-            >
-              <span>{filters.machine || "All Machines"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {machOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.machine ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("machine", "");
-                    setMachOpen(false);
-                  }}
-                >
-                  All Machines
-                </div>
-                {machines.map(m => (
-                  <div
-                    key={m}
-                    className={`pp1-custom-select-option ${filters.machine === m ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("machine", m);
-                      setMachOpen(false);
-                    }}
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.machine || ""}
+            options={machines}
+            onChange={(val) => handleInputChange("machine", val)}
+            placeholder="Select Machines..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
         </div>
 
         {/* Operator Dropdown */}
-        <div className="pp1-filter-group" ref={operRef}>
+        <div className="pp1-filter-group">
           <label className="pp1-filter-label">Operator</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${operOpen ? "open" : ""}`}
-              onClick={() => setOperOpen(o => !o)}
-            >
-              <span>{filters.operator || "All Operators"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {operOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.operator ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("operator", "");
-                    setOperOpen(false);
-                  }}
-                >
-                  All Operators
-                </div>
-                {operators.map(op => (
-                  <div
-                    key={op}
-                    className={`pp1-custom-select-option ${filters.operator === op ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("operator", op);
-                      setOperOpen(false);
-                    }}
-                  >
-                    {op}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.operator || ""}
+            options={operators}
+            onChange={(val) => handleInputChange("operator", val)}
+            placeholder="Select Operators..."
+            allLabel="All Operators"
+            searchPlaceholder="Search operator..."
+          />
         </div>
 
         {/* Idle Reason Dropdown */}
-        <div className="pp1-filter-group" ref={reasonRef}>
+        <div className="pp1-filter-group">
           <label className="pp1-filter-label">Idle Reason</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${reasonOpen ? "open" : ""}`}
-              onClick={() => setReasonOpen(o => !o)}
-            >
-              <span>{filters.idleReason || "All Reasons"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {reasonOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.idleReason ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("idleReason", "");
-                    setReasonOpen(false);
-                  }}
-                >
-                  All Reasons
-                </div>
-                {idleReasons.map(r => (
-                  <div
-                    key={r}
-                    className={`pp1-custom-select-option ${filters.idleReason === r ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("idleReason", r);
-                      setReasonOpen(false);
-                    }}
-                  >
-                    {r}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.idleReason || ""}
+            options={idleReasons}
+            onChange={(val) => handleInputChange("idleReason", val)}
+            placeholder="Select Reasons..."
+            allLabel="All Reasons"
+            searchPlaceholder="Search reason..."
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
@@ -10043,7 +10199,7 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
     const today = new Date();
     const defaultFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
     const defaultTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    
+
     const activeFrom = filters?.fromDate || defaultFrom;
     const activeTo = filters?.toDate || defaultTo;
 
@@ -11218,7 +11374,12 @@ function filterOeeRows(rows, filters, defaultFrom, defaultTo) {
     const d = (r.date || "").slice(0, 10);
     if (!d || d < activeFrom || d > activeTo) return false;
     if (filters.machineType && String(r.machineType || "") !== String(filters.machineType)) return false;
-    if (filters.machine && String(r.machine || "") !== String(filters.machine)) return false;
+    if (filters.machine) {
+      const selected = filters.machine.split(",").map(m => m.trim()).filter(Boolean);
+      if (selected.length > 0 && !selected.includes(String(r.machine || ""))) {
+        return false;
+      }
+    }
     return true;
   });
 }
@@ -11392,22 +11553,23 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
 
 function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, xAxisGroup, setXAxisGroup, uid, onOeeData }) {
   const [machineTypeOpen, setMachineTypeOpen] = React.useState(false);
-  const [machineOpen, setMachineOpen] = React.useState(false);
   const [oeeLive, setOeeLive] = React.useState(null);
   const [oeeLoading, setOeeLoading] = React.useState(false);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
 
   const oeeSource = oeeLive || data?.oeeCompare;
 
   const machineTypeRef = React.useRef(null);
-  const machineRef = React.useRef(null);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (machineTypeRef.current && !machineTypeRef.current.contains(event.target)) {
         setMachineTypeOpen(false);
       }
-      if (machineRef.current && !machineRef.current.contains(event.target)) {
-        setMachineOpen(false);
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -11447,6 +11609,8 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       machineType: "",
       machine: "",
     });
+    setChartType("bar");
+    setChartTypeOpen(false);
   };
 
   React.useEffect(() => {
@@ -11564,10 +11728,144 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
     } else if (xAxisGroup === "Team Wise") {
       minUtilization = targetConfig?.oee_comparison?.teamWiseTarget ?? targetConfig?.oee_comparison?.minUtilization ?? 75;
     }
+
+    const isLine = chartType === "line";
+    const isBar = chartType === "bar";
+    const isArea = chartType === "area";
+    const isStepped = chartType === "stepped";
+    const isCombo = chartType === "combo";
+
+    if (chartType === "radar") {
+      const datasets = [
+        ...(chart1Data.datasets || []).map(ds => ({
+          ...ds,
+          type: "radar",
+          backgroundColor: "rgba(14, 165, 233, 0.15)",
+          borderColor: "#0ea5e9",
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: true
+        })),
+        {
+          type: "radar",
+          label: "Min Utilization Target",
+          data: (chart1Data.labels || []).map(() => minUtilization),
+          borderColor: "rgba(239, 68, 68, 0.85)",
+          borderDash: [5, 5],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        }
+      ];
+
+      return createPp1Chart(canvas, {
+        type: "radar",
+        data: {
+          labels: chart1Data.labels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "top",
+              labels: { font: { size: 10, family: "'Inter', sans-serif" }, boxWidth: 10 }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              max: 100,
+              angleLines: { display: true, color: "rgba(14, 165, 233, 0.08)" },
+              grid: { circular: true, color: "rgba(14, 165, 233, 0.06)" },
+              pointLabels: { font: { family: PP1_FONT, size: 9, weight: "600" }, color: "#64748b" },
+              ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `${v}%` }
+            }
+          }
+        }
+      });
+    }
+
+    if (chartType === "polarArea") {
+      const datasets = [
+        {
+          label: "Overall OEE %",
+          data: (chart1Data.datasets?.[0]?.data || []),
+          backgroundColor: (chart1Data.labels || []).map((_, i) => {
+            const colors = [
+              "rgba(14, 165, 233, 0.6)",
+              "rgba(59, 130, 246, 0.6)",
+              "rgba(16, 185, 129, 0.6)",
+              "rgba(245, 158, 11, 0.6)",
+              "rgba(139, 92, 246, 0.6)",
+              "rgba(236, 72, 153, 0.6)"
+            ];
+            return colors[i % colors.length];
+          }),
+          borderColor: "#ffffff",
+          borderWidth: 1
+        }
+      ];
+
+      return createPp1Chart(canvas, {
+        type: "polarArea",
+        data: {
+          labels: chart1Data.labels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "right",
+              labels: { font: { size: 10, family: "'Inter', sans-serif" }, boxWidth: 10 }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              max: 100,
+              grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { family: PP1_FONT, size: 8 }, backdropColor: "transparent", callback: (v) => `${v}%` }
+            }
+          }
+        }
+      });
+    }
+
+    const getOeeType = () => {
+      if (isCombo) return "bar";
+      return isBar ? "bar" : "line";
+    };
+
+    const getFill = () => {
+      return isArea || isStepped || isLine;
+    };
+
+    const getBgColor = (baseColor) => {
+      const type = getOeeType();
+      if (type === "bar") {
+        return baseColor + "0.75)";
+      }
+      if (isArea) return baseColor + "0.25)";
+      if (isStepped) return baseColor + "0.15)";
+      return baseColor + "0.03)";
+    };
+
     const datasetsWithTarget = [
       ...(chart1Data.datasets || []).map(ds => ({
         ...ds,
-        type: "bar"
+        type: getOeeType(),
+        backgroundColor: getBgColor("rgba(14, 165, 233, "),
+        borderColor: "#0ea5e9",
+        borderWidth: getOeeType() === "bar" ? 1.5 : 2.5,
+        borderRadius: getOeeType() === "bar" ? 5 : 0,
+        fill: getFill(),
+        stepped: isStepped ? "middle" : false,
+        pointRadius: getOeeType() === "bar" ? 0 : 4,
+        tension: isLine || isArea ? 0.25 : 0
       })),
       {
         type: "line",
@@ -11583,7 +11881,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
     ];
 
     return createPp1Chart(canvas, {
-      type: "bar",
+      type: getOeeType(),
       data: {
         labels: chart1Data.labels,
         datasets: datasetsWithTarget
@@ -11619,7 +11917,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
         }
       }
     });
-  }, [chart1Data, targetConfig, xAxisGroup]);
+  }, [chart1Data, targetConfig, xAxisGroup, chartType]);
 
   const carouselControls = (
     <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
@@ -11645,7 +11943,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
         </div>
       </div>
       <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 248 }}>
-        <ChartJsCanvas setup={setupChart1} height={248} rebuildToken={`oee-comp1-${xAxisGroup}-${filteredRows.length}-${JSON.stringify(filters)}`} />
+        <ChartJsCanvas setup={setupChart1} height={248} rebuildToken={`oee-comp1-${chartType}-${xAxisGroup}-${filteredRows.length}-${JSON.stringify(filters)}`} />
       </div>
     </div>
   );
@@ -11716,32 +12014,70 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
         </div>
 
         {/* Machine No Filter */}
-        <div className="pp1-filter-group" ref={machineRef}>
+        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
           <label className="pp1-filter-label">Machine No</label>
+          <Pp1SearchableMultiSelect
+            value={filters?.machine}
+            options={machines}
+            onChange={val => handleInputChange("machine", val)}
+            placeholder="Search machine..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
               type="button"
-              className={`pp1-custom-select-trigger ${machineOpen ? "open" : ""}`}
-              onClick={() => setMachineOpen(o => !o)}
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
             >
-              <span>{filters?.machine || "All Machines"}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#0ea5e9" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#0ea5e9" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
               <ChevronDown size={12} className="pp1-custom-select-caret" />
             </button>
-            {machineOpen && (
+            {chartTypeOpen && (
               <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters?.machine ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("machine", ""); setMachineOpen(false); }}
-                >
-                  All Machines
-                </div>
-                {machines.map(m => (
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
                   <div
-                    key={m}
-                    className={`pp1-custom-select-option ${filters?.machine === m ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("machine", m); setMachineOpen(false); }}
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
                   >
-                    {m}
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#0ea5e9" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -12072,8 +12408,18 @@ function filterEffRows(rows, filters, defaultFrom, defaultTo) {
     if (!d || d < activeFrom || d > activeTo) return false;
     if (filters.team && String(r.team || "") !== String(filters.team)) return false;
     if (filters.machineType && String(r.machineType || "") !== String(filters.machineType)) return false;
-    if (filters.machine && String(r.machine || "") !== String(filters.machine)) return false;
-    if (filters.operatorName && String(r.operator || "") !== String(filters.operatorName)) return false;
+    if (filters.machine) {
+      const selected = filters.machine.split(",").map(m => m.trim()).filter(Boolean);
+      if (selected.length > 0 && !selected.includes(String(r.machine || ""))) {
+        return false;
+      }
+    }
+    if (filters.operatorName) {
+      const selected = filters.operatorName.split(",").map(o => o.trim()).filter(Boolean);
+      if (selected.length > 0 && !selected.includes(String(r.operator || ""))) {
+        return false;
+      }
+    }
     return true;
   });
 }
@@ -12300,8 +12646,6 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
 function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig, uid, onEffData }) {
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [machineTypeOpen, setMachineTypeOpen] = React.useState(false);
-  const [machineOpen, setMachineOpen] = React.useState(false);
-  const [operatorOpen, setOperatorOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [effLive, setEffLive] = React.useState(null);
@@ -12311,8 +12655,6 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
 
   const teamRef = React.useRef(null);
   const machineTypeRef = React.useRef(null);
-  const machineRef = React.useRef(null);
-  const operatorRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -12322,12 +12664,6 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       }
       if (machineTypeRef.current && !machineTypeRef.current.contains(event.target)) {
         setMachineTypeOpen(false);
-      }
-      if (machineRef.current && !machineRef.current.contains(event.target)) {
-        setMachineOpen(false);
-      }
-      if (operatorRef.current && !operatorRef.current.contains(event.target)) {
-        setOperatorOpen(false);
       }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
@@ -12873,71 +13209,29 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
         </div>
 
         {/* Machine No Filter */}
-        <div className="pp1-filter-group" ref={machineRef}>
+        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
           <label className="pp1-filter-label">Machine No</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${machineOpen ? "open" : ""}`}
-              onClick={() => setMachineOpen(o => !o)}
-            >
-              <span>{filters?.machine || "All Machines"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {machineOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters?.machine ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("machine", ""); setMachineOpen(false); }}
-                >
-                  All Machines
-                </div>
-                {machines.map(m => (
-                  <div
-                    key={m}
-                    className={`pp1-custom-select-option ${filters?.machine === m ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("machine", m); setMachineOpen(false); }}
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.machine}
+            options={machines}
+            onChange={val => handleInputChange("machine", val)}
+            placeholder="Search machine..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
         </div>
 
         {/* Operator Name Filter */}
-        <div className="pp1-filter-group" ref={operatorRef}>
+        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
           <label className="pp1-filter-label">Operator Name</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${operatorOpen ? "open" : ""}`}
-              onClick={() => setOperatorOpen(o => !o)}
-            >
-              <span>{filters?.operatorName || "All Operators"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {operatorOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters?.operatorName ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("operatorName", ""); setOperatorOpen(false); }}
-                >
-                  All Operators
-                </div>
-                {operators.map(o => (
-                  <div
-                    key={o}
-                    className={`pp1-custom-select-option ${filters?.operatorName === o ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("operatorName", o); setOperatorOpen(false); }}
-                  >
-                    {o}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.operatorName}
+            options={operators}
+            onChange={val => handleInputChange("operatorName", val)}
+            placeholder="Search operator..."
+            allLabel="All Operators"
+            searchPlaceholder="Search operator..."
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
@@ -13335,7 +13629,13 @@ function filterRejRows(rows, filters, defaultFrom, defaultTo) {
     const d = (r.date || "").slice(0, 10);
     if (!d || d < activeFrom || d > activeTo) return false;
     if (Number(r.rejQty || 0) <= 0) return false;
-    if (filters.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters.customer) {
+      const selectedCustomers = filters.customer.split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
+      if (selectedCustomers.length > 0) {
+        const custVal = String(r.customer || "").trim().toLowerCase();
+        if (!selectedCustomers.includes(custVal)) return false;
+      }
+    }
     if (filters.partNo && String(r.partNo || "") !== String(filters.partNo)) return false;
     if (filters.rejType && String(r.rejType || "") !== String(filters.rejType)) return false;
     if (filters.rejReason) {
@@ -13381,7 +13681,13 @@ function filterRewRows(rows, filters, defaultFrom, defaultTo, xAxisGroup) {
     const d = (r.date || "").slice(0, 10);
     if (!d || d < activeFrom || d > activeTo) return false;
     if (Number(r.reworkQty || 0) <= 0) return false;
-    if (filters.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters.customer) {
+      const selectedCustomers = filters.customer.split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
+      if (selectedCustomers.length > 0) {
+        const custVal = String(r.customer || "").trim().toLowerCase();
+        if (!selectedCustomers.includes(custVal)) return false;
+      }
+    }
     if (filters.partNo && String(r.partNo || "") !== String(filters.partNo)) return false;
     if (xAxisGroup && xAxisGroup !== "Overall") {
       if (xAxisGroup === "Customer Rework") {
@@ -13577,7 +13883,6 @@ function buildRewTablePayload(filteredRows, xAxisGroup) {
 }
 
 function RejectionReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, uid, onRejData }) {
-  const [customerOpen, setCustomerOpen] = React.useState(false);
   const [rejTypeOpen, setRejTypeOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("combo");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
@@ -13586,15 +13891,11 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
 
   const rejSource = rejLive || data?.rejectionCompare;
 
-  const customerRef = React.useRef(null);
   const rejTypeRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerRef.current && !customerRef.current.contains(event.target)) {
-        setCustomerOpen(false);
-      }
       if (rejTypeRef.current && !rejTypeRef.current.contains(event.target)) {
         setRejTypeOpen(false);
       }
@@ -13980,38 +14281,17 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
           />
         </div>
 
-        {/* Customer Dropdown */}
-        <div className="pp1-filter-group" ref={customerRef}>
+        {/* Customer Multi-Select */}
+        <div className="pp1-filter-group" style={{ minWidth: "180px" }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${customerOpen ? "open" : ""}`}
-              onClick={() => setCustomerOpen(o => !o)}
-            >
-              <span>{filters?.customer || "All Customers"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {customerOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters?.customer ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("customer", ""); setCustomerOpen(false); }}
-                >
-                  All Customers
-                </div>
-                {customersList.map(c => (
-                  <div
-                    key={c}
-                    className={`pp1-custom-select-option ${filters?.customer === c ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("customer", c); setCustomerOpen(false); }}
-                  >
-                    {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.customer}
+            options={customersList}
+            onChange={(val) => handleInputChange("customer", val)}
+            placeholder="Select customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
         </div>
 
         {/* Rej Type Dropdown */}
@@ -14153,7 +14433,6 @@ function RejectionReportBottomTable({ data, filters }) {
 }
 
 function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, xAxisGroup, setXAxisGroup, uid, onRewData }) {
-  const [customerOpen, setCustomerOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("combo");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [rewLive, setRewLive] = React.useState(null);
@@ -14161,14 +14440,10 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
 
   const rewSource = rewLive || data?.reworkCompare;
 
-  const customerRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerRef.current && !customerRef.current.contains(event.target)) {
-        setCustomerOpen(false);
-      }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
       }
@@ -14566,38 +14841,17 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
           />
         </div>
 
-        {/* Customer Dropdown */}
-        <div className="pp1-filter-group" ref={customerRef}>
+        {/* Customer Multi-Select */}
+        <div className="pp1-filter-group" style={{ minWidth: "180px" }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${customerOpen ? "open" : ""}`}
-              onClick={() => setCustomerOpen(o => !o)}
-            >
-              <span>{filters?.customer || "All Customers"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {customerOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters?.customer ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("customer", ""); setCustomerOpen(false); }}
-                >
-                  All Customers
-                </div>
-                {customersList.map(c => (
-                  <div
-                    key={c}
-                    className={`pp1-custom-select-option ${filters?.customer === c ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("customer", c); setCustomerOpen(false); }}
-                  >
-                    {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.customer}
+            options={customersList}
+            onChange={(val) => handleInputChange("customer", val)}
+            placeholder="Select customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
@@ -14718,9 +14972,12 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [itemCodeOpen, setItemCodeOpen] = React.useState(false);
   const [stockLive, setStockLive] = React.useState(null);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
 
   const categoryRef = React.useRef(null);
   const itemCodeRef = React.useRef(null);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -14729,6 +14986,9 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       }
       if (itemCodeRef.current && !itemCodeRef.current.contains(event.target)) {
         setItemCodeOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -14800,6 +15060,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       itemCode: "",
       status: "",
     });
+    setChartType("bar");
   };
 
   React.useEffect(() => {
@@ -14835,19 +15096,160 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
   const setupChart = React.useCallback((canvas) => {
     const stockLimit = targetConfig?.store_stock_value?.maxStockValueL ?? 50.0;
 
+    if (chartType === "radar") {
+      return createPp1Chart(canvas, {
+        type: "radar",
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: "Stock Value (₹ Lakhs)",
+              data: chartValues,
+              borderColor: "#059669",
+              backgroundColor: "rgba(5, 150, 105, 0.15)",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: true
+            },
+            {
+              label: "Max Stock Limit (₹ Lakhs)",
+              data: (chartLabels || []).map(() => stockLimit),
+              borderColor: "rgba(239, 68, 68, 0.85)",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: {
+                font: { size: 9, family: "'Outfit', 'Inter', sans-serif", weight: 600 },
+                boxWidth: 10
+              }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              titleFont: { family: "'Outfit', 'Inter', sans-serif", size: 11, weight: "bold" },
+              bodyFont: { family: "'Outfit', 'Inter', sans-serif", size: 11 },
+              padding: 8,
+              cornerRadius: 6,
+              callbacks: {
+                label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)}L`
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: Math.max(0, stockLimit, ...chartValues) * 1.1,
+              angleLines: { display: true, color: "rgba(5, 150, 105, 0.08)" },
+              grid: { circular: true, color: "rgba(5, 150, 105, 0.06)" },
+              pointLabels: { font: { family: "'Outfit', 'Inter', sans-serif", size: 9, weight: "600" }, color: "#64748b" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v}L` }
+            }
+          }
+        }
+      });
+    }
+
+    if (chartType === "polarArea") {
+      return createPp1Chart(canvas, {
+        type: "polarArea",
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: "Stock Value (₹ Lakhs)",
+              data: chartValues,
+              backgroundColor: "rgba(5, 150, 105, 0.6)",
+              borderColor: "#059669",
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: {
+                font: { size: 9, family: "'Outfit', 'Inter', sans-serif", weight: 600 },
+                boxWidth: 10
+              }
+            },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              padding: 8,
+              callbacks: {
+                label: (context) => ` ${context.dataset.label}: ₹${Number(context.raw).toFixed(2)}L`
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              suggestedMax: Math.max(0, ...chartValues) * 1.1,
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, backdropColor: "transparent", callback: (v) => `₹${v}L` }
+            }
+          }
+        }
+      });
+    }
+
+    const isLine = chartType === "line";
+    const isBar = chartType === "bar";
+    const isArea = chartType === "area";
+    const isStepped = chartType === "stepped";
+    const isCombo = chartType === "combo";
+
+    const getDatasetType = () => {
+      return isBar || isCombo ? "bar" : "line";
+    };
+
+    const getFill = () => {
+      if (isArea) return true;
+      if (isStepped) return true;
+      if (isLine) return true;
+      return false;
+    };
+
+    const getBgColor = () => {
+      if (isBar || isCombo) return "rgba(5, 150, 105, 0.75)";
+      if (isArea) return "rgba(5, 150, 105, 0.25)";
+      if (isStepped) return "rgba(5, 150, 105, 0.15)";
+      return "rgba(5, 150, 105, 0.03)";
+    };
+
+    const getPointRadius = () => {
+      return isBar || isCombo ? 0 : 4.5;
+    };
+
     return createPp1Chart(canvas, {
       type: "bar",
       data: {
         labels: chartLabels,
         datasets: [
           {
-            type: "bar",
+            type: getDatasetType(),
             label: "Stock Value (₹ Lakhs)",
             data: chartValues,
-            backgroundColor: "rgba(5, 150, 105, 0.75)",
+            backgroundColor: getBgColor(),
             borderColor: "#059669",
-            borderWidth: 1.5,
-            borderRadius: 4
+            borderWidth: isBar || isCombo ? 1.5 : 2.5,
+            borderRadius: isBar || isCombo ? 4 : 0,
+            tension: isBar || isCombo ? 0 : 0.3,
+            pointBackgroundColor: "#059669",
+            pointRadius: getPointRadius(),
+            fill: getFill(),
+            stepped: isStepped ? "middle" : false
           },
           {
             type: "line",
@@ -14915,9 +15317,9 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
         }
       }
     });
-  }, [chartLabels, chartValues, targetConfig]);
+  }, [chartLabels, chartValues, targetConfig, chartType]);
 
-  const rebuildToken = `store-stock-chart|${targetConfig?.store_stock_value?.maxStockValueL ?? 50.0}|${JSON.stringify(chartValues)}|${JSON.stringify(chartLabels)}`;
+  const rebuildToken = `store-stock-chart|${targetConfig?.store_stock_value?.maxStockValueL ?? 50.0}|${JSON.stringify(chartValues)}|${JSON.stringify(chartLabels)}|${chartType}`;
 
   return (
     <PremiumDashboardView
@@ -15029,6 +15431,65 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
                     onClick={() => { handleInputChange("itemCode", item); setItemCodeOpen(false); }}
                   >
                     {item}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#059669" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#059669" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#059669" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#059669" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#059669" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#059669" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#059669" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#059669" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -15175,7 +15636,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
     const q = suppSearch.trim().toLowerCase();
     if (!q) return allSuppliers;
     return allSuppliers.filter(s => s.toLowerCase().includes(q));
-  }, [suppSearch]);
+  }, [suppSearch, allSuppliers]);
 
   const toggleSupplier = (s) => {
     const current = filters.supplier || [];
@@ -15183,7 +15644,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
     onFilterChange(prev => ({ ...prev, supplier: next }));
   };
 
-  const isAllSuppSelected = (filters.supplier || []).length === allSuppliers.length;
+  const isAllSuppSelected = allSuppliers.length > 0 && (filters.supplier || []).length === allSuppliers.length;
   const toggleSelectAllSupp = () => {
     onFilterChange(prev => ({
       ...prev,
@@ -15519,15 +15980,50 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
               <div className="pp1-multiselect-menu">
                 {/* Search Bar */}
                 <div style={{ padding: "2px 4px 6px 4px" }}>
-                  <input
-                    type="text"
-                    className="pp1-filter-input"
-                    placeholder="Search supplier..."
-                    style={{ width: "100%", height: "24px", padding: "2px 8px", fontSize: "10.5px", borderRadius: "6px", border: "1px solid rgba(226, 232, 240, 0.9)" }}
-                    value={suppSearch}
-                    onChange={e => setSuppSearch(e.target.value)}
-                    onClick={e => e.stopPropagation()}
-                  />
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <input
+                      type="text"
+                      className="pp1-filter-input"
+                      placeholder="Search supplier..."
+                      style={{
+                        width: "100%",
+                        height: "24px",
+                        padding: "2px 24px 2px 8px",
+                        fontSize: "10.5px",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(226, 232, 240, 0.9)",
+                        color: "#334155"
+                      }}
+                      value={suppSearch}
+                      onChange={e => setSuppSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                    {suppSearch && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSuppSearch("");
+                        }}
+                        style={{
+                          position: "absolute",
+                          right: "6px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "#64748b",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: "2px"
+                        }}
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Select All Option */}
@@ -16085,16 +16581,50 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
 
             {vendOpen && (
               <div className="pp1-multiselect-menu">
-                <div style={{ padding: "2px 4px 6px 4px" }}>
+                <div style={{ padding: "2px 4px 6px 4px", position: "relative" }}>
                   <input
                     type="text"
                     className="pp1-filter-input"
                     placeholder="Search vendor..."
-                    style={{ width: "100%", height: "24px", padding: "2px 8px", fontSize: "10.5px", borderRadius: "6px", border: "1px solid rgba(226, 232, 240, 0.9)" }}
+                    style={{
+                      width: "100%",
+                      height: "24px",
+                      padding: "2px 24px 2px 8px",
+                      fontSize: "10.5px",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(226, 232, 240, 0.9)",
+                      color: "#334155",
+                      boxSizing: "border-box"
+                    }}
                     value={vendSearch}
                     onChange={e => setVendSearch(e.target.value)}
                     onClick={e => e.stopPropagation()}
                   />
+                  {vendSearch && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setVendSearch("");
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: "8px",
+                        top: "40%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#94a3b8",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "2px"
+                      }}
+                    >
+                      <X size={10} strokeWidth={3} />
+                    </button>
+                  )}
                 </div>
 
                 <div
@@ -16946,10 +17476,13 @@ function filterDailyProdRows(rows, filters, defaultFrom, defaultTo) {
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
     if (d < activeFrom || d > activeTo) return false;
     if (filters?.machineNo) {
-      const m = String(filters.machineNo).toLowerCase();
-      const mac = String(r.machine || "").toLowerCase();
-      const name = String(r.machineName || "").toLowerCase();
-      if (!mac.includes(m) && !name.includes(m)) return false;
+      const macList = String(filters.machineNo).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (macList.length > 0) {
+        const mac = String(r.machine || "").toLowerCase();
+        const name = String(r.machineName || "").toLowerCase();
+        const matched = macList.some(m => mac.includes(m) || name.includes(m));
+        if (!matched) return false;
+      }
     }
     return true;
   });
@@ -16960,13 +17493,14 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
   const [dailyProdLoading, setDailyProdLoading] = React.useState(false);
   const dailyProdSource = dailyProdLive || data?.dailyProductionCompare;
 
-  const [machineOpen, setMachineOpen] = React.useState(false);
-  const machineRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("combo");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (machineRef.current && !machineRef.current.contains(event.target)) {
-        setMachineOpen(false);
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -17003,6 +17537,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
       toDate: "",
       machineNo: ""
     });
+    setChartType("combo");
   };
 
   React.useEffect(() => {
@@ -17077,10 +17612,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
     return Array.from(new Set(dailyProdRows.map((d) => d.machine).filter(Boolean)));
   }, [dailyProdSource?.filterOptions?.machines, dailyProdRows]);
 
-  const machSuggestions = React.useMemo(() => {
-    if (!filters.machineNo) return machines;
-    return machines.filter(m => m.toLowerCase().includes(filters.machineNo.toLowerCase()));
-  }, [filters.machineNo, machines]);
+
 
   const totalPlanned = React.useMemo(() => {
     return Math.round(filteredData.reduce((acc, r) => acc + Number(r.planned || 0), 0) * 10) / 10;
@@ -17108,80 +17640,267 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.daily_production?.maxBalanceHours ?? 4.0;
+
+      const fmtHrs = (v) => {
+        if (v == null || Number.isNaN(Number(v))) return "";
+        const n = Number(v);
+        if (n >= 1000) return `${(n / 1000).toFixed(1)}k h`;
+        return `${n % 1 === 0 ? n : n.toFixed(1)}h`;
+      };
+      const fmtLoss = (v) => {
+        if (v == null || Number.isNaN(Number(v))) return "";
+        const n = Number(v);
+        if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+        if (n >= 1000) return `₹${(n / 1000).toFixed(1)}k`;
+        return `₹${n}`;
+      };
+
+      const isCombo = chartType === "combo";
+      const isBar = chartType === "bar";
+      const isLine = chartType === "line";
+      const isArea = chartType === "area";
+      const isStepped = chartType === "stepped";
+      const isRadar = chartType === "radar";
+      const isPolarArea = chartType === "polarArea";
+
+      const datasets = [];
+
+      // 1. Production Loss Dataset (Only on Cartesian scales: combo, bar, line, area, stepped)
+      if (!isRadar && !isPolarArea) {
+        const dsType = (isCombo || isLine || isArea || isStepped) ? "line" : "bar";
+        datasets.push({
+          type: dsType,
+          label: "Production Loss (₹)",
+          data: lossData,
+          borderColor: "#0ea5e9",
+          backgroundColor: isArea ? "rgba(14, 165, 233, 0.2)" : "rgba(14, 165, 233, 0.08)",
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: isArea,
+          pointRadius: (isLine || isArea || isStepped || isCombo) ? 5 : 0,
+          pointBackgroundColor: "#0ea5e9",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointHoverRadius: 7,
+          yAxisID: "y1",
+          order: 1,
+          datalabels: {
+            display: (ctx) => {
+              const v = Number(ctx.dataset.data[ctx.dataIndex]);
+              return v > 0;
+            },
+            anchor: "end",
+            align: "top",
+            offset: 4,
+            color: "#ffffff",
+            backgroundColor: "rgba(14, 165, 233, 0.88)",
+            borderRadius: 5,
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
+            font: { family: PP1_FONT, size: 8, weight: "700" },
+            formatter: (v) => fmtLoss(v),
+            clip: false,
+          }
+        });
+      }
+
+      // 2. Planned Hours Dataset
+      datasets.push({
+        type: isRadar ? "radar" : isPolarArea ? "polarArea" : (isLine || isArea || isStepped) ? "line" : "bar",
+        label: "Production Planned Hrs",
+        data: plannedData,
+        backgroundColor: isRadar ? "rgba(132, 204, 22, 0.2)" : isPolarArea ? "rgba(132, 204, 22, 0.4)" : "rgba(132, 204, 22, 0.82)",
+        borderColor: "#65a30d",
+        borderWidth: isRadar ? 2 : 1,
+        borderRadius: (isRadar || isPolarArea) ? 0 : 5,
+        borderSkipped: false,
+        stepped: isStepped ? "middle" : false,
+        fill: isArea || isRadar,
+        pointRadius: (isLine || isArea || isStepped || isRadar) ? 4 : 0,
+        yAxisID: (isRadar || isPolarArea) ? undefined : "y",
+        order: 2,
+        datalabels: {
+          display: (ctx) => {
+            const v = Number(ctx.dataset.data[ctx.dataIndex]);
+            return v > 0;
+          },
+          anchor: "end",
+          align: isRadar ? "top" : "end",
+          offset: 2,
+          color: "#ffffff",
+          backgroundColor: "rgba(101, 163, 13, 0.90)",
+          borderRadius: 5,
+          padding: { top: 2, bottom: 2, left: 5, right: 5 },
+          font: { family: PP1_FONT, size: 8, weight: "700" },
+          formatter: (v) => fmtHrs(v),
+          clip: false,
+        }
+      });
+
+      // 3. Balance Hours Dataset
+      datasets.push({
+        type: isRadar ? "radar" : isPolarArea ? "polarArea" : (isLine || isArea || isStepped) ? "line" : "bar",
+        label: "Balance Hrs",
+        data: balanceData,
+        backgroundColor: isRadar ? "rgba(248, 113, 113, 0.2)" : isPolarArea ? "rgba(248, 113, 113, 0.4)" : "rgba(248, 113, 113, 0.82)",
+        borderColor: "#ef4444",
+        borderWidth: isRadar ? 2 : 1,
+        borderRadius: (isRadar || isPolarArea) ? 0 : 5,
+        borderSkipped: false,
+        stepped: isStepped ? "middle" : false,
+        fill: isArea || isRadar,
+        pointRadius: (isLine || isArea || isStepped || isRadar) ? 4 : 0,
+        yAxisID: (isRadar || isPolarArea) ? undefined : "y",
+        order: 3,
+        datalabels: {
+          display: (ctx) => {
+            const v = Number(ctx.dataset.data[ctx.dataIndex]);
+            return v > 0;
+          },
+          anchor: "end",
+          align: isRadar ? "top" : "end",
+          offset: 2,
+          color: "#ffffff",
+          backgroundColor: "rgba(220, 38, 38, 0.88)",
+          borderRadius: 5,
+          padding: { top: 2, bottom: 2, left: 5, right: 5 },
+          font: { family: PP1_FONT, size: 8, weight: "700" },
+          formatter: (v) => fmtHrs(v),
+          clip: false,
+        }
+      });
+
+      // 4. Limit line (except in Polar Area)
+      if (chartType !== "polarArea") {
+        datasets.push({
+          type: isRadar ? "radar" : "line",
+          label: `Limit ${targetVal} Hrs`,
+          data: Array(chartLabels.length).fill(targetVal),
+          borderColor: "#ef4444",
+          backgroundColor: "transparent",
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          yAxisID: isRadar ? undefined : "y",
+          order: 4,
+          datalabels: { display: false }
+        });
+      }
+
       return createPp1Chart(canvas, {
-        type: "bar",
+        type: isRadar ? "radar" : isPolarArea ? "polarArea" : "bar",
         data: {
           labels: chartLabels,
-          datasets: [
-            {
-              type: "line",
-              label: "Production Loss (₹)",
-              data: lossData,
-              borderColor: "#0ea5e9",
-              backgroundColor: "rgba(14, 165, 233, 0.1)",
-              borderWidth: 2,
-              tension: 0.3,
-              fill: false,
-              yAxisID: "y1",
-              order: 1
-            },
-            {
-              type: "bar",
-              label: "Production Planned Hrs",
-              data: plannedData,
-              backgroundColor: "#84cc16",
-              yAxisID: "y",
-              order: 2
-            },
-            {
-              type: "bar",
-              label: "Balance Hrs",
-              data: balanceData,
-              backgroundColor: "#f87171",
-              yAxisID: "y",
-              order: 3
-            },
-            {
-              type: "line",
-              label: `Limit ${targetVal} Hrs`,
-              data: Array(chartLabels.length).fill(targetVal),
-              borderColor: "#ef4444",
-              borderDash: [5, 5],
-              pointRadius: 0,
-              fill: false,
-              yAxisID: "y",
-              order: 4
-            }
-          ]
+          datasets: datasets
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { top: 28, right: 8, bottom: 8, left: 4 } },
           plugins: {
-            legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
+            legend: {
+              display: true,
+              position: "top",
+              labels: {
+                boxWidth: 12,
+                font: { size: 10 },
+                padding: 12,
+                usePointStyle: true,
+                pointStyleWidth: 10,
+              }
+            },
+            datalabels: { display: false },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+              backgroundColor: "rgba(15,23,42,0.92)",
+              titleColor: "#f1f5f9",
+              bodyColor: "#cbd5e1",
+              borderColor: "rgba(255,255,255,0.08)",
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              callbacks: {
+                label(ctx) {
+                  const v = ctx.parsed.y;
+                  if (v == null || Number.isNaN(v)) return null;
+                  if (ctx.dataset.yAxisID === "y1") {
+                    return ` ${ctx.dataset.label}: ${fmtLoss(v)}`;
+                  }
+                  const label = ctx.dataset.label || "";
+                  if (/limit/i.test(label)) return ` ${label}: ${v}h`;
+                  return ` ${label}: ${fmtHrs(v)}`;
+                }
+              }
+            }
           },
-          scales: {
+          scales: (isRadar || isPolarArea) ? {
+            r: {
+              angleLines: { color: "rgba(0, 0, 0, 0.05)" },
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              pointLabels: {
+                font: { family: PP1_FONT, size: 9, weight: "600" },
+                color: "#475569"
+              },
+              ticks: {
+                backdropColor: "transparent",
+                color: "#64748b",
+                font: { family: PP1_FONT, size: 8 },
+                callback: (v) => `${v}h`
+              }
+            }
+          } : {
+            x: {
+              grid: { display: false },
+              border: { display: false }
+            },
             y: {
               type: "linear",
               position: "left",
               beginAtZero: true,
-              max: 25,
-              title: { display: true, text: "Hours", font: { size: 10 } }
+              grid: { color: "rgba(0,0,0,0.04)", drawTicks: false },
+              border: { display: false, dash: [4, 4] },
+              title: {
+                display: true,
+                text: "Hours",
+                font: { size: 10, weight: "600" },
+                color: "#64748b"
+              },
+              ticks: {
+                padding: 6,
+                callback: (v) => {
+                  if (v >= 1000) return `${(v / 1000).toFixed(0)}kh`;
+                  return `${v}h`;
+                }
+              }
             },
             y1: {
               type: "linear",
               position: "right",
               beginAtZero: true,
-              max: 1200,
               grid: { drawOnChartArea: false },
-              title: { display: true, text: "Loss (₹)", font: { size: 10 } },
-              ticks: { callback: (v) => `₹${v}` }
+              border: { display: false },
+              title: {
+                display: true,
+                text: "Loss (₹)",
+                font: { size: 10, weight: "600" },
+                color: "#0ea5e9"
+              },
+              ticks: {
+                padding: 6,
+                color: "#0ea5e9",
+                callback: (v) => {
+                  if (v >= 100000) return `₹${(v / 100000).toFixed(0)}L`;
+                  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+                  return `₹${v}`;
+                }
+              }
             }
           }
         }
       });
     },
-    [chartLabels, plannedData, balanceData, lossData, targetConfig?.daily_production?.maxBalanceHours]
+    [chartLabels, plannedData, balanceData, lossData, targetConfig?.daily_production?.maxBalanceHours, chartType]
   );
 
   const kpis = [
@@ -17191,7 +17910,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
     { label: "Avg Rate/Hr", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `₹${avgRate}`, icon: Activity, color: "#0f766e" }
   ];
 
-  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(filteredData)}|${filters.machineNo}|${filters.fromDate}|${filters.toDate}|${dailyProdLoading}`;
+  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(filteredData)}|${filters.machineNo}|${filters.fromDate}|${filters.toDate}|${dailyProdLoading}|${chartType}`;
 
   return (
     <PremiumDashboardView
@@ -17217,42 +17936,108 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
           />
         </div>
 
-        {/* Machine No Autocomplete */}
-        <div className="pp1-filter-group" ref={machineRef} style={{ maxWidth: "260px" }}>
+        {/* Machine No Multi-Select Dropdown */}
+        <div className="pp1-filter-group" style={{ width: "230px", maxWidth: "230px" }}>
           <label className="pp1-filter-label">Machine No</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Machine No..."
-              value={filters.machineNo || ""}
-              onChange={e => {
-                handleInputChange("machineNo", e.target.value);
-                setMachineOpen(true);
+          <Pp1SearchableMultiSelect
+            value={filters.machineNo || ""}
+            options={machines}
+            onChange={(val) => handleInputChange("machineNo", val)}
+            placeholder="Select Machines..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
+        </div>
+
+        {/* Chart Type Dropdown */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap" style={{ position: "relative" }}>
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(!chartTypeOpen)}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "6px 12px",
+                background: "#fcfdfe",
+                border: "1.5px solid #d1e2ff",
+                borderRadius: "8px",
+                fontFamily: PP1_FONT,
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#334155",
+                cursor: "pointer",
+                height: "28px",
+                minWidth: "120px",
+                boxSizing: "border-box"
               }}
-              onFocus={() => setMachineOpen(true)}
-            />
-            {machineOpen && machSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.machineNo ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("machineNo", "");
-                    setMachineOpen(false);
-                  }}
-                >
-                  All Machines
-                </div>
-                {machSuggestions.map(mach => (
+            >
+              <span>
+                {chartType === "combo" ? "Combo" :
+                  chartType === "line" ? "Line" :
+                    chartType === "bar" ? "Bar" :
+                      chartType === "area" ? "Area" :
+                        chartType === "radar" ? "Radar" :
+                          chartType === "polarArea" ? "Polar Area" :
+                            chartType === "stepped" ? "Stepped" : "Combo"}
+              </span>
+              <ChevronDown size={11} style={{ color: "#94a3b8", marginLeft: "6px" }} />
+            </button>
+
+            {chartTypeOpen && (
+              <div
+                className="pp1-custom-select-options pp1-ct-reveal pp1-ct-reveal--in"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  width: "140px",
+                  padding: "4px",
+                  background: "#ffffff",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                  zIndex: 99999,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px"
+                }}
+              >
+                {[
+                  { id: "combo", label: "Combo", icon: BarChart2 },
+                  { id: "line", label: "Line", icon: LucideLineChart },
+                  { id: "bar", label: "Bar", icon: BarChart2 },
+                  { id: "area", label: "Area", icon: AreaChart },
+                  { id: "radar", label: "Radar", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped", icon: LucideLineChart }
+                ].map(opt => (
                   <div
-                    key={mach}
-                    className={`pp1-part-suggestion-item ${filters.machineNo === mach ? "selected" : ""}`}
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
                     onClick={() => {
-                      handleInputChange("machineNo", mach);
-                      setMachineOpen(false);
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "6px 8px",
+                      fontSize: "11px",
+                      fontWeight: chartType === opt.id ? 700 : 500,
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      color: chartType === opt.id ? "#ffffff" : "#475569",
+                      background: chartType === opt.id ? "#0f766e" : "transparent"
                     }}
                   >
-                    {mach}
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#ffffff" : "#0f766e" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -17314,14 +18099,14 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
   const [targetVsActualLive, setTargetVsActualLive] = React.useState(null);
   const [targetVsActualLoading, setTargetVsActualLoading] = React.useState(false);
   const targetVsActualSource = targetVsActualLive || data?.targetVsActualCompare;
-
-  const [customerOpen, setCustomerOpen] = React.useState(false);
-  const customerRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("bar");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerRef.current && !customerRef.current.contains(event.target)) {
-        setCustomerOpen(false);
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -17329,7 +18114,6 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
-
   const pickerFrom = React.useMemo(() => filters?.fromDate ? new Date(filters.fromDate) : null, [filters?.fromDate]);
   const pickerTo = React.useMemo(() => filters?.toDate ? new Date(filters.toDate) : null, [filters?.toDate]);
 
@@ -17358,6 +18142,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
       toDate: "",
       customer: ""
     });
+    setChartType("bar");
   };
 
   React.useEffect(() => {
@@ -17393,15 +18178,13 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
     return [...new Set(list)].filter(Boolean).sort();
   }, [rawRows]);
 
-  const custSuggestions = React.useMemo(() => {
-    if (!filters.customer) return customersList;
-    return customersList.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer, customersList]);
-
   const filteredData = React.useMemo(() => {
     let list = rawRows;
     if (filters?.customer) {
-      list = list.filter(d => d.customerName.toLowerCase().includes(filters.customer.toLowerCase()));
+      const custList = String(filters.customer).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (custList.length > 0) {
+        list = list.filter(d => custList.includes((d.customerName || "").toLowerCase()));
+      }
     }
     return list;
   }, [rawRows, filters?.customer]);
@@ -17444,36 +18227,59 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
 
   const setupChart = React.useCallback(
     (canvas) => {
+      const datasets = [
+        {
+          label: "Plan Qty (Target)",
+          data: customerChartData.planQty,
+          backgroundColor: chartType === "area" || chartType === "stepped"
+            ? "rgba(99, 102, 241, 0.25)"
+            : (chartType === "radar" ? "rgba(99, 102, 241, 0.15)" : (chartType === "polarArea" ? "rgba(99, 102, 241, 0.6)" : "#6366f1")),
+          borderColor: "#4f46e5",
+          borderWidth: (chartType === "line" || chartType === "combo") ? 2.5 : 1,
+          tension: 0.4,
+          fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+          stepped: chartType === "stepped" ? "middle" : false,
+          pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 3,
+          type: chartType === "combo" ? "line" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : undefined)),
+          order: chartType === "combo" ? 1 : 2
+        },
+        {
+          label: "Available Qty (Actual)",
+          data: customerChartData.availableQty,
+          backgroundColor: chartType === "area" || chartType === "stepped"
+            ? "rgba(16, 185, 129, 0.25)"
+            : (chartType === "radar" ? "rgba(16, 185, 129, 0.15)" : (chartType === "polarArea" ? "rgba(16, 185, 129, 0.6)" : "#10b981")),
+          borderColor: "#059669",
+          borderWidth: chartType === "line" ? 2.5 : 1,
+          tension: 0.4,
+          fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+          stepped: chartType === "stepped" ? "middle" : false,
+          pointRadius: (chartType === "bar" || chartType === "combo" || chartType === "polarArea") ? 0 : 3,
+          type: chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : undefined),
+          order: 3
+        },
+        {
+          label: "Dispatched Qty",
+          data: customerChartData.dispatchQty,
+          backgroundColor: chartType === "area" || chartType === "stepped"
+            ? "rgba(245, 158, 11, 0.25)"
+            : (chartType === "radar" ? "rgba(245, 158, 11, 0.15)" : (chartType === "polarArea" ? "rgba(245, 158, 11, 0.6)" : "#f59e0b")),
+          borderColor: "#d97706",
+          borderWidth: chartType === "line" ? 2.5 : 1,
+          tension: 0.4,
+          fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+          stepped: chartType === "stepped" ? "middle" : false,
+          pointRadius: (chartType === "bar" || chartType === "combo" || chartType === "polarArea") ? 0 : 3,
+          type: chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : undefined),
+          order: 4
+        }
+      ];
+
       return createPp1Chart(canvas, {
-        type: "bar",
+        type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : "line")),
         data: {
           labels: customerChartData.labels,
-          datasets: [
-            {
-              label: "Plan Qty (Target)",
-              data: customerChartData.planQty,
-              backgroundColor: "#6366f1",
-              borderColor: "#4f46e5",
-              borderWidth: 1,
-              order: 2
-            },
-            {
-              label: "Available Qty (Actual)",
-              data: customerChartData.availableQty,
-              backgroundColor: "#10b981",
-              borderColor: "#059669",
-              borderWidth: 1,
-              order: 3
-            },
-            {
-              label: "Dispatched Qty",
-              data: customerChartData.dispatchQty,
-              backgroundColor: "#f59e0b",
-              borderColor: "#d97706",
-              borderWidth: 1,
-              order: 4
-            }
-          ]
+          datasets: datasets
         },
         options: {
           responsive: true,
@@ -17481,14 +18287,21 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
           plugins: {
             legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
           },
-          scales: {
+          scales: (chartType === "radar" || chartType === "polarArea") ? {
+            r: {
+              angleLines: { display: chartType === "radar", color: "rgba(0, 0, 0, 0.05)" },
+              grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, color: "#64748b", backdropColor: "transparent" },
+              suggestedMin: 0
+            }
+          } : {
             y: { beginAtZero: true, ticks: { font: { size: 9 } } },
             x: { ticks: { font: { size: 9 } } }
           }
         }
       });
     },
-    [customerChartData]
+    [customerChartData, chartType]
   );
 
   const kpis = [
@@ -17498,7 +18311,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
     { label: "Fulfillment Rate", value: `${avgFulfillment}%`, icon: Target, color: "#eab308" }
   ];
 
-  const rebuildToken = `target-vs-actual-chart|${targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0}|${JSON.stringify(customerChartData)}`;
+  const rebuildToken = `target-vs-actual-chart|${chartType}|${targetConfig?.target_vs_actual?.minFulfillmentPct ?? 90.0}|${JSON.stringify(customerChartData)}`;
 
   return (
     <PremiumDashboardView
@@ -17525,42 +18338,71 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
           />
         </div>
 
-        {/* Customer Name Autocomplete */}
-        <div className="pp1-filter-group" ref={customerRef} style={{ maxWidth: "260px" }}>
+        {/* Customer Name Multi-Select Dropdown */}
+        <div className="pp1-filter-group" style={{ width: "230px", maxWidth: "230px" }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Customer Name..."
-              value={filters.customer || ""}
-              onChange={e => {
-                handleInputChange("customer", e.target.value);
-                setCustomerOpen(true);
-              }}
-              onFocus={() => setCustomerOpen(true)}
-            />
-            {customerOpen && custSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.customer ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("customer", "");
-                    setCustomerOpen(false);
-                  }}
-                >
-                  All Customers
-                </div>
-                {custSuggestions.map(cust => (
+          <Pp1SearchableMultiSelect
+            value={filters.customer || ""}
+            options={customersList}
+            onChange={(val) => handleInputChange("customer", val)}
+            placeholder="Select Customers..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#6366f1" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#6366f1" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#6366f1" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#6366f1" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#6366f1" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#6366f1" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#6366f1" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
                   <div
-                    key={cust}
-                    className={`pp1-part-suggestion-item ${filters.customer === cust ? "selected" : ""}`}
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
                     onClick={() => {
-                      handleInputChange("customer", cust);
-                      setCustomerOpen(false);
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
                     }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
                   >
-                    {cust}
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#6366f1" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -17592,7 +18434,10 @@ function TargetVsActualBottomTable({ data, filters, targetConfig }) {
   const rows = React.useMemo(() => {
     let list = rawRows;
     if (filters?.customer) {
-      list = list.filter(r => r.customerName.toLowerCase().includes(filters.customer.toLowerCase()));
+      const custList = String(filters.customer).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (custList.length > 0) {
+        list = list.filter(r => custList.includes((r.customerName || "").toLowerCase()));
+      }
     }
     if (filters?.fromDate) {
       list = list.filter(r => r.date >= filters.fromDate);
@@ -17666,8 +18511,11 @@ function filterOpEffRows(rows, filters, defaultFrom, defaultTo, { dateOnly = fal
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
     if (d < activeFrom || d > activeTo) return false;
     if (!dateOnly && filters?.operator) {
-      const op = String(r.operator || "").toLowerCase();
-      if (!op.includes(String(filters.operator).toLowerCase())) return false;
+      const opList = String(filters.operator).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (opList.length > 0) {
+        const op = String(r.operator || "").toLowerCase();
+        if (!opList.includes(op)) return false;
+      }
     }
     if (!dateOnly && filters?.effLimit && !matchesOpEffLimit(r.operatorPct, filters.effLimit)) return false;
     return true;
@@ -17678,9 +18526,12 @@ function buildOpEffFilterOptions(allRows, filters, defaultFrom, defaultTo) {
   const dateScoped = filterOpEffRows(allRows, filters, defaultFrom, defaultTo, { dateOnly: true });
   let scoped = dateScoped;
   if (filters?.operator) {
-    scoped = scoped.filter((r) =>
-      String(r.operator || "").toLowerCase().includes(String(filters.operator).toLowerCase())
-    );
+    const opList = String(filters.operator).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (opList.length > 0) {
+      scoped = scoped.filter((r) =>
+        opList.includes(String(r.operator || "").toLowerCase())
+      );
+    }
   }
   const operators = [...new Set(dateScoped.map((r) => r.operator).filter(Boolean))].sort();
   return { operators, dateScoped, scoped };
@@ -17734,18 +18585,19 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
   const [opEffLoading, setOpEffLoading] = React.useState(false);
   const opEffSource = opEffLive || data?.operatorEfficiencyCompare;
 
-  const [operatorOpen, setOperatorOpen] = React.useState(false);
-  const operatorRef = React.useRef(null);
   const [effLimitOpen, setEffLimitOpen] = React.useState(false);
   const effLimitRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("line");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (operatorRef.current && !operatorRef.current.contains(event.target)) {
-        setOperatorOpen(false);
-      }
       if (effLimitRef.current && !effLimitRef.current.contains(event.target)) {
         setEffLimitOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -17783,6 +18635,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
       operator: "",
       effLimit: ""
     });
+    setChartType("line");
   };
 
   React.useEffect(() => {
@@ -17838,10 +18691,13 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
     return Array.from(new Set(opEffRows.map((d) => d.operator).filter(Boolean)));
   }, [opEffFilterOptions.operators, opEffSource?.filterOptions?.operators, opEffRows]);
 
-  const opSuggestions = React.useMemo(() => {
-    if (!filters.operator) return operatorsList;
-    return operatorsList.filter(o => o.toLowerCase().includes(filters.operator.toLowerCase()));
-  }, [filters.operator, operatorsList]);
+  const getOperatorLabel = React.useCallback(() => {
+    if (!filters.operator) return "Avg Operator Efficiency %";
+    const ops = String(filters.operator).split(",").map(x => x.trim()).filter(Boolean);
+    if (ops.length === 0) return "Avg Operator Efficiency %";
+    if (ops.length <= 2) return `${ops.join(", ")} Efficiency %`;
+    return `${ops.length} Selected Operators Efficiency %`;
+  }, [filters.operator]);
 
   const totalPlanned = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.plannedQty || 0), 0), [filteredData]);
   const totalProduced = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.producedQty || 0), 0), [filteredData]);
@@ -17864,34 +18720,39 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0;
+      const datasets = [
+        {
+          label: getOperatorLabel(),
+          data: monthwiseData,
+          backgroundColor: chartType === "area" || chartType === "stepped"
+            ? "rgba(139, 92, 246, 0.25)"
+            : (chartType === "radar" ? "rgba(139, 92, 246, 0.15)" : (chartType === "polarArea" ? "rgba(139, 92, 246, 0.6)" : "#8b5cf6")),
+          borderColor: "#8b5cf6",
+          borderWidth: (chartType === "line" || chartType === "combo") ? 2.5 : 1,
+          tension: 0.3,
+          fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+          stepped: chartType === "stepped" ? "middle" : false,
+          pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 3,
+          type: chartType === "combo" ? "line" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : undefined)),
+          order: chartType === "combo" ? 1 : 2
+        },
+        {
+          type: chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : "line"),
+          label: `Target Limit ${targetVal}%`,
+          data: Array(monthLabels.length).fill(targetVal),
+          borderColor: "#ef4444",
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false,
+          order: 1
+        }
+      ];
+
       return createPp1Chart(canvas, {
-        type: "line",
+        type: chartType === "polarArea" ? "polarArea" : (chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : "line")),
         data: {
           labels: monthLabels,
-          datasets: [
-            {
-              label: filters.operator ? `${filters.operator} Efficiency %` : "Avg Operator Efficiency %",
-              data: monthwiseData,
-              borderColor: "#8b5cf6",
-              backgroundColor: "rgba(139, 92, 246, 0.1)",
-              borderWidth: 2.5,
-              tension: 0.3,
-              fill: true,
-              pointBackgroundColor: "#8b5cf6",
-              pointHoverRadius: 6,
-              order: 2
-            },
-            {
-              type: "line",
-              label: `Target Limit ${targetVal}%`,
-              data: Array(monthLabels.length).fill(targetVal),
-              borderColor: "#ef4444",
-              borderDash: [5, 5],
-              pointRadius: 0,
-              fill: false,
-              order: 1
-            }
-          ]
+          datasets: datasets
         },
         options: {
           responsive: true,
@@ -17899,7 +18760,15 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
           plugins: {
             legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
           },
-          scales: {
+          scales: (chartType === "radar" || chartType === "polarArea") ? {
+            r: {
+              angleLines: { display: chartType === "radar", color: "rgba(0, 0, 0, 0.05)" },
+              grid: { circular: true, color: "rgba(0, 0, 0, 0.05)" },
+              ticks: { display: true, font: { size: 8 }, color: "#64748b", backdropColor: "transparent" },
+              suggestedMin: 0,
+              max: 100
+            }
+          } : {
             y: {
               beginAtZero: true,
               max: 100,
@@ -17909,7 +18778,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
         }
       });
     },
-    [monthwiseData, monthLabels, filters.operator, targetConfig?.operator_efficiency?.minEfficiencyPct]
+    [monthwiseData, monthLabels, filters.operator, targetConfig?.operator_efficiency?.minEfficiencyPct, chartType]
   );
 
   const kpis = [
@@ -17919,7 +18788,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
     { label: "Avg Efficiency", value: (loading || opEffLoading) && !filteredData.length ? "…" : `${avgEfficiency}%`, icon: Users, color: "#8b5cf6" }
   ];
 
-  const rebuildToken = `operator-efficiency-chart|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(monthLabels)}|${filters.operator}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${opEffLoading}`;
+  const rebuildToken = `operator-efficiency-chart|${chartType}|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(monthLabels)}|${filters.operator}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${opEffLoading}`;
 
   return (
     <PremiumDashboardView
@@ -17945,47 +18814,17 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
           />
         </div>
 
-        {/* Operator Name Autocomplete */}
-        <div className="pp1-filter-group" ref={operatorRef} style={{ maxWidth: "260px" }}>
+        {/* Operator Name Multi-Select Dropdown */}
+        <div className="pp1-filter-group" style={{ width: "230px", maxWidth: "230px" }}>
           <label className="pp1-filter-label">Operator Name</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Operator Name..."
-              value={filters.operator || ""}
-              onChange={e => {
-                handleInputChange("operator", e.target.value);
-                setOperatorOpen(true);
-              }}
-              onFocus={() => setOperatorOpen(true)}
-            />
-            {operatorOpen && opSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.operator ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("operator", "");
-                    setOperatorOpen(false);
-                  }}
-                >
-                  All Operators
-                </div>
-                {opSuggestions.map(op => (
-                  <div
-                    key={op}
-                    className={`pp1-part-suggestion-item ${filters.operator === op ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("operator", op);
-                      setOperatorOpen(false);
-                    }}
-                  >
-                    {op}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.operator || ""}
+            options={operatorsList}
+            onChange={(val) => handleInputChange("operator", val)}
+            placeholder="Select Operators..."
+            allLabel="All Operators"
+            searchPlaceholder="Search operator..."
+          />
         </div>
 
         {/* Efficiency Limit Custom Text Input & Dropdown */}
@@ -18047,6 +18886,65 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
                     }}
                   >
                     {item.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "135px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#8b5cf6" }} />
+                ) : chartType === "combo" ? (
+                  <TrendingUp size={12} style={{ color: "#8b5cf6" }} />
+                ) : (
+                  <LucideLineChart size={12} style={{ color: "#8b5cf6" }} />
+                )}
+                <span style={{ textTransform: "capitalize" }}>{chartType === "polarArea" ? "Polar Area" : chartType === "radar" ? "Radar" : chartType === "stepped" ? "Stepped" : chartType}</span>
+              </div>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options">
+                {[
+                  { id: "combo", label: "Combo Chart", icon: TrendingUp },
+                  { id: "line", label: "Line Chart", icon: LucideLineChart },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#8b5cf6" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -18113,18 +19011,19 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
   const [machEffLoading, setMachEffLoading] = React.useState(false);
   const machEffSource = machEffLive || data?.machineEfficiencyCompare;
 
-  const [machineOpen, setMachineOpen] = React.useState(false);
-  const machineRef = React.useRef(null);
   const [effLimitOpen, setEffLimitOpen] = React.useState(false);
   const effLimitRef = React.useRef(null);
+  const [chartType, setChartType] = React.useState("line");
+  const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
+  const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (machineRef.current && !machineRef.current.contains(event.target)) {
-        setMachineOpen(false);
-      }
       if (effLimitRef.current && !effLimitRef.current.contains(event.target)) {
         setEffLimitOpen(false);
+      }
+      if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
+        setChartTypeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -18162,6 +19061,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
       machine: "",
       effLimit: ""
     });
+    setChartType("line");
   };
 
   React.useEffect(() => {
@@ -18214,10 +19114,13 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
     return Array.from(new Set(machEffRows.map(d => d.machine).filter(Boolean)));
   }, [allMachineNames, machEffSource, machEffRows]);
 
-  const macSuggestions = React.useMemo(() => {
-    if (!filters.machine) return machinesList;
-    return machinesList.filter(o => o.toLowerCase().includes(filters.machine.toLowerCase()));
-  }, [filters.machine, machinesList]);
+  const getMachineLabel = React.useCallback(() => {
+    if (!filters.machine) return "Avg Machine Efficiency %";
+    const macs = String(filters.machine).split(",").map(x => x.trim()).filter(Boolean);
+    if (macs.length === 0) return "Avg Machine Efficiency %";
+    if (macs.length <= 2) return `${macs.join(", ")} Efficiency %`;
+    return `${macs.length} Selected Machines Efficiency %`;
+  }, [filters.machine]);
 
   // date + machine already filtered server-side; only apply effLimit client-side
   const filteredData = React.useMemo(() => {
@@ -18270,52 +19173,79 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0;
+      const isRadial = chartType === "radar" || chartType === "polarArea";
+
+      const datasets = [
+        {
+          label: getMachineLabel(),
+          data: monthwiseData,
+          backgroundColor: chartType === "area" || chartType === "stepped"
+            ? "rgba(14, 165, 233, 0.25)"
+            : (chartType === "radar" ? "rgba(14, 165, 233, 0.15)" : (chartType === "polarArea" ? "rgba(14, 165, 233, 0.6)" : "#0ea5e9")),
+          borderColor: "#0ea5e9",
+          borderWidth: (chartType === "line" || chartType === "combo") ? 2.5 : 1,
+          tension: 0.3,
+          fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
+          stepped: chartType === "stepped" ? "middle" : false,
+          pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 3,
+          type: chartType === "combo" ? "line" : (chartType === "radar" ? "radar" : (chartType === "bar" ? "bar" : undefined)),
+          order: chartType === "combo" ? 1 : 2
+        },
+        {
+          type: chartType === "radar" ? "radar" : (chartType === "bar" || chartType === "combo" ? "bar" : "line"),
+          label: `Target Limit ${targetVal}%`,
+          data: Array(months.length).fill(targetVal),
+          borderColor: "#ef4444",
+          backgroundColor: "transparent",
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false,
+          order: 2
+        }
+      ];
+
+      const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
+        }
+      };
+
+      if (isRadial) {
+        chartOptions.scales = {
+          r: {
+            angleLines: { display: true },
+            suggestedMin: 0,
+            suggestedMax: 100,
+            ticks: { font: { size: 8 } }
+          }
+        };
+      } else {
+        chartOptions.scales = {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 9 } }
+          },
+          y: {
+            beginAtZero: true,
+            max: 100,
+            title: { display: true, text: "Efficiency %", font: { size: 10 } },
+            ticks: { font: { size: 9 } }
+          }
+        };
+      }
+
       return createPp1Chart(canvas, {
-        type: "line",
+        type: chartType === "radar" ? "radar" : (chartType === "polarArea" ? "polarArea" : "bar"),
         data: {
           labels: months,
-          datasets: [
-            {
-              label: filters.machine ? `${filters.machine} Efficiency %` : "Avg Machine Efficiency %",
-              data: monthwiseData,
-              borderColor: "#0ea5e9",
-              backgroundColor: "rgba(14, 165, 233, 0.1)",
-              borderWidth: 2.5,
-              tension: 0.3,
-              fill: true,
-              pointBackgroundColor: "#0ea5e9",
-              pointHoverRadius: 6,
-              order: 2
-            },
-            {
-              type: "line",
-              label: `Target Limit ${targetVal}%`,
-              data: Array(months.length).fill(targetVal),
-              borderColor: "#ef4444",
-              borderDash: [5, 5],
-              pointRadius: 0,
-              fill: false,
-              order: 1
-            }
-          ]
+          datasets: datasets
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              title: { display: true, text: "Efficiency %", font: { size: 10 } }
-            }
-          }
-        }
+        options: chartOptions
       });
     },
-    [monthwiseData, months, filters.machine, targetConfig?.machine_efficiency?.minEfficiencyPct]
+    [monthwiseData, months, chartType, getMachineLabel, targetConfig?.machine_efficiency?.minEfficiencyPct]
   );
 
   const kpis = [
@@ -18325,7 +19255,7 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
     { label: "Avg Efficiency", value: (loading || machEffLoading) && !filteredData.length ? "…" : `${avgEfficiency}%`, icon: Cpu, color: "#0ea5e9" }
   ];
 
-  const rebuildToken = `machine-efficiency-chart|${targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(months)}|${filters.machine}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${machEffLoading}`;
+  const rebuildToken = `machine-efficiency-chart|${chartType}|${targetConfig?.machine_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(months)}|${filters.machine}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${machEffLoading}`;
 
   return (
     <PremiumDashboardView
@@ -18351,47 +19281,17 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
           />
         </div>
 
-        {/* Machine No Autocomplete */}
-        <div className="pp1-filter-group" ref={machineRef} style={{ maxWidth: "260px" }}>
+        {/* Machine No Multi-Select Dropdown */}
+        <div className="pp1-filter-group" style={{ width: "230px", maxWidth: "230px" }}>
           <label className="pp1-filter-label">Machine No</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Machine No..."
-              value={filters.machine || ""}
-              onChange={e => {
-                handleInputChange("machine", e.target.value);
-                setMachineOpen(true);
-              }}
-              onFocus={() => setMachineOpen(true)}
-            />
-            {machineOpen && macSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.machine ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("machine", "");
-                    setMachineOpen(false);
-                  }}
-                >
-                  All Machines
-                </div>
-                {macSuggestions.map(m => (
-                  <div
-                    key={m}
-                    className={`pp1-part-suggestion-item ${filters.machine === m ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("machine", m);
-                      setMachineOpen(false);
-                    }}
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.machine || ""}
+            options={machinesList}
+            onChange={(val) => handleInputChange("machine", val)}
+            placeholder="Select Machines..."
+            allLabel="All Machines"
+            searchPlaceholder="Search machine..."
+          />
         </div>
 
         {/* Efficiency Limit Custom Text Input & Dropdown */}
@@ -18453,6 +19353,74 @@ function MachineEfficiencyDashboardView({ data, loading, filters, onFilterChange
                     }}
                   >
                     {item.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart Type Dropdown Filter */}
+        <div className="pp1-filter-group" ref={chartTypeRef}>
+          <label className="pp1-filter-label">Chart Type</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
+              onClick={() => setChartTypeOpen(o => !o)}
+              style={{ minWidth: "145px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {chartType === "bar" ? (
+                  <BarChart2 size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "area" ? (
+                  <AreaChart size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "radar" ? (
+                  <Radar size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "polarArea" ? (
+                  <PieChart size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "stepped" ? (
+                  <Activity size={12} style={{ color: "#0ea5e9" }} />
+                ) : chartType === "combo" ? (
+                  <BarChart2 size={12} style={{ color: "#0ea5e9" }} />
+                ) : (
+                  <TrendingUp size={12} style={{ color: "#0ea5e9" }} />
+                )}
+                <span>
+                  {chartType === "line" && "Line Chart"}
+                  {chartType === "bar" && "Bar Chart"}
+                  {chartType === "combo" && "Combo Chart"}
+                  {chartType === "area" && "Area Chart"}
+                  {chartType === "radar" && "Radar Chart"}
+                  {chartType === "polarArea" && "Polar Area"}
+                  {chartType === "stepped" && "Stepped Chart"}
+                </span>
+              </div>
+              <ChevronDown size={14} className="pp1-select-chevron" />
+            </button>
+
+            {chartTypeOpen && (
+              <div className="pp1-custom-select-options" style={{ minWidth: "135px" }}>
+                {[
+                  { id: "combo", label: "Combo Chart", icon: BarChart2 },
+                  { id: "line", label: "Line Chart", icon: TrendingUp },
+                  { id: "bar", label: "Bar Chart", icon: BarChart2 },
+                  { id: "area", label: "Area Chart", icon: AreaChart },
+                  { id: "radar", label: "Radar Chart", icon: Radar },
+                  { id: "polarArea", label: "Polar Area", icon: PieChart },
+                  { id: "stepped", label: "Stepped Chart", icon: Activity }
+                ].map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`pp1-custom-select-option ${chartType === opt.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setChartType(opt.id);
+                      setChartTypeOpen(false);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <opt.icon size={12} style={{ color: chartType === opt.id ? "#fff" : "#0ea5e9" }} />
+                    <span>{opt.label}</span>
                   </div>
                 ))}
               </div>
@@ -18563,7 +19531,12 @@ function filterCapaRows(rows, filters, defaultFrom, defaultTo) {
     if (!d || d < activeFrom || d > activeTo) return false;
     if (filters?.customer) {
       const cust = String(r.customer || "").toLowerCase();
-      if (!cust.includes(String(filters.customer).toLowerCase())) return false;
+      // Support comma-separated multi-select customers list
+      const selectedCusts = String(filters.customer).split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
+      if (selectedCusts.length > 0) {
+        const hasMatch = selectedCusts.some(sc => sc === cust);
+        if (!hasMatch) return false;
+      }
     }
     if (filters?.status && String(r.status || "") !== String(filters.status)) return false;
     return true;
@@ -18587,16 +19560,11 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
   const [capaLoading, setCapaLoading] = React.useState(false);
   const capaSource = capaLive || data?.capaCompare;
 
-  const [customerOpen, setCustomerOpen] = React.useState(false);
   const [statusOpen, setStatusOpen] = React.useState(false);
-  const customerRef = React.useRef(null);
   const statusRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerRef.current && !customerRef.current.contains(event.target)) {
-        setCustomerOpen(false);
-      }
       if (statusRef.current && !statusRef.current.contains(event.target)) {
         setStatusOpen(false);
       }
@@ -18741,10 +19709,6 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
     if (Array.isArray(api) && api.length) return api;
     return Array.from(new Set(capaRows.map((d) => d.customer).filter(Boolean)));
   }, [capaSource?.filterOptions?.customers, capaRows]);
-  const custSuggestions = React.useMemo(() => {
-    if (!filters.customer) return customersList;
-    return customersList.filter(c => c.toLowerCase().includes(filters.customer.toLowerCase()));
-  }, [filters.customer]);
 
   const extraBottomContent = selectedRecord && (
     <div style={{ marginTop: "12px", padding: "12px", background: "var(--pp1-bg-card, #f8fafc)", borderRadius: "8px", border: "1px solid var(--pp1-border, #e2e8f0)" }}>
@@ -18848,48 +19812,18 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
           />
         </div>
 
-        {/* Customer Autocomplete */}
-        <div className="pp1-filter-group" ref={customerRef} style={{ maxWidth: "260px" }}>
+        {/* Customer Name Filter (Multi-Select) */}
+        <div className="pp1-filter-group" style={{ minWidth: "180px", maxWidth: "260px" }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Search Customer..."
-              value={filters.customer || ""}
-              onChange={e => {
-                handleInputChange("customer", e.target.value);
-                setCustomerOpen(true);
-              }}
-              onFocus={() => setCustomerOpen(true)}
-            />
-            {customerOpen && custSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.customer ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("customer", "");
-                    setCustomerOpen(false);
-                  }}
-                >
-                  All Customers
-                </div>
-                {custSuggestions.map(cust => (
-                  <div
-                    key={cust}
-                    className={`pp1-part-suggestion-item ${filters.customer === cust ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("customer", cust);
-                      setCustomerOpen(false);
-                    }}
-                    style={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-                  >
-                    {cust}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.customer}
+            options={customersList}
+            onChange={val => handleInputChange("customer", val)}
+            placeholder="Search customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+            accentColor="#0891b2"
+          />
         </div>
 
         {/* Status Dropdown */}
@@ -19037,7 +19971,12 @@ function filterCompRows(rows, filters, defaultFrom, defaultTo) {
   return source.filter((r) => {
     const d = (r.date || "").slice(0, 10);
     if (!d || d < activeFrom || d > activeTo) return false;
-    if (filters?.customer && String(r.customer || "") !== String(filters.customer)) return false;
+    if (filters?.customer) {
+      const selected = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+      if (selected.length > 0 && !selected.includes(String(r.customer || ""))) {
+        return false;
+      }
+    }
     if (filters?.status && String(r.status || "") !== String(filters.status)) return false;
     return true;
   });
@@ -19076,12 +20015,10 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
   const [compLoading, setCompLoading] = React.useState(false);
   const compSource = compLive || data?.complaintCompare;
 
-  const [customerOpen, setCustomerOpen] = React.useState(false);
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
 
-  const customerRef = React.useRef(null);
   const statusRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
@@ -19174,9 +20111,6 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerRef.current && !customerRef.current.contains(event.target)) {
-        setCustomerOpen(false);
-      }
       if (statusRef.current && !statusRef.current.contains(event.target)) {
         setStatusOpen(false);
       }
@@ -19381,38 +20315,17 @@ function CustomerComplaintReportDashboardView({ data, loading, filters, onFilter
           />
         </div>
 
-        {/* Customer Dropdown */}
-        <div className="pp1-filter-group" ref={customerRef}>
+        {/* Customer Name Filter */}
+        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
           <label className="pp1-filter-label">Customer Name</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${customerOpen ? "open" : ""}`}
-              onClick={() => setCustomerOpen(o => !o)}
-            >
-              <span>{filters.customer || "All Customers"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
-            {customerOpen && (
-              <div className="pp1-custom-select-options">
-                <div
-                  className={`pp1-custom-select-option ${!filters.customer ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("customer", ""); setCustomerOpen(false); }}
-                >
-                  All Customers
-                </div>
-                {customersList.map(c => (
-                  <div
-                    key={c}
-                    className={`pp1-custom-select-option ${filters.customer === c ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("customer", c); setCustomerOpen(false); }}
-                  >
-                    {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.customer}
+            options={customersList}
+            onChange={val => handleInputChange("customer", val)}
+            placeholder="Search customer..."
+            allLabel="All Customers"
+            searchPlaceholder="Search customer..."
+          />
         </div>
 
         {/* Status Dropdown */}

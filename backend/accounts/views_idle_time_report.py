@@ -204,7 +204,9 @@ def _parse_reason(value):
     v = (value or "").strip()
     if not v or v.lower() == "all reasons":
         return None
-    return v
+    if "," in v:
+        return [item.strip() for item in v.split(",") if item.strip()]
+    return [v]
 
 
 def _build_outer_filters(machine, shift, reason):
@@ -222,8 +224,13 @@ def _build_outer_filters(machine, shift, reason):
         clauses.append("AND LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))) = ?")
         params.append(shift)
     if reason:
-        clauses.append("AND LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) = ?")
-        params.append(reason)
+        if isinstance(reason, list):
+            placeholders = ",".join(["?"] * len(reason))
+            clauses.append(f"AND LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) IN ({placeholders})")
+            params.extend(reason)
+        else:
+            clauses.append("AND LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) = ?")
+            params.append(reason)
     return "\n".join(clauses), params
 
 
@@ -1729,7 +1736,16 @@ def idle_time_report(request):
         report_sql = report_sql_template.format(outer_filters=outer_sql)
         report_params = date_params + outer_params
         cursor.execute(report_sql, report_params)
-        data_rows = [_row_to_dict(r) for r in (cursor.fetchall() or [])]
+        raw_rows = cursor.fetchall() or []
+        data_rows = []
+        for r in raw_rows:
+            d = _row_to_dict(r)
+            d["date"] = d["entry_date"][:10] if d.get("entry_date") else ""
+            d["machine"] = d["mac_no"]
+            data_rows.append(d)
+
+        from .views_plantperformance import _pv_enrich_operator_team
+        _pv_enrich_operator_team(cursor, data_rows, start_date, end_date)
 
         kpis = _compute_kpis(
             cursor, start_date, end_date, date_params, outer_sql, outer_params,
@@ -1789,6 +1805,8 @@ def idle_time_report(request):
             cursor, date_params, outer_sql, outer_params,
         )
 
+        operators_list = sorted(list({r.get("operator") for r in data_rows if r.get("operator") and r.get("operator") != "—"}))
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -1816,6 +1834,7 @@ def idle_time_report(request):
             "machines": _machine_options(mac_set),
             "shifts": _shift_options(shift_set),
             "reasons": _reason_options(reason_set),
+            "operators": operators_list,
         },
         "row_count": len(data_rows),
         "rows": data_rows,
