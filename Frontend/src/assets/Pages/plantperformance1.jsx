@@ -21887,6 +21887,42 @@ export default function PlantPerformance1() {
 
   const centerRef = useRef(null);
   const [sideColumnHeight, setSideColumnHeight] = useState(null);
+  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = (e) => {
+      // Only process scroll events from the main window scroll or the main layout content container
+      const isMainScroll =
+        e.target === document ||
+        (e.target && e.target.classList && e.target.classList.contains("dl-content"));
+
+      if (!isMainScroll) return;
+
+      let scrollTop = 0;
+      if (e.target === document) {
+        scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop;
+      } else {
+        scrollTop = e.target.scrollTop;
+      }
+      setIsHeaderScrolled(scrollTop > 60);
+    };
+
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+    document.documentElement.scrollTo({ top: 0 });
+    document.body.scrollTo({ top: 0 });
+    const contentEl = document.querySelector(".dl-content");
+    if (contentEl) {
+      contentEl.scrollTo({ top: 0 });
+    }
+  }, [selectionId, selKpi]);
+
   const [panelsCollapsed, setPanelsCollapsed] = useState(false);
   const [railHover, setRailHover] = useState(null); // {id,title,Icon,color,rect,side}
   const [isStackedLayout, setIsStackedLayout] = useState(
@@ -21930,14 +21966,32 @@ export default function PlantPerformance1() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [centerKey, selectionId, loading, isStackedLayout]);
+  const themeColor = activeActionCard ? activeActionCard.color : "var(--pp1-blue, #2563eb)";
+  const themeBorderColor = activeActionCard ? `${activeActionCard.color}3d` : "rgba(37, 99, 235, 0.24)";
+  const themeHoverBg = activeActionCard ? `${activeActionCard.color}0a` : "rgba(37, 99, 235, 0.04)";
+
   return (
     <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`}>
-      <div className="pp1-fbar">
+      <div className="pp1-fbar" style={{
+        "--act-color": themeColor,
+        "--act-border": themeBorderColor,
+        "--act-hover-bg": themeHoverBg
+      }}>
         <PlantPerformance1DatePicker
           from={dateRange.from}
           to={dateRange.to}
           onChange={handleRangeChange}
         />
+
+        {activeActionCard && isHeaderScrolled && (
+          <div className="pp1-fbar-center-heading" style={{ "--act-color": activeActionCard.color }}>
+            <div className="pp1-fbar-center-heading__icon-wrapper">
+              {React.createElement(activeActionCard.icon, { size: 14 })}
+            </div>
+            <span className="pp1-fbar-center-heading__text">{activeActionCard.title}</span>
+          </div>
+        )}
+
         {loading && <span className="pp1-fbar-status">Loading live data…</span>}
         {fetchError && <span className="pp1-fbar-error">{fetchError}</span>}
 
@@ -23088,7 +23142,7 @@ export default function PlantPerformance1() {
                               {item.message}
                             </span>
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
+                          <div className="pp1-ac-badge-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
                             {item.trend && (
                               <span style={{
                                 fontSize: "11px",
