@@ -433,6 +433,10 @@
     .pp1dp-month-col { min-width: unset; }
 }
 
+.pp1dp-drawer-handle {
+    display: none;
+}
+
 @media (max-width: 600px) {
     .pp1dp-wrap { max-width: 100%; }
     .pp1dp-portal-wrap .pp1dp-popup {
@@ -440,18 +444,51 @@
         bottom: 0 !important; left: 0 !important;
         top: auto !important; right: 0 !important;
         width: 100% !important;
-        border-radius: 20px 20px 0 0;
-        animation: pp1dp-slide-up .25s cubic-bezier(.23,1,.32,1) both;
+        max-height: 82vh !important;
+        overflow-y: auto;
+        border-radius: 24px 24px 0 0;
+        animation: pp1dp-slide-up .3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        border: none;
+        border-top: 1px solid var(--pp1dp-border);
+        box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.12);
     }
-    .pp1dp-presets { gap: .3rem; }
-    .pp1dp-footer  { flex-direction: column; align-items: stretch; }
-    .pp1dp-footer__range { justify-content: center; flex-wrap: wrap; }
-    .pp1dp-footer__btns  { justify-content: stretch; }
-    .pp1dp-footer-btn    { flex: 1; padding: .7rem; }
-    .pp1dp-day           { padding: .44rem .1rem; font-size: .75rem; }
+    
+    .pp1dp-drawer-handle {
+        display: block;
+        width: 38px;
+        height: 5px;
+        background: #cbd5e1;
+        border-radius: 99px;
+        margin: 10px auto 4px;
+        flex-shrink: 0;
+    }
+
+    .pp1dp-presets {
+        display: flex;
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        padding: 8px 12px;
+        gap: 8px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .pp1dp-presets::-webkit-scrollbar {
+        display: none;
+    }
+    .pp1dp-preset {
+        flex-shrink: 0;
+        padding: 6px 12px;
+        font-size: 0.72rem;
+    }
+
+    .pp1dp-footer  { flex-direction: column; align-items: stretch; padding: 10px 14px 14px; }
+    .pp1dp-footer__range { justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .pp1dp-footer__btns  { justify-content: stretch; gap: 8px; }
+    .pp1dp-footer-btn    { flex: 1; padding: .65rem; font-size: 0.8rem; }
+    .pp1dp-day           { padding: .26rem .1rem; font-size: .75rem; }
 }
 
 @keyframes pp1dp-slide-up {
-    from { opacity: 0; transform: translateY(40px); }
-    to   { opacity: 1; transform: none; }
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
 }

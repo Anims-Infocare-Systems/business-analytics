@@ -20536,24 +20536,44 @@ function CustomerComplaintReportBottomTable({ data, filters }) {
 
 /* ── Center panel animated wrapper (zero-latency) ──────────── */
 function CenterTransitionWrapper({ uid, loading, children }) {
-  if (loading) {
-    return (
-      <div className="pp1-ct-skeleton">
-        <div className="pp1-ct-skeleton__header">
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--icon" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--title" />
-        </div>
-        <div className="pp1-ct-skeleton__body">
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--display" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--row" />
-          <div className="pp1-ct-skel-block pp1-ct-skel-block--row pp1-ct-skel-block--row-sm" />
-        </div>
-      </div>
-    );
-  }
+  const [localLoading, setLocalLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    setLocalLoading(true);
+    const timer = setTimeout(() => {
+      setLocalLoading(false);
+    }, 380);
+    return () => clearTimeout(timer);
+  }, [uid]);
+
+  const activeLoading = loading || localLoading;
+
   return (
-    <div key={uid} className="pp1-ct-reveal pp1-ct-reveal--in">
-      {children}
+    <div className="pp1-ct-wrapper" style={{ position: "relative", width: "100%", minHeight: "380px" }}>
+      {/* Main Content Pane */}
+      <div 
+        className="pp1-ct-reveal"
+        style={{
+          transition: "filter 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+          filter: activeLoading ? "blur(8px)" : "none",
+          opacity: activeLoading ? 0.35 : 1,
+          transform: activeLoading ? "scale(0.99) translateY(4px)" : "scale(1) translateY(0)",
+          pointerEvents: activeLoading ? "none" : "auto"
+        }}
+      >
+        {children}
+      </div>
+
+      {/* Frosted Glass Premium Loader Overlay */}
+      {activeLoading && (
+        <div className="pp1-loading-overlay">
+          <div className="pp1-loading-spinner-wrap">
+            <div className="pp1-loading-spinner" />
+            <div className="pp1-loading-spinner-inner" />
+          </div>
+          <div className="pp1-loading-text">Analyzing performance metrics...</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -20654,6 +20674,36 @@ export default function PlantPerformance1() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [data, setData] = useState({});
+  const [networkLoading, setNetworkLoading] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState("center");
+
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    let activeRequests = 0;
+    let loadingTimeout = null;
+
+    window.fetch = async (...args) => {
+      activeRequests++;
+      setNetworkLoading(true);
+      if (loadingTimeout) clearTimeout(loadingTimeout);
+
+      try {
+        return await originalFetch(...args);
+      } finally {
+        activeRequests--;
+        if (activeRequests <= 0) {
+          loadingTimeout = setTimeout(() => {
+            setNetworkLoading(false);
+          }, 250);
+        }
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+      if (loadingTimeout) clearTimeout(loadingTimeout);
+    };
+  }, []);
 
 
 
@@ -21094,6 +21144,7 @@ export default function PlantPerformance1() {
 
   useEffect(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     setDateRange({ from: monthStart, to: today });
     fetchAbortRef.current?.abort();
@@ -21107,16 +21158,28 @@ export default function PlantPerformance1() {
     if (dateRange.from && dateRange.to) {
       const fromStr = formatLocalYmd(dateRange.from);
       const toStr = formatLocalYmd(dateRange.to);
-      setSupplierFilters(prev => ({
-        ...prev,
-        fromDate: fromStr,
-        toDate: toStr
-      }));
-      setMachineEfficiencyFilters(prev => ({
-        ...prev,
-        fromDate: fromStr,
-        toDate: toStr
-      }));
+
+      setPoFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setOtdFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setPurFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setPurchaseValueFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setSalesFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setSupplierFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setVendorFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setDailyProductionFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setTargetVsActualFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setOperatorEfficiencyFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setMachineEfficiencyFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setCapaFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setCompFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setOeeCompFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setEffFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setRejFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setRewFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setStockFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setProdFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setIdleFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
+      setNonAccFilters(prev => ({ ...prev, fromDate: fromStr, toDate: toStr }));
     }
   }, [dateRange]);
 
@@ -21133,6 +21196,7 @@ export default function PlantPerformance1() {
     setSelAction(null);
     setSelKpi(idx);
     setCenterKey((k) => k + 1);
+    setMobileActiveTab("center");
   };
 
   const handleActionClick = (id) => {
@@ -21143,6 +21207,7 @@ export default function PlantPerformance1() {
     }
     setSelAction(id);
     setCenterKey((k) => k + 1);
+    setMobileActiveTab("center");
   };
 
   const activeStateCard = CURRENT_STATE_CARDS[selKpi];
@@ -21971,12 +22036,12 @@ export default function PlantPerformance1() {
   const themeHoverBg = activeActionCard ? `${activeActionCard.color}0a` : "rgba(37, 99, 235, 0.04)";
 
   return (
-    <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`}>
-      <div className="pp1-fbar" style={{
-        "--act-color": themeColor,
-        "--act-border": themeBorderColor,
-        "--act-hover-bg": themeHoverBg
-      }}>
+    <div className={`pp1-root ${loading ? "pp1-root--loading" : ""}`} style={{
+      "--act-color": themeColor,
+      "--act-border": themeBorderColor,
+      "--act-hover-bg": themeHoverBg
+    }}>
+      <div className="pp1-fbar">
         <PlantPerformance1DatePicker
           from={dateRange.from}
           to={dateRange.to}
@@ -22749,11 +22814,40 @@ export default function PlantPerformance1() {
       </div>
 
       <div className="pp1-main">
+        {isStackedLayout && (
+          <div className="pp1-mob-tabs">
+            <button 
+              className={`pp1-mob-tab ${mobileActiveTab === "left" ? "pp1-mob-tab--active" : ""}`}
+              onClick={() => setMobileActiveTab("left")}
+              type="button"
+            >
+              <ClipboardList size={14} />
+              <span>Status ({ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).length})</span>
+            </button>
+            <button 
+              className={`pp1-mob-tab ${mobileActiveTab === "center" ? "pp1-mob-tab--active" : ""}`}
+              onClick={() => setMobileActiveTab("center")}
+              type="button"
+            >
+              <Activity size={14} />
+              <span>Analysis</span>
+            </button>
+            <button 
+              className={`pp1-mob-tab ${mobileActiveTab === "right" ? "pp1-mob-tab--active" : ""}`}
+              onClick={() => setMobileActiveTab("right")}
+              type="button"
+            >
+              <AlertTriangle size={14} />
+              <span>Actions ({actionItems.length})</span>
+            </button>
+          </div>
+        )}
         <div
           className={`pp1-body${isStackedLayout ? " pp1-body--stacked" : ""}${panelsCollapsed ? " pp1-body--left-collapsed pp1-body--right-collapsed" : ""}`}
           style={sideColumnHeight ? { "--pp1-side-h": `${sideColumnHeight}px` } : undefined}
         >
-          <section className={`pp1-panel pp1-panel--left${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
+          {(!isStackedLayout || mobileActiveTab === "left") && (
+            <section className={`pp1-panel pp1-panel--left${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
             {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
             {panelsCollapsed && (
               <div className="pp1-dl-rail pp1-dl-rail--left">
@@ -22900,11 +22994,13 @@ export default function PlantPerformance1() {
               </>
             )}
           </section>
+          )}
 
-          <section className="pp1-center" ref={centerRef}>
+          {(!isStackedLayout || mobileActiveTab === "center") && (
+            <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-              <CenterTransitionWrapper uid={centerKey} loading={loading}>
+              <CenterTransitionWrapper uid={centerKey} loading={loading || networkLoading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
                     <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
@@ -23027,8 +23123,10 @@ export default function PlantPerformance1() {
               </CenterTransitionWrapper>
             </div>
           </section>
+          )}
 
-          <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
+          {(!isStackedLayout || mobileActiveTab === "right") && (
+            <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
             {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
             {panelsCollapsed && (
               <div className="pp1-dl-rail pp1-dl-rail--right">
@@ -23192,6 +23290,7 @@ export default function PlantPerformance1() {
               </>
             )}
           </section>
+          )}
         </div>
 
         {/* ── Rail hover card portal ─────────────────────────── */}
@@ -23219,54 +23318,56 @@ export default function PlantPerformance1() {
           document.body
         )}
 
-        <DashboardErrorBoundary>
-          {selectionId === "customer_po_vs_sales_analysis" ? (
-            <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
-          ) : selectionId === "purchase_report_dashboard" ? (
-            <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
-          ) : selectionId === "purchase_value_report_dashboard" ? (
-            <PurchaseValueBottomTable data={data} filters={purchaseValueFilters} />
-          ) : selectionId === "sales_analysis_report_dashboard" ? (
-            <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
-          ) : selectionId === "production_analysis_report_dashboard" ? (
-            <ProductionAnalysisReportBottomTable data={{ productionValueCompare: prodValuePanelData ?? { machineRows: [], detailRows: [], rows: [] } }} filters={prodFilters} xAxisGroup={prodXAxisGroup} defaultFrom={defaultFrom} defaultTo={defaultTo} />
-          ) : selectionId === "idle_hours_report_dashboard" ? (
-            <IdleHoursReportBottomTable filters={idleFilters} activeTab={idleActiveTab} setActiveTab={setIdleActiveTab} />
-          ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-            <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
-          ) : selectionId === "oee_comparison_report_dashboard" ? (
-            <OeeComparisonReportBottomTable data={{ oeeCompare: oeePanelData || data?.oeeCompare }} filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
-          ) : selectionId === "efficiency_eff_report_dashboard" ? (
-            <EfficiencyEffReportBottomTable data={{ efficiencyCompare: effPanelData || data?.efficiencyCompare }} filters={effFilters} xAxisGroup={effXAxisGroup} />
-          ) : selectionId === "rejection_report_dashboard" ? (
-            <RejectionReportBottomTable data={{ rejectionCompare: rejPanelData || data?.rejectionCompare }} filters={rejFilters} />
-          ) : selectionId === "rework_report_dashboard" ? (
-            <ReworkReportBottomTable data={{ reworkCompare: rewPanelData || data?.reworkCompare }} filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
-          ) : selectionId === "store_stock_value_report_dashboard" ? (
-            <StoreStockValueReportBottomTable data={{ storeStockValue: stockPanelData || data?.storeStockValue }} filters={stockFilters} />
-          ) : selectionId === "otd_report_dashboard" ? (
-            <OtdReportBottomTable data={{ otd: otdPanelData || data?.otd }} filters={otdFilters} />
-          ) : selectionId === "supplier_rating_report_dashboard" ? (
-            <SupplierRatingBottomTable data={{ supplierRating: srPanelData || data?.supplierRating }} filters={supplierFilters} />
-          ) : selectionId === "vendor_rating_report_dashboard" ? (
-            <VendorRatingBottomTable data={{ vendorRating: vrPanelData || data?.vendorRating }} filters={vendorFilters} />
+        {(!isStackedLayout || mobileActiveTab === "center") && (
+          <DashboardErrorBoundary>
+            {selectionId === "customer_po_vs_sales_analysis" ? (
+              <CustomerPoCompareBottomTable data={data} loading={loading} uid={`bot-pocomp-${centerKey}`} filters={poFilters} showTargetOnly={poShowTargetOnly} targetConfig={targetConfig} />
+            ) : selectionId === "purchase_report_dashboard" ? (
+              <PurchaseReportBottomTable data={data} loading={loading} filters={purFilters} />
+            ) : selectionId === "purchase_value_report_dashboard" ? (
+              <PurchaseValueBottomTable data={data} filters={purchaseValueFilters} />
+            ) : selectionId === "sales_analysis_report_dashboard" ? (
+              <SalesAnalysisReportBottomTable data={data} loading={loading} filters={salesFilters} />
+            ) : selectionId === "production_analysis_report_dashboard" ? (
+              <ProductionAnalysisReportBottomTable data={{ productionValueCompare: prodValuePanelData ?? { machineRows: [], detailRows: [], rows: [] } }} filters={prodFilters} xAxisGroup={prodXAxisGroup} defaultFrom={defaultFrom} defaultTo={defaultTo} />
+            ) : selectionId === "idle_hours_report_dashboard" ? (
+              <IdleHoursReportBottomTable filters={idleFilters} activeTab={idleActiveTab} setActiveTab={setIdleActiveTab} />
+            ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+              <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
+            ) : selectionId === "oee_comparison_report_dashboard" ? (
+              <OeeComparisonReportBottomTable data={{ oeeCompare: oeePanelData || data?.oeeCompare }} filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
+            ) : selectionId === "efficiency_eff_report_dashboard" ? (
+              <EfficiencyEffReportBottomTable data={{ efficiencyCompare: effPanelData || data?.efficiencyCompare }} filters={effFilters} xAxisGroup={effXAxisGroup} />
+            ) : selectionId === "rejection_report_dashboard" ? (
+              <RejectionReportBottomTable data={{ rejectionCompare: rejPanelData || data?.rejectionCompare }} filters={rejFilters} />
+            ) : selectionId === "rework_report_dashboard" ? (
+              <ReworkReportBottomTable data={{ reworkCompare: rewPanelData || data?.reworkCompare }} filters={rewFilters} xAxisGroup={reworkXAxisGroup} />
+            ) : selectionId === "store_stock_value_report_dashboard" ? (
+              <StoreStockValueReportBottomTable data={{ storeStockValue: stockPanelData || data?.storeStockValue }} filters={stockFilters} />
+            ) : selectionId === "otd_report_dashboard" ? (
+              <OtdReportBottomTable data={{ otd: otdPanelData || data?.otd }} filters={otdFilters} />
+            ) : selectionId === "supplier_rating_report_dashboard" ? (
+              <SupplierRatingBottomTable data={{ supplierRating: srPanelData || data?.supplierRating }} filters={supplierFilters} />
+            ) : selectionId === "vendor_rating_report_dashboard" ? (
+              <VendorRatingBottomTable data={{ vendorRating: vrPanelData || data?.vendorRating }} filters={vendorFilters} />
 
-          ) : selectionId === "fg_value_report_dashboard" ? (
-            <FgValueReportBottomTable data={{ fgValueCompare: fgValuePanelData || data?.fgValueCompare }} filters={fgFilters} />
-          ) : selectionId === "daily_production_report_dashboard" ? (
-            <DailyProductionBottomTable data={{ dailyProductionCompare: dailyProdPanelData || data?.dailyProductionCompare }} filters={dailyProductionFilters} targetConfig={targetConfig} />
-          ) : selectionId === "target_vs_actual_report_dashboard" ? (
-            <TargetVsActualBottomTable data={{ targetVsActualCompare: targetVsActualPanelData || data?.targetVsActualCompare }} filters={targetVsActualFilters} targetConfig={targetConfig} />
-          ) : selectionId === "operator_efficiency_report_dashboard" ? (
-            <OperatorEfficiencyBottomTable data={{ operatorEfficiencyCompare: opEffPanelData || data?.operatorEfficiencyCompare }} filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
-          ) : selectionId === "machine_efficiency_report_dashboard" ? (
-            <MachineEfficiencyBottomTable data={{ machineEfficiencyCompare: machEffPanelData || data?.machineEfficiencyCompare }} filters={machineEfficiencyFilters} targetConfig={targetConfig} />
-          ) : selectionId === "capa_report_dashboard" ? (
-            <CapaBottomTable data={{ capaCompare: capaPanelData || data?.capaCompare }} filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
-          ) : selectionId === "customer_complaint_report_dashboard" ? (
-            <CustomerComplaintReportBottomTable data={{ complaintCompare: compPanelData || data?.complaintCompare }} filters={compFilters} />
-          ) : null}
-        </DashboardErrorBoundary>
+            ) : selectionId === "fg_value_report_dashboard" ? (
+              <FgValueReportBottomTable data={{ fgValueCompare: fgValuePanelData || data?.fgValueCompare }} filters={fgFilters} />
+            ) : selectionId === "daily_production_report_dashboard" ? (
+              <DailyProductionBottomTable data={{ dailyProductionCompare: dailyProdPanelData || data?.dailyProductionCompare }} filters={dailyProductionFilters} targetConfig={targetConfig} />
+            ) : selectionId === "target_vs_actual_report_dashboard" ? (
+              <TargetVsActualBottomTable data={{ targetVsActualCompare: targetVsActualPanelData || data?.targetVsActualCompare }} filters={targetVsActualFilters} targetConfig={targetConfig} />
+            ) : selectionId === "operator_efficiency_report_dashboard" ? (
+              <OperatorEfficiencyBottomTable data={{ operatorEfficiencyCompare: opEffPanelData || data?.operatorEfficiencyCompare }} filters={operatorEfficiencyFilters} targetConfig={targetConfig} />
+            ) : selectionId === "machine_efficiency_report_dashboard" ? (
+              <MachineEfficiencyBottomTable data={{ machineEfficiencyCompare: machEffPanelData || data?.machineEfficiencyCompare }} filters={machineEfficiencyFilters} targetConfig={targetConfig} />
+            ) : selectionId === "capa_report_dashboard" ? (
+              <CapaBottomTable data={{ capaCompare: capaPanelData || data?.capaCompare }} filters={capaFilters} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} />
+            ) : selectionId === "customer_complaint_report_dashboard" ? (
+              <CustomerComplaintReportBottomTable data={{ complaintCompare: compPanelData || data?.complaintCompare }} filters={compFilters} />
+            ) : null}
+          </DashboardErrorBoundary>
+        )}
       </div>
 
       {toast && (
