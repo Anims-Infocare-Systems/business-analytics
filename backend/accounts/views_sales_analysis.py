@@ -1264,3 +1264,265 @@ def sales_analysis_top_products(request):
     })
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Monthly Performance & Bill Type Analytics — Bar View Charts
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@api_view(["GET"])
+def sales_analysis_monthly_sales_trend(request):
+    """
+    Monthly Sales Trend (Value) — Bar chart data.
+
+    Returns month-wise SUM(Bill_Det.amt) for the selected date range.
+    SQL mirrors:
+        SELECT DATENAME(MONTH, BM.invdt), MONTH(BM.invdt), SUM(BD.amt)
+        FROM Bill_Mas BM INNER JOIN Bill_Det BD ON BM.invno = BD.invno
+        WHERE BD.deleted = 0 AND BM.deleted = 0 AND BM.invdt BETWEEN ? AND ?
+        GROUP BY MONTH(BM.invdt), DATENAME(MONTH, BM.invdt)
+        ORDER BY MonthNo
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                DATENAME(MONTH, BM.invdt)   AS MonthName,
+                MONTH(BM.invdt)             AS MonthNo,
+                ISNULL(SUM(BD.amt), 0)      AS SalesValue
+            FROM Bill_Mas AS BM
+            INNER JOIN Bill_Det AS BD ON BM.invno = BD.invno
+            WHERE
+                BD.deleted  = 0
+                AND BM.deleted = 0
+                AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+            GROUP BY
+                MONTH(BM.invdt),
+                DATENAME(MONTH, BM.invdt)
+            ORDER BY
+                MonthNo
+            """,
+            (start_date, end_date),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    labels = []
+    sales_values = []
+    for row in rows:
+        labels.append(str(row[0] or "").strip())
+        sales_values.append(round(float(row[2] or 0), 2))
+
+    total = round(sum(sales_values), 2)
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "period": format_period_label(start_date, end_date),
+        "labels": labels,
+        "sales_values": sales_values,
+        "sales_values_lakhs": [round(v / 100_000, 2) for v in sales_values],
+        "total": total,
+        "total_lakhs": round(total / 100_000, 2),
+    })
+
+
+@api_view(["GET"])
+def sales_analysis_bill_type_revenue(request):
+    """
+    Bill Type Revenue Contribution (Month-wise) — Grouped/Stacked Bar chart data.
+
+    Returns month-wise SUM(Bill_Mas.namt) broken down by btype for the selected date range.
+    SQL mirrors:
+        SELECT DATENAME(MONTH, bm.invdt), MONTH(bm.invdt), bm.btype, SUM(bm.namt)
+        FROM Bill_Mas bm INNER JOIN Bill_Det bd ON bm.invno = bd.invno
+        WHERE bm.deleted = 0 AND bd.deleted = 0 AND bm.invdt BETWEEN ? AND ?
+        GROUP BY MONTH(bm.invdt), DATENAME(MONTH, bm.invdt), bm.btype
+        ORDER BY MonthNo, bm.btype
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                DATENAME(MONTH, bm.invdt)           AS MonthName,
+                MONTH(bm.invdt)                     AS MonthNo,
+                LTRIM(RTRIM(ISNULL(bm.btype, N''))) AS BillType,
+                ISNULL(SUM(bm.namt), 0)             AS NetAmount
+            FROM Bill_Mas bm
+            INNER JOIN Bill_Det bd ON bm.invno = bd.invno
+            WHERE
+                bm.deleted = 0
+                AND bd.deleted = 0
+                AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
+            GROUP BY
+                MONTH(bm.invdt),
+                DATENAME(MONTH, bm.invdt),
+                bm.btype
+            ORDER BY
+                MonthNo,
+                bm.btype
+            """,
+            (start_date, end_date),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # Build ordered month labels (preserving DB ORDER BY MonthNo)
+    month_order = {}   # month_no -> month_name (insertion-ordered)
+    btypes_set = []    # ordered list of unique btypes
+
+    raw = []
+    for row in rows:
+        month_name = str(row[0] or "").strip()
+        month_no   = int(row[1] or 0)
+        btype      = str(row[2] or "").strip() or "(Blank)"
+        net_amount = round(float(row[3] or 0), 2)
+
+        if month_no not in month_order:
+            month_order[month_no] = month_name
+        if btype not in btypes_set:
+            btypes_set.append(btype)
+        raw.append((month_no, btype, net_amount))
+
+    # Labels in MonthNo order
+    labels = [month_order[mn] for mn in sorted(month_order)]
+
+    # Build dataset per btype: list of net amounts aligned to labels list
+    month_idx = {mn: i for i, mn in enumerate(sorted(month_order))}
+    datasets = {}
+    for btype in btypes_set:
+        datasets[btype] = [0.0] * len(labels)
+
+    for month_no, btype, net_amount in raw:
+        idx = month_idx[month_no]
+        datasets[btype][idx] += net_amount
+
+    # Round dataset values
+    datasets_list = [
+        {
+            "bill_type": btype,
+            "data": [round(v, 2) for v in vals],
+            "data_lakhs": [round(v / 100_000, 2) for v in vals],
+        }
+        for btype, vals in datasets.items()
+    ]
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "period": format_period_label(start_date, end_date),
+        "labels": labels,
+        "bill_types": btypes_set,
+        "datasets": datasets_list,
+    })
+
+
+@api_view(["GET"])
+def sales_analysis_monthly_tax_trend(request):
+    """
+    Monthly Tax Trend (Value) — Bar chart data.
+
+    Returns month-wise SUM(Bill_Tax.txamt) for the selected date range,
+    ordered by financial-year month sequence (Apr→Mar).
+    SQL mirrors:
+        SELECT DATENAME(MONTH, BM.invdt), MONTH(BM.invdt),
+               SUM(BT.txamt), CAST(SUM(BT.txamt)/100000.0 AS DECIMAL(10,2))
+        FROM Bill_Mas BM INNER JOIN Bill_Tax BT ON BM.invno = BT.invno
+        WHERE BM.deleted = 0 AND BT.deleted = 0 AND BM.invdt BETWEEN ? AND ?
+        GROUP BY MONTH(BM.invdt), DATENAME(MONTH, BM.invdt)
+        ORDER BY CASE MONTH ... (Apr=1 … Mar=12)
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                DATENAME(MONTH, BM.invdt)                                   AS MonthName,
+                MONTH(BM.invdt)                                             AS MonthNo,
+                ISNULL(SUM(BT.txamt), 0)                                    AS TotalTaxValue,
+                CAST(ISNULL(SUM(BT.txamt), 0) / 100000.0 AS DECIMAL(10,2)) AS TaxValueLakhs
+            FROM Bill_Mas BM
+            INNER JOIN Bill_Tax BT ON BM.invno = BT.invno
+            WHERE
+                BM.deleted = 0
+                AND BT.deleted = 0
+                AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+            GROUP BY
+                MONTH(BM.invdt),
+                DATENAME(MONTH, BM.invdt)
+            ORDER BY
+                CASE MONTH(BM.invdt)
+                    WHEN 4  THEN 1
+                    WHEN 5  THEN 2
+                    WHEN 6  THEN 3
+                    WHEN 7  THEN 4
+                    WHEN 8  THEN 5
+                    WHEN 9  THEN 6
+                    WHEN 10 THEN 7
+                    WHEN 11 THEN 8
+                    WHEN 12 THEN 9
+                    WHEN 1  THEN 10
+                    WHEN 2  THEN 11
+                    WHEN 3  THEN 12
+                END
+            """,
+            (start_date, end_date),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    labels       = []
+    tax_values   = []
+    tax_lakhs    = []
+
+    for row in rows:
+        labels.append(str(row[0] or "").strip())
+        tax_values.append(round(float(row[2] or 0), 2))
+        tax_lakhs.append(float(row[3] or 0))
+
+    total = round(sum(tax_values), 2)
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "period": format_period_label(start_date, end_date),
+        "labels": labels,
+        "tax_values": tax_values,
+        "tax_values_lakhs": tax_lakhs,
+        "total": total,
+        "total_lakhs": round(total / 100_000, 2),
+    })

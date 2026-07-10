@@ -35,7 +35,9 @@ from .views_userrights import (
     user_rights_add_user, user_rights_delete,
 )
 from .views_sales_analysis import (
-    sales_analysis_summary_strip, sales_analysis_weekly_trend, sales_analysis_revenue_charts, sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
+    sales_analysis_summary_strip, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
+    sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
+    sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
 )
 from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
@@ -173,6 +175,9 @@ urlpatterns = [
     path('sales-analysis/month-summary/', sales_analysis_month_summary, name='sales_analysis_month_summary'),
     path('sales-analysis/invoice-details/', sales_analysis_invoice_details, name='sales_analysis_invoice_details'),
     path('sales-analysis/top-products/', sales_analysis_top_products, name='sales_analysis_top_products'),
+    path('sales-analysis/monthly-sales-trend/', sales_analysis_monthly_sales_trend, name='sales_analysis_monthly_sales_trend'),
+    path('sales-analysis/bill-type-revenue/', sales_analysis_bill_type_revenue, name='sales_analysis_bill_type_revenue'),
+    path('sales-analysis/monthly-tax-trend/', sales_analysis_monthly_tax_trend, name='sales_analysis_monthly_tax_trend'),
 
     # ── Idle Time Report ──────────────────────────────────────────────
     path('idle-time-report/', idle_time_report, name='idle_time_report'),

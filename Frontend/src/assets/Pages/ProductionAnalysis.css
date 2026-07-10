@@ -109,20 +109,22 @@
 
 /* ── Card ────────────────────────────────────────────────── */
 .pa2-card {
-    background: #fff;
-    border-radius: 14px;
-    padding: 20px 22px;
-    box-shadow: 0 2px 12px rgba(26, 84, 212, .06), 0 1px 3px rgba(0, 0, 0, .04);
-    border: 1px solid rgba(45, 109, 232, .08);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 20px -2px rgba(26, 84, 212, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(45, 109, 232, 0.07);
     position: relative;
     overflow: hidden;
-    transition: box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .pa2-card:hover {
-    box-shadow: 0 12px 36px rgba(26, 84, 212, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
-    transform: translateY(-3px);
-    border-color: rgba(45, 109, 232, 0.25);
+    box-shadow: 0 20px 40px -10px rgba(26, 84, 212, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
+    transform: translateY(-4px);
+    border-color: rgba(45, 109, 232, 0.22);
 }
 
 .pa2-card::before {
@@ -218,14 +220,15 @@
 
 .pa2-fg input,
 .pa2-fg select {
-    padding: 9px 11px;
+    padding: 9px 12px;
     border: 1.5px solid #d1e2ff;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 13px;
-    background: #fcfdfe;
-    transition: all .22s ease;
+    background: #ffffff;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     font-family: inherit;
-    color: #334155;
+    color: #1e293b;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .pa2-fg input:hover,
@@ -239,7 +242,7 @@
     outline: none;
     border-color: #2d6de8;
     box-shadow: 0 0 0 3.5px rgba(45, 109, 232, .15);
-    background: #fff;
+    background: #ffffff;
 }
 
 /* Align Date Picker trigger with premium theme */
@@ -567,8 +570,18 @@
     border: 1.5px solid #eef2ff;
     position: relative;
     overflow: hidden;
-    transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 15px rgba(22, 28, 45, 0.04);
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 15px rgba(22, 28, 45, 0.03);
+}
+
+.pa2-kpi:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(22, 28, 45, 0.08);
+    border-color: rgba(45, 109, 232, 0.15);
+}
+
+.pa2-kpi:hover .pa2-kpi-icon-wrap {
+    transform: scale(1.15) rotate(5deg);
 }
 
 .pa2-kpi::after {
@@ -2590,18 +2603,18 @@
 /* Toggle pill */
 .pa2-pv-toggle {
     display: flex;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: rgba(241, 245, 249, 0.85);
+    border: 1px solid rgba(226, 232, 240, 0.85);
     border-radius: 10px;
     padding: 3px;
     gap: 3px;
     flex-shrink: 0;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .pa2-pv-toggle:hover {
     border-color: #cbd5e1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 .pa2-pv-tab {
@@ -2614,7 +2627,7 @@
     cursor: pointer;
     color: #475569;
     background: transparent;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
@@ -2630,12 +2643,12 @@
 .pa2-pv-tab--active {
     background: linear-gradient(135deg, #2d6de8, #1448b8) !important;
     color: #ffffff !important;
-    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.3);
+    box-shadow: 0 4px 12px rgba(45, 109, 232, 0.25);
 }
 
 .pa2-pv-tab--active:hover {
     transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 6px 16px rgba(45, 109, 232, 0.4);
+    box-shadow: 0 6px 16px rgba(45, 109, 232, 0.35);
 }
 
 /* KPI summary row */
@@ -2647,16 +2660,19 @@
 }
 
 .pa2-pv-kpi {
-    background: #f8faff;
-    border: 1.5px solid transparent;
+    background: rgba(248, 250, 255, 0.85);
+    border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 12px;
     padding: 14px 16px;
     text-align: center;
-    transition: border-color .2s, box-shadow .2s;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .pa2-pv-kpi:hover {
-    box-shadow: 0 3px 12px rgba(45, 109, 232, .12);
+    transform: translateY(-2px);
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(45, 109, 232, 0.08);
+    border-color: currentColor;
 }
 
 .pa2-pv-kpi-lbl {

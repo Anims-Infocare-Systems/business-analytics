@@ -623,6 +623,9 @@ export default function SalesAnalysis() {
   }, [customerOptions, customerSearch]);
 
   const [topProductsRaw, setTopProductsRaw] = useState(null);
+  const [monthlyTrendData, setMonthlyTrendData] = useState(null);
+  const [billTypeRevenueData, setBillTypeRevenueData] = useState(null);
+  const [monthlyTaxData, setMonthlyTaxData] = useState(null);
   const [invoiceDropdownOpen, setInvoiceDropdownOpen] = useState(false);
   const invoiceDropdownRef = useRef(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -1270,6 +1273,16 @@ export default function SalesAnalysis() {
     const isBar = performanceChartType === "bar";
     const isShare = performanceChartType === "share";
 
+    // Pull real labels & values from API data
+    const apiLabels = monthlyTrendData?.labels ?? [];
+    const apiValuesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
+
+    // Compute MoM growth for "share" view
+    const growthData = apiValuesLakhs.map((v, i) => {
+      if (i === 0 || apiValuesLakhs[i - 1] === 0) return 0;
+      return parseFloat(((v - apiValuesLakhs[i - 1]) / apiValuesLakhs[i - 1] * 100).toFixed(1));
+    });
+
     if (isBar) {
       gradient.addColorStop(0, "rgba(99, 102, 241, 0.9)");
       gradient.addColorStop(1, "rgba(99, 102, 241, 0.15)");
@@ -1282,13 +1295,11 @@ export default function SalesAnalysis() {
     monthlyTrendChart.current = new Chart(monthlyTrendRef.current, {
       type: isBar ? "bar" : "line",
       data: {
-        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+        labels: apiLabels,
         datasets: [
           {
             label: isShare ? "Growth Rate (%)" : "Sales Value (Lakhs)",
-            data: isShare
-              ? [0, 13.6, -16.9, 39.8, 10.3, -12.6, 32.1]
-              : [12.5, 14.2, 11.8, 16.5, 18.2, 15.9, 21.0],
+            data: isShare ? growthData : apiValuesLakhs,
             backgroundColor: gradient,
             borderColor: "rgba(99, 102, 241, 1)",
             borderWidth: isBar ? 1.5 : 2.5,
@@ -1347,7 +1358,7 @@ export default function SalesAnalysis() {
       }
     });
     return () => monthlyTrendChart.current?.destroy();
-  }, [loading, performanceChartType]);
+  }, [loading, performanceChartType, monthlyTrendData]);
 
   useEffect(() => {
     if (!billTypeRef.current) return;
@@ -1356,85 +1367,55 @@ export default function SalesAnalysis() {
     const isShare = performanceChartType === "share";
     const isBarOrShare = isBar || isShare;
 
-    const gradMaterial = ctx.createLinearGradient(0, 0, 0, 240);
-    gradMaterial.addColorStop(0, isBarOrShare ? "rgba(79, 70, 229, 0.95)" : "rgba(79, 70, 229, 0.5)");
-    gradMaterial.addColorStop(1, isBarOrShare ? "rgba(79, 70, 229, 0.4)" : "rgba(79, 70, 229, 0.05)");
+    // Palette of gradients — one per bill type (cycled)
+    const PALETTE_STOPS = [
+      ["rgba(79, 70, 229, 0.95)",  "rgba(79, 70, 229, 0.4)",  "rgba(79, 70, 229, 0.5)",  "rgba(79, 70, 229, 0.05)",  "rgba(79, 70, 229, 1)"],
+      ["rgba(124, 58, 237, 0.95)", "rgba(124, 58, 237, 0.4)", "rgba(124, 58, 237, 0.5)", "rgba(124, 58, 237, 0.05)", "rgba(124, 58, 237, 1)"],
+      ["rgba(168, 85, 247, 0.95)", "rgba(168, 85, 247, 0.4)", "rgba(168, 85, 247, 0.5)", "rgba(168, 85, 247, 0.05)", "rgba(168, 85, 247, 1)"],
+      ["rgba(192, 132, 252, 0.9)", "rgba(192, 132, 252, 0.35)","rgba(192, 132, 252, 0.5)","rgba(192, 132, 252, 0.05)","rgba(192, 132, 252, 1)"],
+      ["rgba(59, 130, 246, 0.95)", "rgba(59, 130, 246, 0.4)", "rgba(59, 130, 246, 0.5)", "rgba(59, 130, 246, 0.05)", "rgba(59, 130, 246, 1)"],
+      ["rgba(16, 185, 129, 0.95)", "rgba(16, 185, 129, 0.4)", "rgba(16, 185, 129, 0.5)", "rgba(16, 185, 129, 0.05)", "rgba(16, 185, 129, 1)"],
+    ];
 
-    const gradLabour = ctx.createLinearGradient(0, 0, 0, 240);
-    gradLabour.addColorStop(0, isBarOrShare ? "rgba(124, 58, 237, 0.95)" : "rgba(124, 58, 237, 0.5)");
-    gradLabour.addColorStop(1, isBarOrShare ? "rgba(124, 58, 237, 0.4)" : "rgba(124, 58, 237, 0.05)");
+    // Build real datasets from API
+    const apiLabels = billTypeRevenueData?.labels ?? [];
+    const apiDatasets = billTypeRevenueData?.datasets ?? [];
 
-    const gradRework = ctx.createLinearGradient(0, 0, 0, 240);
-    gradRework.addColorStop(0, isBarOrShare ? "rgba(168, 85, 247, 0.95)" : "rgba(168, 85, 247, 0.5)");
-    gradRework.addColorStop(1, isBarOrShare ? "rgba(168, 85, 247, 0.4)" : "rgba(168, 85, 247, 0.05)");
+    // Compute per-month totals for share view
+    const monthTotals = apiLabels.map((_, mi) =>
+      apiDatasets.reduce((sum, ds) => sum + (ds.data_lakhs?.[mi] ?? 0), 0)
+    );
 
-    const gradDebit = ctx.createLinearGradient(0, 0, 0, 240);
-    gradDebit.addColorStop(0, isBarOrShare ? "rgba(192, 132, 252, 0.9)" : "rgba(192, 132, 252, 0.5)");
-    gradDebit.addColorStop(1, isBarOrShare ? "rgba(192, 132, 252, 0.35)" : "rgba(192, 132, 252, 0.05)");
+    const chartDatasets = apiDatasets.map((ds, i) => {
+      const stops = PALETTE_STOPS[i % PALETTE_STOPS.length];
+      const grad = ctx.createLinearGradient(0, 0, 0, 240);
+      grad.addColorStop(0, isBarOrShare ? stops[0] : stops[2]);
+      grad.addColorStop(1, isBarOrShare ? stops[1] : stops[3]);
+
+      const shareData = ds.data_lakhs?.map((v, mi) =>
+        monthTotals[mi] > 0 ? parseFloat(((v / monthTotals[mi]) * 100).toFixed(1)) : 0
+      ) ?? [];
+
+      return {
+        label: ds.bill_type,
+        data: isShare ? shareData : (ds.data_lakhs ?? []),
+        backgroundColor: grad,
+        borderColor: stops[4],
+        borderWidth: isBarOrShare ? 1 : 2,
+        borderRadius: isBarOrShare ? 4 : 0,
+        fill: !isBarOrShare,
+        tension: isBarOrShare ? 0 : 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      };
+    });
 
     billTypeChart.current?.destroy();
     billTypeChart.current = new Chart(billTypeRef.current, {
       type: isBarOrShare ? "bar" : "line",
       data: {
-        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
-        datasets: [
-          {
-            label: "With Material",
-            data: isShare
-              ? [65.6, 66.9, 66.1, 66.7, 67.0, 66.0, 67.6]
-              : [8.2, 9.5, 7.8, 11.0, 12.2, 10.5, 14.2],
-            backgroundColor: gradMaterial,
-            borderColor: "rgba(79, 70, 229, 1)",
-            borderWidth: isBarOrShare ? 1 : 2,
-            borderRadius: isBarOrShare ? 4 : 0,
-            fill: !isBarOrShare,
-            tension: isBarOrShare ? 0 : 0.3,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Labour Charges",
-            data: isShare
-              ? [16.8, 16.9, 16.9, 17.0, 17.6, 17.0, 18.1]
-              : [2.1, 2.4, 2.0, 2.8, 3.2, 2.7, 3.8],
-            backgroundColor: gradLabour,
-            borderColor: "rgba(124, 58, 237, 1)",
-            borderWidth: isBarOrShare ? 1 : 2,
-            borderRadius: isBarOrShare ? 4 : 0,
-            fill: !isBarOrShare,
-            tension: isBarOrShare ? 0 : 0.3,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "General / Rework",
-            data: isShare
-              ? [12.0, 12.7, 11.0, 12.1, 11.5, 12.6, 11.0]
-              : [1.5, 1.8, 1.3, 2.0, 2.1, 2.0, 2.3],
-            backgroundColor: gradRework,
-            borderColor: "rgba(168, 85, 247, 1)",
-            borderWidth: isBarOrShare ? 1 : 2,
-            borderRadius: isBarOrShare ? 4 : 0,
-            fill: !isBarOrShare,
-            tension: isBarOrShare ? 0 : 0.3,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Debit Note",
-            data: isShare
-              ? [5.6, 3.5, 6.0, 4.2, 3.9, 4.4, 3.3]
-              : [0.7, 0.5, 0.7, 0.7, 0.7, 0.7, 0.7],
-            backgroundColor: gradDebit,
-            borderColor: "rgba(192, 132, 252, 1)",
-            borderWidth: isBarOrShare ? 1 : 2,
-            borderRadius: isBarOrShare ? 4 : 0,
-            fill: !isBarOrShare,
-            tension: isBarOrShare ? 0 : 0.3,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          }
-        ]
+        labels: apiLabels,
+        datasets: chartDatasets,
       },
       options: {
         responsive: true,
@@ -1474,13 +1455,19 @@ export default function SalesAnalysis() {
       }
     });
     return () => billTypeChart.current?.destroy();
-  }, [loading, performanceChartType]);
+  }, [loading, performanceChartType, billTypeRevenueData]);
 
   useEffect(() => {
     if (!taxRef.current) return;
     const ctx = taxRef.current.getContext("2d");
     const isBar = performanceChartType === "bar";
     const isShare = performanceChartType === "share";
+
+    // Real data from API
+    const apiLabels = monthlyTaxData?.labels ?? [];
+    const apiTaxLakhs = monthlyTaxData?.tax_values_lakhs ?? [];
+    // Sales lakhs for combo view (line view) from monthly trend API
+    const apiSalesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
 
     taxChart.current?.destroy();
 
@@ -1492,11 +1479,11 @@ export default function SalesAnalysis() {
       taxChart.current = new Chart(taxRef.current, {
         type: "bar",
         data: {
-          labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+          labels: apiLabels,
           datasets: [
             {
               label: "Tax Value (Lakhs)",
-              data: [2.25, 2.55, 2.12, 2.97, 3.28, 2.86, 3.78],
+              data: apiTaxLakhs,
               backgroundColor: gradient,
               borderColor: "rgba(139, 92, 246, 1)",
               borderWidth: 1.5,
@@ -1519,7 +1506,7 @@ export default function SalesAnalysis() {
               offset: 2,
               font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
               color: "#7c3aed",
-              formatter: (v) => `₹${v.toFixed(2)}L`
+              formatter: (v) => `₹${Number(v).toFixed(2)}L`
             }
           },
           scales: {
@@ -1537,6 +1524,13 @@ export default function SalesAnalysis() {
         }
       });
     } else if (isShare) {
+      // Effective tax rate = taxLakhs / salesLakhs * 100
+      const effectiveTaxRate = apiTaxLakhs.map((t, i) => {
+        const s = apiSalesLakhs[i];
+        return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
+      });
+      const shareLabels = apiLabels.length ? apiLabels : monthlyTrendData?.labels ?? [];
+
       const gradient = ctx.createLinearGradient(0, 0, 0, 240);
       gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
       gradient.addColorStop(1, "rgba(139, 92, 246, 0.02)");
@@ -1544,11 +1538,11 @@ export default function SalesAnalysis() {
       taxChart.current = new Chart(taxRef.current, {
         type: "line",
         data: {
-          labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+          labels: shareLabels,
           datasets: [
             {
               label: "Effective Tax Rate (%)",
-              data: [18.00, 17.96, 17.97, 18.00, 18.02, 17.99, 18.00],
+              data: effectiveTaxRate,
               backgroundColor: gradient,
               borderColor: "rgba(139, 92, 246, 1)",
               borderWidth: 2.5,
@@ -1577,7 +1571,7 @@ export default function SalesAnalysis() {
               offset: 4,
               font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
               color: "#7c3aed",
-              formatter: (v) => `${v.toFixed(2)}%`
+              formatter: (v) => `${Number(v).toFixed(2)}%`
             }
           },
           scales: {
@@ -1595,19 +1589,23 @@ export default function SalesAnalysis() {
         }
       });
     } else {
+      // Trend / Line View: combo bar (sales) + line (tax)
       const gradSales = ctx.createLinearGradient(0, 0, 0, 240);
       gradSales.addColorStop(0, "rgba(59, 130, 246, 0.85)");
       gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
 
+      // Use tax labels if available, else fall back to sales trend labels
+      const comboLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []);
+
       taxChart.current = new Chart(taxRef.current, {
         type: "bar",
         data: {
-          labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+          labels: comboLabels,
           datasets: [
             {
               label: "Sales Value (Lakhs)",
               type: "bar",
-              data: [12.5, 14.2, 11.8, 16.5, 18.2, 15.9, 21.0],
+              data: apiSalesLakhs,
               backgroundColor: gradSales,
               borderColor: "rgba(59, 130, 246, 1)",
               borderWidth: 1.5,
@@ -1620,7 +1618,7 @@ export default function SalesAnalysis() {
             {
               label: "Tax Value (Lakhs)",
               type: "line",
-              data: [2.25, 2.55, 2.12, 2.97, 3.28, 2.86, 3.78],
+              data: apiTaxLakhs,
               borderColor: "rgba(139, 92, 246, 1)",
               borderWidth: 2.5,
               tension: 0.4,
@@ -1638,7 +1636,7 @@ export default function SalesAnalysis() {
                 offset: 2,
                 font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
                 color: "#7c3aed",
-                formatter: (v) => `₹${v.toFixed(2)}L`
+                formatter: (v) => `₹${Number(v).toFixed(2)}L`
               }
             }
           ]
@@ -1665,7 +1663,7 @@ export default function SalesAnalysis() {
               type: "linear",
               position: "right",
               grid: { drawOnChartArea: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${v.toFixed(2)}L` },
+              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${Number(v).toFixed(2)}L` },
               title: { display: true, text: "Tax Liability", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#7c3aed' }
             },
             x: {
@@ -1677,7 +1675,7 @@ export default function SalesAnalysis() {
       });
     }
     return () => taxChart.current?.destroy();
-  }, [loading, performanceChartType]);
+  }, [loading, performanceChartType, monthlyTaxData, monthlyTrendData]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
@@ -1774,7 +1772,58 @@ export default function SalesAnalysis() {
         }
       });
 
-    Promise.all([p1, p2, p3, p4, p5]).finally(() => {
+    const p6 = fetch(`${API_BASE}/sales-analysis/monthly-sales-trend/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Monthly sales trend:", data?.error || r.statusText);
+          setMonthlyTrendData(null);
+          return;
+        }
+        setMonthlyTrendData(data);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Monthly sales trend fetch failed:", err);
+          setMonthlyTrendData(null);
+        }
+      });
+
+    const p7 = fetch(`${API_BASE}/sales-analysis/bill-type-revenue/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Bill type revenue:", data?.error || r.statusText);
+          setBillTypeRevenueData(null);
+          return;
+        }
+        setBillTypeRevenueData(data);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Bill type revenue fetch failed:", err);
+          setBillTypeRevenueData(null);
+        }
+      });
+
+    const p8 = fetch(`${API_BASE}/sales-analysis/monthly-tax-trend/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Monthly tax trend:", data?.error || r.statusText);
+          setMonthlyTaxData(null);
+          return;
+        }
+        setMonthlyTaxData(data);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Monthly tax trend fetch failed:", err);
+          setMonthlyTaxData(null);
+        }
+      });
+
+    Promise.all([p1, p2, p3, p4, p5, p6, p7, p8]).finally(() => {
       if (!ctrl.signal.aborted) {
         setLoading(false);
       }
