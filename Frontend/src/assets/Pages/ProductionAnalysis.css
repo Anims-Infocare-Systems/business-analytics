@@ -868,7 +868,7 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(135deg, rgba(45,109,232,0.04) 0%, rgba(99,102,241,0.03) 100%);
+    background: linear-gradient(135deg, rgba(45, 109, 232, 0.04) 0%, rgba(99, 102, 241, 0.03) 100%);
     pointer-events: none;
 }
 
@@ -1037,23 +1037,47 @@
    MACHINE DETAIL MODAL
 ═══════════════════════════════════════════ */
 @keyframes pa2-modal-in {
-    from { opacity: 0; transform: translateY(20px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0)    scale(1); }
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 @keyframes pa2-overlay-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes pa2-bar-grow {
-    from { width: 0%; }
-    to   { width: var(--bw, 0%); }
+    from {
+        width: 0%;
+    }
+
+    to {
+        width: var(--bw, 0%);
+    }
 }
 
 @keyframes pa2-modal-cascade {
-    from { opacity: 0; transform: translateY(14px) scale(0.98); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .pa2-modal-overlay {
@@ -1080,6 +1104,7 @@
         opacity: 0;
         transform: rotateY(-65deg) rotateX(12deg) translateZ(-150px) translateY(10px);
     }
+
     100% {
         opacity: 1;
         transform: none;
@@ -1113,7 +1138,9 @@
 .pa2-modal-hdr::before {
     content: "";
     position: absolute;
-    left: 0; top: 0; bottom: 0;
+    left: 0;
+    top: 0;
+    bottom: 0;
     width: 5px;
     background: var(--mc, #2563eb);
     border-radius: 20px 0 0 0;
@@ -1167,7 +1194,7 @@
     color: #64748b;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
 }
 
 .pa2-modal-close:hover {
@@ -1324,9 +1351,17 @@
     margin-bottom: 4px;
 }
 
-.pa2-modal-qty--ok   .pa2-modal-qty-val { color: #059669; }
-.pa2-modal-qty--rej  .pa2-modal-qty-val { color: #dc2626; }
-.pa2-modal-qty--rw   .pa2-modal-qty-val { color: #d97706; }
+.pa2-modal-qty--ok .pa2-modal-qty-val {
+    color: #059669;
+}
+
+.pa2-modal-qty--rej .pa2-modal-qty-val {
+    color: #dc2626;
+}
+
+.pa2-modal-qty--rw .pa2-modal-qty-val {
+    color: #d97706;
+}
 
 .pa2-modal-qty-lbl {
     font-size: 10px;
@@ -1389,7 +1424,7 @@
     border-radius: 12px;
     max-height: 175px;
     overflow-y: auto;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     opacity: 0;
     animation: pa2-modal-cascade 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
     animation-delay: calc(var(--di, 0) * 50ms + 250ms);
@@ -1495,8 +1530,13 @@
 }
 
 @keyframes pa2-shimmer-anim {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 .pa2-kpi--skeleton {
@@ -1536,8 +1576,13 @@
 }
 
 @keyframes pa2-spin-loader {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .pa2-macdetail-title {
@@ -1560,8 +1605,15 @@
 
 /* ── Machine Chips — Professional Accent-Bar Style ─────── */
 @keyframes pa2-chip-in {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .pa2-mac-chip {
@@ -1580,8 +1632,8 @@
     animation: pa2-chip-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     animation-delay: calc(var(--ci, 0) * 35ms + 100ms);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     touch-action: manipulation;
 }
 
@@ -1643,7 +1695,7 @@
     transform: translateY(-4px) scale(1.02);
     border-color: color-mix(in srgb, var(--cc1, #2563eb) 35%, #cbd5e1);
     box-shadow: 0 10px 24px color-mix(in srgb, var(--cc1, #2563eb) 18%, transparent),
-                0 3px 8px rgba(15, 23, 42, 0.04);
+        0 3px 8px rgba(15, 23, 42, 0.04);
 }
 
 .pa2-mac-chip:hover .pa2-mac-chip-accent {
@@ -2355,19 +2407,19 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: linear-gradient(135deg, #2d6de8 0%, #1448b8 100%);
-    color: rgba(255, 255, 255, .95);
-    padding: 12px 13px;
-    font-size: 11px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #ffffff;
+    box-shadow: inset 0 -2px 0 rgba(59, 130, 246, 0.4);
+    padding: 14px 16px;
+    font-size: 11.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .7px;
+    letter-spacing: .8px;
     white-space: nowrap;
-    text-align: left;
 }
 
 .pa2-table td {
-    padding: 11px 13px;
+    padding: 14px 16px;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
     white-space: nowrap;
@@ -2472,6 +2524,7 @@
         opacity: 0;
         transform: translateY(24px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -2479,6 +2532,7 @@
 }
 
 @media (max-width: 640px) {
+
     /* Fast, Crisp Mobile Modal Rendering with 3D Flip */
     .pa2-modal-overlay {
         background: rgba(15, 23, 42, 0.75) !important;
@@ -2711,13 +2765,13 @@
     .pa2-fg {
         flex: 1 1 100% !important;
     }
-    
+
     .pa2-section-hdr {
         flex-direction: column;
         align-items: flex-start;
         gap: 6px;
     }
-    
+
     .pa2-filter-reset-btn {
         width: 100%;
     }
@@ -2748,4 +2802,267 @@
 
 .pa2-search-clear-btn:active {
     transform: scale(0.92);
+}
+
+/* ── MACHINE HOUR RATE (MHR) CALCULATOR STYLES ── */
+.pa2-mhr-layout-grid {
+    display: grid;
+    grid-template-columns: 310px 1fr 310px;
+    gap: 20px;
+    margin-top: 15px;
+    align-items: start;
+}
+
+.pa2-mhr-inputs-panel {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.pa2-mhr-section-subtitle {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: #1e3a8a;
+    margin-bottom: 12px;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+    border-bottom: 1.5px solid #f1f5f9;
+    padding-bottom: 6px;
+}
+
+.pa2-mhr-scroll-inputs {
+    max-height: 460px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+.pa2-mhr-scroll-inputs::-webkit-scrollbar {
+    width: 4px;
+}
+
+.pa2-mhr-scroll-inputs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-mhr-scroll-inputs::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 2px;
+}
+
+.pa2-mhr-input-group-box {
+    background: #f8fafc;
+    border: 1px solid #eef2ff;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.pa2-mhr-input-group-box:hover {
+    border-color: #cbdbe5;
+    background: #fcfdfe;
+}
+
+.pa2-mhr-group-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #2d6de8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.pa2-mhr-field-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.pa2-mhr-field-row:last-child {
+    margin-bottom: 0;
+}
+
+.pa2-mhr-input-field {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.pa2-mhr-input-field label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+}
+
+.pa2-mhr-input-field input {
+    height: 28px;
+    padding: 4px 8px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+    outline: none;
+    background: #ffffff;
+    transition: all 0.2s ease;
+}
+
+.pa2-mhr-input-field input:focus {
+    border-color: #2d6de8;
+    box-shadow: 0 0 0 3px rgba(45, 109, 232, 0.12);
+}
+
+.pa2-mhr-table-panel {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.pa2-mhr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.pa2-mhr-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 6px 10px;
+    border-bottom: 1.5px solid #cbdbe5;
+}
+
+.pa2-mhr-table td {
+    padding: 4.8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    vertical-align: middle;
+}
+
+.pa2-mhr-group-hdr td {
+    background: #eff6ff;
+    font-weight: 800;
+    color: #1e3a8a;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border-bottom: 1.5px solid #d1e2ff;
+}
+
+.pa2-mhr-total-sub-row td {
+    background: #f8fafc;
+    font-weight: 700;
+    color: #1e293b;
+    border-top: 1.5px solid #e2e8f0;
+    border-bottom: 1.5px solid #e2e8f0;
+}
+
+.pa2-mhr-grand-total-row td {
+    background: linear-gradient(135deg, #f0f6ff, #f5f3ff);
+    font-weight: 800;
+    color: #1a2a5e;
+    font-size: 13px;
+    border-top: 2px solid #bcd5ff;
+    border-bottom: 2.5px double #cbd5e1;
+    padding: 11px 12px;
+}
+
+.pa2-mhr-td-num {
+    text-align: right;
+    font-weight: 600;
+}
+
+.pa2-mhr-chart-panel {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.pa2-mhr-summary-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #eff6ff, #faf5ff);
+    border: 1px solid #dbe9ff;
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.pa2-mhr-summary-kpi-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2d6de8, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(45, 109, 232, 0.2);
+}
+
+.pa2-mhr-ratios-summary {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.pa2-mhr-ratio-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1px solid;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.pa2-mhr-ratio-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* Responsive constraints for MHR Grid */
+@media (max-width: 1200px) {
+    .pa2-mhr-layout-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+}
+
+.pa2-mhr-inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid #eef2ff;
+    border-radius: 12px;
+    padding: 14px;
+}
+
+/* Hide number spinner controls */
+.pa2-mhr-inputs-grid input[type=number]::-webkit-inner-spin-button, 
+.pa2-mhr-inputs-grid input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+.pa2-mhr-inputs-grid input[type=number] {
+    -moz-appearance: textfield;
 }

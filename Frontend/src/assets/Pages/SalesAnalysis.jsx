@@ -18,6 +18,7 @@ import {
   Pin,
   Search,
   ChevronDown,
+  ChevronUp,
   RotateCcw,
   Link,
   Inbox,
@@ -71,6 +72,41 @@ function formatTooltipLakhs(rupees) {
   const n = Number(rupees);
   if (!Number.isFinite(n)) return "—";
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })} (${formatLakhs(n)})`;
+}
+
+function getMonthYearMap(from, to) {
+  const map = {};
+  if (!from || !to) return map;
+  const start = new Date(from);
+  const end = new Date(to);
+  let curr = new Date(start.getFullYear(), start.getMonth(), 1);
+  const limit = new Date(end.getFullYear(), end.getMonth(), 1);
+  let count = 0;
+  while (curr <= limit && count < 100) {
+    const monthName = curr.toLocaleString("en-US", { month: "long" });
+    const monthShort = curr.toLocaleString("en-US", { month: "short" });
+    const year2Digit = String(curr.getFullYear()).slice(-2);
+    map[monthName.toLowerCase()] = year2Digit;
+    map[monthShort.toLowerCase()] = year2Digit;
+    curr.setMonth(curr.getMonth() + 1);
+    count++;
+  }
+  return map;
+}
+
+function formatLabelWithYear(label, map) {
+  if (!label) return label;
+  const labelStr = String(label);
+  const lowerLabel = labelStr.toLowerCase();
+  for (const [month, year] of Object.entries(map)) {
+    if (lowerLabel.includes(month)) {
+      if (labelStr.includes("-") && /\d{2}$/.test(labelStr)) {
+        return labelStr;
+      }
+      return `${labelStr}-${year}`;
+    }
+  }
+  return labelStr;
 }
 
 function formatRate(rupees) {
@@ -425,6 +461,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-10",
     custName: "Coromandel International Limited",
     partDesc: "TD09020721 - Standard Shaft Pin",
+    poSlNo: 10,
     qty: 1500,
     shortCloseQty: 0,
     rate: 450,
@@ -440,6 +477,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-15",
     custName: "Shanthi Gears Limited",
     partDesc: "TD09020725 - Custom Gear Sleeve",
+    poSlNo: 20,
     qty: 800,
     shortCloseQty: 50,
     rate: 1200,
@@ -455,6 +493,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-20",
     custName: "Canara India Private Limited",
     partDesc: "OA-95-041VX - Support Bracket",
+    poSlNo: 10,
     qty: 2500,
     shortCloseQty: 0,
     rate: 350,
@@ -470,6 +509,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-22",
     custName: "STI Digital Ltd",
     partDesc: "TD09020802 - Rework Roller",
+    poSlNo: 10,
     qty: 300,
     shortCloseQty: 0,
     rate: 950,
@@ -485,6 +525,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-25",
     custName: "Vasanthi Foundry",
     partDesc: "CC004AS5 - Heavy Casting Block",
+    poSlNo: 30,
     qty: 1200,
     shortCloseQty: 100,
     rate: 1800,
@@ -500,6 +541,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-05-28",
     custName: "VR Foundries",
     partDesc: "TD09020721 - Connecting Flange",
+    poSlNo: 10,
     qty: 900,
     shortCloseQty: 0,
     rate: 650,
@@ -515,6 +557,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-06-01",
     custName: "Coromandel International Limited",
     partDesc: "TD09020725 - Threaded Pin 15mm",
+    poSlNo: 40,
     qty: 2000,
     shortCloseQty: 0,
     rate: 150,
@@ -530,6 +573,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-06-05",
     custName: "Vasanthi Foundry",
     partDesc: "OA-95-041VX - Adapter Bracket",
+    poSlNo: 20,
     qty: 500,
     shortCloseQty: 0,
     rate: 2200,
@@ -545,6 +589,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-06-10",
     custName: "Canara India Private Limited",
     partDesc: "CC004AS5 - Export Hub Block",
+    poSlNo: 30,
     qty: 600,
     shortCloseQty: 0,
     rate: 3400,
@@ -560,6 +605,7 @@ const MOCK_PO_LEDGER = [
     poDate: "2026-06-12",
     custName: "Shanthi Gears Limited",
     partDesc: "TD09020802 - Spacer ring 85mm",
+    poSlNo: 50,
     qty: 1500,
     shortCloseQty: 200,
     rate: 280,
@@ -567,6 +613,89 @@ const MOCK_PO_LEDGER = [
     dcDate: "—",
     dcQty: 0,
     invNoDt: "—"
+  }
+];
+
+const MOCK_PLAN_VS_ACTUAL = [
+  {
+    date: "2026-06-01",
+    customer: "Coromandel International Limited",
+    partNoDesc: "TD09020721 - Standard Shaft Pin",
+    planQty: 2000,
+    availableQty: 1800,
+    dispatchQty: 1500,
+  },
+  {
+    date: "2026-06-05",
+    customer: "Shanthi Gears Limited",
+    partNoDesc: "TD09020725 - Custom Gear Sleeve",
+    planQty: 1000,
+    availableQty: 1000,
+    dispatchQty: 1000,
+  },
+  {
+    date: "2026-06-10",
+    customer: "Canara India Private Limited",
+    partNoDesc: "OA-95-041VX - Support Bracket",
+    planQty: 3000,
+    availableQty: 2500,
+    dispatchQty: 2500,
+  },
+  {
+    date: "2026-06-15",
+    customer: "STI Digital Ltd",
+    partNoDesc: "TD09020802 - Rework Roller",
+    planQty: 500,
+    availableQty: 450,
+    dispatchQty: 300,
+  },
+  {
+    date: "2026-06-20",
+    customer: "Vasanthi Foundry",
+    partNoDesc: "CC004AS5 - Heavy Casting Block",
+    planQty: 1500,
+    availableQty: 1200,
+    dispatchQty: 900,
+  },
+  {
+    date: "2026-06-25",
+    customer: "VR Foundries",
+    partNoDesc: "TD09020721 - Connecting Flange",
+    planQty: 800,
+    availableQty: 800,
+    dispatchQty: 800,
+  },
+  {
+    date: "2026-07-02",
+    customer: "Coromandel International Limited",
+    partNoDesc: "TD09020725 - Threaded Pin 15mm",
+    planQty: 1200,
+    availableQty: 1200,
+    dispatchQty: 600,
+  },
+  {
+    date: "2026-07-04",
+    customer: "Vasanthi Foundry",
+    partNoDesc: "OA-95-041VX - Adapter Bracket",
+    planQty: 600,
+    availableQty: 500,
+    dispatchQty: 0,
+  },
+  {
+    date: "2026-07-06",
+    customer: "Canara India Private Limited",
+    partNoDesc: "CC004AS5 - Export Hub Block",
+    planQty: 1800,
+    availableQty: 1800,
+    dispatchQty: 1800,
+  },
+  {
+    date: "2026-07-10",
+    customer: "Shanthi Gears Limited",
+    partNoDesc: "TD09020802 - Spacer ring 85mm",
+    planQty: 1600,
+    availableQty: 1400,
+    dispatchQty: 1200,
   }
 ];
 
@@ -599,11 +728,16 @@ export default function SalesAnalysis() {
   const [poSearchQuery, setPoSearchQuery] = useState("");
   const [poSortField, setPoSortField] = useState("poDate");
   const [poSortAsc, setPoSortAsc] = useState(false);
+  const [projSortField, setProjSortField] = useState("customer");
+  const [projSortAsc, setProjSortAsc] = useState(true);
+  const [planSortField, setPlanSortField] = useState("date");
+  const [planSortAsc, setPlanSortAsc] = useState(true);
   const [poPage, setPoPage] = useState(1);
   const [poPendingOnly, setPoPendingOnly] = useState(false);
   const [performanceChartType, setPerformanceChartType] = useState("bar");
   const [weeklyChartType, setWeeklyChartType] = useState("combo");
   const [customerSearch, setCustomerSearch] = useState("");
+  const [planSearchQuery, setPlanSearchQuery] = useState("");
 
   const customerOptions = useMemo(() => {
     const customers = new Set();
@@ -624,6 +758,12 @@ export default function SalesAnalysis() {
 
   const [topProductsRaw, setTopProductsRaw] = useState(null);
   const [monthlyTrendData, setMonthlyTrendData] = useState(null);
+  const monthlyAvg = useMemo(() => {
+    if (!monthlyTrendData?.sales_values_lakhs?.length) return 0;
+    const vals = monthlyTrendData.sales_values_lakhs;
+    const sum = vals.reduce((s, v) => s + v, 0);
+    return sum / vals.length;
+  }, [monthlyTrendData]);
   const [billTypeRevenueData, setBillTypeRevenueData] = useState(null);
   const [monthlyTaxData, setMonthlyTaxData] = useState(null);
   const [invoiceDropdownOpen, setInvoiceDropdownOpen] = useState(false);
@@ -730,7 +870,7 @@ export default function SalesAnalysis() {
 
   const handlePoExport = () => {
     const headers = [
-      "#", "Type", "Apono", "Po No", "Po date", "Cust Name", "PartNO- Description",
+      "#", "Type", "Apono", "Po No", "Po date", "Cust Name", "PartNO- Description", "Po Sl.No",
       "Qty", "Shot close Qty", "Rate", "Value", "Dc.NO", "Dc Dt", "Dc Qty",
       "Pending Qty", "Pending Value", "Age Days", "Invoice No & Dt"
     ];
@@ -743,6 +883,7 @@ export default function SalesAnalysis() {
       formatToMmDdYyyy(row.poDate),
       row.custName,
       row.partDesc,
+      row.poSlNo || "—",
       row.qty,
       row.shortCloseQty,
       row.rate,
@@ -781,6 +922,130 @@ export default function SalesAnalysis() {
       { totVal: 0, totPendVal: 0 }
     );
   }, [filteredPoLedger]);
+
+  const filteredPlanVsActual = useMemo(() => {
+    return MOCK_PLAN_VS_ACTUAL.filter((row) => {
+      const rowDate = new Date(row.date);
+      if (dateRange.from && rowDate < dateRange.from) return false;
+      if (dateRange.to && rowDate > dateRange.to) return false;
+
+      const q = planSearchQuery.toLowerCase().trim();
+      if (q) {
+        return (
+          row.customer.toLowerCase().includes(q) ||
+          row.partNoDesc.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [dateRange, planSearchQuery]);
+
+  const planTotals = useMemo(() => {
+    const totals = filteredPlanVsActual.reduce(
+      (acc, row) => {
+        acc.planned += row.planQty;
+        acc.dispatched += row.dispatchQty;
+        return acc;
+      },
+      { planned: 0, dispatched: 0 }
+    );
+    const avgPct = totals.planned > 0 ? (totals.dispatched / totals.planned) * 100 : 0;
+    return { ...totals, avgPct };
+  }, [filteredPlanVsActual]);
+
+  const SortIcon = ({ active, asc }) => {
+    if (!active) {
+      return (
+        <span style={{ display: "inline-flex", flexDirection: "column", verticalAlign: "middle", marginLeft: "4px", opacity: 0.35 }}>
+          <ChevronUp size={10} style={{ marginBottom: "-3px" }} />
+          <ChevronDown size={10} />
+        </span>
+      );
+    }
+    return asc ? (
+      <ChevronUp size={13} style={{ marginLeft: "4px", verticalAlign: "middle", color: "#4f46e5" }} />
+    ) : (
+      <ChevronDown size={13} style={{ marginLeft: "4px", verticalAlign: "middle", color: "#4f46e5" }} />
+    );
+  };
+
+  const sortedPlanVsActual = useMemo(() => {
+    const sorted = [...filteredPlanVsActual];
+    sorted.sort((a, b) => {
+      let valA = a[planSortField];
+      let valB = b[planSortField];
+
+      if (planSortField === "date") {
+        return planSortAsc
+          ? new Date(valA) - new Date(valB)
+          : new Date(valB) - new Date(valA);
+      }
+
+      if (planSortField === "status") {
+        const getPct = (x) => (x.planQty > 0 ? x.dispatchQty / x.planQty : 0);
+        return planSortAsc ? getPct(a) - getPct(b) : getPct(b) - getPct(a);
+      }
+
+      if (typeof valA === "string") {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+        if (valA < valB) return planSortAsc ? -1 : 1;
+        if (valA > valB) return planSortAsc ? 1 : -1;
+        return 0;
+      } else {
+        return planSortAsc ? valA - valB : valB - valA;
+      }
+    });
+    return sorted;
+  }, [filteredPlanVsActual, planSortField, planSortAsc]);
+
+  const handlePlanSort = (field) => {
+    if (planSortField === field) {
+      setPlanSortAsc(!planSortAsc);
+    } else {
+      setPlanSortField(field);
+      setPlanSortAsc(true);
+    }
+  };
+
+  const sortedProjections = useMemo(() => {
+    const sorted = [...MOCK_PROJECTIONS];
+    sorted.sort((a, b) => {
+      let valA = a[projSortField];
+      let valB = b[projSortField];
+
+      if (projSortField === "month" || projSortField === "schdMonth") {
+        const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        const getVal = (s) => {
+          const parts = s.toLowerCase().split(" ");
+          const mIdx = months.indexOf(parts[0]);
+          const yVal = parseInt(parts[1]) || 0;
+          return yVal * 12 + mIdx;
+        };
+        return projSortAsc ? getVal(valA) - getVal(valB) : getVal(valB) - getVal(valA);
+      }
+
+      if (typeof valA === "string") {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+        if (valA < valB) return projSortAsc ? -1 : 1;
+        if (valA > valB) return projSortAsc ? 1 : -1;
+        return 0;
+      } else {
+        return projSortAsc ? valA - valB : valB - valA;
+      }
+    });
+    return sorted;
+  }, [projSortField, projSortAsc]);
+
+  const handleProjSort = (field) => {
+    if (projSortField === field) {
+      setProjSortAsc(!projSortAsc);
+    } else {
+      setProjSortField(field);
+      setProjSortAsc(true);
+    }
+  };
 
   useEffect(() => {
     if (!invoiceDropdownOpen) {
@@ -855,6 +1120,68 @@ export default function SalesAnalysis() {
   }, [summary, selectedCustomers, filteredInvoices]);
 
   const kpiCards = useMemo(() => buildKpiCards(derivedSummary), [derivedSummary]);
+
+  const avgRateCards = useMemo(() => {
+    if (!derivedSummary) {
+      return [
+        { label: "AVG SELLING RATE (Per Day)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#3b82f6", type: "neutral" },
+        { label: "AVG SELLING RATE (Per Week)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#10b981", type: "neutral" },
+        { label: "AVG SELLING RATE (Per Month)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#f97316", type: "neutral" },
+        { label: "AVG SELLING RATE (Per Year)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#8b5cf6", type: "neutral" },
+      ];
+    }
+
+    const grandTotal = derivedSummary.grand_total ?? 0;
+    let days = 1;
+    if (dateRange.from && dateRange.to) {
+      const diffTime = Math.abs(dateRange.to - dateRange.from);
+      days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
+    }
+
+    const perDay = grandTotal / days;
+    const perWeek = perDay * 7;
+    const perMonth = perDay * 30;
+    const perYear = perDay * 365;
+
+    return [
+      {
+        label: "AVG SELLING RATE (Per Day)",
+        value: `₹${formatRupees(perDay)}`,
+        sub: "Per calendar day",
+        trend: `${days} days total`,
+        icon: Scale,
+        iconColor: "#3b82f6",
+        type: "neutral"
+      },
+      {
+        label: "AVG SELLING RATE (Per Week)",
+        value: `₹${formatRupees(perWeek)}`,
+        sub: "Per calendar week",
+        trend: `${(days / 7).toFixed(1)} weeks total`,
+        icon: Scale,
+        iconColor: "#10b981",
+        type: "neutral"
+      },
+      {
+        label: "AVG SELLING RATE (Per Month)",
+        value: `₹${formatRupees(perMonth)}`,
+        sub: "Per calendar month (30d)",
+        trend: `${(days / 30).toFixed(1)} months total`,
+        icon: Scale,
+        iconColor: "#f97316",
+        type: "neutral"
+      },
+      {
+        label: "AVG SELLING RATE (Per Year)",
+        value: `₹${formatRupees(perYear)}`,
+        sub: "Annualized rate (365d)",
+        trend: `${(days / 365).toFixed(2)} years total`,
+        icon: Scale,
+        iconColor: "#8b5cf6",
+        type: "neutral"
+      }
+    ];
+  }, [derivedSummary, dateRange]);
   const customerRanking = useMemo(
     () => buildCustomerRanking(revenueCharts?.customer_ranking),
     [revenueCharts],
@@ -884,6 +1211,10 @@ export default function SalesAnalysis() {
   const monthlyTrendChart = useRef(null);
   const billTypeChart = useRef(null);
   const taxChart = useRef(null);
+  const planRef = useRef(null);
+  const planChart = useRef(null);
+  const projRef = useRef(null);
+  const projChart = useRef(null);
 
   const CHART_FONT = "'Segoe UI', system-ui, sans-serif";
 
@@ -1040,7 +1371,8 @@ export default function SalesAnalysis() {
     if (!trendRef.current) return;
     const ctx = trendRef.current.getContext("2d");
 
-    const labels = weeklyTrend?.labels ?? [];
+    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+    const labels = (weeklyTrend?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
     const sales = weeklyTrend?.sales ?? [];
     const cumulative = weeklyTrend?.cumulative ?? [];
 
@@ -1076,20 +1408,36 @@ export default function SalesAnalysis() {
           type: "bar",
           yAxisID: "y",
           datalabels: {
-            display: true,
+            display: (context) => {
+              const val = context.dataset.data[context.dataIndex];
+              return val && val >= 10000;
+            },
             align: "top",
             anchor: "end",
             offset: 4,
-            formatter: (value) => {
-              if (!value || value < 10000) return "";
-              if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-              return `₹${(value / 1000).toFixed(0)}K`;
+            formatter: (value, context) => {
+              const idx = context.dataIndex;
+              const prev = context.dataset.data[idx - 1];
+              let label = "";
+              if (value >= 100000) {
+                label = `₹${(value / 100000).toFixed(1)}L`;
+              } else {
+                label = `₹${(value / 1000).toFixed(0)}K`;
+              }
+              if (prev && prev > 0) {
+                const pct = ((value - prev) / prev) * 100;
+                const sign = pct >= 0 ? "↑" : "↓";
+                label += ` (${sign}${Math.abs(pct).toFixed(0)}%)`;
+              }
+              return label;
             },
-            font: { size: 9, weight: "700", family: 'Plus Jakarta Sans' },
-            color: "#ffffff",
-            backgroundColor: "#2d6de8",
-            borderRadius: 4,
-            padding: { top: 3, bottom: 3, left: 5, right: 5 }
+            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
+            color: "#2d6de8",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderColor: "rgba(45, 109, 232, 0.4)",
+            borderWidth: 1.5,
+            borderRadius: 6,
+            padding: { top: 4, bottom: 4, left: 6, right: 6 }
           }
         },
         {
@@ -1136,8 +1484,7 @@ export default function SalesAnalysis() {
           ticks: {
             font: { size: 9, family: 'Plus Jakarta Sans' },
             color: '#312e81',
-            autoSkip: true,
-            maxTicksLimit: 8,
+            autoSkip: false,
             maxRotation: 0,
             minRotation: 0
           },
@@ -1154,15 +1501,32 @@ export default function SalesAnalysis() {
           borderWidth: 3,
           tension: 0.4,
           fill: true,
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          pointRadius: 4,
+          pointHoverRadius: 6,
           pointBackgroundColor: "#ffffff",
           pointBorderColor: "#10b981",
           pointBorderWidth: 2,
           type: "line",
           yAxisID: "y",
           datalabels: {
-            display: false
+            display: (context) => {
+              const val = context.dataset.data[context.dataIndex];
+              return val && val >= 10000;
+            },
+            align: "top",
+            anchor: "end",
+            offset: 8,
+            formatter: (value) => {
+              if (value >= 100000) return `₹${(value / 100000).toFixed(2)}L`;
+              return `₹${(value / 1000).toFixed(0)}K`;
+            },
+            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
+            color: "#10b981",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderColor: "rgba(16, 185, 129, 0.4)",
+            borderWidth: 1.5,
+            borderRadius: 6,
+            padding: { top: 4, bottom: 4, left: 6, right: 6 }
           }
         }
       ];
@@ -1181,8 +1545,7 @@ export default function SalesAnalysis() {
           ticks: {
             font: { size: 9, family: 'Plus Jakarta Sans' },
             color: '#312e81',
-            autoSkip: true,
-            maxTicksLimit: 8,
+            autoSkip: false,
             maxRotation: 0,
             minRotation: 0
           },
@@ -1194,20 +1557,43 @@ export default function SalesAnalysis() {
         {
           label: "Weekly Sales",
           data: sales,
+          backgroundColor: gradBlue,
           borderColor: "#2d6de8",
-          backgroundColor: gradBlueArea,
-          borderWidth: 3,
-          tension: 0.4,
-          fill: true,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: "#ffffff",
-          pointBorderColor: "#2d6de8",
-          pointBorderWidth: 2,
-          type: "line",
+          borderWidth: 1.5,
+          borderRadius: 4,
+          type: "bar",
           yAxisID: "y",
           datalabels: {
-            display: false
+            display: (context) => {
+              const val = context.dataset.data[context.dataIndex];
+              return val && val >= 10000;
+            },
+            align: "top",
+            anchor: "end",
+            offset: 4,
+            formatter: (value, context) => {
+              const idx = context.dataIndex;
+              const prev = context.dataset.data[idx - 1];
+              let label = "";
+              if (value >= 100000) {
+                label = `₹${(value / 100000).toFixed(1)}L`;
+              } else {
+                label = `₹${(value / 1000).toFixed(0)}K`;
+              }
+              if (prev && prev > 0) {
+                const pct = ((value - prev) / prev) * 100;
+                const sign = pct >= 0 ? "↑" : "↓";
+                label += ` (${sign}${Math.abs(pct).toFixed(0)}%)`;
+              }
+              return label;
+            },
+            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
+            color: "#2d6de8",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderColor: "rgba(45, 109, 232, 0.4)",
+            borderWidth: 1.5,
+            borderRadius: 6,
+            padding: { top: 4, bottom: 4, left: 6, right: 6 }
           }
         }
       ];
@@ -1215,7 +1601,7 @@ export default function SalesAnalysis() {
       scales = {
         y: {
           beginAtZero: true,
-          max: Math.ceil(peakSales * 1.25),
+          max: Math.ceil(peakSales * 1.35),
           grid: { color: "rgba(45,109,232,0.07)" },
           ticks: { font: { size: 9, family: 'Plus Jakarta Sans' }, color: '#3b82f6', callback: formatAxisLakhs },
           border: { display: false },
@@ -1226,8 +1612,7 @@ export default function SalesAnalysis() {
           ticks: {
             font: { size: 9, family: 'Plus Jakarta Sans' },
             color: '#312e81',
-            autoSkip: true,
-            maxTicksLimit: 8,
+            autoSkip: false,
             maxRotation: 0,
             minRotation: 0
           },
@@ -1246,6 +1631,17 @@ export default function SalesAnalysis() {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
+        animation: {
+          delay: (context) => {
+            let delay = 0;
+            if (context.type === 'data' && context.mode === 'default') {
+              delay = context.dataIndex * 50; // 50ms stagger per item
+            }
+            return delay;
+          },
+          duration: 1000,
+          easing: "easeOutBack", // Premium springy animation
+        },
         plugins: {
           legend: {
             labels: { font: { size: 10, weight: "600", family: 'Plus Jakarta Sans' }, boxWidth: 12, padding: 14 },
@@ -1254,9 +1650,28 @@ export default function SalesAnalysis() {
             callbacks: {
               label(ctx) {
                 const val = ctx.parsed.y ?? 0;
-                return `${ctx.dataset.label}: ${formatTooltipLakhs(val)}`;
+                const idx = ctx.dataIndex;
+                const dataset = ctx.dataset;
+                const prev = dataset.data[idx - 1];
+                let text = `${dataset.label}: ${formatTooltipLakhs(val)}`;
+                if (dataset.label.toLowerCase().includes("weekly") && prev && prev > 0) {
+                  const pct = ((val - prev) / prev) * 100;
+                  const diff = val - prev;
+                  const diffText = diff >= 0 ? `+₹${(diff / 100000).toFixed(2)}L` : `-₹${(Math.abs(diff) / 100000).toFixed(2)}L`;
+                  text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% WoW, ${diffText})`;
+                }
+                return text;
               },
             },
+          },
+          datalabels: {
+            display: (context) => {
+              const d = context.dataset.datalabels?.display;
+              if (typeof d === 'function') {
+                return d(context);
+              }
+              return d ?? false;
+            }
           }
         },
         scales
@@ -1274,7 +1689,8 @@ export default function SalesAnalysis() {
     const isShare = performanceChartType === "share";
 
     // Pull real labels & values from API data
-    const apiLabels = monthlyTrendData?.labels ?? [];
+    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+    const apiLabels = (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
     const apiValuesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
 
     // Compute MoM growth for "share" view
@@ -1318,31 +1734,89 @@ export default function SalesAnalysis() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          delay: (context) => {
+            let delay = 0;
+            if (context.type === 'data' && context.mode === 'default') {
+              delay = context.dataIndex * 100; // 100ms staggered delay
+            }
+            return delay;
+          },
+          duration: 1000,
+          easing: "easeOutBack", // Premium springy animation
+        },
         plugins: {
           legend: {
             display: false
           },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const val = ctx.parsed.y ?? 0;
+                const idx = ctx.dataIndex;
+                const dataset = ctx.dataset;
+                const prev = dataset.data[idx - 1];
+                let text = "";
+                if (isShare) {
+                  text = `${ctx.label}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + val.toFixed(1) + "%"}`;
+                } else {
+                  text = `Sales Value: ₹${val.toFixed(2)}L`;
+                  if (prev && prev > 0) {
+                    const pct = ((val - prev) / prev) * 100;
+                    const diff = val - prev;
+                    const diffText = diff >= 0 ? `+₹${diff.toFixed(2)}L` : `-₹${Math.abs(diff).toFixed(2)}L`;
+                    text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% MoM, ${diffText})`;
+                  }
+                }
+                return text;
+              }
+            }
+          },
           datalabels: {
             display: true,
-            align: isBar ? "end" : "top",
+            align: "top",
             anchor: "end",
-            offset: isBar ? 2 : 4,
+            offset: 8,
             font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-            color: isShare
-              ? (ctx) => {
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderWidth: 1.5,
+            borderRadius: 6,
+            padding: { top: 4, bottom: 4, left: 6, right: 6 },
+            borderColor: (ctx) => {
+              if (isShare) {
+                const val = ctx.dataset.data[ctx.dataIndex];
+                return val === 0 ? "rgba(100, 116, 139, 0.4)" : (val > 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)");
+              }
+              return "rgba(99, 102, 241, 0.4)";
+            },
+            color: (ctx) => {
+              if (isShare) {
                 const val = ctx.dataset.data[ctx.dataIndex];
                 return val === 0 ? "#64748b" : (val > 0 ? "#10b981" : "#ef4444");
               }
-              : "#4f46e5",
-            formatter: (v) => isShare
-              ? (v === 0 ? "—" : `${v > 0 ? "↑" : "↓"} ${Math.abs(v).toFixed(1)}%`)
-              : `₹${v.toFixed(1)}L`
+              return "#4f46e5";
+            },
+            formatter: (v, context) => {
+              if (isShare) {
+                return v === 0 ? "—" : `${v > 0 ? "↑" : "↓"} ${Math.abs(v).toFixed(1)}%`;
+              }
+              let label = `₹${v.toFixed(1)}L`;
+              const idx = context.dataIndex;
+              const prev = context.dataset.data[idx - 1];
+              if (prev && prev > 0) {
+                const pct = ((v - prev) / prev) * 100;
+                const sign = pct >= 0 ? "↑" : "↓";
+                label += ` (${sign}${Math.abs(pct).toFixed(1)}%)`;
+              }
+              return label;
+            }
           }
         },
         scales: {
           y: {
             type: "linear",
             position: "left",
+            max: isShare ? undefined : Math.ceil((Math.max(0, ...apiValuesLakhs) || 1) * 1.25),
             grid: { color: "rgba(99, 102, 241, 0.05)" },
             ticks: {
               font: { family: 'Plus Jakarta Sans', size: 9 },
@@ -1378,7 +1852,8 @@ export default function SalesAnalysis() {
     ];
 
     // Build real datasets from API
-    const apiLabels = billTypeRevenueData?.labels ?? [];
+    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+    const apiLabels = (billTypeRevenueData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
     const apiDatasets = billTypeRevenueData?.datasets ?? [];
 
     // Compute per-month totals for share view
@@ -1464,7 +1939,8 @@ export default function SalesAnalysis() {
     const isShare = performanceChartType === "share";
 
     // Real data from API
-    const apiLabels = monthlyTaxData?.labels ?? [];
+    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+    const apiLabels = (monthlyTaxData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
     const apiTaxLakhs = monthlyTaxData?.tax_values_lakhs ?? [];
     // Sales lakhs for combo view (line view) from monthly trend API
     const apiSalesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
@@ -1529,7 +2005,7 @@ export default function SalesAnalysis() {
         const s = apiSalesLakhs[i];
         return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
       });
-      const shareLabels = apiLabels.length ? apiLabels : monthlyTrendData?.labels ?? [];
+      const shareLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
 
       const gradient = ctx.createLinearGradient(0, 0, 0, 240);
       gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
@@ -1595,7 +2071,7 @@ export default function SalesAnalysis() {
       gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
 
       // Use tax labels if available, else fall back to sales trend labels
-      const comboLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []);
+      const comboLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
 
       taxChart.current = new Chart(taxRef.current, {
         type: "bar",
@@ -1676,6 +2152,311 @@ export default function SalesAnalysis() {
     }
     return () => taxChart.current?.destroy();
   }, [loading, performanceChartType, monthlyTaxData, monthlyTrendData]);
+
+  useEffect(() => {
+    if (!planRef.current) return;
+    const ctx = planRef.current.getContext("2d");
+
+    const labels = filteredPlanVsActual.map((row) => row.partNoDesc.split(" - ")[0]);
+    const planned = filteredPlanVsActual.map((row) => row.planQty);
+    const dispatched = filteredPlanVsActual.map((row) => row.dispatchQty);
+
+    const gradPlanned = ctx.createLinearGradient(0, 0, 0, 240);
+    gradPlanned.addColorStop(0, "rgba(139, 92, 246, 0.9)");
+    gradPlanned.addColorStop(1, "rgba(139, 92, 246, 0.15)");
+
+    const gradDispatched = ctx.createLinearGradient(0, 0, 0, 240);
+    gradDispatched.addColorStop(0, "rgba(16, 185, 129, 0.9)");
+    gradDispatched.addColorStop(1, "rgba(16, 185, 129, 0.15)");
+
+    planChart.current?.destroy();
+    planChart.current = new Chart(planRef.current, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Planned Quantity",
+            data: planned,
+            backgroundColor: gradPlanned,
+            borderColor: "rgba(139, 92, 246, 1)",
+            borderWidth: 1.5,
+            borderRadius: 4,
+          },
+          {
+            label: "Dispatched Quantity",
+            data: dispatched,
+            backgroundColor: gradDispatched,
+            borderColor: "rgba(16, 185, 129, 1)",
+            borderWidth: 1.5,
+            borderRadius: 4,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          delay: (context) => {
+            let delay = 0;
+            if (context.type === 'data' && context.mode === 'default') {
+              delay = context.dataIndex * 80;
+            }
+            return delay;
+          },
+          duration: 1000,
+          easing: "easeOutBack",
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const row = filteredPlanVsActual[ctx.dataIndex];
+                if (ctx.datasetIndex === 0) {
+                  return `Planned: ${ctx.parsed.y} qty (${row.partNoDesc})`;
+                } else {
+                  return `Dispatched: ${ctx.parsed.y} qty / ${row.planQty} planned`;
+                }
+              }
+            }
+          },
+          datalabels: {
+            display: true,
+            align: "top",
+            anchor: "end",
+            offset: 4,
+            font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: { top: 2, bottom: 2, left: 4, right: 4 },
+            borderColor: (ctx) => ctx.datasetIndex === 0 ? "rgba(139, 92, 246, 0.4)" : "rgba(16, 185, 129, 0.4)",
+            color: (ctx) => ctx.datasetIndex === 0 ? "#7c3aed" : "#10b981",
+            formatter: (v) => formatQty(v)
+          }
+        },
+        scales: {
+          y: {
+            type: "linear",
+            max: Math.ceil((Math.max(0, ...planned) || 1) * 1.25),
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: {
+              font: { family: 'Plus Jakarta Sans', size: 9 },
+              color: '#312e81'
+            }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+          }
+        }
+      }
+    });
+
+    return () => planChart.current?.destroy();
+  }, [filteredPlanVsActual]);
+
+  useEffect(() => {
+    if (!projRef.current) return;
+    const ctx = projRef.current.getContext("2d");
+
+    const labels = MOCK_PROJECTIONS.map((row) => row.customer.split(" ")[0]);
+    const dispatchedQty = MOCK_PROJECTIONS.map((row) => row.dispQty);
+    const pendingQty = MOCK_PROJECTIONS.map((row) => row.pendQty);
+    const totalAmtLakhs = MOCK_PROJECTIONS.map((row) => row.totAmt / 100_000);
+    const pendingValLakhs = MOCK_PROJECTIONS.map((row) => row.pendVal / 100_000);
+
+    const gradDisp = ctx.createLinearGradient(0, 0, 0, 240);
+    gradDisp.addColorStop(0, "rgba(16, 185, 129, 0.85)");
+    gradDisp.addColorStop(1, "rgba(16, 185, 129, 0.15)");
+
+    const gradPend = ctx.createLinearGradient(0, 0, 0, 240);
+    gradPend.addColorStop(0, "rgba(249, 115, 22, 0.85)");
+    gradPend.addColorStop(1, "rgba(249, 115, 22, 0.15)");
+
+    projChart.current?.destroy();
+    projChart.current = new Chart(projRef.current, {
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Dispatched Qty (Units)",
+            data: dispatchedQty,
+            backgroundColor: gradDisp,
+            borderColor: "rgba(16, 185, 129, 1)",
+            borderWidth: 1.5,
+            borderRadius: 4,
+            yAxisID: "yQty",
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 2,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1,
+              borderRadius: 4,
+              padding: { top: 2, bottom: 2, left: 4, right: 4 },
+              borderColor: "rgba(16, 185, 129, 0.4)",
+              color: "#10b981",
+              formatter: (v) => formatQty(v)
+            }
+          },
+          {
+            type: "bar",
+            label: "Pending Qty (Units)",
+            data: pendingQty,
+            backgroundColor: gradPend,
+            borderColor: "rgba(249, 115, 22, 1)",
+            borderWidth: 1.5,
+            borderRadius: 4,
+            yAxisID: "yQty",
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 2,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1,
+              borderRadius: 4,
+              padding: { top: 2, bottom: 2, left: 4, right: 4 },
+              borderColor: "rgba(249, 115, 22, 0.4)",
+              color: "#ea580c",
+              formatter: (v) => formatQty(v)
+            }
+          },
+          {
+            type: "line",
+            label: "Total Order Value (Lakhs)",
+            data: totalAmtLakhs,
+            borderColor: "rgba(79, 70, 229, 1)",
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: false,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "rgba(79, 70, 229, 1)",
+            pointBorderWidth: 2,
+            yAxisID: "yValue",
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 6,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1.5,
+              borderRadius: 4,
+              padding: { top: 2, bottom: 2, left: 5, right: 5 },
+              borderColor: "rgba(79, 70, 229, 0.4)",
+              color: "#4f46e5",
+              formatter: (v) => `₹${v.toFixed(1)}L`
+            }
+          },
+          {
+            type: "line",
+            label: "Pending Value (Lakhs)",
+            data: pendingValLakhs,
+            borderColor: "rgba(239, 68, 68, 1)",
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: false,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "rgba(239, 68, 68, 1)",
+            pointBorderWidth: 2,
+            yAxisID: "yValue",
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 6,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1.5,
+              borderRadius: 4,
+              padding: { top: 2, bottom: 2, left: 5, right: 5 },
+              borderColor: "rgba(239, 68, 68, 0.4)",
+              color: "#ef4444",
+              formatter: (v) => `₹${v.toFixed(1)}L`
+            }
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          delay: (context) => {
+            let delay = 0;
+            if (context.type === 'data' && context.mode === 'default') {
+              delay = context.dataIndex * 100;
+            }
+            return delay;
+          },
+          duration: 1000,
+          easing: "easeOutBack",
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const row = MOCK_PROJECTIONS[ctx.dataIndex];
+                const val = ctx.parsed.y ?? 0;
+                if (ctx.dataset.type === "bar") {
+                  return `${ctx.dataset.label}: ${formatQty(val)} units (Customer: ${row.customer})`;
+                } else {
+                  return `${ctx.dataset.label}: ₹${val.toFixed(2)} Lakhs (Customer: ${row.customer})`;
+                }
+              }
+            }
+          }
+        },
+        scales: {
+          yQty: {
+            type: "linear",
+            position: "left",
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: {
+              font: { family: 'Plus Jakarta Sans', size: 9 },
+              color: '#312e81',
+              callback: (v) => `${v} units`
+            },
+            title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
+          },
+          yValue: {
+            type: "linear",
+            position: "right",
+            grid: { drawOnChartArea: false },
+            ticks: {
+              font: { family: 'Plus Jakarta Sans', size: 9 },
+              color: '#4f46e5',
+              callback: (v) => `₹${v}L`
+            },
+            title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+          }
+        }
+      }
+    });
+
+    return () => projChart.current?.destroy();
+  }, []);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
@@ -2275,7 +3056,34 @@ export default function SalesAnalysis() {
             {kpiCards.map((k, i) => {
               const Icon = k.icon;
               return (
-                <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i }}>
+                <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i, borderTopColor: k.iconColor }}>
+                  <div className="sa-kpi-card__glow" />
+                  <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
+                    <Icon size={22} />
+                  </div>
+                  <div className="sa-kpi-card__label">{k.label}</div>
+                  <div className="sa-kpi-card__val">
+                    {loading ? <div className="sa-skeleton" style={{ width: '60%', height: '24px', margin: '4px 0', borderRadius: '4px' }} /> : k.value}
+                  </div>
+                  <div className="sa-kpi-card__sub">
+                    {loading ? <div className="sa-skeleton" style={{ width: '80%', height: '12px', margin: '4px 0', borderRadius: '3px' }} /> : k.sub}
+                  </div>
+                  {loading ? (
+                    <div className="sa-skeleton" style={{ width: '40%', height: '12px', marginTop: '6px', borderRadius: '3px' }} />
+                  ) : (
+                    <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Average Selling Rate KPI Cards (Row 2) ── */}
+          <div className="sa-kpi-grid sa-kpi-grid--4col" style={{ marginTop: '-8px' }}>
+            {avgRateCards.map((k, i) => {
+              const Icon = k.icon;
+              return (
+                <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i + 5, borderTopColor: k.iconColor }}>
                   <div className="sa-kpi-card__glow" />
                   <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
                     <Icon size={22} />
@@ -2525,14 +3333,21 @@ export default function SalesAnalysis() {
               </div>
             </div>
             <div className="sa-monthly-charts-row">
-              <div className="sa-monthly-chart-container">
-                <h4 className="sa-chart-title">
-                  {performanceChartType === "share" ? "Sales Growth Rate (MoM)" : "Monthly Sales Trend (Value)"}
-                </h4>
+              <div className="sa-monthly-chart-container" style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h4 className="sa-chart-title" style={{ margin: 0 }}>
+                    {performanceChartType === "share" ? "Sales Growth Rate (MoM)" : "Monthly Sales Trend (Value)"}
+                  </h4>
+                  {performanceChartType !== "share" && !loading && monthlyAvg > 0 && (
+                    <span className="sa-badge sa-badge--purple" style={{ margin: 0, fontSize: '0.72rem', fontWeight: '700', padding: '3px 8px', borderRadius: '6px' }}>
+                      ₹{monthlyAvg.toFixed(2)}L Avg
+                    </span>
+                  )}
+                </div>
                 {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
                 ) : (
-                  <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
                     <canvas ref={monthlyTrendRef} />
                   </div>
                 )}
@@ -2542,9 +3357,9 @@ export default function SalesAnalysis() {
                   {performanceChartType === "share" ? "Bill Type Revenue Share (%)" : "Bill Type Revenue Contribution (Month-wise)"}
                 </h4>
                 {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
                 ) : (
-                  <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
                     <canvas ref={billTypeRef} />
                   </div>
                 )}
@@ -2556,9 +3371,9 @@ export default function SalesAnalysis() {
                     : (performanceChartType === "line" ? "Monthly Sales & Tax Correlation" : "Monthly Tax Trend (Value)")}
                 </h4>
                 {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '260px' }}><div className="sa-skeleton" /></div>
+                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
                 ) : (
-                  <div className="sa-chart-wrap" style={{ height: '260px' }}>
+                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
                     <canvas ref={taxRef} />
                   </div>
                 )}
@@ -2833,21 +3648,47 @@ export default function SalesAnalysis() {
                 <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
               </div>
             </div>
+            {/* Order Book Analysis Combo Chart */}
+            <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
+              <div className="sa-chart-wrap" style={{ height: '300px' }}>
+                <canvas ref={projRef} />
+              </div>
+            </div>
             <div className="sa-table-scroll">
               <table className="sa-table sa-proj-table">
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>Customer Name</th>
-                    <th>Month</th>
-                    <th className="sa-num">No. PO's</th>
-                    <th className="sa-num">Tot Qty</th>
-                    <th className="sa-num">Tot Amt (₹)</th>
-                    <th>Schd Month</th>
-                    <th className="sa-num">Schd Qty</th>
-                    <th className="sa-num">Dispatched Qty</th>
-                    <th className="sa-num">Pending Qty</th>
-                    <th className="sa-num">Pending Value (₹)</th>
+                    <th className="sa-sortable" onClick={() => handleProjSort("customer")}>
+                      Customer Name <SortIcon active={projSortField === "customer"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-sortable" onClick={() => handleProjSort("month")}>
+                      Month <SortIcon active={projSortField === "month"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pos")}>
+                      No. PO's <SortIcon active={projSortField === "pos"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("totQty")}>
+                      Tot Qty <SortIcon active={projSortField === "totQty"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("totAmt")}>
+                      Tot Amt (₹) <SortIcon active={projSortField === "totAmt"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-sortable" onClick={() => handleProjSort("schdMonth")}>
+                      Schd Month <SortIcon active={projSortField === "schdMonth"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("schdQty")}>
+                      Schd Qty <SortIcon active={projSortField === "schdQty"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("dispQty")}>
+                      Dispatched Qty <SortIcon active={projSortField === "dispQty"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendQty")}>
+                      Pending Qty <SortIcon active={projSortField === "pendQty"} asc={projSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendVal")}>
+                      Pending Value (₹) <SortIcon active={projSortField === "pendVal"} asc={projSortAsc} />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2869,7 +3710,7 @@ export default function SalesAnalysis() {
                     ))
                   ) : (
                     <>
-                      {MOCK_PROJECTIONS.map((row, i) => (
+                      {sortedProjections.map((row, i) => (
                         <tr key={i} className="sa-proj-row" style={{ "--ri": i }}>
                           <td>{i + 1}</td>
                           <td><strong className="sa-proj-cust-name">{row.customer}</strong></td>
@@ -2912,6 +3753,139 @@ export default function SalesAnalysis() {
                         <td className="sa-num"><strong>₹{formatRupees(projectionTotals.pendVal)}</strong></td>
                       </tr>
                     </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── Plan vs Actual Section ── */}
+          <div className="sa-card sa-card--table sa-plan-actual-card sa-animate">
+            <div className="sa-card__head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Scale size={16} style={{ color: "#8b5cf6" }} />
+                <span className="sa-card__title">Plan Vs Actual Performance Ledger</span>
+              </div>
+              <div className="sa-po-head-actions">
+                {/* Search Input */}
+                <div className="sa-po-search-wrapper">
+                  <Search size={14} className="sa-po-search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search Customer, Part..."
+                    value={planSearchQuery}
+                    onChange={(e) => setPlanSearchQuery(e.target.value)}
+                    className="sa-po-search-input"
+                  />
+                  {planSearchQuery && (
+                    <button onClick={() => setPlanSearchQuery("")} className="sa-po-search-clear">
+                      &times;
+                    </button>
+                  )}
+                </div>
+                {/* KPI Suffixes */}
+                <div className="sa-po-badges">
+                  <span className="sa-badge sa-badge--purple">
+                    Total Planned: {formatQty(planTotals.planned)}
+                  </span>
+                  <span className="sa-badge sa-badge--green">
+                    Total Dispatched: {formatQty(planTotals.dispatched)}
+                  </span>
+                  <span className="sa-badge sa-badge--blue">
+                    Avg Dispatch: {planTotals.avgPct.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Split layout: Chart top, Table bottom */}
+            <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
+              <div className="sa-chart-wrap" style={{ height: '300px' }}>
+                <canvas ref={planRef} />
+              </div>
+            </div>
+
+            <div className="sa-table-scroll">
+              <table className="sa-table sa-plan-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th className="sa-sortable" onClick={() => handlePlanSort("date")}>
+                      Date <SortIcon active={planSortField === "date"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-sortable" onClick={() => handlePlanSort("customer")}>
+                      Customer Name <SortIcon active={planSortField === "customer"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-sortable" onClick={() => handlePlanSort("partNoDesc")}>
+                      PartNo - Description <SortIcon active={planSortField === "partNoDesc"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("planQty")}>
+                      Plan Qty <SortIcon active={planSortField === "planQty"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("availableQty")}>
+                      Available Qty <SortIcon active={planSortField === "availableQty"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("dispatchQty")}>
+                      Dispatch Qty <SortIcon active={planSortField === "dispatchQty"} asc={planSortAsc} />
+                    </th>
+                    <th className="sa-sortable" onClick={() => handlePlanSort("status")}>
+                      Dispatch Status <SortIcon active={planSortField === "status"} asc={planSortAsc} />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedPlanVsActual.length ? (
+                    sortedPlanVsActual.map((row, i) => {
+                      const pct = row.planQty > 0 ? (row.dispatchQty / row.planQty) * 100 : 0;
+                      let statusText = "Not Started";
+                      let badgeClass = "sa-badge--red";
+                      if (pct === 100) {
+                        statusText = "Complete";
+                        badgeClass = "sa-badge--green";
+                      } else if (pct > 0) {
+                        statusText = "In Progress";
+                        badgeClass = "sa-badge--orange";
+                      }
+                      
+                      return (
+                        <tr key={i} className="sa-po-row" style={{ "--ri": i }}>
+                          <td>{i + 1}</td>
+                          <td className="sa-date">{formatToMmDdYyyy(row.date)}</td>
+                          <td><span className="sa-po-cust-name" title={row.customer}>{row.customer}</span></td>
+                          <td><span className="sa-po-part-desc" title={row.partNoDesc}>{row.partNoDesc}</span></td>
+                          <td className="sa-num">{formatQty(row.planQty)}</td>
+                          <td className="sa-num">{formatQty(row.availableQty)}</td>
+                          <td className="sa-num">{formatQty(row.dispatchQty)}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span className={`sa-badge ${badgeClass}`} style={{ minWidth: '75px', textAlign: 'center' }}>
+                                {statusText} ({pct.toFixed(0)}%)
+                              </span>
+                              <div className="sa-legend-progress-bar" style={{ width: '80px', margin: 0, height: '6px', background: '#e2e8f0' }}>
+                                <div
+                                  className="sa-legend-progress-fill"
+                                  style={{
+                                    width: `${pct}%`,
+                                    height: '100%',
+                                    borderRadius: '99px',
+                                    background: pct === 100 
+                                      ? 'linear-gradient(90deg, #10b981, #34d399)' 
+                                      : pct > 0 
+                                        ? 'linear-gradient(90deg, #f97316, #fb923c)' 
+                                        : '#ef4444',
+                                    transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: "center", color: "#94a3b8" }}>No data matching filters</td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -3069,6 +4043,9 @@ export default function SalesAnalysis() {
                     <th className="sa-sortable" onClick={() => handlePoSort("partDesc")}>
                       PartNO - Description {poSortField === "partDesc" && (poSortAsc ? "▲" : "▼")}
                     </th>
+                    <th className="sa-sortable" onClick={() => handlePoSort("poSlNo")}>
+                      Po Sl.No {poSortField === "poSlNo" && (poSortAsc ? "▲" : "▼")}
+                    </th>
                     <th className="sa-num sa-sortable" onClick={() => handlePoSort("qty")}>
                       Qty {poSortField === "qty" && (poSortAsc ? "▲" : "▼")}
                     </th>
@@ -3119,6 +4096,7 @@ export default function SalesAnalysis() {
                           <td className="sa-date">{formatToMmDdYyyy(row.poDate)}</td>
                           <td><span className="sa-po-cust-name" title={row.custName}>{row.custName}</span></td>
                           <td><span className="sa-po-part-desc" title={row.partDesc}>{row.partDesc}</span></td>
+                          <td><span className="sa-po-sl-no" style={{ fontWeight: '600', color: '#475569' }}>{row.poSlNo || "—"}</span></td>
                           <td className="sa-num">{formatQty(row.qty)}</td>
                           <td className="sa-num">{formatQty(row.shortCloseQty)}</td>
                           <td className="sa-num">₹{formatQty(row.rate)}</td>
