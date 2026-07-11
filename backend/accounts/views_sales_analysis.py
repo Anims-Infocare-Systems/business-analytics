@@ -1526,3 +1526,616 @@ def sales_analysis_monthly_tax_trend(request):
         "total": total,
         "total_lakhs": round(total / 100_000, 2),
     })
+
+
+@api_view(["GET"])
+def sales_analysis_future_projections(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    from collections import defaultdict
+    from datetime import datetime
+
+    try:
+        cursor = conn.cursor()
+        use_alias = table_exists(cursor, "CustAliasMast")
+        
+        if use_alias:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(cm.CName, N''))), N''), NULLIF(LTRIM(RTRIM(ISNULL(ca.CName, N''))), N''))))"
+            cust_join = """
+                LEFT JOIN CustMast cm ON p.cid = cm.Id
+                LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
+            """
+        else:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(cm.CName, N'')))"
+            cust_join = "LEFT JOIN CustMast cm ON p.cid = cm.Id"
+
+        # 1. Fetch schedules within the selected PO date range
+        schedules_sql = f"""
+        SELECT 
+            s.Apono,
+            s.pono,
+            s.itcode AS partno,
+            s.poslno,
+            s.reqdate,
+            s.shdQty,
+            p.podt,
+            {cust_name_expr} AS CustomerName,
+            pd.Rate
+        FROM In_PoDet_ShdQty s
+        INNER JOIN In_PoMas p ON s.Apono = p.Apono
+        INNER JOIN In_PoDet pd ON pd.pono = p.pono AND pd.ItCode = s.itcode AND pd.poslno = s.poslno
+        {cust_join}
+        WHERE ISNULL(s.deleted, 0) = 0
+          AND ISNULL(p.deleted, 0) = 0
+          AND ISNULL(pd.deleted, 0) = 0
+          AND CAST(p.podt AS DATE) BETWEEN ? AND ?
+        ORDER BY s.reqdate ASC
+        """
+        cursor.execute(schedules_sql, (start_date, end_date))
+        schedules = []
+        for row in cursor.fetchall() or []:
+            schedules.append({
+                "apono": row[0],
+                "pono": row[1],
+                "partno": row[2],
+                "poslno": row[3],
+                "reqdate": row[4],
+                "shdQty": float(row[5] or 0),
+                "podt": row[6],
+                "customer": row[7] or "—",
+                "rate": float(row[8] or 0)
+            })
+
+        # 2. Fetch dispatches for the same Apono
+        aponos = list(set(s["apono"] for s in schedules if s["apono"]))
+        
+        dispatches = []
+        if aponos:
+            placeholders = ",".join("?" for _ in aponos)
+            dispatches_sql = f"""
+            SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
+            FROM DcInSubDetAssmPoDet d 
+            INNER JOIN DC_Mas m ON d.dcno = m.dcno 
+            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+            UNION ALL 
+            SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
+            FROM DcInSubDet d 
+            INNER JOIN DC_Mas m ON d.dcno = m.dcno 
+            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+            ORDER BY dcdate ASC
+            """
+            cursor.execute(dispatches_sql, aponos + aponos)
+            dispatches = cursor.fetchall() or []
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # Group dispatches by (apono, partno, poslno)
+    dispatches_by_key = defaultdict(list)
+    for row in dispatches:
+        key = (row[0], row[1], row[2])
+        dispatches_by_key[key].append({
+            "dcdate": row[3],
+            "okqty": float(row[4] or 0)
+        })
+
+    # Group schedules by (apono, partno, poslno)
+    schedules_by_key = defaultdict(list)
+    for s in schedules:
+        key = (s["apono"], s["partno"], s["poslno"])
+        schedules_by_key[key].append(s)
+
+    # Perform chronological allocation
+    for key, schs in schedules_by_key.items():
+        schs.sort(key=lambda x: x["reqdate"] if x["reqdate"] else datetime.min)
+        disps = dispatches_by_key.get(key, [])
+        disps.sort(key=lambda x: x["dcdate"] if x["dcdate"] else datetime.min)
+
+        disp_idx = 0
+        disp_rem = disps[disp_idx]["okqty"] if disp_idx < len(disps) else 0
+
+        for sch in schs:
+            sch["dispQty"] = 0.0
+            target = sch["shdQty"]
+
+            while target > 0 and disp_idx < len(disps):
+                allocated = min(target, disp_rem)
+                sch["dispQty"] += allocated
+                target -= allocated
+                disp_rem -= allocated
+
+                if disp_rem <= 0:
+                    disp_idx += 1
+                    if disp_idx < len(disps):
+                        disp_rem = disps[disp_idx]["okqty"]
+
+            sch["pendQty"] = max(0.0, sch["shdQty"] - sch["dispQty"])
+            sch["pendVal"] = sch["pendQty"] * sch["rate"]
+            sch["totAmt"] = sch["shdQty"] * sch["rate"]
+
+    # Aggregate projections by Customer, Month (PO Date), Schd Month (reqdate)
+    projections = defaultdict(lambda: {
+        "pos": set(),
+        "totQty": 0.0,
+        "totAmt": 0.0,
+        "schdQty": 0.0,
+        "dispQty": 0.0,
+        "pendQty": 0.0,
+        "pendVal": 0.0
+    })
+
+    for sch in schedules:
+        cust = sch["customer"]
+        po_date = sch["podt"]
+        po_month = po_date.strftime("%B %Y") if po_date else "—"
+        
+        req_date = sch["reqdate"]
+        schd_month = req_date.strftime("%B %Y") if req_date else "—"
+
+        group_key = (cust, po_month, schd_month)
+
+        agg = projections[group_key]
+        if sch["pono"]:
+            agg["pos"].add(sch["pono"])
+        agg["totQty"] += sch["shdQty"]
+        agg["totAmt"] += sch.get("totAmt", 0.0)
+        agg["schdQty"] += sch["shdQty"]
+        agg["dispQty"] += sch.get("dispQty", 0.0)
+        agg["pendQty"] += sch.get("pendQty", 0.0)
+        agg["pendVal"] += sch.get("pendVal", 0.0)
+
+    rows = []
+    for group_key, agg in projections.items():
+        cust, po_month, schd_month = group_key
+        rows.append({
+            "customer": cust,
+            "month": po_month,
+            "pos": len(agg["pos"]),
+            "totQty": round(agg["totQty"], 2),
+            "totAmt": round(agg["totAmt"], 2),
+            "schdMonth": schd_month,
+            "schdQty": round(agg["schdQty"], 2),
+            "dispQty": round(agg["dispQty"], 2),
+            "pendQty": round(agg["pendQty"], 2),
+            "pendVal": round(agg["pendVal"], 2)
+        })
+
+    return Response({
+        "rows": rows
+    })
+
+
+@api_view(["GET"])
+def sales_analysis_plan_vs_actual(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    sql = """
+;WITH PART_DESCRIPTION AS
+(
+    SELECT
+        WM.PartNo,
+        WM.Description
+    FROM WithMatMas WM
+    WHERE WM.Deleted = 0
+
+    UNION
+
+    SELECT
+        PM.PartNo,
+        PM.Description
+    FROM ProductMast PM
+    WHERE PM.Deleted = 0
+
+    UNION
+
+    SELECT
+        CJ.partno AS PartNo,
+        CJ.description AS Description
+    FROM CustJobRawMat CJ
+    WHERE CJ.deleted = 0
+),
+
+UNIQUE_COMBINATIONS AS
+(
+    SELECT
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE) AS ComboDate
+    FROM DailyDcPlan_Det DPD
+    INNER JOIN DailyDcPlan_Mas DPM
+        ON DPM.dplno = DPD.dplno
+    WHERE
+        DPM.deleted = 0
+        AND DPD.deleted = 0
+        AND DPM.dpldate BETWEEN ? AND ?
+
+    UNION
+
+    SELECT
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE) AS ComboDate
+    FROM DC_Det DD
+    INNER JOIN DC_Mas DM
+        ON DM.dcno = DD.dcno
+    WHERE
+        DM.deleted = 0
+        AND DD.deleted = 0
+        AND DM.dcdate BETWEEN ? AND ?
+),
+
+PLAN_DATA AS
+(
+    SELECT
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE) AS PlanDate,
+        SUM(ISNULL(DPD.PlanQty,0)) AS PlanQty,
+        SUM(ISNULL(DPD.PlanReqQty,0)) AS PlanReqQty,
+        SUM(ISNULL(DPD.AvailQty,0)) AS AvailableQty
+    FROM DailyDcPlan_Det DPD
+    INNER JOIN DailyDcPlan_Mas DPM
+        ON DPM.dplno = DPD.dplno
+    WHERE
+        DPM.deleted = 0
+        AND DPD.deleted = 0
+        AND DPM.dpldate BETWEEN ? AND ?
+    GROUP BY
+        DPD.CID,
+        DPD.PartNo,
+        CAST(DPM.dpldate AS DATE)
+),
+
+DISPATCH_DATA AS
+(
+    SELECT
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE) AS DcDate,
+        SUM(ISNULL(DD.okqty,0)) AS DispatchQty
+    FROM DC_Det DD
+    INNER JOIN DC_Mas DM
+        ON DM.dcno = DD.dcno
+    WHERE
+        DM.deleted = 0
+        AND DD.deleted = 0
+        AND DM.dcdate BETWEEN ? AND ?
+    GROUP BY
+        DM.CID,
+        DD.PartNo,
+        CAST(DM.dcdate AS DATE)
+)
+
+SELECT
+    UC.CID,
+    ISNULL(CM.CName, N'—') AS CustomerName,
+    UC.PartNo,
+    MAX(ISNULL(PD.Description, N'')) AS Description,
+    UC.ComboDate AS PlanDate,
+    SUM(ISNULL(P.PlanQty,0)) AS PlanQty,
+    SUM(ISNULL(P.AvailableQty,0)) AS AvailableQty,
+    SUM(ISNULL(P.PlanReqQty,0)) AS PlanReqQty,
+    SUM(ISNULL(D.DispatchQty,0)) AS DispatchQty,
+
+    CASE
+        WHEN SUM(ISNULL(P.PlanQty,0)) = 0 THEN 0
+        ELSE ROUND(SUM(ISNULL(D.DispatchQty,0)) * 100.0 / SUM(ISNULL(P.PlanQty,0)),2)
+    END AS DispatchPercentage,
+
+    CASE
+        WHEN SUM(ISNULL(D.DispatchQty,0)) >= SUM(ISNULL(P.PlanQty,0)) AND SUM(ISNULL(P.PlanQty,0)) > 0 THEN 'Completed'
+        WHEN SUM(ISNULL(D.DispatchQty,0)) > 0 THEN 'Partial'
+        ELSE 'Pending'
+    END AS DispatchStatus
+
+FROM UNIQUE_COMBINATIONS UC
+
+LEFT JOIN PLAN_DATA P
+    ON P.CID = UC.CID
+   AND P.PartNo = UC.PartNo
+   AND P.PlanDate = UC.ComboDate
+
+LEFT JOIN DISPATCH_DATA D
+    ON D.CID = UC.CID
+   AND D.PartNo = UC.PartNo
+   AND D.DcDate = UC.ComboDate
+
+LEFT JOIN CustMast CM
+    ON CM.ID = UC.CID
+   AND CM.Deleted = 0
+
+LEFT JOIN PART_DESCRIPTION PD
+    ON PD.PartNo = UC.PartNo
+
+GROUP BY
+    UC.CID,
+    CM.CName,
+    UC.PartNo,
+    UC.ComboDate
+
+ORDER BY
+    CustomerName,
+    UC.PartNo,
+    PlanDate;
+"""
+
+    rows = []
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, [
+            start_date, end_date, start_date, end_date,
+            start_date, end_date, start_date, end_date
+        ])
+        for row in cursor.fetchall() or []:
+            customer = str(row[1]) if row[1] else "—"
+            part_no = str(row[2]) if row[2] else ""
+            description = str(row[3]) if row[3] else ""
+            part_no_desc = f"{part_no} - {description}" if part_no and description else (part_no or description or "—")
+            plan_date = str(row[4])[:10] if row[4] else ""
+            plan_qty = float(row[5] or 0)
+            avail_qty = float(row[6] or 0)
+            dispatch_qty = float(row[8] or 0)
+
+            rows.append({
+                "date": plan_date,
+                "customer": customer,
+                "partNoDesc": part_no_desc,
+                "planQty": plan_qty,
+                "availableQty": avail_qty,
+                "dispatchQty": dispatch_qty,
+            })
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows
+    })
+
+
+@api_view(["GET"])
+def sales_analysis_po_ledger(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    try:
+        cursor = conn.cursor()
+        use_alias = table_exists(cursor, "CustAliasMast")
+
+        if use_alias:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(CM.CName, N''))), N''), NULLIF(LTRIM(RTRIM(ISNULL(ca.CName, N''))), N''))))"
+            cust_join = """
+                LEFT JOIN CustMast CM ON PM.CId = CM.Id
+                LEFT JOIN CustAliasMast ca ON PM.CId = ca.Id
+            """
+        else:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(CM.CName, N'')))"
+            cust_join = "LEFT JOIN CustMast CM ON PM.CId = CM.Id"
+
+        sql = f"""
+        WITH DC_SUMMARY AS (
+            SELECT 
+                d.Apono,
+                d.partno,
+                d.poslno,
+                SUM(ISNULL(d.okqty, 0)) AS dcQty,
+                MAX(d.dcno) AS dcNo,
+                MAX(m.dcdate) AS dcDate
+            FROM (
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDet WHERE deleted = 0
+                UNION ALL
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
+            ) d
+            INNER JOIN DC_Mas m ON d.dcno = m.dcno
+            WHERE m.deleted = 0
+            GROUP BY d.Apono, d.partno, d.poslno
+        ),
+        BILL_SUMMARY AS (
+            SELECT 
+                ab.Dcno,
+                ab.DcPartNo,
+                MAX(ab.invno) AS invNo,
+                MAX(bm.invdt) AS invDate
+            FROM ABillDc_Det ab
+            INNER JOIN Bill_Mas bm ON ab.invno = bm.invno
+            WHERE ab.deleted = 0 AND bm.deleted = 0
+            GROUP BY ab.Dcno, ab.DcPartNo
+        )
+        SELECT 
+            PM.type AS POType,
+            PM.Apono,
+            PM.pono AS PoNo,
+            CAST(PM.podt AS DATE) AS PoDate,
+            {cust_name_expr} AS CustomerName,
+            PD.itcode AS PartNo,
+            PD.itdesc AS Description,
+            PD.poslno AS PoSlNo,
+            ISNULL(PD.Qty, 0) AS Qty,
+            ISNULL(PD.PoShotCloseQty, 0) AS ShortCloseQty,
+            ISNULL(PD.rate, 0) AS Rate,
+            ISNULL(D.dcQty, 0) AS DcQty,
+            D.dcNo,
+            CAST(D.dcDate AS DATE) AS DcDate,
+            B.invNo,
+            CAST(B.invDate AS DATE) AS InvDate
+        FROM In_PoMas PM
+        INNER JOIN In_PoDet PD ON PM.PONO = PD.PONO
+        {cust_join}
+        LEFT JOIN DC_SUMMARY D ON D.Apono = PM.Apono AND D.partno = PD.itcode AND D.poslno = PD.poslno
+        LEFT JOIN BILL_SUMMARY B ON B.Dcno = D.dcNo AND B.DcPartNo = PD.itcode
+        WHERE PM.Deleted = 0 AND PD.Deleted = 0
+          AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
+        ORDER BY PM.podt DESC, PM.Apono;
+        """
+
+        cursor.execute(sql, [start_date, end_date])
+        rows = []
+        for row in cursor.fetchall() or []:
+            po_type = str(row[0]) if row[0] else ""
+            apono = str(row[1]) if row[1] else ""
+            po_no = str(row[2]) if row[2] else ""
+            po_date = str(row[3])[:10] if row[3] else ""
+            customer_name = str(row[4]) if row[4] else "—"
+            part_no = str(row[5]) if row[5] else ""
+            description = str(row[6]) if row[6] else ""
+            part_desc = f"{part_no} - {description}" if part_no and description else (part_no or description or "—")
+            po_sl_no = str(row[7]) if row[7] else ""
+            qty = float(row[8] or 0)
+            short_close_qty = float(row[9] or 0)
+            rate = float(row[10] or 0)
+            dc_qty = float(row[11] or 0)
+            dc_no = str(row[12]) if row[12] else ""
+            dc_date = str(row[13])[:10] if row[13] else ""
+            inv_no = str(row[14]) if row[14] else ""
+            inv_date_val = row[15]
+
+            inv_no_dt = ""
+            if inv_no:
+                if inv_date_val:
+                    if hasattr(inv_date_val, "strftime"):
+                        inv_date_str = inv_date_val.strftime("%d/%m/%Y")
+                    else:
+                        inv_date_str = str(inv_date_val)[:10]
+                    inv_no_dt = f"{inv_no} ({inv_date_str})"
+                else:
+                    inv_no_dt = inv_no
+
+            rows.append({
+                "type": po_type,
+                "apoNo": apono,
+                "poNo": po_no,
+                "poDate": po_date,
+                "custName": customer_name,
+                "partDesc": part_desc,
+                "poSlNo": po_sl_no,
+                "qty": qty,
+                "shortCloseQty": short_close_qty,
+                "rate": rate,
+                "dcNo": dc_no,
+                "dcDate": dc_date,
+                "dcQty": dc_qty,
+                "invNoDt": inv_no_dt
+            })
+
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows
+    })
+
+
+@api_view(["GET"])
+def sales_analysis_traceability(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    sql = """
+    SELECT
+        COALESCE(CA.CName, CM.CName) AS [Customer Name],
+        BM.invno AS [Invoice No],
+        BM.invdt AS [Invoice Date],
+        BDO.dcno AS [DC No],
+        BDO.dcdt AS [DC Date],
+        CASE
+            WHEN BM.btype = 'Labour'
+                THEN DAP.PONos
+            ELSE
+                DIS.APONos
+        END AS [GRN/PO No],
+        RC.RouteCards AS [Route Card No]
+    FROM Bill_Mas BM
+    LEFT JOIN CustAliasMast CA
+        ON BM.cid = CA.Id
+       AND CA.Deleted = 0
+    LEFT JOIN CustMast CM
+        ON BM.cid = CM.Id
+       AND CM.Deleted = 0
+    INNER JOIN Bill_DcOrdDet BDO
+        ON BM.invno = BDO.invno
+       AND BDO.deleted = 0
+    LEFT JOIN (
+        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(Apono)), ''), ', ') AS APONos
+        FROM DcInSubDet WHERE deleted = 0 GROUP BY dcno
+    ) DIS ON BDO.dcno = DIS.dcno
+    LEFT JOIN (
+        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(pono)), ''), ', ') AS PONos
+        FROM DcInSubDetAssmPoDet WHERE deleted = 0 GROUP BY dcno
+    ) DAP ON BDO.dcno = DAP.dcno
+    LEFT JOIN (
+        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(RouCardNo)), ''), ', ') AS RouteCards
+        FROM Dc_RouCardDet WHERE deleted = 0 GROUP BY dcno
+    ) RC ON BDO.dcno = RC.dcno
+    WHERE BM.deleted = 0
+      AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+    ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno;
+    """
+
+    rows = []
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, [start_date, end_date])
+        for row in cursor.fetchall() or []:
+            customer = str(row[0]) if row[0] else "—"
+            inv_no = str(row[1]) if row[1] else ""
+            inv_date = str(row[2])[:10] if row[2] else ""
+            dc_no = str(row[3]) if row[3] else ""
+            dc_date = str(row[4])[:10] if row[4] else ""
+            grn_po = str(row[5]) if row[5] else "—"
+            rc_no = str(row[6]) if row[6] else "—"
+
+            rows.append({
+                "customer": customer,
+                "invNo": inv_no,
+                "invDate": inv_date,
+                "dcNo": dc_no,
+                "dcDate": dc_date,
+                "grnPo": grn_po,
+                "rcNo": rc_no
+            })
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows
+    })
+
+
+
+

@@ -716,6 +716,10 @@ export default function SalesAnalysis() {
   const [revenueCharts, setRevenueCharts] = useState(null);
   const [monthSummary, setMonthSummary] = useState(null);
   const [invoiceRows, setInvoiceRows] = useState([]);
+  const [projections, setProjections] = useState([]);
+  const [planVsActual, setPlanVsActual] = useState([]);
+  const [poLedger, setPoLedger] = useState([]);
+  const [traceability, setTraceability] = useState([]);
   const [invoiceBtypes, setInvoiceBtypes] = useState([]);
   const [invoiceBtype, setInvoiceBtype] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -771,7 +775,7 @@ export default function SalesAnalysis() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const optionsList = useMemo(() => ["", ...invoiceBtypes], [invoiceBtypes]);
   const projectionTotals = useMemo(() => {
-    return MOCK_PROJECTIONS.reduce(
+    return projections.reduce(
       (acc, row) => {
         acc.pos += row.pos;
         acc.totQty += row.totQty;
@@ -784,10 +788,10 @@ export default function SalesAnalysis() {
       },
       { pos: 0, totQty: 0, totAmt: 0, schdQty: 0, dispQty: 0, pendQty: 0, pendVal: 0 }
     );
-  }, []);
+  }, [projections]);
 
   const processedPoLedger = useMemo(() => {
-    return MOCK_PO_LEDGER.map((row) => {
+    return poLedger.map((row) => {
       const value = row.qty * row.rate;
       const pendingQty = Math.max(0, row.qty - row.dcQty - row.shortCloseQty);
       const pendingValue = pendingQty * row.rate;
@@ -808,7 +812,7 @@ export default function SalesAnalysis() {
         ageDays
       };
     });
-  }, []);
+  }, [poLedger]);
 
   const filteredPoLedger = useMemo(() => {
     return processedPoLedger.filter((row) => {
@@ -924,7 +928,7 @@ export default function SalesAnalysis() {
   }, [filteredPoLedger]);
 
   const filteredPlanVsActual = useMemo(() => {
-    return MOCK_PLAN_VS_ACTUAL.filter((row) => {
+    return planVsActual.filter((row) => {
       const rowDate = new Date(row.date);
       if (dateRange.from && rowDate < dateRange.from) return false;
       if (dateRange.to && rowDate > dateRange.to) return false;
@@ -938,7 +942,7 @@ export default function SalesAnalysis() {
       }
       return true;
     });
-  }, [dateRange, planSearchQuery]);
+  }, [dateRange, planSearchQuery, planVsActual]);
 
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
@@ -1009,7 +1013,7 @@ export default function SalesAnalysis() {
   };
 
   const sortedProjections = useMemo(() => {
-    const sorted = [...MOCK_PROJECTIONS];
+    const sorted = [...projections];
     sorted.sort((a, b) => {
       let valA = a[projSortField];
       let valB = b[projSortField];
@@ -1036,7 +1040,7 @@ export default function SalesAnalysis() {
       }
     });
     return sorted;
-  }, [projSortField, projSortAsc]);
+  }, [projSortField, projSortAsc, projections]);
 
   const handleProjSort = (field) => {
     if (projSortField === field) {
@@ -2264,11 +2268,11 @@ export default function SalesAnalysis() {
     if (!projRef.current) return;
     const ctx = projRef.current.getContext("2d");
 
-    const labels = MOCK_PROJECTIONS.map((row) => row.customer.split(" ")[0]);
-    const dispatchedQty = MOCK_PROJECTIONS.map((row) => row.dispQty);
-    const pendingQty = MOCK_PROJECTIONS.map((row) => row.pendQty);
-    const totalAmtLakhs = MOCK_PROJECTIONS.map((row) => row.totAmt / 100_000);
-    const pendingValLakhs = MOCK_PROJECTIONS.map((row) => row.pendVal / 100_000);
+    const labels = projections.map((row) => row.customer.split(" ")[0]);
+    const dispatchedQty = projections.map((row) => row.dispQty);
+    const pendingQty = projections.map((row) => row.pendQty);
+    const totalAmtLakhs = projections.map((row) => row.totAmt / 100_000);
+    const pendingValLakhs = projections.map((row) => row.pendVal / 100_000);
 
     const gradDisp = ctx.createLinearGradient(0, 0, 0, 240);
     gradDisp.addColorStop(0, "rgba(16, 185, 129, 0.85)");
@@ -2413,7 +2417,7 @@ export default function SalesAnalysis() {
           tooltip: {
             callbacks: {
               label(ctx) {
-                const row = MOCK_PROJECTIONS[ctx.dataIndex];
+                const row = projections[ctx.dataIndex];
                 const val = ctx.parsed.y ?? 0;
                 if (ctx.dataset.type === "bar") {
                   return `${ctx.dataset.label}: ${formatQty(val)} units (Customer: ${row.customer})`;
@@ -2456,7 +2460,7 @@ export default function SalesAnalysis() {
     });
 
     return () => projChart.current?.destroy();
-  }, []);
+  }, [projections]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
@@ -2604,7 +2608,75 @@ export default function SalesAnalysis() {
         }
       });
 
-    Promise.all([p1, p2, p3, p4, p5, p6, p7, p8]).finally(() => {
+    const p9 = fetch(`${API_BASE}/sales-analysis/future-projections/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Future projections:", data?.error || r.statusText);
+          setProjections([]);
+          return;
+        }
+        setProjections(data.rows ?? []);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Future projections fetch failed:", err);
+          setProjections([]);
+        }
+      });
+
+    const p10 = fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Plan vs actual:", data?.error || r.statusText);
+          setPlanVsActual([]);
+          return;
+        }
+        setPlanVsActual(data.rows ?? []);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Plan vs actual fetch failed:", err);
+          setPlanVsActual([]);
+        }
+      });
+
+    const p11 = fetch(`${API_BASE}/sales-analysis/po-ledger/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("PO ledger:", data?.error || r.statusText);
+          setPoLedger([]);
+          return;
+        }
+        setPoLedger(data.rows ?? []);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("PO ledger fetch failed:", err);
+          setPoLedger([]);
+        }
+      });
+
+    const p12 = fetch(`${API_BASE}/sales-analysis/traceability/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Traceability:", data?.error || r.statusText);
+          setTraceability([]);
+          return;
+        }
+        setTraceability(data.rows ?? []);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Traceability fetch failed:", err);
+          setTraceability([]);
+        }
+      });
+
+    Promise.all([p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12]).finally(() => {
       if (!ctrl.signal.aborted) {
         setLoading(false);
       }
@@ -3929,7 +4001,7 @@ export default function SalesAnalysis() {
                       </tr>
                     ))
                   ) : (
-                    MOCK_TRACEABILITY.map((row, i) => (
+                    traceability.map((row, i) => (
                       <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
                         <td>{i + 1}</td>
                         <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>

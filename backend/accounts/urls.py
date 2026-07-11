@@ -38,6 +38,8 @@ from .views_sales_analysis import (
     sales_analysis_summary_strip, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
     sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
+    sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
+    sales_analysis_traceability,
 )
 from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
@@ -49,6 +51,7 @@ from .views_purchaseanalysis import (
 )
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
+    quality_analysis_supplier_rejections,
 )
 from .views_signup import signup_view
 from .views_settings import settings_profile, settings_change_password, settings_upgrade_plan
@@ -178,6 +181,10 @@ urlpatterns = [
     path('sales-analysis/monthly-sales-trend/', sales_analysis_monthly_sales_trend, name='sales_analysis_monthly_sales_trend'),
     path('sales-analysis/bill-type-revenue/', sales_analysis_bill_type_revenue, name='sales_analysis_bill_type_revenue'),
     path('sales-analysis/monthly-tax-trend/', sales_analysis_monthly_tax_trend, name='sales_analysis_monthly_tax_trend'),
+    path('sales-analysis/future-projections/', sales_analysis_future_projections, name='sales_analysis_future_projections'),
+    path('sales-analysis/plan-vs-actual/', sales_analysis_plan_vs_actual, name='sales_analysis_plan_vs_actual'),
+    path('sales-analysis/po-ledger/', sales_analysis_po_ledger, name='sales_analysis_po_ledger'),
+    path('sales-analysis/traceability/', sales_analysis_traceability, name='sales_analysis_traceability'),
 
     # ── Idle Time Report ──────────────────────────────────────────────
     path('idle-time-report/', idle_time_report, name='idle_time_report'),
@@ -210,6 +217,7 @@ urlpatterns = [
     path('quality-analysis/records/', quality_analysis_records, name='quality_analysis_records'),
     path('quality-analysis/calibration/', quality_analysis_calibration, name='quality_analysis_calibration'),
     path('quality-analysis/insights/', quality_analysis_insights, name='quality_analysis_insights'),
+    path('quality-analysis/supplier-rejections/', quality_analysis_supplier_rejections, name='quality_analysis_supplier_rejections'),
 
     # ── E-Approval Module ─────────────────────────────────────────────
     path('eapproval/list/', eapproval_list, name='eapproval_list'),

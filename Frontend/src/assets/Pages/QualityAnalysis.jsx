@@ -26,7 +26,10 @@ import {
     Pin,
     Search,
     X,
-    Users
+    Users,
+    ChevronDown,
+    PieChart,
+    Inbox
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -65,22 +68,6 @@ function useCountUp(target, duration = 900) {
 // ─────────────────────────────────────────────
 //  Static Data
 // ─────────────────────────────────────────────
-const KPI_CARDS = [
-    { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "2,748", sub: "Jan–Feb 2026", trend: "24 inspection records", cls: "qa2-t-neutral" },
-    { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "87.6%", sub: "2,409 units passed", trend: "↑ 2.1% vs last period", cls: "qa2-t-up" },
-    { icon: CheckCircle, iconColor: "#059669", label: "First Pass Yield", value: "85.1%", sub: "Right first time", trend: "Optimize process", cls: "qa2-t-down" },
-    { icon: XCircle, iconColor: "#ef4444", label: "Rejection Rate", value: "7.5%", sub: "205 units rejected", trend: "↓ 1.2% vs last", cls: "qa2-t-up" },
-    { icon: Wrench, iconColor: "#f97316", label: "Rework Rate", value: "4.9%", sub: "134 units rework", trend: "↑ 0.8% vs last", cls: "qa2-t-down" },
-    { icon: Coins, iconColor: "#8b5cf6", label: "Quality Value", value: "₹56,589", sub: "Total Rejection Cost", trend: "Action needed", cls: "qa2-t-down" },
-
-    { icon: Package, iconColor: "#f43f5e", label: "Material Rejection Qty", value: "115", sub: "Material defects", trend: "Action required", cls: "qa2-t-down" },
-    { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "90", sub: "Processing defects", trend: "Under watch", cls: "qa2-t-down" },
-    { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "3", sub: "Log complaints", trend: "3 open issues", cls: "qa2-t-down" },
-    { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "74,599 PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: "qa2-t-down" },
-    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "5", sub: "Live snapshot", trend: "Action needed", cls: "qa2-t-down" },
-    { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: "2", sub: "Gauges & Instruments", trend: "2 alerts pending", cls: "qa2-t-down" },
-];
-
 const EMPTY_KPI_CARDS = [
     { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: "0", sub: "Selected period", trend: "0 inspection records", cls: "qa2-t-neutral" },
     { icon: CheckCircle2, iconColor: "#10b981", label: "Pass Rate", value: "0.0%", sub: "0 units passed", trend: "—", cls: "qa2-t-neutral" },
@@ -97,68 +84,6 @@ const EMPTY_KPI_CARDS = [
     { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: "0", sub: "Gauges & Instruments", trend: "All calibrated", cls: "qa2-t-up" },
 ];
 
-const PRODUCT_QUALITY = [
-    { name: "Round Rod DIA 50–90MM", insp: "1,216", pass: "1,168", rej: "48", barW: 96, barColor: "#10b981", rateVal: "96.1%", rateColor: "#10b981" },
-    { name: "Segment Carrier RM", insp: "410", pass: "370", rej: "40", barW: 90, barColor: "#f5a623", rateVal: "90.2%", rateColor: "#f5a623" },
-    { name: "Insert CCMT 09T304", insp: "200", pass: "198", rej: "2", barW: 99, barColor: "#10b981", rateVal: "99.0%", rateColor: "#10b981" },
-    { name: 'VCI Cover 8"×8" / 10"×12"', insp: "125", pass: "121", rej: "4", barW: 97, barColor: "#10b981", rateVal: "96.8%", rateColor: "#10b981" },
-    { name: "Paint-Seal Cast Dipping", insp: "75", pass: "0", rej: "75", barW: 0, barColor: "#ef4444", rateVal: "0%", rateColor: "#ef4444", hasWarning: true },
-    { name: "Thinner GP 015 (RAS)", insp: "60", pass: "0", rej: "60", barW: 0, barColor: "#f97316", rateVal: "Rework", rateColor: "#f97316", hasWarning: true },
-    { name: "Bottom Bearing Housing", insp: "183", pass: "177", rej: "6", barW: 96.7, barColor: "#10b981", rateVal: "96.7%", rateColor: "#10b981" },
-];
-
-const DEFECT_CAUSES = [
-    { name: "Surface Defects", barW: 100, color: "#ef4444", count: "75", pct: "36.6%" },
-    { name: "Dimension Variance", barW: 72, color: "#f97316", count: "54", pct: "26.3%" },
-    { name: "Alignment Error", barW: 53, color: "#f59e0b", count: "40", pct: "19.5%" },
-    { name: "Viscosity / Chemical", barW: 40, color: "#8b5cf6", count: "30", pct: "14.6%" },
-    { name: "Hardness Non-conformance", barW: 8, color: "#94a3b8", count: "6", pct: "2.9%" },
-];
-
-const INSPECTION_ROWS = [
-    { partyName: "Anims Infocare Systems", typeLabel: "Intermediate", id: "INS-2601-001", date: "22-Feb-2026", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", process: "Cutting", qty: "100", okQty: "100", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "A-One Steel Forgings", typeLabel: "Final", id: "INS-2601-002", date: "22-Feb-2026", partNoDesc: "PKM0012 - VCI Cover 8\"×8\"", process: "Packaging", qty: "50", okQty: "50", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Sam", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "Dynamic Precision India", typeLabel: "Job Order", id: "INS-2601-003", date: "22-Feb-2026", partNoDesc: "PDC0017 - Paint-Seal Cast", process: "Dipping", qty: "75", okQty: "0", matRejQty: "75", macRejQty: "0", reworkQty: "0", inspBy: "Operator Sarah", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-fail", result: "FAIL" },
-    { partyName: "Micro Tools & Dies", typeLabel: "Incoming", id: "INS-2601-004", date: "21-Feb-2026", partNoDesc: "PDCT0165 - Insert CCMT 09T304", process: "Receiving", qty: "200", okQty: "200", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Alex", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "Apex Industries Ltd", typeLabel: "Final", id: "INS-2601-005", date: "21-Feb-2026", partNoDesc: "PDC0018 - Thinner GP 015", process: "Mixing", qty: "60", okQty: "0", matRejQty: "0", macRejQty: "0", reworkQty: "60", inspBy: "Operator Chris", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-rework", result: "REWORK" },
-    { partyName: "Super Forge Pvt Ltd", typeLabel: "Intermediate", id: "INS-2601-006", date: "20-Feb-2026", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", process: "Forging", qty: "150", okQty: "150", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "Zenith Components", typeLabel: "Final", id: "INS-2601-007", date: "20-Feb-2026", partNoDesc: "RSC01-600H2-00 - Segment Carrier RM", process: "Assembly", qty: "40", okQty: "0", matRejQty: "0", macRejQty: "40", reworkQty: "0", inspBy: "Operator Sarah", typeCls: "qa2-tag-blue", resultCls: "qa2-tag-fail", result: "FAIL" },
-    { partyName: "Ultra Tech Engineering", typeLabel: "Incoming", id: "INS-2601-008", date: "19-Feb-2026", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", process: "Machining", qty: "183", okQty: "183", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Mike", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "Alpha Castings Inc", typeLabel: "Intermediate", id: "INS-2601-009", date: "18-Feb-2026", partNoDesc: "RRD03-07070-00 - Round Rod DIA 70MM", process: "Cutting", qty: "240", okQty: "240", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator John", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pass", result: "PASS" },
-    { partyName: "Global Stationery Corp", typeLabel: "Job Order", id: "INS-2601-010", date: "17-Feb-2026", partNoDesc: "GNC0013 / PDC0012 - Letter Pad / Record Notes", process: "Printing", qty: "500", okQty: "500", matRejQty: "0", macRejQty: "0", reworkQty: "0", inspBy: "Operator Lisa", typeCls: "qa2-tag-teal", resultCls: "qa2-tag-pending", result: "PENDING" },
-];
-
-const REJECTION_ROWS = [
-    { id: "INS-2601-003", product: "PDC0017 - Paint-Seal Cast", reason: "Surface defects", qty: "75", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejection", date: "22-Feb-2026" },
-    { id: "INS-2601-005", product: "PDC0018 - Thinner GP 015", reason: "Rework Needed", qty: "60", defectCls: "qa2-tag-major", defect: "Major", dispCls: "qa2-tag-rework", disp: "Rework", date: "21-Feb-2026" },
-    { id: "INS-2601-007", product: "RSC01-600H2-00 - Segment Carrier RM", reason: "Alignment error", qty: "40", defectCls: "qa2-tag-critical", defect: "Critical", dispCls: "qa2-tag-fail", disp: "Rejection", date: "20-Feb-2026" }
-];
-
-const REWORK_QUEUE = [
-    { dotColor: "#ef4444", name: "PDC0018 - Thinner GP 015 (RAS)", code: "INS-2601-005 · Rework Needed · Quality dept", qty: "60 Nos", daysBg: "#fee2e2", daysFg: "#b91c1c", daysLbl: "+5d" }
-];
-
-const TRACEABILITY_ROWS = [
-    { routecardNo: "RC-2602-081", date: "22-Feb-2026", supplierName: "A-One Steel Forgings", grnDetails: "GRN-9801 · 21-Feb-2026", materialName: "Steel Bar EN8", customerName: "TVS Motor Company", partNoDesc: "RRD03-05050-00 - Round Rod DIA 50MM", operator: "Operator John", qty: "100", okQty: "100", rejQty: "0", rwQty: "0", dispatchQty: "100" },
-    { routecardNo: "RC-2602-082", date: "22-Feb-2026", supplierName: "Apex Industries Ltd", grnDetails: "GRN-9802 · 20-Feb-2026", materialName: "Thinner GP 015", customerName: "Sundram Fasteners", partNoDesc: "PDC0018 - Thinner GP 015", operator: "Operator Sam", qty: "60", okQty: "0", rejQty: "0", rwQty: "60", dispatchQty: "0" },
-    { routecardNo: "RC-2602-083", date: "21-Feb-2026", supplierName: "Dynamic Precision India", grnDetails: "GRN-9803 · 19-Feb-2026", materialName: "Paint GP Grey", customerName: "Lucas TVS Ltd", partNoDesc: "PDC0017 - Paint-Seal Cast", operator: "Operator Sarah", qty: "75", okQty: "0", rejQty: "75", rwQty: "0", dispatchQty: "0" },
-    { routecardNo: "RC-2602-084", date: "20-Feb-2026", supplierName: "Micro Tools & Dies", grnDetails: "GRN-9804 · 18-Feb-2026", materialName: "CCMT Carbide Insert", customerName: "Brakes India", partNoDesc: "PDCT0165 - Insert CCMT 09T304", operator: "Operator Alex", qty: "200", okQty: "200", rejQty: "0", rwQty: "0", dispatchQty: "200" },
-    { routecardNo: "RC-2602-085", date: "19-Feb-2026", supplierName: "Super Forge Pvt Ltd", grnDetails: "GRN-9805 · 17-Feb-2026", materialName: "Round Rod DIA 65MM", customerName: "TVS Motor Company", partNoDesc: "RRD03-06565-00 - Round Rod DIA 65MM", operator: "Operator John", qty: "150", okQty: "150", rejQty: "0", rwQty: "0", dispatchQty: "150" },
-    { routecardNo: "RC-2602-086", date: "18-Feb-2026", supplierName: "Ultra Tech Engineering", grnDetails: "GRN-9806 · 16-Feb-2026", materialName: "Casting EN9", customerName: "Lucas TVS Ltd", partNoDesc: "BEH04X100001WM0 - Bottom Bearing Housing", operator: "Operator Mike", qty: "183", okQty: "183", rejQty: "0", rwQty: "0", dispatchQty: "183" },
-];
-
-// CALIBRATION_ROWS removed — live data from Ins_Mas only
-
-const INSIGHTS_LEFT = [
-    { iconKey: "error", title: "Paint-Seal Cast — 100% Rejection (75 units)", sub: "Critical surface defects. Entire batch rejected. Supplier quality audit required immediately.", val: "100% Fail", valColor: "#ef4444" },
-    { iconKey: "warning", title: "Segment Carrier pass rate at 90.2% — below 95% target", sub: "40 units failed alignment check. Review assembly fixture calibration.", val: "90.2%", valColor: "#f97316" },
-    { iconKey: "info", title: "Hardness Tester #HT-01 calibration overdue today", sub: "Calibration expired 28-Feb-2026. All hardness test results today may be non-compliant.", val: "Action Now", valColor: "#f59e0b" },
-];
-
-const INSIGHTS_RIGHT = [
-    { iconKey: "success", title: "Overall pass rate 87.6% — trending up +2.1%", sub: "Quality improving steadily. Round Rod and Insert lines achieving 96%+. Maintain current controls.", val: "↑ 2.1%", valColor: "#10b981" },
-];
-
 const InsightIconMap = {
     error: AlertTriangle,
     warning: AlertCircle,
@@ -166,48 +91,15 @@ const InsightIconMap = {
     success: CheckCircle2
 };
 
-// ─────────────────────────────────────────────
-//  Chart Data
-// ─────────────────────────────────────────────
-const TREND_DATA = {
-    labels: ["W1 Jan", "W2 Jan", "W3 Jan", "W4 Jan", "W1 Feb", "W2 Feb", "W3 Feb", "W4 Feb"],
-    datasets: [
-        { label: "Pass", data: [310, 285, 340, 280, 320, 295, 270, 309], backgroundColor: "rgba(16,185,129,0.75)", borderRadius: 5 },
-        { label: "Rework", data: [22, 18, 15, 25, 20, 14, 10, 10], backgroundColor: "rgba(245,166,35,0.75)", borderRadius: 5 },
-        { label: "Reject", data: [28, 22, 15, 30, 25, 28, 32, 25], backgroundColor: "rgba(239,68,68,0.75)", borderRadius: 5 },
-    ],
-};
+const SUPPLIER_REJECTIONS = [
+    { supplier: "Super Forge Pvt Ltd", grnNo: "GRN-2604-091", date: "18-Apr-2026", item: "RRD03-05050-00 - Round Rod", qty: 250, okQty: 235, matRej: 12, macRej: 3, uom: "Nos" },
+    { supplier: "A-One Steel Forgings", grnNo: "GRN-2604-042", date: "12-Apr-2026", item: "VCI05-CVR-02 - Protection Cover", qty: 500, okQty: 485, matRej: 10, macRej: 5, uom: "Nos" },
+    { supplier: "Dynamic Precision India", grnNo: "GRN-2603-112", date: "28-Mar-2026", item: "SGC-BOTTOM-01 - Bottom Bearing Cast", qty: 120, okQty: 110, matRej: 8, macRej: 2, uom: "Nos" },
+    { supplier: "Micro Tools & Dies", grnNo: "GRN-2603-085", date: "15-Mar-2026", item: "CARB-INS-WNMG - Carbide Insert WNMG", qty: 1000, okQty: 994, matRej: 5, macRej: 1, uom: "Nos" },
+    { supplier: "Apex Industries Ltd", grnNo: "GRN-2602-099", date: "26-Feb-2026", item: "THN-EPOXY-20L - Epoxy Thinner", qty: 80, okQty: 76, matRej: 4, macRej: 0, uom: "Ltr" },
+    { supplier: "Ultra Tech Engineering", grnNo: "GRN-2602-031", date: "10-Feb-2026", item: "HSG-MACHINED-A - Gearbox Housing", qty: 45, okQty: 40, matRej: 3, macRej: 2, uom: "Nos" }
+];
 
-const RESULT_DONUT = {
-    labels: ["Pass (87.6%)", "Rework (4.9%)", "Reject (7.5%)"],
-    datasets: [{ data: [87.6, 4.9, 7.5], backgroundColor: ["#10b981", "#f5a623", "#ef4444"], borderColor: "#fff", borderWidth: 2.5 }],
-};
-
-const DEFECT_DONUT = {
-    labels: ["Material Rejection", "Machine Rejection", "Rework"],
-    datasets: [{ data: [45.5, 34.2, 20.3], backgroundColor: ["#ef4444", "#f97316", "#f59e0b"], borderColor: "#fff", borderWidth: 2.5 }],
-};
-
-const PPM_DATA = {
-    labels: ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"],
-    datasets: [{
-        label: "Actual PPM",
-        data: [1200, 1450, 1100, 980, 870, 760, 820, 700, 650, 590, 540, 480],
-        borderColor: "#f97316",
-        backgroundColor: "rgba(249,115,22,0.1)",
-        tension: 0.4,
-        fill: true,
-        pointRadius: 3
-    }]
-};
-
-const PARETO_DATA = {
-    labels: ["Surface defects", "Rework Needed", "Alignment error"],
-    datasets: [
-        { label: "Count", data: [75, 60, 40], backgroundColor: ["#ef4444", "#f97316", "#f59e0b"], borderRadius: 5, yAxisID: "y" },
-        { label: "Cumulative %", data: [42.9, 77.1, 100], type: "line", borderColor: "#2d6de8", backgroundColor: "rgba(45,109,232,0.08)", borderWidth: 2.5, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: "#2d6de8", pointBorderColor: "#fff", pointBorderWidth: 2, yAxisID: "y2" },
-    ],
-};
 
 const getPartyName = (id, product) => {
     if (product?.includes("Rod")) return "Super Forge Pvt Ltd";
@@ -220,16 +112,6 @@ const getPartyName = (id, product) => {
     return "Anims Infocare Systems";
 };
 
-const getProcessName = (product) => {
-    if (product?.includes("Rod")) return "Cutting";
-    if (product?.includes("Cover")) return "Packaging";
-    if (product?.includes("Cast")) return "Dipping";
-    if (product?.includes("Insert")) return "Receiving";
-    if (product?.includes("Thinner")) return "Mixing";
-    if (product?.includes("Housing")) return "Machining";
-    if (product?.includes("Letter")) return "Printing";
-    return "Forging";
-};
 
 const getDepartmentForProcess = (process) => {
     const p = String(process).toLowerCase();
@@ -264,6 +146,54 @@ const getColStyle = (h) => {
     }
 };
 
+const getRejColStyle = (h) => {
+    switch (h) {
+        case "Insp No": return { width: "110px" };
+        case "Insp Type": return { width: "150px" };
+        case "Product": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "Reason": return { minWidth: "200px", maxWidth: "300px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "Qty": return { width: "80px", textAlign: "right" };
+        case "Disposition": return { width: "110px" };
+        case "Date": return { width: "110px" };
+        default: return {};
+    }
+};
+
+const getTraceColStyle = (h) => {
+    switch (h) {
+        case "#": return { width: "50px", textAlign: "center" };
+        case "Inspno": return { width: "110px" };
+        case "Insp Date": return { width: "110px" };
+        case "Machine No": return { width: "100px" };
+        case "Shift": return { width: "80px" };
+        case "Partno-Description": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "Process": return { width: "110px" };
+        case "Operator Name": return { width: "130px" };
+        case "Prod Qty":
+        case "Rej Qty":
+        case "Rw Qty": return { width: "80px", textAlign: "right" };
+        case "Inspected By": return { width: "120px" };
+        case "Routecard Details": return { width: "140px" };
+        default: return {};
+    }
+};
+
+const getSuppColStyle = (h) => {
+    switch (h) {
+        case "#": return { width: "50px", textAlign: "center" };
+        case "Supplier Name": return { width: "160px" };
+        case "Grn no": return { width: "100px" };
+        case "Grn Date": return { width: "100px" };
+        case "Item Details": return { minWidth: "180px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "GRN Qty":
+        case "Ok Qty":
+        case "Mat Rej":
+        case "Mac Rej": return { width: "85px", textAlign: "right" };
+        case "UOM": return { width: "60px", textAlign: "center" };
+        default: return {};
+    }
+};
+
 // ─────────────────────────────────────────────
 //  Sub-components
 // ─────────────────────────────────────────────
@@ -276,6 +206,92 @@ function SectionHead({ icon: Icon, iconColor = "#2d6de8", title, badge, badgeCls
                 {badge && <span className={`qa2-badge ${badgeCls || ""}`}>{badge}</span>}
             </div>
             {extra && <div className="qa2-section-extra">{extra}</div>}
+        </div>
+    );
+}
+
+function QualityEmptyState({ message = "No Data found on this period", height = "192px" }) {
+    return (
+        <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: height,
+            background: "linear-gradient(135deg, rgba(248, 250, 252, 0.65) 0%, rgba(241, 245, 249, 0.65) 100%)",
+            border: "1.5px dashed rgba(209, 226, 255, 0.45)",
+            borderRadius: "12px",
+            margin: "0 1rem 1rem",
+            padding: "1.5rem",
+            textAlign: "center"
+        }}>
+            <div style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "50%",
+                background: "#f1f5f9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#94a3b8",
+                marginBottom: "8px",
+                boxShadow: "inset 0 2px 4px rgba(15, 23, 42, 0.02)"
+            }}>
+                <Inbox size={18} />
+            </div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569" }}>{message}</div>
+            <div style={{ fontSize: "10.5px", color: "#94a3b8", marginTop: "2px" }}>Try selecting another date range or filter option</div>
+        </div>
+    );
+}
+
+function QualityPremiumSelect({ value, onChange, options }) {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef(null);
+    
+    useEffect(() => {
+        const handleOutsideClick = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleOutsideClick);
+        return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }, []);
+
+    const activeOption = options.find(o => o.value === value) || options[0];
+
+    return (
+        <div className="qa2-premium-select-container" ref={containerRef}>
+            <button
+                type="button"
+                className={`qa2-premium-select-trigger ${open ? "open" : ""}`}
+                onClick={() => setOpen(!open)}
+            >
+                <span className="qa2-select-trigger-label">
+                    {activeOption.icon && <span className="qa2-select-trigger-icon" style={{ display: "flex", alignItems: "center" }}>{activeOption.icon}</span>}
+                    <span>{activeOption.label}</span>
+                </span>
+                <ChevronDown size={14} className="qa2-select-caret" />
+            </button>
+            {open && (
+                <div className="qa2-premium-select-menu">
+                    {options.map((opt) => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            className={`qa2-premium-select-item ${opt.value === value ? "active" : ""}`}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setOpen(false);
+                            }}
+                        >
+                            {opt.icon && <span className="qa2-select-item-icon">{opt.icon}</span>}
+                            <span>{opt.label}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -353,8 +369,15 @@ export default function QualityAnalysis() {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState("ALL");
     const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
+    const [selectedInspTypeFilter, setSelectedInspTypeFilter] = useState("ALL");
+    const [inspTypeDropdownOpen, setInspTypeDropdownOpen] = useState(false);
+    const typeDropdownRef = useRef(null);
+    const [selectedTraceTypeFilter, setSelectedTraceTypeFilter] = useState("ALL");
+    const [traceTypeDropdownOpen, setTraceTypeDropdownOpen] = useState(false);
+    const traceTypeDropdownRef = useRef(null);
     const [animated, setAnimated] = useState(false);
     const [weeklyChartType, setWeeklyChartType] = useState("stack");
+    const [paretoChartType, setParetoChartType] = useState("pareto"); // "pareto" | "count" | "distribution"
 
     // API state data
     const [summaryData, setSummaryData] = useState(null);
@@ -365,6 +388,7 @@ export default function QualityAnalysis() {
     const [calibrationData, setCalibrationData] = useState(null);
     const [insightsData, setInsightsData] = useState(null);
     const [customerComplaintsData, setCustomerComplaintsData] = useState(null);
+    const [supplierData, setSupplierData] = useState(null);
 
     // Modern Individual Panel Loading States
     const [summaryLoading, setSummaryLoading] = useState(false);
@@ -375,8 +399,9 @@ export default function QualityAnalysis() {
     const [calibrationLoading, setCalibrationLoading] = useState(false);
     const [insightsLoading, setInsightsLoading] = useState(false);
     const [customerComplaintsLoading, setCustomerComplaintsLoading] = useState(false);
+    const [supplierLoading, setSupplierLoading] = useState(false);
 
-    const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading || customerComplaintsLoading;
+    const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading || customerComplaintsLoading || supplierLoading;
 
     const trendRef = useRef(null); const trendChart = useRef(null);
     const resultRef = useRef(null); const resultChart = useRef(null);
@@ -385,6 +410,7 @@ export default function QualityAnalysis() {
     const paretoRef = useRef(null); const paretoChart = useRef(null);
     const rejectionRef = useRef(null); const rejectionChart = useRef(null);
     const reworkRef = useRef(null); const reworkChart = useRef(null);
+    const supplierRef = useRef(null); const supplierChart = useRef(null);
 
     const debounceRef = useRef(null);
 
@@ -419,6 +445,7 @@ export default function QualityAnalysis() {
             await fetchPanel(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading);
             await fetchPanel(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading);
             await fetchPanel(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading);
+            await fetchPanel(buildUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading);
         };
 
         loadAllSequentially();
@@ -427,6 +454,20 @@ export default function QualityAnalysis() {
     useEffect(() => {
         const t = setTimeout(() => setAnimated(true), 60);
         return () => clearTimeout(t);
+    }, []);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
+                setInspTypeDropdownOpen(false);
+            }
+            if (traceTypeDropdownRef.current && !traceTypeDropdownRef.current.contains(event.target)) {
+                setTraceTypeDropdownOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     // ✅ Persist date range to sessionStorage on every change
@@ -463,11 +504,11 @@ export default function QualityAnalysis() {
 
         const fontBase = { family: "Poppins" };
 
-        const trendData = chartsData?.trend || TREND_DATA;
-        const resultDonut = chartsData?.result_donut || RESULT_DONUT;
-        const defectDonut = chartsData?.defect_donut || DEFECT_DONUT;
-        const ppmData = chartsData?.mac_rejection_ppm || PPM_DATA;
-        const paretoData = chartsData?.pareto || PARETO_DATA;
+        const trendData = chartsData?.trend || { labels: [], datasets: [] };
+        const resultDonut = chartsData?.result_donut || { labels: [], datasets: [] };
+        const defectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
+        const ppmData = chartsData?.mac_rejection_ppm || { labels: [], datasets: [] };
+        const paretoData = chartsData?.pareto || { labels: [], datasets: [] };
 
         const trendLabels = trendData.labels || [];
         const rejectDataset = trendData.datasets?.find(d =>
@@ -802,55 +843,134 @@ export default function QualityAnalysis() {
             },
         });
 
-        mk(paretoRef, paretoChart, "bar", paretoData, {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
-                datalabels: {
-                    display: true,
-                    formatter: (value, context) => {
-                        if (context.datasetIndex === 0) {
-                            return value > 0 ? value.toString() : "";
-                        } else {
-                            return value > 0 ? `${value.toFixed(0)}%` : "";
+        let finalParetoType = "bar";
+        let finalParetoData = { ...paretoData };
+        let finalParetoOptions = {};
+
+        if (paretoChartType === "pareto") {
+            finalParetoType = "bar";
+            finalParetoData = {
+                labels: paretoData.labels || [],
+                datasets: [
+                    { 
+                        label: "Count", 
+                        data: paretoData.datasets?.[0]?.data || [], 
+                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"], 
+                        borderRadius: 5, 
+                        yAxisID: "y" 
+                    },
+                    { 
+                        label: "Cumulative %", 
+                        data: paretoData.datasets?.[1]?.data || [], 
+                        type: "line", 
+                        borderColor: "#2d6de8", 
+                        backgroundColor: "rgba(45,109,232,0.08)", 
+                        borderWidth: 2.5, 
+                        tension: 0.4, 
+                        fill: true, 
+                        pointRadius: 4, 
+                        pointBackgroundColor: "#2d6de8", 
+                        pointBorderColor: "#fff", 
+                        pointBorderWidth: 2, 
+                        yAxisID: "y2" 
+                    }
+                ]
+            };
+            finalParetoOptions = {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                    datalabels: {
+                        display: true,
+                        formatter: (value, context) => {
+                            if (context.datasetIndex === 0) {
+                                return value > 0 ? value.toString() : "";
+                            } else {
+                                return value > 0 ? `${value.toFixed(0)}%` : "";
+                            }
+                        },
+                        font: { size: 9.5, weight: "700", family: "Poppins" },
+                        color: (context) => context.datasetIndex === 0 ? "#ef4444" : "#2d6de8",
+                        anchor: (context) => context.datasetIndex === 0 ? "end" : "center",
+                        align: (context) => context.datasetIndex === 0 ? "top" : "top",
+                        offset: (context) => context.datasetIndex === 0 ? 2 : 6,
+                        backgroundColor: (context) => context.datasetIndex === 1 ? "#ffffff" : null,
+                        borderRadius: (context) => context.datasetIndex === 1 ? 4 : null,
+                        borderWidth: (context) => context.datasetIndex === 1 ? 1 : null,
+                        borderColor: (context) => context.datasetIndex === 1 ? "rgba(45, 109, 232, 0.25)" : null,
+                        padding: (context) => context.datasetIndex === 1 ? { top: 2, bottom: 2, left: 6, right: 6 } : null
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                    y2: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a", callback: v => v + "%" } },
+                    x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                }
+            };
+        } else if (paretoChartType === "count") {
+            finalParetoType = "bar";
+            finalParetoData = {
+                labels: paretoData.labels || [],
+                datasets: [
+                    { 
+                        label: "Count", 
+                        data: paretoData.datasets?.[0]?.data || [], 
+                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"], 
+                        borderRadius: 6 
+                    }
+                ]
+            };
+            finalParetoOptions = {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        font: { size: 9.5, weight: "700", family: "Poppins" },
+                        color: "#ef4444"
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                    x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                }
+            };
+        } else if (paretoChartType === "distribution") {
+            finalParetoType = "doughnut";
+            finalParetoData = {
+                labels: paretoData.labels || [],
+                datasets: [
+                    {
+                        data: paretoData.datasets?.[0]?.data || [],
+                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"],
+                        borderWidth: 2,
+                        borderColor: "#ffffff"
+                    }
+                ]
+            };
+            finalParetoOptions = {
+                responsive: true, maintainAspectRatio: false,
+                cutout: "60%",
+                plugins: {
+                    legend: { position: "right", labels: { font: { ...fontBase, size: 10, weight: 600 }, boxWidth: 10, padding: 8 } },
+                    datalabels: {
+                        display: true,
+                        color: "#fff",
+                        font: { size: 9.5, weight: "750", family: "Poppins" },
+                        formatter: (value, context) => {
+                            const sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = sum > 0 ? ((value / sum) * 100).toFixed(0) : 0;
+                            return pct > 5 ? `${pct}%` : "";
                         }
-                    },
-                    font: { size: 9.5, weight: "700", family: "Poppins" },
-                    color: (context) => {
-                        return context.datasetIndex === 0 ? "#ef4444" : "#2d6de8";
-                    },
-                    anchor: (context) => {
-                        return context.datasetIndex === 0 ? "end" : "center";
-                    },
-                    align: (context) => {
-                        return context.datasetIndex === 0 ? "top" : "top";
-                    },
-                    offset: (context) => {
-                        return context.datasetIndex === 0 ? 2 : 6;
-                    },
-                    backgroundColor: (context) => {
-                        return context.datasetIndex === 1 ? "#ffffff" : null;
-                    },
-                    borderRadius: (context) => {
-                        return context.datasetIndex === 1 ? 4 : null;
-                    },
-                    borderWidth: (context) => {
-                        return context.datasetIndex === 1 ? 1 : null;
-                    },
-                    borderColor: (context) => {
-                        return context.datasetIndex === 1 ? "rgba(45, 109, 232, 0.25)" : null;
-                    },
-                    padding: (context) => {
-                        return context.datasetIndex === 1 ? { top: 2, bottom: 2, left: 6, right: 6 } : null;
                     }
                 }
-            },
-            scales: {
-                y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
-                y2: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a", callback: v => v + "%" } },
-                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
-            },
-        });
+            };
+        }
+
+        mk(paretoRef, paretoChart, finalParetoType, finalParetoData, finalParetoOptions);
 
         mk(rejectionRef, rejectionChart, "line", {
             labels: trendLabels,
@@ -930,10 +1050,68 @@ export default function QualityAnalysis() {
             },
         });
 
+        const supplierLabels = supplierData?.chart?.labels || ["Super Forge", "A-One Steel", "Dynamic Precision", "Micro Tools", "Apex Industries", "Ultra Tech"];
+        const supplierMatRej = supplierData?.chart?.matRej || [12, 10, 8, 5, 4, 3];
+        const supplierMacRej = supplierData?.chart?.macRej || [3, 5, 2, 1, 0, 2];
+
+        mk(supplierRef, supplierChart, "bar", {
+            labels: supplierLabels,
+            datasets: [
+                {
+                    label: "Material Rej",
+                    data: supplierMatRej,
+                    backgroundColor: "rgba(139, 92, 246, 0.75)",
+                    borderColor: "#8b5cf6",
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    hoverBackgroundColor: "rgba(139, 92, 246, 0.95)",
+                },
+                {
+                    label: "Machine Rej",
+                    data: supplierMacRej,
+                    backgroundColor: "rgba(244, 63, 94, 0.75)",
+                    borderColor: "#f43f5e",
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    hoverBackgroundColor: "rgba(244, 63, 94, 0.95)",
+                }
+            ]
+        }, {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "top",
+                    labels: { font: { family: "Poppins", size: 10 }, color: "#5a6a9a" }
+                },
+                datalabels: {
+                    display: true,
+                    anchor: "end",
+                    align: "right",
+                    formatter: (v) => (v > 0 ? v : ""),
+                    font: { size: 9, weight: "700", family: "Poppins" },
+                    color: "#475569"
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { color: "rgba(26,84,212,0.07)" },
+                    ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+                },
+                y: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+                }
+            }
+        });
+
         return () => {
-            [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart].forEach(c => c.current?.destroy());
+            [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart, supplierChart].forEach(c => c.current?.destroy());
         };
-    }, [chartsData, weeklyChartType]);
+    }, [chartsData, weeklyChartType, paretoChartType, supplierData]);
 
     const resetFilters = () => {
         const today = new Date();
@@ -967,7 +1145,11 @@ export default function QualityAnalysis() {
 
     const searchFilteredInspectionRows = useMemo(() => {
         if (hasNoData) return [];
-        const raw = recordsData?.inspection_records || INSPECTION_ROWS;
+        const records = recordsData?.inspection_records || [];
+        const raw = records.map(r => ({
+            ...r,
+            partyName: r.partyName || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")
+        }));
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -983,19 +1165,13 @@ export default function QualityAnalysis() {
 
     const activeProductQuality = useMemo(() => {
         if (hasNoData && !hasSearchWithData) return [];
-        // When search is active: use backend-filtered data directly (no additional client filter)
-        // When no search: use raw API data or fallback mock
-        if (searchQuery) {
-            return prodPerfData?.products ?? [];
-        }
-        const raw = prodPerfData?.products || PRODUCT_QUALITY;
-        return raw;
-    }, [prodPerfData, hasNoData, hasSearchWithData, searchQuery]);
+        return prodPerfData?.products || [];
+    }, [prodPerfData, hasNoData, hasSearchWithData]);
 
 
     const activeDefectCauses = useMemo(() => {
         if (hasNoData) return [];
-        return defectCausesData?.causes || DEFECT_CAUSES;
+        return defectCausesData?.causes || [];
     }, [defectCausesData, hasNoData]);
 
     const activeDefectClasses = useMemo(() => {
@@ -1005,9 +1181,9 @@ export default function QualityAnalysis() {
             { bg: "#fef9c3", lbl: "Minor", val: "0", pct: "0.0%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
         ];
         return defectCausesData?.classes || [
-            { bg: "#fee2e2", lbl: "Critical", val: "115", pct: "56.1%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
-            { bg: "#ffedd5", lbl: "Major", val: "60", pct: "29.3%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
-            { bg: "#fef9c3", lbl: "Minor", val: "30", pct: "14.6%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
+            { bg: "#fee2e2", lbl: "Critical", val: "0", pct: "0.0%", lc: "#b91c1c", vc: "#7f1d1d", pc: "#991b1b" },
+            { bg: "#ffedd5", lbl: "Major", val: "0", pct: "0.0%", lc: "#c2410c", vc: "#7c2d12", pc: "#9a3412" },
+            { bg: "#fef9c3", lbl: "Minor", val: "0", pct: "0.0%", lc: "#92400e", vc: "#78350f", pc: "#92400e" },
         ];
     }, [defectCausesData, hasNoData]);
 
@@ -1055,7 +1231,7 @@ export default function QualityAnalysis() {
 
     const searchFilteredRejectionRows = useMemo(() => {
         if (hasNoData) return [];
-        const raw = recordsData?.rejection_rows || REJECTION_ROWS;
+        const raw = recordsData?.rejection_rows || [];
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -1067,27 +1243,36 @@ export default function QualityAnalysis() {
         );
     }, [recordsData, hasNoData, searchQuery]);
 
+    const typeFilteredRejectionRows = useMemo(() => {
+        if (selectedInspTypeFilter === "ALL") return searchFilteredRejectionRows;
+        return searchFilteredRejectionRows.filter(r => r.inspType === selectedInspTypeFilter);
+    }, [searchFilteredRejectionRows, selectedInspTypeFilter]);
+
     const activeRejectionRows = useMemo(() => {
-        if (selectedDispFilter === "ALL") return searchFilteredRejectionRows;
-        return searchFilteredRejectionRows.filter(r => {
+        if (selectedDispFilter === "ALL") return typeFilteredRejectionRows;
+        return typeFilteredRejectionRows.filter(r => {
             const d = (r.disp || "").toLowerCase();
             if (selectedDispFilter === "REJECTION") return d.includes("reject");
             if (selectedDispFilter === "REWORK") return d.includes("rework");
             return true;
         });
-    }, [searchFilteredRejectionRows, selectedDispFilter]);
+    }, [typeFilteredRejectionRows, selectedDispFilter]);
 
     const rejectionCount = useMemo(() =>
-        searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("reject")).length,
-        [searchFilteredRejectionRows]);
+        typeFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("reject")).length,
+        [typeFilteredRejectionRows]);
 
     const reworkCount = useMemo(() =>
-        searchFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("rework")).length,
-        [searchFilteredRejectionRows]);
+        typeFilteredRejectionRows.filter(r => r.disp?.toLowerCase().includes("rework")).length,
+        [typeFilteredRejectionRows]);
+
+    const totalRejRwkQty = useMemo(() =>
+        activeRejectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0),
+        [activeRejectionRows]);
 
     const activeReworkQueue = useMemo(() => {
         if (hasNoData) return [];
-        const raw = recordsData?.rework_queue || REWORK_QUEUE;
+        const raw = recordsData?.rework_queue || [];
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -1106,6 +1291,7 @@ export default function QualityAnalysis() {
 
         // Aggregate from searchFilteredInspectionRows (which are dynamically search-filtered and date-range filtered)
         searchFilteredInspectionRows.forEach(r => {
+            if (!r.typeLabel?.includes("Job")) return;
             const vendor = r.partyName || "Unknown Vendor";
             if (!vendorMap[vendor]) {
                 vendorMap[vendor] = { name: vendor, insp: 0, pass: 0, rej: 0 };
@@ -1122,16 +1308,8 @@ export default function QualityAnalysis() {
 
         let list = Object.values(vendorMap);
 
-        // Fallback mockup data when empty/offline
-        if (list.length === 0 || hasNoData) {
-            const mock = [
-                { name: "Super Forge Pvt Ltd", insp: 150, pass: 147, rej: 3 },
-                { name: "A-One Steel Forgings", insp: 50, pass: 45, rej: 5 },
-                { name: "Dynamic Precision India", insp: 75, pass: 68, rej: 7 },
-                { name: "Micro Tools & Dies", insp: 200, pass: 198, rej: 2 },
-                { name: "Apex Industries Ltd", insp: 60, pass: 58, rej: 2 }
-            ];
-            list = searchQuery ? mock.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) : mock;
+        if (hasNoData) {
+            list = [];
         }
 
         const totalRejectionsAllVendors = list.reduce((sum, v) => sum + v.rej, 0);
@@ -1177,20 +1355,7 @@ export default function QualityAnalysis() {
             processMap[process].rej += (matRej + macRej);
         });
 
-        let list = Object.values(processMap);
-
-        // Fallback mockup data when empty/offline
-        if (list.length === 0 || hasNoData) {
-            const mock = [
-                { name: "Machining", insp: 800, pass: 782, rej: 18 },
-                { name: "Assembly", insp: 620, pass: 605, rej: 15 },
-                { name: "Cutting", insp: 550, pass: 542, rej: 8 },
-                { name: "Dipping", insp: 400, pass: 388, rej: 12 },
-                { name: "Forging", insp: 300, pass: 295, rej: 5 },
-                { name: "Packaging", insp: 250, pass: 249, rej: 1 }
-            ];
-            list = searchQuery ? mock.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) : mock;
-        }
+        const list = Object.values(processMap);
 
         const totalRejectionsAllProcesses = list.reduce((sum, v) => sum + v.rej, 0);
 
@@ -1228,15 +1393,7 @@ export default function QualityAnalysis() {
                 map[partNoDesc].qty += matRej;
             }
         });
-        let list = Object.values(map).sort((a, b) => b.qty - a.qty);
-
-        if (list.length === 0 || hasNoData) {
-            list = [
-                { name: "Round Rod DIA 50MM", qty: 48, process: "Cutting" },
-                { name: "Paint-Seal Cast", qty: 75, process: "Dipping" },
-                { name: "VCI Cover 8\"×8\"", qty: 4, process: "Packaging" }
-            ];
-        }
+        const list = Object.values(map).sort((a, b) => b.qty - a.qty);
         return list.slice(0, 5);
     }, [searchFilteredInspectionRows, hasNoData]);
 
@@ -1252,14 +1409,7 @@ export default function QualityAnalysis() {
                 map[partNoDesc].qty += macRej;
             }
         });
-        let list = Object.values(map).sort((a, b) => b.qty - a.qty);
-
-        if (list.length === 0 || hasNoData) {
-            list = [
-                { name: "Segment Carrier RM", qty: 40, process: "Assembly" },
-                { name: "Bottom Bearing Housing", qty: 6, process: "Machining" }
-            ];
-        }
+        const list = Object.values(map).sort((a, b) => b.qty - a.qty);
         return list.slice(0, 5);
     }, [searchFilteredInspectionRows, hasNoData]);
 
@@ -1279,17 +1429,7 @@ export default function QualityAnalysis() {
             map[dept].rejected += rej;
         });
 
-        let list = Object.values(map);
-
-        if (list.length === 0 || hasNoData) {
-            list = [
-                { department: "Machining", inspected: 800, rejected: 24 },
-                { department: "Forging", inspected: 300, rejected: 5 },
-                { department: "Assembly", inspected: 620, rejected: 40 },
-                { department: "Finishing & Paint", inspected: 475, rejected: 75 },
-                { department: "Logistics & Incoming", inspected: 450, rejected: 6 }
-            ];
-        }
+        const list = Object.values(map);
 
         const totalAllRejections = list.reduce((sum, d) => sum + d.rejected, 0);
 
@@ -1311,26 +1451,6 @@ export default function QualityAnalysis() {
         if (hasNoData) return [];
         const raw = customerComplaintsData?.complaints || [];
 
-        // Fallback mock data when empty/offline
-        if (raw.length === 0) {
-            const mock = [
-                { complaint_id: "CC-2601-001", customer_name: "TVS Motor Company", product: "RRD03-05050-00 - Round Rod DIA 50MM", complaint_description: "Surface scratches on the outer diameter.", action_taken: "Polished and sorted the batch.", complaint_date: "22-Feb-2026", corrective_action: "Enhanced buffering speed in grinding stage.", permanent_action: "Installed automated visual inspection camera.", status: "RESOLVED" },
-                { complaint_id: "CC-2601-002", customer_name: "Sundram Fasteners", product: "PKM0012 - VCI Cover 8\"×8\"", complaint_description: "VCI bags having tear at the corner.", action_taken: "Replaced the damaged covers.", complaint_date: "18-Feb-2026", corrective_action: "Adjusted folding machine guide rails.", permanent_action: "Reinforced corner thickness specifications.", status: "IN PROGRESS" },
-                { complaint_id: "CC-2601-003", customer_name: "Lucas TVS Ltd", product: "PDC0017 - Paint-Seal Cast Dipping", complaint_description: "Paint peel-off from corners.", action_taken: "Stripped paint and re-dipped casting.", complaint_date: "15-Feb-2026", corrective_action: "Increased oven curing time by 5 minutes.", permanent_action: "Added hourly viscosity checks for dipping paint.", status: "RESOLVED" }
-            ];
-            const filteredMock = searchQuery ? mock.filter(c =>
-                (c.complaint_id && c.complaint_id.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.customer_name && c.customer_name.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.product && c.product.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.complaint_description && c.complaint_description.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.action_taken && c.action_taken.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.corrective_action && c.corrective_action.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.permanent_action && c.permanent_action.toLowerCase().includes(searchQuery.toLowerCase().trim())) ||
-                (c.status && c.status.toLowerCase().includes(searchQuery.toLowerCase().trim()))
-            ) : mock;
-            return filteredMock;
-        }
-
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(c =>
@@ -1345,31 +1465,28 @@ export default function QualityAnalysis() {
         );
     }, [customerComplaintsData, hasNoData, searchQuery]);
 
+    // Traceability — mapped to searchFilteredInspectionRows and filtered by selectedTraceTypeFilter
     const activeTraceabilityRows = useMemo(() => {
-        if (hasNoData) return [];
-        let list = TRACEABILITY_ROWS;
+        if (selectedTraceTypeFilter === "ALL") return searchFilteredInspectionRows;
+        return searchFilteredInspectionRows.filter(r => {
+            const label = (r.typeLabel || "").toLowerCase();
+            const id = (r.id || "").toLowerCase();
+            if (selectedTraceTypeFilter === "FINAL") {
+                return label.includes("final") || id.startsWith("fi");
+            }
+            if (selectedTraceTypeFilter === "INTER") {
+                return label.includes("inter") || id.startsWith("ii");
+            }
+            if (selectedTraceTypeFilter === "JOB") {
+                return label.includes("job") || (!label.includes("final") && !label.includes("inter") && !id.startsWith("fi") && !id.startsWith("ii"));
+            }
+            return true;
+        });
+    }, [searchFilteredInspectionRows, selectedTraceTypeFilter]);
 
-        // Filter by date range if active
-        if (dateRange.from && dateRange.to) {
-            list = list.filter(r => {
-                const rd = parseDisplayDate(r.date);
-                if (!rd) return true;
-                return rd >= dateRange.from && rd <= dateRange.to;
-            });
-        }
-
-        // Filter by search query if active
-        if (!searchQuery) return list;
-        const q = searchQuery.toLowerCase().trim();
-        return list.filter(r =>
-            (r.routecardNo && r.routecardNo.toLowerCase().includes(q)) ||
-            (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
-            (r.customerName && r.customerName.toLowerCase().includes(q)) ||
-            (r.materialName && r.materialName.toLowerCase().includes(q)) ||
-            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
-            (r.operator && r.operator.toLowerCase().includes(q))
-        );
-    }, [hasNoData, dateRange, searchQuery]);
+    const activeSupplierRejections = useMemo(() => {
+        return supplierData?.results || SUPPLIER_REJECTIONS;
+    }, [supplierData]);
 
     const interInspCount = useMemo(() =>
         searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.toLowerCase().startsWith("ii")).length,
@@ -1394,7 +1511,7 @@ export default function QualityAnalysis() {
                 return { ...ins, iconKey: ins.iconKey || keys[idx % keys.length] };
             });
         }
-        return INSIGHTS_LEFT;
+        return [];
     }, [insightsData, hasNoData]);
 
     const activeInsightsRight = useMemo(() => {
@@ -1404,18 +1521,14 @@ export default function QualityAnalysis() {
                 .filter(ins => !ins.title.toLowerCase().includes("scrap"))
                 .map(ins => ({ ...ins, iconKey: ins.iconKey || "success" }));
         }
-        return INSIGHTS_RIGHT;
+        return [];
     }, [insightsData, hasNoData]);
 
     const activePriorityActions = useMemo(() => {
         if (hasNoData) return [];
         return insightsData?.priority_actions
             ? insightsData.priority_actions.filter(act => !act.toLowerCase().includes("scrap"))
-            : [
-                "1) Initiate supplier audit for Paint-Seal Cast (100% batch failure).",
-                "2) Calibrate Hardness Tester #HT-01 today.",
-                "3) Review assembly fixture for Segment Carrier alignment."
-            ];
+            : [];
     }, [insightsData, hasNoData]);
 
 
@@ -1437,14 +1550,14 @@ export default function QualityAnalysis() {
         const fpy = totalInspected > 0
             ? ((totalInspected - (totalMaterialRej + totalMachineRej + totalReworkQty)) / totalInspected) * 100
             : 0;
-        const fpyVal = totalInspected > 0 ? `${fpy.toFixed(1)}%` : "85.1%";
+        const fpyVal = totalInspected > 0 ? `${fpy.toFixed(1)}%` : "0.0%";
 
         const insQty = summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN");
-        const passRate = summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "87.6%");
-        const rejRate = summaryData?.kpis?.rejection_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "7.5%");
-        const reworkRate = summaryData?.kpis?.rework_rate_card?.value || "4.9%";
-        const pendingInsp = summaryData?.kpis?.pending_insp_card?.value || "5";
-        const qualityVal = summaryData?.kpis?.quality_value_card?.value || "₹56,589";
+        const passRate = summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "0.0%");
+        const rejRate = summaryData?.kpis?.rejection_rate_card?.value || (totalInspected > 0 ? `${(((totalMaterialRej + totalMachineRej) / totalInspected) * 100).toFixed(1)}%` : "0.0%");
+        const reworkRate = summaryData?.kpis?.rework_rate_card?.value || (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%");
+        const pendingInsp = summaryData?.kpis?.pending_insp_card?.value || "0";
+        const qualityVal = summaryData?.kpis?.quality_value_card?.value || "₹0";
 
         return [
             { icon: ClipboardCheck, iconColor: "#2d6de8", label: "Total Inspections Qty", value: insQty, sub: "Selected Period", trend: `${searchFilteredInspectionRows.length} records`, cls: "qa2-t-neutral" },
@@ -1656,19 +1769,17 @@ export default function QualityAnalysis() {
                         }
                     />
                     {chartsLoading ? (
-                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
-                            <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "260px" }}>
+                            <div style={{ display: "flex", gap: "10px", height: "208px", alignItems: "flex-end", padding: "0 10px" }}>
                                 {[40, 70, 55, 85, 60, 95, 75, 90].map((h, idx) => (
                                     <div key={idx} className="qa2-skeleton-chart-bar qa2-shimmer" style={{ height: `${h}%` }} />
                                 ))}
                             </div>
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.trend) ? (
+                        <QualityEmptyState message="No Data found on this period" height="260px" />
                     ) : (
-                        <div className="qa2-chart-wrap"><canvas ref={trendRef} /></div>
+                        <div className="qa2-chart-wrap qa2-chart-wrap--trend"><canvas ref={trendRef} /></div>
                     )}
                 </div>
             </div>
@@ -1681,10 +1792,8 @@ export default function QualityAnalysis() {
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.result_donut) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={resultRef} /></div>
                     )}
@@ -1695,10 +1804,8 @@ export default function QualityAnalysis() {
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.defect_donut) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={defectRef} /></div>
                     )}
@@ -1718,16 +1825,29 @@ export default function QualityAnalysis() {
                                 ))}
                             </div>
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.mac_rejection_ppm) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={ppmRef} /></div>
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead icon={BarChart2} iconColor="#ef4444" title="Top Defect Causes" />
+                    <SectionHead 
+                        icon={BarChart2} 
+                        iconColor="#ef4444" 
+                        title="Top Defect Causes" 
+                        extra={
+                            <QualityPremiumSelect
+                                value={paretoChartType}
+                                onChange={setParetoChartType}
+                                options={[
+                                    { value: "pareto", label: "Pareto Chart", icon: <BarChart2 size={12} /> },
+                                    { value: "count", label: "Defect Count", icon: <Activity size={12} /> },
+                                    { value: "distribution", label: "Distribution", icon: <PieChart size={12} /> }
+                                ]}
+                            />
+                        }
+                    />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div style={{ display: "flex", gap: "10px", height: "140px", alignItems: "flex-end", padding: "0 10px" }}>
@@ -1736,10 +1856,8 @@ export default function QualityAnalysis() {
                                 ))}
                             </div>
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.pareto) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={paretoRef} /></div>
                     )}
@@ -1760,10 +1878,8 @@ export default function QualityAnalysis() {
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.trend) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={rejectionRef} /></div>
                     )}
@@ -1780,10 +1896,8 @@ export default function QualityAnalysis() {
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
                         </div>
-                    ) : hasNoData ? (
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "192px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                            No data found for the selected period
-                        </div>
+                    ) : (hasNoData || !chartsData?.trend) ? (
+                        <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={reworkRef} /></div>
                     )}
@@ -1841,9 +1955,7 @@ export default function QualityAnalysis() {
                                         );
                                     })
                                 ) : (
-                                    <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                        No product records found for this period
-                                    </div>
+                                    <QualityEmptyState message="No Data found on this period" height="240px" />
                                 )}
                             </div>
                         </>
@@ -1878,9 +1990,7 @@ export default function QualityAnalysis() {
                                     </div>
                                 ))
                             ) : (
-                                <div style={{ textAlign: "center", padding: "3.5rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                    No defect causes found for this period
-                                </div>
+                                <QualityEmptyState message="No Data found on this period" height="200px" />
                             )}
                         </div>
                     )}
@@ -1918,9 +2028,7 @@ export default function QualityAnalysis() {
                                 </div>
                             ))
                         ) : (
-                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                No vendor records found for this period
-                            </div>
+                            <QualityEmptyState message="No Data found on this period" height="180px" />
                         )}
                     </div>
                 </div>
@@ -2031,9 +2139,7 @@ export default function QualityAnalysis() {
                                 </div>
                             ))
                         ) : (
-                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                No material rejections found
-                            </div>
+                            <QualityEmptyState message="No Data found on this period" height="180px" />
                         )}
                     </div>
                 </div>
@@ -2057,9 +2163,7 @@ export default function QualityAnalysis() {
                                 </div>
                             ))
                         ) : (
-                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                No machine rejections found
-                            </div>
+                            <QualityEmptyState message="No Data found on this period" height="180px" />
                         )}
                     </div>
                 </div>
@@ -2092,9 +2196,7 @@ export default function QualityAnalysis() {
                                 </div>
                             ))
                         ) : (
-                            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                No department records found
-                            </div>
+                            <QualityEmptyState message="No Data found on this period" height="180px" />
                         )}
                     </div>
                 </div>
@@ -2223,8 +2325,8 @@ export default function QualityAnalysis() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="11" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                            No inspection records found for this period
+                                        <td colSpan="11" style={{ padding: 0 }}>
+                                            <QualityEmptyState message="No Data found on this period" height="240px" />
                                         </td>
                                     </tr>
                                 )}
@@ -2252,7 +2354,7 @@ export default function QualityAnalysis() {
                     iconColor="#ef4444"
                     title="Rejection & Rework Summary"
                     extra={
-                        <div className="qa2-tag-row" style={{ paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <div className="qa2-tag-row" style={{ paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                             <span
                                 className="qa2-badge"
                                 style={{
@@ -2281,10 +2383,121 @@ export default function QualityAnalysis() {
                             >
                                 <Wrench size={10} style={{ strokeWidth: 3 }} /> Rework: {reworkCount}
                             </span>
-                            {selectedDispFilter !== "ALL" && (
+
+                            {/* Premium Custom Dropdown Filter */}
+                            <div ref={typeDropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+                                <button
+                                    onClick={() => setInspTypeDropdownOpen(p => !p)}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        background: '#ffffff',
+                                        color: '#334155',
+                                        border: '1px solid #cbd5e1',
+                                        borderRadius: '6px',
+                                        padding: '4px 10px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                        transition: 'all 0.15s ease',
+                                        outline: 'none',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.borderColor = '#94a3b8';
+                                        e.currentTarget.style.background = '#f8fafc';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.borderColor = '#cbd5e1';
+                                        e.currentTarget.style.background = '#ffffff';
+                                    }}
+                                >
+                                    <SlidersHorizontal size={10} style={{ color: '#64748b' }} />
+                                    <span>
+                                        {selectedInspTypeFilter === "ALL" ? "All Insp. Types" : selectedInspTypeFilter}
+                                    </span>
+                                    <ChevronDown size={10} style={{ 
+                                        color: '#64748b', 
+                                        transition: 'transform 0.2s ease', 
+                                        transform: inspTypeDropdownOpen ? 'rotate(180deg)' : 'none' 
+                                    }} />
+                                </button>
+
+                                {inspTypeDropdownOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 4px)',
+                                        right: 0,
+                                        zIndex: 999,
+                                        minWidth: '190px',
+                                        background: 'rgba(255, 255, 255, 0.95)',
+                                        backdropFilter: 'blur(8px)',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                                        padding: '4px',
+                                    }}>
+                                        {[
+                                            { value: "ALL", label: "All Insp. Types" },
+                                            { value: "Job Order", label: "Job Order" },
+                                            { value: "Intermediate Inspection", label: "Intermediate" },
+                                            { value: "Final Inspection", label: "Final Inspection" }
+                                        ].map(opt => {
+                                            const isSelected = selectedInspTypeFilter === opt.value;
+                                            return (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => {
+                                                        setSelectedInspTypeFilter(opt.value);
+                                                        setInspTypeDropdownOpen(false);
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        width: '100%',
+                                                        padding: '6px 12px',
+                                                        border: 'none',
+                                                        background: isSelected ? 'rgba(45, 109, 232, 0.08)' : 'transparent',
+                                                        color: isSelected ? '#2d6de8' : '#475569',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: isSelected ? 700 : 500,
+                                                        borderRadius: '6px',
+                                                        textAlign: 'left',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.background = '#f1f5f9';
+                                                            e.currentTarget.style.color = '#0f172a';
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.background = 'transparent';
+                                                            e.currentTarget.style.color = '#475569';
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>{opt.label}</span>
+                                                    {isSelected && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#2d6de8' }} />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {(selectedDispFilter !== "ALL" || selectedInspTypeFilter !== "ALL") && (
                                 <button
                                     className="qa2-clear-type-filter-btn"
-                                    onClick={() => setSelectedDispFilter("ALL")}
+                                    onClick={() => {
+                                        setSelectedDispFilter("ALL");
+                                        setSelectedInspTypeFilter("ALL");
+                                    }}
                                     style={{
                                         background: 'none',
                                         border: 'none',
@@ -2321,42 +2534,123 @@ export default function QualityAnalysis() {
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Insp No", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
-                                        <th key={h} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
+                                    {["Insp No", "Insp Type", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
+                                        <th key={h} style={getRejColStyle(h)} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
                                 {activeRejectionRows.length > 0 ? (
-                                    activeRejectionRows.map((r, i) => (
-                                        <tr key={i} className="qa2-tr">
-                                            <td><span className="qa2-rej-id">{r.id}</span></td>
-                                            <td>{r.product}</td>
-                                            <td>{r.reason}</td>
-                                            <td className="qa2-td-r">{r.qty}</td>
-                                            <td>
-                                                <span
-                                                    className={`qa2-badge ${r.dispCls} qa2-badge-interactive`}
-                                                    style={{ display: 'inline-flex', alignItems: 'center' }}
-                                                    onClick={() => handleDispBadgeClick(r.disp)}
-                                                >
-                                                    {r.disp}
-                                                </span>
-                                            </td>
-                                            <td className="qa2-muted qa2-nowrap">{r.date}</td>
-                                        </tr>
-                                    ))
+                                    activeRejectionRows.map((r, i) => {
+                                        const type = r.inspType || "Job Order";
+                                        const typeCls = type.includes("Job") ? "qa2-tag-teal" : "qa2-tag-blue";
+                                        return (
+                                            <tr key={i} className="qa2-tr">
+                                                <td style={getRejColStyle("Insp No")}><span className="qa2-rej-id">{r.id}</span></td>
+                                                <td style={getRejColStyle("Insp Type")}>
+                                                    <span className={`qa2-badge ${typeCls}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                        {type}
+                                                    </span>
+                                                </td>
+                                                <td style={getRejColStyle("Product")}>{r.product}</td>
+                                                <td style={getRejColStyle("Reason")}>{r.reason}</td>
+                                                <td className="qa2-td-r" style={getRejColStyle("Qty")}>{r.qty}</td>
+                                                <td style={getRejColStyle("Disposition")}>
+                                                    <span
+                                                        className={`qa2-badge ${r.dispCls} qa2-badge-interactive`}
+                                                        style={{ display: 'inline-flex', alignItems: 'center' }}
+                                                        onClick={() => handleDispBadgeClick(r.disp)}
+                                                    >
+                                                        {r.disp}
+                                                    </span>
+                                                </td>
+                                                <td className="qa2-muted qa2-nowrap" style={getRejColStyle("Date")}>{r.date}</td>
+                                            </tr>
+                                        );
+                                    })
                                 ) : (
                                     <tr>
-                                        <td colSpan="6" style={{ textAlign: "center", padding: "2.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                            No rejection or rework records found
+                                        <td colSpan="7" style={{ padding: 0 }}>
+                                            <QualityEmptyState message="No Data found on this period" height="200px" />
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
+                            {activeRejectionRows.length > 0 && (
+                                <tfoot>
+                                    <tr className="qa2-total-row">
+                                        <td style={getRejColStyle("Insp No")} className="qa2-total-label">Total</td>
+                                        <td style={getRejColStyle("Insp Type")}></td>
+                                        <td style={getRejColStyle("Product")}></td>
+                                        <td style={getRejColStyle("Reason")}></td>
+                                        <td className="qa2-td-r" style={getRejColStyle("Qty")}>
+                                            <span className="qa2-total-badge qa2-total-badge-red" style={{ fontWeight: 700 }}>
+                                                {totalRejRwkQty.toLocaleString("en-IN")}
+                                            </span>
+                                        </td>
+                                        <td style={getRejColStyle("Disposition")}></td>
+                                        <td style={getRejColStyle("Date")}></td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 )}
+            </div>
+
+            {/* ── Supplier Wise Rejection (Full Width, Chart Left, Table Right) ── */}
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+                <SectionHead icon={PieChart} iconColor="#8b5cf6" title="Supplier Wise Rejection"
+                    badge={`${activeSupplierRejections.length} Record${activeSupplierRejections.length !== 1 ? "s" : ""}`} badgeCls="qa2-badge-purple" />
+                <div className="qa2-supplier-grid">
+                    
+                    {/* Left side: Chart/Graph */}
+                    <div style={{
+                        background: "rgba(255, 255, 255, 0.4)",
+                        backdropFilter: "blur(10px)",
+                        border: "1px solid rgba(226, 232, 240, 0.8)",
+                        borderRadius: "12px",
+                        padding: "1rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: "340px",
+                        boxShadow: "inset 0 2px 4px 0 rgba(0,0,0,0.01)"
+                    }}>
+                        <div style={{ fontWeight: 600, fontSize: "0.78rem", color: "#1e293b", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Rejection Breakdown by Supplier</div>
+                        <div style={{ flex: 1, position: "relative" }}>
+                            <canvas ref={supplierRef} />
+                        </div>
+                    </div>
+
+                    {/* Right side: Table */}
+                    <div className="qa2-table-scroll" style={{ margin: 0, padding: 0, background: "rgba(255, 255, 255, 0.2)", borderRadius: "12px", border: "1px solid rgba(226, 232, 240, 0.8)", minHeight: "340px" }}>
+                        <table className="qa2-table">
+                            <thead>
+                                <tr>
+                                    {["#", "Supplier Name", "Grn no", "Grn Date", "Item Details", "GRN Qty", "UOM", "Ok Qty", "Mat Rej", "Mac Rej"].map(h => (
+                                        <th key={h} style={getSuppColStyle(h)} className={["GRN Qty", "Ok Qty", "Mat Rej", "Mac Rej"].includes(h) ? "qa2-th-r" : ""}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {activeSupplierRejections.map((r, i) => (
+                                    <tr key={i} className="qa2-tr">
+                                        <td style={{ ...getSuppColStyle("#"), fontWeight: 600, color: "#64748b" }}>{i + 1}</td>
+                                        <td style={{ ...getSuppColStyle("Supplier Name"), fontWeight: 600 }}>{r.supplier}</td>
+                                        <td style={getSuppColStyle("Grn no")}><span className="qa2-rej-id" style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6" }}>{r.grnNo}</span></td>
+                                        <td style={getSuppColStyle("Grn Date")} className="qa2-muted qa2-nowrap">{r.date}</td>
+                                        <td style={getSuppColStyle("Item Details")} className="qa2-mono qa2-muted">{r.item}</td>
+                                        <td style={{ ...getSuppColStyle("GRN Qty"), fontWeight: 600 }} className="qa2-td-r">{r.qty.toLocaleString()}</td>
+                                        <td style={{ ...getSuppColStyle("UOM"), color: "#64748b" }} className="qa2-nowrap qa2-center">{r.uom}</td>
+                                        <td style={{ ...getSuppColStyle("Ok Qty"), fontWeight: 600 }} className="qa2-td-r qa2-green">{r.okQty.toLocaleString()}</td>
+                                        <td style={{ ...getSuppColStyle("Mat Rej"), fontWeight: r.matRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.matRej > 0 ? "qa2-red" : ""}`}>{r.matRej.toLocaleString()}</td>
+                                        <td style={{ ...getSuppColStyle("Mac Rej"), fontWeight: r.macRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.macRej > 0 ? "qa2-red" : ""}`}>{r.macRej.toLocaleString()}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             {/* ── Customer Complaints (Full Width) ── */}
@@ -2411,8 +2705,8 @@ export default function QualityAnalysis() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="9" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-                                            No customer complaints logged for this period
+                                        <td colSpan="9" style={{ padding: 0 }}>
+                                            <QualityEmptyState message="No Data found on this period" height="200px" />
                                         </td>
                                     </tr>
                                 )}
@@ -2430,42 +2724,184 @@ export default function QualityAnalysis() {
                     title="Traceability Records"
                     badge={`${activeTraceabilityRows.length} Record${activeTraceabilityRows.length !== 1 ? "s" : ""}`}
                     badgeCls="qa2-badge-purple"
+                    extra={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ position: 'relative' }} ref={traceTypeDropdownRef}>
+                                <button
+                                    className="qa2-filter-btn"
+                                    onClick={() => setTraceTypeDropdownOpen(!traceTypeDropdownOpen)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '5px 12px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #cbd5e1',
+                                        background: 'rgba(255,255,255,0.7)',
+                                        color: '#475569',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#ffffff';
+                                        e.currentTarget.style.borderColor = '#94a3b8';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(255,255,255,0.7)';
+                                        e.currentTarget.style.borderColor = '#cbd5e1';
+                                    }}
+                                >
+                                    <span>
+                                        {selectedTraceTypeFilter === "ALL" && "All Insp. Types"}
+                                        {selectedTraceTypeFilter === "FINAL" && "Final Inspection"}
+                                        {selectedTraceTypeFilter === "INTER" && "Intermediate"}
+                                        {selectedTraceTypeFilter === "JOB" && "Job Order"}
+                                    </span>
+                                    <ChevronDown size={10} style={{ 
+                                        color: '#64748b', 
+                                        transition: 'transform 0.2s ease', 
+                                        transform: traceTypeDropdownOpen ? 'rotate(180deg)' : 'none' 
+                                    }} />
+                                </button>
+
+                                {traceTypeDropdownOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 4px)',
+                                        right: 0,
+                                        zIndex: 999,
+                                        minWidth: '190px',
+                                        background: 'rgba(255, 255, 255, 0.95)',
+                                        backdropFilter: 'blur(8px)',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                                        padding: '4px',
+                                    }}>
+                                        {[
+                                            { value: "ALL", label: "All Insp. Types" },
+                                            { value: "JOB", label: "Job Order" },
+                                            { value: "INTER", label: "Intermediate" },
+                                            { value: "FINAL", label: "Final Inspection" }
+                                        ].map(opt => {
+                                            const isSelected = selectedTraceTypeFilter === opt.value;
+                                            return (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => {
+                                                        setSelectedTraceTypeFilter(opt.value);
+                                                        setTraceTypeDropdownOpen(false);
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        width: '100%',
+                                                        padding: '6px 12px',
+                                                        border: 'none',
+                                                        background: isSelected ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
+                                                        color: isSelected ? '#8b5cf6' : '#475569',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: isSelected ? 700 : 500,
+                                                        borderRadius: '6px',
+                                                        textAlign: 'left',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.background = '#f1f5f9';
+                                                            e.currentTarget.style.color = '#0f172a';
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.background = 'transparent';
+                                                            e.currentTarget.style.color = '#475569';
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>{opt.label}</span>
+                                                    {isSelected && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#8b5cf6' }} />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {selectedTraceTypeFilter !== "ALL" && (
+                                <button
+                                    className="qa2-clear-type-filter-btn"
+                                    onClick={() => {
+                                        setSelectedTraceTypeFilter("ALL");
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#8b5cf6',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        padding: '0 4px',
+                                        marginLeft: '4px'
+                                    }}
+                                >
+                                    <X size={10} style={{ strokeWidth: 3 }} /> Clear Filter
+                                </button>
+                            )}
+                        </div>
+                    }
                 />
                 <div className="qa2-table-scroll">
                     <table className="qa2-table">
                         <thead>
                             <tr>
-                                {["ROUTECARD NO", "ROUTECARD DATE", "SUPPLIER NAME", "GRN Details", "MATERIAL NAME", "CUSTOMER NAME", "PART NO – DESCRIPTION", "OPERATOR", "Tot QTY", "OK QTY", "REJ QTY", "RW QTY", "Dispatch Qty"].map(h => (
-                                    <th key={h} className={["Tot QTY", "OK QTY", "REJ QTY", "RW QTY", "Dispatch Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
+                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Partno-Description", "Process", "Operator Name", "Prod Qty", "Rej Qty", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
+                                    <th key={h} style={getTraceColStyle(h)} className={["Prod Qty", "Rej Qty", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {activeTraceabilityRows.length > 0 ? (
-                                activeTraceabilityRows.map((r, i) => (
-                                    <tr key={i} className="qa2-tr">
-                                        <td style={{ minWidth: "130px" }}>
-                                            <span
-                                                className="qa2-badge"
-                                                style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6", fontWeight: 700 }}
-                                            >
-                                                {r.routecardNo}
-                                            </span>
-                                        </td>
-                                        <td className="qa2-muted qa2-nowrap" style={{ minWidth: "120px" }}>{r.date}</td>
-                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.supplierName}</td>
-                                        <td className="qa2-muted qa2-nowrap" style={{ minWidth: "150px" }}>{r.grnDetails || "—"}</td>
-                                        <td className="qa2-muted" style={{ minWidth: "150px" }}>{r.materialName}</td>
-                                        <td style={{ minWidth: "160px", fontWeight: 600 }}>{r.customerName}</td>
-                                        <td className="qa2-mono qa2-muted" style={{ minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" }}>{r.partNoDesc}</td>
-                                        <td className="qa2-nowrap" style={{ minWidth: "130px" }}>{r.operator}</td>
-                                        <td className="qa2-td-r" style={{ minWidth: "80px", fontWeight: 600 }}>{r.qty}</td>
-                                        <td className="qa2-td-r qa2-green" style={{ minWidth: "80px", fontWeight: 600 }}>{r.okQty}</td>
-                                        <td className="qa2-td-r qa2-red" style={{ minWidth: "80px" }}>{r.rejQty}</td>
-                                        <td className="qa2-td-r qa2-orange" style={{ minWidth: "80px" }}>{r.rwQty}</td>
-                                        <td className="qa2-td-r qa2-blue" style={{ minWidth: "90px", fontWeight: 600 }}>{r.dispatchQty || "0"}</td>
-                                    </tr>
-                                ))
+                                activeTraceabilityRows.map((r, i) => {
+                                    const totalRej = (parseFloat(r.matRejQty || 0) + parseFloat(r.macRejQty || 0));
+                                    return (
+                                        <tr key={i} className="qa2-tr">
+                                            <td style={{ ...getTraceColStyle("#"), fontWeight: 600, color: "#64748b" }}>{i + 1}</td>
+                                            <td style={getTraceColStyle("Inspno")}><span className="qa2-rej-id" style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6" }}>{r.id}</span></td>
+                                            <td style={getTraceColStyle("Insp Date")} className="qa2-muted qa2-nowrap">{r.date}</td>
+                                            <td style={getTraceColStyle("Machine No")}>
+                                                {r.machineNo && r.machineNo !== "—" ? (
+                                                    <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{r.machineNo}</span>
+                                                ) : "—"}
+                                            </td>
+                                            <td style={getTraceColStyle("Shift")}>
+                                                {r.shift && r.shift !== "—" ? (
+                                                    <span className="qa2-badge qa2-tag-teal" style={{ background: "rgba(204,251,241,0.6)", color: "#0f766e" }}>{r.shift}</span>
+                                                ) : "—"}
+                                            </td>
+                                            <td style={getTraceColStyle("Partno-Description")} className="qa2-mono qa2-muted">{r.partNoDesc}</td>
+                                            <td style={getTraceColStyle("Process")}>
+                                                {r.process ? (
+                                                    <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{r.process}</span>
+                                                ) : "—"}
+                                            </td>
+                                            <td style={getTraceColStyle("Operator Name")}>{r.operatorName}</td>
+                                            <td style={{ ...getTraceColStyle("Prod Qty"), fontWeight: 600 }} className="qa2-td-r">{r.qty}</td>
+                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Rej Qty"), fontWeight: totalRej > 0 ? 600 : 400, color: totalRej > 0 ? "#ef4444" : "inherit" }}>{totalRej}</td>
+                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Rw Qty"), fontWeight: parseFloat(r.reworkQty || 0) > 0 ? 600 : 400, color: parseFloat(r.reworkQty || 0) > 0 ? "#f97316" : "inherit" }}>{r.reworkQty || 0}</td>
+                                            <td style={getTraceColStyle("Inspected By")}>{r.inspBy}</td>
+                                            <td style={getTraceColStyle("Routecard Details")} className="qa2-mono qa2-muted">{r.routecardDetails}</td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
                                     <td colSpan="13" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
