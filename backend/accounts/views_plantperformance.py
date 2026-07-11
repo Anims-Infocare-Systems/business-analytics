@@ -48,7 +48,8 @@ WITH PO_DATA AS
         PM.Apono,
         PD.ItCode,
 
-        SUM(ISNULL(PD.Amt,0)) AS POValue
+        SUM(ISNULL(PD.Amt,0))  AS POValue,
+        ISNULL(MAX(PD.Rate),0) AS PORate
 
     FROM In_PoMas PM
     INNER JOIN In_PoDet PD
@@ -67,51 +68,61 @@ WITH PO_DATA AS
         PD.ItCode
 ),
 
-PO_DC_MAP AS
+
+/* Step 1: Build a clean Apono+PartNo → Rate lookup from PO master/detail */
+PO_RATE AS
 (
-    SELECT DISTINCT
-        Apono,
-        PartNo,
-        DCNO
-    FROM DcInSubDet
-    WHERE Deleted = 0
+    SELECT
+        LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))) AS Apono,
+        LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512)))) AS ItCode,
+        MAX(ISNULL(PD.Rate, 0))                        AS Rate
+    FROM In_PoMas PM
+    INNER JOIN In_PoDet PD ON PD.PONO = PM.PONO AND PD.Deleted = 0
+    WHERE PM.Deleted = 0
+    GROUP BY
+        LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))),
+        LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512))))
+),
 
-    UNION
+/* Step 2: DC dispatched qty × PO rate for each Apono+PartNo */
+DC_SALES AS
+(
+    SELECT
+        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
+        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
+        SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
+    FROM DcInSubDet D
+    LEFT JOIN PO_RATE R
+        ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
+        AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+    WHERE ISNULL(D.Deleted, 0) = 0
+    GROUP BY
+        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
+        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
 
-    SELECT DISTINCT
-        Apono,
-        PartNo,
-        DCNO
-    FROM DcInSubDetAssmPoDet
-    WHERE Deleted = 0
+    UNION ALL
+
+    SELECT
+        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
+        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
+        SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
+    FROM DcInSubDetAssmPoDet D
+    LEFT JOIN PO_RATE R
+        ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
+        AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+    WHERE ISNULL(D.Deleted, 0) = 0
+    GROUP BY
+        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
+        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
 ),
 
 SALES_DATA AS
 (
-    SELECT
-        PDM.Apono,
-        PDM.PartNo,
-
-        SUM(ISNULL(BD.Amt,0)) AS SalesValue
-
-    FROM PO_DC_MAP PDM
-
-    INNER JOIN Bill_DcOrdDet BDO
-        ON PDM.DCNO = BDO.DCNO
-
-    INNER JOIN Bill_Mas BM
-        ON BDO.InvNo = BM.InvNo
-       AND BM.Deleted = 0
-
-    INNER JOIN Bill_Det BD
-        ON BM.InvNo = BD.InvNo
-       AND BD.Deleted = 0
-       AND BD.ItCode = PDM.PartNo
-
-    GROUP BY
-        PDM.Apono,
-        PDM.PartNo
+    SELECT Apono, PartNo, SUM(SalesValue) AS SalesValue
+    FROM DC_SALES
+    GROUP BY Apono, PartNo
 )
+
 
 SELECT
     P.CustomerName,
@@ -126,37 +137,23 @@ SELECT
 
     SUM(
         CASE
-            WHEN ISNULL(S.SalesValue,0) > P.POValue
-            THEN P.POValue
-            ELSE ISNULL(S.SalesValue,0)
+            WHEN ISNULL(S.SalesValue, 0) > P.POValue THEN P.POValue
+            ELSE ISNULL(S.SalesValue, 0)
         END
     ) AS SalesValue,
 
     SUM(
         CASE
-            WHEN P.POValue >
-                 CASE
-                    WHEN ISNULL(S.SalesValue,0) > P.POValue
-                    THEN P.POValue
-                    ELSE ISNULL(S.SalesValue,0)
-                 END
-            THEN
-                 P.POValue
-                 -
-                 CASE
-                    WHEN ISNULL(S.SalesValue,0) > P.POValue
-                    THEN P.POValue
-                    ELSE ISNULL(S.SalesValue,0)
-                 END
-            ELSE 0
+            WHEN ISNULL(S.SalesValue, 0) >= P.POValue THEN 0
+            ELSE P.POValue - ISNULL(S.SalesValue, 0)
         END
     ) AS PendingValue
 
 FROM PO_DATA P
 
 LEFT JOIN SALES_DATA S
-    ON P.Apono = S.Apono
-   AND P.ItCode = S.PartNo
+    ON  S.Apono  = LTRIM(RTRIM(CAST(P.Apono  AS NVARCHAR(512))))
+   AND  S.PartNo = LTRIM(RTRIM(CAST(P.ItCode AS NVARCHAR(512))))
 
 GROUP BY
     P.CustomerName,
@@ -171,6 +168,7 @@ ORDER BY
     P.PODate,
     P.Apono;
     """
+
     
     rows = []
     cursor = None
@@ -194,9 +192,9 @@ ORDER BY
                 "customer": customer,
                 "month": month_label,
                 "date": date_str,
-                "orderValue": round(po_val, 2),
-                "salesValue": round(sales_val, 2),
-                "pendingValue": round(pending_val, 2),
+                "orderValue": round(po_val, 3),
+                "salesValue": round(sales_val, 3),
+                "pendingValue": round(pending_val, 3),
                 "poNumber": po_number,
                 "partNumber": part_number
             })

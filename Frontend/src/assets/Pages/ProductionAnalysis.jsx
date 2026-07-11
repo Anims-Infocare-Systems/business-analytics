@@ -3149,10 +3149,10 @@ export default function ProductionAnalysis() {
 
         return createPortal(
           <div className="pa2-modal-overlay" onClick={() => setMhrModalOpen(false)}>
-            <div className="pa2-modal" style={{ maxWidth: "1020px", width: "95vw", padding: 0, overflow: "hidden", borderRadius: "16px" }} onClick={e => e.stopPropagation()}>
+            <div className="pa2-modal pa2-modal--mhr" onClick={e => e.stopPropagation()}>
               
               {/* Modal Header */}
-              <div className="pa2-modal-hdr" style={{ "--mc": "#2563eb", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", borderBottom: "1.5px solid #cbdbe5" }}>
+              <div className="pa2-modal-hdr pa2-modal-hdr--mhr" style={{ "--mc": "#2563eb" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{ width: "36px", height: "36px", border: "1.5px solid #d1e2ff", borderRadius: "50%", background: "#eff6ff", display: "flex", alignItems: "center", justifyContext: "center", color: "#2563eb", justifyContent: "center" }}>
                     <FiClock size={18} />
@@ -3191,8 +3191,8 @@ export default function ProductionAnalysis() {
                 </div>
               </div>
 
-              {/* Modal Content - 2 Columns */}
-              <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "20px", padding: "20px 24px", background: "#ffffff" }}>
+              {/* Modal Content - Responsive Columns */}
+              <div className="pa2-mhr-modal-split">
                 
                 {/* 1. CALCULATOR INPUTS */}
                 <div className="pa2-mhr-inputs-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>

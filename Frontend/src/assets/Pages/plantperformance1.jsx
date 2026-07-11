@@ -375,6 +375,9 @@ const pp1ChartTransitions = {
 function fmtLakhs(val, decimals = 2) {
   const n = Number(val);
   if (!Number.isFinite(n)) return "—";
+  if (n > 0 && n < 0.01 && decimals === 2) {
+    return n.toFixed(3);
+  }
   return n.toFixed(decimals);
 }
 
@@ -4718,9 +4721,9 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
                     <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
                   ) : (
                     <>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(r.orderValue || 0).toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{Number(r.salesValue || 0).toFixed(2)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{Number(r.pendingValue || 0).toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{fmtLakhs(r.orderValue)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{fmtLakhs(r.salesValue)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{fmtLakhs(r.pendingValue)} L</td>
                     </>
                   )}
                 </tr>
@@ -9952,43 +9955,104 @@ function IdleHoursReportBottomTable({ filters }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
+  const [liveLogs, setLiveLogs] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(false);
 
+  // Compute active date range from filters
+  const activeFromStr = React.useMemo(() => {
+    if (filters?.fromDate) return filters.fromDate;
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  }, [filters?.fromDate]);
+
+  const activeToStr = React.useMemo(() => {
+    if (filters?.toDate) return filters.toDate;
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  }, [filters?.toDate]);
+
+  // Fetch real data from /api/idle-time-report/
+  React.useEffect(() => {
+    if (!activeFromStr || !activeToStr) return;
+    setIsLoading(true);
+    const params = new URLSearchParams({
+      from: activeFromStr,
+      to: activeToStr,
+      machine: filters?.machine || "",
+      reason: filters?.idleReason || "",
+    });
+    const ctrl = new AbortController();
+    fetch(`/api/idle-time-report/?${params}`, {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json && Array.isArray(json.rows)) {
+          // Aggregate by date + machine to show one row per machine per day
+          const aggMap = {};
+          json.rows.forEach(row => {
+            const date = (row.entry_date || row.date || "").slice(0, 10);
+            const machine = (row.mac_no || row.machine || "").trim();
+            if (!date || !machine) return;
+            const key = `${date}||${machine}`;
+            if (!aggMap[key]) {
+              aggMap[key] = {
+                date,
+                machine,
+                idleHours: 0,
+                ratePerHour: Number(row.rate_per_hour || 0),
+              };
+            }
+            aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+            // Keep the highest rate for the machine (same machine, same rate)
+            if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
+              aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
+            }
+          });
+          setLiveLogs(
+            Object.values(aggMap).sort((a, b) => {
+              if (a.date < b.date) return -1;
+              if (a.date > b.date) return 1;
+              return a.machine.localeCompare(b.machine);
+            })
+          );
+        } else {
+          setLiveLogs([]);
+        }
+      })
+      .catch(() => setLiveLogs([]))
+      .finally(() => setIsLoading(false));
+    return () => ctrl.abort();
+  }, [activeFromStr, activeToStr, filters?.machine, filters?.idleReason]);
+
+  // Apply optional machine filter on the aggregated list
   const filteredLogs = React.useMemo(() => {
-    let list = MOCK_IDLE_LOGS;
-
-    let activeFrom = filters?.fromDate;
-    let activeTo = filters?.toDate;
-    if (!activeFrom) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, "0");
-      activeFrom = `${year}-${month}-01`;
+    let list = liveLogs;
+    if (filters?.machine) {
+      const macList = filters.machine.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (macList.length > 0) {
+        list = list.filter(r => macList.includes((r.machine || "").toLowerCase()));
+      }
     }
-    if (!activeTo) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, "0");
-      const day = String(today.getDate()).padStart(2, "0");
-      activeTo = `${year}-${month}-${day}`;
-    }
-
-    list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
-    if (filters?.operator) list = list.filter(r => r.operator === filters.operator);
-    if (filters?.machine) list = list.filter(r => r.machine === filters.machine);
-    if (filters?.idleReason) list = list.filter(r => r.reason === filters.idleReason);
     return list;
-  }, [filters]);
+  }, [liveLogs, filters?.machine]);
 
   // Tab 1 Data
   const columns1 = ["Sl.No", "Date", "Machine Name", "Idle Hour", "Rate Per Hour", "Production Loss (Lakhs)"];
   const rows1 = React.useMemo(() => {
+    const fmtDate = (d) => {
+      if (!d) return "";
+      const [y, m, day] = d.split("-");
+      return `${day}-${m}-${y}`;
+    };
     return filteredLogs.map((r, idx) => [
       String(idx + 1),
-      r.date,
+      fmtDate(r.date),
       r.machine,
-      `${r.duration} h`,
-      `₹${r.ratePerHour.toLocaleString()}`,
-      `₹${((r.duration * r.ratePerHour) / 100000).toFixed(3)} L`
+      `${Number(r.idleHours).toFixed(2)} h`,
+      r.ratePerHour > 0 ? `\u20b9${Number(r.ratePerHour).toLocaleString("en-IN")}` : "\u2014",
+      r.ratePerHour > 0 ? `\u20b9${((r.idleHours * r.ratePerHour) / 100000).toFixed(3)} L` : "\u2014"
     ]);
   }, [filteredLogs]);
 
@@ -10096,7 +10160,13 @@ function IdleHoursReportBottomTable({ filters }) {
             </tr>
           </thead>
           <tbody>
-            {sortedRows1.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={columns1.length} className="pp1-cc-tbl__empty">
+                  Loading…
+                </td>
+              </tr>
+            ) : sortedRows1.length === 0 ? (
               <tr>
                 <td colSpan={columns1.length} className="pp1-cc-tbl__empty">
                   No data available.
@@ -12161,7 +12231,7 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
   const activeColumns = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      return ["Sl.No", ...monthLabels];
+      return ["Avg OEE", ...monthLabels];
     } else if (xAxisGroup === "Day Wise") {
       return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
@@ -12173,28 +12243,21 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
   const activeRows = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      const list = processedData.map((m, idx) => [
-        String(idx + 1),
-        ...m.monthlyVals.map(v => (v > 0 ? `${v}%` : "—"))
-      ]);
-
-      if (processedData.length > 0) {
-        const numMonths = processedData[0].monthlyVals.length;
-        const overallAvg = [];
-        for (let idx = 0; idx < numMonths; idx++) {
-          let sum = 0;
-          let count = 0;
-          processedData.forEach(m => {
-            if (m.monthlyVals[idx] > 0) {
-              sum += m.monthlyVals[idx];
-              count += 1;
-            }
-          });
-          overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
-        }
-        list.push(["-", ...overallAvg]);
+      if (processedData.length === 0) return [];
+      const numMonths = processedData[0].monthlyVals.length;
+      const overallAvg = [];
+      for (let idx = 0; idx < numMonths; idx++) {
+        let sum = 0;
+        let count = 0;
+        processedData.forEach(m => {
+          if (m.monthlyVals[idx] > 0) {
+            sum += m.monthlyVals[idx];
+            count += 1;
+          }
+        });
+        overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
       }
-      return list;
+      return [["Overall Average", ...overallAvg]];
     } else if (xAxisGroup === "Day Wise") {
       if (processedData.length === 0) return [];
 
@@ -12209,8 +12272,9 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
             count += 1;
           }
         });
-        const dayLabel = processedData[0].dayDates?.[idx]
-          ? processedData[0].dayDates[idx]
+        const rawDate = processedData[0].dayDates?.[idx];
+        const dayLabel = rawDate
+          ? rawDate.split("-").reverse().join("-")
           : `Day ${idx + 1}`;
         list.push([
           String(idx + 1),
@@ -13371,7 +13435,7 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
   const activeColumns = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      return ["Sl.No", ...monthLabels];
+      return ["Avg Eff", ...monthLabels];
     } else if (xAxisGroup === "Day Wise") {
       return ["Sl.No", "Date", "Eff%"];
     } else if (xAxisGroup === "Mac Wise") {
@@ -13383,27 +13447,21 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
   const activeRows = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      const list = filteredData.map((row, idx) => [
-        String(idx + 1),
-        ...row.monthlyVals.map(v => (v > 0 ? `${v}%` : "—"))
-      ]);
-      if (filteredData.length > 0) {
-        const numMonths = filteredData[0].monthlyVals.length;
-        const overallAvg = [];
-        for (let idx = 0; idx < numMonths; idx++) {
-          let sum = 0;
-          let count = 0;
-          filteredData.forEach(row => {
-            if (row.monthlyVals[idx] > 0) {
-              sum += row.monthlyVals[idx];
-              count += 1;
-            }
-          });
-          overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
-        }
-        list.push(["-", ...overallAvg]);
+      if (filteredData.length === 0) return [];
+      const numMonths = filteredData[0].monthlyVals.length;
+      const overallAvg = [];
+      for (let idx = 0; idx < numMonths; idx++) {
+        let sum = 0;
+        let count = 0;
+        filteredData.forEach(row => {
+          if (row.monthlyVals[idx] > 0) {
+            sum += row.monthlyVals[idx];
+            count += 1;
+          }
+        });
+        overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
       }
-      return list;
+      return [["Overall Average", ...overallAvg]];
     } else if (xAxisGroup === "Day Wise") {
       if (filteredData.length === 0) return [];
 
@@ -13429,13 +13487,31 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
       }
       return list;
     } else if (xAxisGroup === "Mac Wise") {
-      const list = filteredData.map((row, idx) => [
-        String(idx + 1),
-        row.machine,
-        `${row.avgVal}%`
-      ]);
-      if (filteredData.length > 0) {
-        const overallAvg = Math.round(filteredData.reduce((acc, r) => acc + r.avgVal, 0) / filteredData.length);
+      // Group by machine name only — combine all operators/shifts for the same machine
+      const machineMap = {};
+      filteredRows.forEach(r => {
+        const mac = (r.machine || "").trim();
+        if (!mac) return;
+        const eff = Number(r.oaeff || 0);
+        if (eff <= 0) return;
+        if (!machineMap[mac]) machineMap[mac] = { sum: 0, count: 0 };
+        machineMap[mac].sum += eff;
+        machineMap[mac].count += 1;
+      });
+
+      const machines = Object.keys(machineMap).sort();
+      const list = machines.map((mac, idx) => {
+        const { sum, count } = machineMap[mac];
+        const avg = count ? Math.round(sum / count) : 0;
+        return [String(idx + 1), mac, `${avg}%`];
+      });
+
+      if (list.length > 0) {
+        // True period-wise overall from all raw rows
+        const validRows = filteredRows.filter(r => Number(r.oaeff || 0) > 0);
+        const overallAvg = validRows.length
+          ? Math.round(validRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0) / validRows.length)
+          : 0;
         list.push(["-", "Overall Average", `${overallAvg}%`]);
       }
       return list;
@@ -13455,7 +13531,7 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
       }
       return validList;
     }
-  }, [filteredData, xAxisGroup]);
+  }, [filteredData, filteredRows, xAxisGroup]);
 
   const sortedRows = React.useMemo(() => {
     if (sortIndex === null) return activeRows;
@@ -18984,20 +19060,49 @@ function OperatorEfficiencyBottomTable({ data, filters, targetConfig }) {
 
   const rows = React.useMemo(() => {
     const list = filterOpEffRows(opEffRows, filters, defaultRange.from, defaultRange.to);
-    const ranked = [...list].sort((a, b) => Number(b.operatorPct || 0) - Number(a.operatorPct || 0));
 
-    return ranked.map((row, idx) => {
-      return [
-        String(idx + 1),
-        formatOpEffDisplayDate(row.date),
-        row.operator || "—",
-        `${Number(row.oaEff || 0).toFixed(1)}%`,
-        `${Number(row.operatorPct || 0).toFixed(1)}%`,
-        `${Number(row.qfEff || 0).toFixed(1)}%`,
-        `${Number(row.idle || 0).toFixed(1)}%`,
-        `# ${idx + 1}`
-      ];
+    // Combine same operator on same date into one row (average the efficiency values)
+    const combined = {};
+    list.forEach(r => {
+      const key = `${(r.date || "").slice(0, 10)}||${(r.operator || "").trim()}`;
+      if (!combined[key]) {
+        combined[key] = {
+          date: (r.date || "").slice(0, 10),
+          operator: (r.operator || "").trim() || "—",
+          oaEffSum: 0, oaEffCount: 0,
+          operatorPctSum: 0, operatorPctCount: 0,
+          qfEffSum: 0, qfEffCount: 0,
+          idleSum: 0, idleCount: 0,
+        };
+      }
+      const g = combined[key];
+      const oaEff = Number(r.oaEff || 0);
+      const opPct = Number(r.operatorPct || 0);
+      const qfEff = Number(r.qfEff || 0);
+      const idle = Number(r.idle || 0);
+      if (oaEff > 0) { g.oaEffSum += oaEff; g.oaEffCount += 1; }
+      if (opPct > 0) { g.operatorPctSum += opPct; g.operatorPctCount += 1; }
+      if (qfEff > 0) { g.qfEffSum += qfEff; g.qfEffCount += 1; }
+      g.idleSum += idle; g.idleCount += 1;
     });
+
+    // Sort date-wise (ascending), then by operator name
+    const merged = Object.values(combined).sort((a, b) => {
+      if (a.date < b.date) return -1;
+      if (a.date > b.date) return 1;
+      return (a.operator || "").localeCompare(b.operator || "");
+    });
+
+    return merged.map((g, idx) => [
+      String(idx + 1),
+      formatOpEffDisplayDate(g.date),
+      g.operator,
+      `${(g.oaEffCount ? g.oaEffSum / g.oaEffCount : 0).toFixed(1)}%`,
+      `${(g.operatorPctCount ? g.operatorPctSum / g.operatorPctCount : 0).toFixed(1)}%`,
+      `${(g.qfEffCount ? g.qfEffSum / g.qfEffCount : 0).toFixed(1)}%`,
+      `${(g.idleCount ? g.idleSum / g.idleCount : 0).toFixed(1)}%`,
+      `# ${idx + 1}`
+    ]);
   }, [opEffRows, filters, defaultRange]);
 
   const columns = ["Sl.No", "Date", "Operator", "OA EFF%", "Operator %", "QF Eff%", "Idle %", "Rank"];

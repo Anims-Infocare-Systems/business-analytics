@@ -2578,7 +2578,12 @@
     }
 
     .pa2-filters-grid {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .pa2-fg {
+        width: 100% !important;
+        flex: 1 1 auto !important;
     }
 
     .pa2-idle-layout {
@@ -3065,4 +3070,125 @@
 }
 .pa2-mhr-inputs-grid input[type=number] {
     -moz-appearance: textfield;
+}
+
+/* ── MHR Calculator Modal Split Layout ── */
+.pa2-mhr-modal-split {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 20px;
+    padding: 20px 24px;
+    background: #ffffff;
+}
+
+@media (max-width: 900px) {
+    .pa2-mhr-modal-split {
+        grid-template-columns: 1fr !important;
+        gap: 24px !important;
+        padding: 16px !important;
+    }
+}
+
+/* ── Machine Details Controls Responsive Overrides ── */
+@media (max-width: 768px) {
+    .pa2-macdetail-hdr {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+    }
+    
+    .pa2-macdetail-controls {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 10px;
+    }
+    
+    .pa2-macdetail-search-wrapper,
+    .pa2-macdetail-search-input {
+        width: 100% !important;
+    }
+    
+    .pa2-macdetail-tabs {
+        width: 100%;
+        overflow-x: auto;
+        white-space: nowrap;
+        padding: 4px;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .pa2-macdetail-tab {
+        flex: 0 0 auto;
+    }
+}
+
+/* ── Modal Grid & Info Strip Stacking Overrides ── */
+@media (max-width: 600px) {
+    .pa2-modal-kpi-strip {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    .pa2-modal-kpi-card {
+        border-bottom: 1px solid #f1f5f9;
+        border-right: 1px solid #f1f5f9;
+    }
+    
+    .pa2-modal-kpi-card:nth-child(2n) {
+        border-right: none;
+    }
+    
+    .pa2-modal-info-grid {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+        padding: 12px 16px 0 !important;
+    }
+}
+
+/* ── Summary Grid Extra Sizing ── */
+@media (max-width: 480px) {
+    .pa2-summary-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ── MHR Calculator Modal & Header Responsiveness ── */
+.pa2-modal--mhr {
+    max-width: 1020px !important;
+    width: 95vw !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-radius: 16px !important;
+}
+
+.pa2-modal-hdr--mhr {
+    padding: 16px 24px !important;
+    background: #f8fafc !important;
+    border-bottom: 1.5px solid #cbdbe5 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+}
+
+@media (max-width: 768px) {
+    .pa2-modal-hdr--mhr {
+        padding: 12px 16px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+    
+    .pa2-modal-hdr--mhr .pa2-modal-hdr-left {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .pa2-modal-hdr--mhr > div:last-child {
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 4px;
+        border-top: 1px dashed #cbdbe5;
+        padding-top: 8px;
+    }
 }
