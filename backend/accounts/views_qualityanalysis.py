@@ -3328,15 +3328,15 @@ def quality_analysis_supplier_rejections(request):
     # Aggregate rejections (Material & Machine) by Supplier
     agg = {}
     for r in results:
-        supp = r["supplier"]
+        supp = str(r["supplier"])
         if len(supp) > 15:
             supp_short = supp[:12] + "..."
         else:
             supp_short = supp
         if supp_short not in agg:
             agg[supp_short] = {"matRej": 0, "macRej": 0}
-        agg[supp_short]["matRej"] += r["matRej"]
-        agg[supp_short]["macRej"] += r["macRej"]
+        agg[supp_short]["matRej"] += int(r["matRej"])
+        agg[supp_short]["macRej"] += int(r["macRej"])
     
     chart_labels = list(agg.keys())
     chart_mat_rej = [agg[l]["matRej"] for l in chart_labels]

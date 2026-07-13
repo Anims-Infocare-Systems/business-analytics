@@ -25,7 +25,10 @@ import {
     X,
     RotateCcw,
     FileEdit,
-    Check
+    Check,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -209,8 +212,50 @@ export default function PurchaseAnalysis() {
     const [searchQuery, setSearchQuery] = useState("");
     const [poSummary, setPoSummary] = useState(null);
     const [poLoading, setPoLoading] = useState(false);
+    const [amendedPoRows, setAmendedPoRows] = useState([]);
+    const [amendedPoLoading, setAmendedPoLoading] = useState(false);
+    const [shortCloseRows, setShortCloseRows] = useState([]);
+    const [shortCloseLoading, setShortCloseLoading] = useState(false);
+    const [priceTrendRows, setPriceTrendRows] = useState([]);
+    const [priceTrendLoading, setPriceTrendLoading] = useState(false);
+    const [alertsData, setAlertsData] = useState(null);
+    const [alertsLoading, setAlertsLoading] = useState(false);
     const [weeklyTrend, setWeeklyTrend] = useState(null);
     const [weeklyChartType, setWeeklyChartType] = useState("combo");
+    const [sortConfig, setSortConfig] = useState({ key: "po_date", direction: "desc" });
+
+    const handleSort = (key) => {
+        let direction = "asc";
+        if (sortConfig.key === key && sortConfig.direction === "asc") {
+            direction = "desc";
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const renderSortableTh = (label, key, isRightAligned = false, isWide = false) => {
+        const isSorted = sortConfig.key === key;
+        const isAsc = sortConfig.direction === "asc";
+        const IconComponent = isSorted ? (isAsc ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+        return (
+            <th
+                className={`pa2-po-th pa2-po-th--sortable ${isRightAligned ? "pa2-po-th--r" : ""} ${isWide ? "pa2-po-th--wide" : ""}`}
+                onClick={() => handleSort(key)}
+            >
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6.5px", justifyContent: isRightAligned ? "flex-end" : "flex-start", width: "100%" }}>
+                    <span>{label}</span>
+                    <span className={`pa2-sort-icon-wrap ${isSorted ? "active" : ""}`} style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        opacity: isSorted ? 1 : 0.35,
+                        color: isSorted ? "#2d6de8" : "inherit"
+                    }}>
+                        <IconComponent size={12} style={{ strokeWidth: 2.5 }} />
+                    </span>
+                </div>
+            </th>
+        );
+    };
 
     const filteredPoRows = useMemo(() => {
         return poRows.filter(r => {
@@ -239,6 +284,86 @@ export default function PurchaseAnalysis() {
         });
     }, [poRows, searchQuery, filters.supplier, filters.department, filters.status]);
 
+    const sortedFilteredPoRows = useMemo(() => {
+        const sorted = [...filteredPoRows];
+        if (sortConfig.key) {
+            sorted.sort((a, b) => {
+                let aVal = a[sortConfig.key];
+                let bVal = b[sortConfig.key];
+
+                if (sortConfig.key === "po_qty") {
+                    const aNum = parseFloat(String(aVal || "0").replace(/,/g, ""));
+                    const bNum = parseFloat(String(bVal || "0").replace(/,/g, ""));
+                    aVal = isNaN(aNum) ? 0 : aNum;
+                    bVal = isNaN(bNum) ? 0 : bNum;
+                } else if (sortConfig.key === "value" || sortConfig.key === "rate") {
+                    aVal = Number(aVal || 0);
+                    bVal = Number(bVal || 0);
+                } else if (sortConfig.key === "po_date" || sortConfig.key === "grn_date") {
+                    const parseDateStr = (str) => {
+                        if (!str) return new Date(0);
+                        if (str.includes("/") || str.includes("-")) {
+                            const separator = str.includes("/") ? "/" : "-";
+                            const parts = str.split(separator);
+                            if (parts.length === 3) {
+                                if (parts[0].length === 4) return new Date(parts[0], parts[1] - 1, parts[2]);
+                                return new Date(parts[2], parts[1] - 1, parts[0]);
+                            }
+                        }
+                        return new Date(str);
+                    };
+                    aVal = parseDateStr(aVal);
+                    bVal = parseDateStr(bVal);
+                } else {
+                    aVal = String(aVal || "").toLowerCase();
+                    bVal = String(bVal || "").toLowerCase();
+                }
+
+                if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+                return 0;
+            });
+        }
+        return sorted;
+    }, [filteredPoRows, sortConfig]);
+
+    const filteredAmendedPoRows = useMemo(() => {
+        return amendedPoRows.filter(r => {
+            const q = searchQuery.toLowerCase().trim();
+            if (q) {
+                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                    (r.po_amnd_no && r.po_amnd_no.toLowerCase().includes(q)) ||
+                    (r.po_type && r.po_type.toLowerCase().includes(q)) ||
+                    (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
+                    (r.material_code && r.material_code.toLowerCase().includes(q)) ||
+                    (r.material && r.material.toLowerCase().includes(q)) ||
+                    (r.grn_no && r.grn_no.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+                if (!filters.supplier.includes(r.vendor_name)) return false;
+            }
+            if (filters.status && filters.status !== "All Status") {
+                const isGrn = !!r.grn_no;
+                if (filters.status === "GRN Done" && !isGrn) return false;
+                if (filters.status === "GRN Pending" && isGrn) return false;
+            }
+            return true;
+        });
+    }, [amendedPoRows, searchQuery, filters.supplier, filters.status]);
+
+    const uniqueAmendedPoCount = useMemo(() => {
+        const uniqueKeys = new Set();
+        amendedPoRows.forEach(r => {
+            if (r.po_amnd_no) {
+                uniqueKeys.add(r.po_amnd_no);
+            } else if (r.po_number) {
+                uniqueKeys.add(r.po_number);
+            }
+        });
+        return uniqueKeys.size;
+    }, [amendedPoRows]);
+
     const suppliersList = useMemo(() => {
         const set = new Set();
         poRows.forEach(r => {
@@ -257,42 +382,59 @@ export default function PurchaseAnalysis() {
     }, [poRows]);
 
     const rmStockVal = useMemo(() => {
+        if (filteredPoRows.length === 0) return "—";
         const rawSum = filteredPoRows
             .filter(r => {
                 const t = (r.po_type || "").toLowerCase();
                 return t.includes("raw") || t.includes("rm");
             })
             .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
-        const val = rawSum > 0 ? rawSum * 0.18 : 48.65;
+        const val = rawSum * 0.18;
         return `₹${val.toFixed(2)}L`;
     }, [filteredPoRows]);
 
     const storeStockVal = useMemo(() => {
+        if (filteredPoRows.length === 0) return "—";
         const storeSum = filteredPoRows
             .filter(r => {
                 const t = (r.po_type || "").toLowerCase();
                 return !(t.includes("raw") || t.includes("rm"));
             })
             .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
-        const val = storeSum > 0 ? storeSum * 0.14 : 18.30;
+        const val = storeSum * 0.14;
         return `₹${val.toFixed(2)}L`;
     }, [filteredPoRows]);
 
-    const shortCloseData = useMemo(() => [
-        { sno: 1, poNo: "PO-2026-0045", poDate: "05-Jan-2026", supplier: "Musk Metals Pvt Ltd", partDesc: "P-1002-39 (Impeller Casting)", uom: "Nos", qty: 120, reason: "Vendor unable to supply due to raw material shortage" },
-        { sno: 2, poNo: "PO-2026-0049", poDate: "08-Jan-2026", supplier: "Ammarun Foundries", partDesc: "P-1002-40 (Shaft Pin)", uom: "Kgs", qty: 450, reason: "Order balance quantity cancelled by user request" },
-        { sno: 3, poNo: "PO-2026-0052", poDate: "12-Jan-2026", supplier: "Ansari CNC Centre", partDesc: "P-8094-11 (Metallic Impeller)", uom: "Nos", qty: 35, reason: "Price dispute resolved via short closing remainder" },
-        { sno: 4, poNo: "PO-2026-0058", poDate: "15-Jan-2026", supplier: "Balaji Tooling Systems", partDesc: "P-4509-02 (Adapter Ring)", uom: "Nos", qty: 80, reason: "Defective trial lot, balance cancelled" },
-        { sno: 5, poNo: "PO-2026-0063", poDate: "19-Jan-2026", supplier: "Karthik Enterprises", partDesc: "P-3321-77 (Bearing Housing)", uom: "Nos", qty: 15, reason: "Alternate sourcing arranged due to delays" }
-    ], []);
+    const filteredShortCloseRows = useMemo(() => {
+        return shortCloseRows.filter(r => {
+            const q = searchQuery.toLowerCase().trim();
+            if (q) {
+                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                    (r.supplier_name && r.supplier_name.toLowerCase().includes(q)) ||
+                    (r.material && r.material.toLowerCase().includes(q)) ||
+                    (r.reason && r.reason.toLowerCase().includes(q)) ||
+                    (r.short_close_user && r.short_close_user.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+                if (!filters.supplier.includes(r.supplier_name)) return false;
+            }
+            return true;
+        });
+    }, [shortCloseRows, searchQuery, filters.supplier]);
 
-    const priceTrendData = useMemo(() => [
-        { sno: 1, partDesc: "P-1002-39 (Impeller Casting)", month: "Feb 2026", rate: 250, pct: 4.2, diff: 10, type: "up" },
-        { sno: 2, partDesc: "P-1002-40 (Shaft Pin)", month: "Feb 2026", rate: 180, pct: -2.7, diff: -5, type: "down" },
-        { sno: 3, partDesc: "P-8094-11 (Metallic Impeller)", month: "Jan 2026", rate: 450, pct: 0.0, diff: 0, type: "flat" },
-        { sno: 4, partDesc: "P-4509-02 (Adapter Ring)", month: "Feb 2026", rate: 320, pct: 8.5, diff: 25, type: "up" },
-        { sno: 5, partDesc: "P-3321-77 (Bearing Housing)", month: "Feb 2026", rate: 980, pct: -1.5, diff: -15, type: "down" }
-    ], []);
+    const filteredPriceTrendRows = useMemo(() => {
+        return priceTrendRows.filter(r => {
+            const q = searchQuery.toLowerCase().trim();
+            if (q) {
+                const match = (r.partDesc && r.partDesc.toLowerCase().includes(q)) ||
+                    (r.month && r.month.toLowerCase().includes(q)) ||
+                    (r.type && r.type.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            return true;
+        });
+    }, [priceTrendRows, searchQuery]);
 
     const [traceSearch, setTraceSearch] = useState("");
 
@@ -558,6 +700,137 @@ export default function PurchaseAnalysis() {
             })
             .catch(err => {
                 if (err.name !== "AbortError") setPoLoading(false);
+            });
+        return () => ctrl.abort();
+    }, [dateRange.from, dateRange.to, filters.poType]);
+
+    // ── Fetch Amended PO table rows ──────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        const ctrl = new AbortController();
+        setAmendedPoLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/amended-po-table/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setAmendedPoRows(data?.rows ?? []);
+                setAmendedPoLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setAmendedPoLoading(false);
+            });
+        return () => ctrl.abort();
+    }, [dateRange.from, dateRange.to, filters.poType]);
+
+    // ── Fetch Short Close table rows ──────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        const ctrl = new AbortController();
+        setShortCloseLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/short-close-table/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setShortCloseRows(data?.rows ?? []);
+                setShortCloseLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setShortCloseLoading(false);
+            });
+    }, [dateRange.from, dateRange.to, filters.poType]);
+
+    // ── Fetch Price Trend table rows ──────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        const ctrl = new AbortController();
+        setPriceTrendLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/price-trend/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setPriceTrendRows(data?.rows ?? []);
+                setPriceTrendLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setPriceTrendLoading(false);
+            });
+        return () => ctrl.abort();
+    }, [dateRange.from, dateRange.to, filters.poType]);
+
+    // ── Fetch management alerts ──────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        const ctrl = new AbortController();
+        setAlertsLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/management-alerts/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setAlertsData(data);
+                setAlertsLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setAlertsLoading(false);
             });
         return () => ctrl.abort();
     }, [dateRange.from, dateRange.to, filters.poType]);
@@ -1178,15 +1451,7 @@ export default function PurchaseAnalysis() {
                 };
             });
         }
-        return [
-            { month: "Jan 2026", poValue: 124.5, rawMaterial: 90.2, storeMaterial: 34.3, serviceMaterial: 0, grnValue: 98.4 },
-            { month: "Feb 2026", poValue: 156.2, rawMaterial: 110.5, storeMaterial: 45.7, serviceMaterial: 0, grnValue: 122.1 },
-            { month: "Mar 2026", poValue: 189.4, rawMaterial: 135.0, storeMaterial: 54.4, serviceMaterial: 0, grnValue: 145.2 },
-            { month: "Apr 2026", poValue: 142.1, rawMaterial: 102.3, storeMaterial: 39.8, serviceMaterial: 0, grnValue: 110.8 },
-            { month: "May 2026", poValue: 210.5, rawMaterial: 152.0, storeMaterial: 58.5, serviceMaterial: 0, grnValue: 165.4 },
-            { month: "Jun 2026", poValue: 175.8, rawMaterial: 125.4, storeMaterial: 50.4, serviceMaterial: 0, grnValue: 130.2 },
-            { month: "Jul 2026", poValue: 198.3, rawMaterial: 144.1, storeMaterial: 54.2, serviceMaterial: 0, grnValue: 150.5 }
-        ];
+        return [];
     }, [monthlyData, filteredPoRows]);
 
     const topProducts = useMemo(() => {
@@ -1228,20 +1493,8 @@ export default function PurchaseAnalysis() {
     }, [filteredPoRows]);
 
     const finalTopProducts = useMemo(() => {
-        const raw = topProducts.raw.length ? topProducts.raw : [
-            { name: "Round Rod DIA 50MM AISI410", code: "RRD03-05050", totalValue: 1240000, qty: 1200 },
-            { name: "Round Rod DIA 65MM AISI410", code: "RRD03-06565", totalValue: 980000, qty: 850 },
-            { name: "HR Steel Plate 12mm", code: "HRPL-12MM", totalValue: 650000, qty: 450 },
-            { name: "Aluminum Alloy Block 6061", code: "AL-6061-B", totalValue: 420000, qty: 200 },
-            { name: "Stainless Steel Sheet 2mm", code: "SSPL-2MM", totalValue: 310000, qty: 150 }
-        ];
-        const store = topProducts.store.length ? topProducts.store : [
-            { name: "Insert CCMT 09T304 Carbide", code: "PDCT0165", totalValue: 240000, qty: 1500 },
-            { name: "Industrial VCI Cover 8x8", code: "PKM0012", totalValue: 180000, qty: 4000 },
-            { name: "High-Temp Bearing HTB-202", code: "BRG-HTB202", totalValue: 120000, qty: 300 },
-            { name: "Paint-Seal Red Oxide Primer", code: "PDC0017", totalValue: 80000, qty: 450 },
-            { name: "GP Thinner 015", code: "PDC0018", totalValue: 50000, qty: 350 }
-        ];
+        const raw = topProducts.raw;
+        const store = topProducts.store;
         const service = topProducts.service;
         return { raw, store, service };
     }, [topProducts]);
@@ -1270,15 +1523,6 @@ export default function PurchaseAnalysis() {
         });
 
         let list = Object.entries(groups).map(([name, value]) => ({ name, value }));
-        if (list.length === 0) {
-            list = [
-                { name: "Production", value: 12.45 },
-                { name: "Tool Room", value: 5.80 },
-                { name: "Maintenance", value: 4.22 },
-                { name: "Stores & Painting", value: 2.10 },
-                { name: "IT & Admin", value: 0.55 }
-            ];
-        }
         return list.sort((a, b) => b.value - a.value);
     }, [filteredPoRows]);
 
@@ -2124,10 +2368,10 @@ export default function PurchaseAnalysis() {
                         },
                         {
                             label: "Tot Amnd PO Count",
-                            value: "8",
-                            sub: "4 pending approvals",
+                            value: String(uniqueAmendedPoCount),
+                            sub: "In selected period",
                             trend: "Amended POs",
-                            cls: "pa2-trend-down"
+                            cls: "pa2-trend-neutral"
                         }
                     ].map((k, i) => (
                         <div className="pa2-kpi-card pa2-card-premium pa2-animate" style={{ animationDelay: `${0.1 + i * 0.07}s` }} key={i}>
@@ -2269,6 +2513,10 @@ export default function PurchaseAnalysis() {
                                 ))}
                             </div>
                         </div>
+                    ) : filteredPoRows.length === 0 ? (
+                        <div className="pa2-no-data-msg" style={{ height: "300px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
+                            No Data found on this period
+                        </div>
                     ) : (
                         <div className="pa2-trend-chart-full-wrap" style={{ height: "300px" }}>
                             <canvas ref={monthlyChartRef} />
@@ -2321,6 +2569,10 @@ export default function PurchaseAnalysis() {
                         <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center" }}>
                             <div className="pa2-skeleton pa2-shimmer" style={{ width: "80%", height: "180px", borderRadius: "8px" }} />
                         </div>
+                    ) : filteredPoRows.length === 0 ? (
+                        <div className="pa2-no-data-msg" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
+                            No Data found on this period
+                        </div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={poVsGrnChartRef} />
@@ -2340,6 +2592,10 @@ export default function PurchaseAnalysis() {
                         <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center" }}>
                             <div className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "110px", height: "110px", border: "10px solid #f1f5f9" }} />
                         </div>
+                    ) : filteredPoRows.length === 0 ? (
+                        <div className="pa2-no-data-msg" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
+                            No Data found on this period
+                        </div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={deptChartRef} />
@@ -2351,77 +2607,21 @@ export default function PurchaseAnalysis() {
             {/* ── Top 5 Buying Products Analysis ── */}
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginBottom: "1.4rem" }}>
                 <SectionHeader icon={<Package size={16} style={{ color: "#f5a623" }} />} title="Top 5 Buying Products Analysis" />
-                <div className="pa2-top-products-grid" style={{ marginTop: "1.2rem", gridTemplateColumns: `repeat(${finalTopProducts.service.length > 0 ? 3 : 2}, minmax(0, 1fr))` }}>
-                    {/* Raw Materials Column */}
-                    <div className="pa2-top-prod-col">
-                        <div className="pa2-col-subtitle">
-                            <span className="pa2-col-dot" style={{ background: "#2d6de8" }} />
-                            Raw Material Top 5
-                        </div>
-                        <div className="pa2-prod-list">
-                            {finalTopProducts.raw.map((p, idx) => {
-                                const maxVal = finalTopProducts.raw[0]?.totalValue || 1;
-                                const barW = (p.totalValue / maxVal) * 100;
-                                return (
-                                    <div className="pa2-prod-row" key={idx}>
-                                        <div className="pa2-prod-rank">#{idx + 1}</div>
-                                        <div className="pa2-prod-details">
-                                            <div className="pa2-prod-name">{p.name}</div>
-                                            <div className="pa2-prod-code">{p.code}</div>
-                                            <div className="pa2-prod-bar-track">
-                                                <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #2d6de8, #06b6d4)" }} />
-                                            </div>
-                                        </div>
-                                        <div className="pa2-prod-meta">
-                                            <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
-                                            <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                {filteredPoRows.length === 0 ? (
+                    <div className="pa2-no-data-msg" style={{ height: "200px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
+                        No Data found on this period
                     </div>
-
-                    {/* Store Materials Column */}
-                    <div className="pa2-top-prod-col">
-                        <div className="pa2-col-subtitle">
-                            <span className="pa2-col-dot" style={{ background: "#f5a623" }} />
-                            Store Material Top 5
-                        </div>
-                        <div className="pa2-prod-list">
-                            {finalTopProducts.store.map((p, idx) => {
-                                const maxVal = finalTopProducts.store[0]?.totalValue || 1;
-                                const barW = (p.totalValue / maxVal) * 100;
-                                return (
-                                    <div className="pa2-prod-row" key={idx}>
-                                        <div className="pa2-prod-rank">#{idx + 1}</div>
-                                        <div className="pa2-prod-details">
-                                            <div className="pa2-prod-name">{p.name}</div>
-                                            <div className="pa2-prod-code">{p.code}</div>
-                                            <div className="pa2-prod-bar-track">
-                                                <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #f5a623, #f76b1c)" }} />
-                                            </div>
-                                        </div>
-                                        <div className="pa2-prod-meta">
-                                            <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
-                                            <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Service Column */}
-                    {finalTopProducts.service.length > 0 && (
+                ) : (
+                    <div className="pa2-top-products-grid" style={{ marginTop: "1.2rem", gridTemplateColumns: `repeat(${finalTopProducts.service.length > 0 ? 3 : 2}, minmax(0, 1fr))` }}>
+                        {/* Raw Materials Column */}
                         <div className="pa2-top-prod-col">
                             <div className="pa2-col-subtitle">
-                                <span className="pa2-col-dot" style={{ background: "#8b5cf6" }} />
-                                Service Top 5
+                                <span className="pa2-col-dot" style={{ background: "#2d6de8" }} />
+                                Raw Material Top 5
                             </div>
                             <div className="pa2-prod-list">
-                                {finalTopProducts.service.map((p, idx) => {
-                                    const maxVal = finalTopProducts.service[0]?.totalValue || 1;
+                                {finalTopProducts.raw.map((p, idx) => {
+                                    const maxVal = finalTopProducts.raw[0]?.totalValue || 1;
                                     const barW = (p.totalValue / maxVal) * 100;
                                     return (
                                         <div className="pa2-prod-row" key={idx}>
@@ -2430,7 +2630,7 @@ export default function PurchaseAnalysis() {
                                                 <div className="pa2-prod-name">{p.name}</div>
                                                 <div className="pa2-prod-code">{p.code}</div>
                                                 <div className="pa2-prod-bar-track">
-                                                    <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #8b5cf6, #a855f7)" }} />
+                                                    <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #2d6de8, #06b6d4)" }} />
                                                 </div>
                                             </div>
                                             <div className="pa2-prod-meta">
@@ -2442,8 +2642,70 @@ export default function PurchaseAnalysis() {
                                 })}
                             </div>
                         </div>
-                    )}
-                </div>
+
+                        {/* Store Materials Column */}
+                        <div className="pa2-top-prod-col">
+                            <div className="pa2-col-subtitle">
+                                <span className="pa2-col-dot" style={{ background: "#f5a623" }} />
+                                Store Material Top 5
+                            </div>
+                            <div className="pa2-prod-list">
+                                {finalTopProducts.store.map((p, idx) => {
+                                    const maxVal = finalTopProducts.store[0]?.totalValue || 1;
+                                    const barW = (p.totalValue / maxVal) * 100;
+                                    return (
+                                        <div className="pa2-prod-row" key={idx}>
+                                            <div className="pa2-prod-rank">#{idx + 1}</div>
+                                            <div className="pa2-prod-details">
+                                                <div className="pa2-prod-name">{p.name}</div>
+                                                <div className="pa2-prod-code">{p.code}</div>
+                                                <div className="pa2-prod-bar-track">
+                                                    <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #f5a623, #f76b1c)" }} />
+                                                </div>
+                                            </div>
+                                            <div className="pa2-prod-meta">
+                                                <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
+                                                <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Service Column */}
+                        {finalTopProducts.service.length > 0 && (
+                            <div className="pa2-top-prod-col">
+                                <div className="pa2-col-subtitle">
+                                    <span className="pa2-col-dot" style={{ background: "#8b5cf6" }} />
+                                    Service Top 5
+                                </div>
+                                <div className="pa2-prod-list">
+                                    {finalTopProducts.service.map((p, idx) => {
+                                        const maxVal = finalTopProducts.service[0]?.totalValue || 1;
+                                        const barW = (p.totalValue / maxVal) * 100;
+                                        return (
+                                            <div className="pa2-prod-row" key={idx}>
+                                                <div className="pa2-prod-rank">#{idx + 1}</div>
+                                                <div className="pa2-prod-details">
+                                                    <div className="pa2-prod-name">{p.name}</div>
+                                                    <div className="pa2-prod-code">{p.code}</div>
+                                                    <div className="pa2-prod-bar-track">
+                                                        <div className="pa2-prod-bar-fill" style={{ width: `${barW}%`, background: "linear-gradient(90deg, #8b5cf6, #a855f7)" }} />
+                                                    </div>
+                                                </div>
+                                                <div className="pa2-prod-meta">
+                                                    <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
+                                                    <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* ── Pipeline + Supplier Ranking ── */}
@@ -2569,25 +2831,48 @@ export default function PurchaseAnalysis() {
 
             {/* ── PO Details Table (Dashboard2-style) ── */}
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium">
-                <div className="pa2-table-header">
+                <div className="pa2-table-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", paddingRight: "1.3rem" }}>
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Details" />
-                    <div className="pa2-tag-row">
-                        <span className="pa2-badge pa2-badge-blue">{poLoading ? "Loading…" : `${filteredPoRows.length} records`}</span>
+                    <div className="pa2-tag-row" style={{ display: "flex", alignItems: "center", gap: "0.8rem", paddingBottom: "0" }}>
+                        <div className="pa2-premium-search-box">
+                            <Search className="pa2-premium-search-icon" size={14} />
+                            <input
+                                type="text"
+                                className="pa2-premium-search-input"
+                                placeholder="Search table..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    className="pa2-premium-search-clear"
+                                    onClick={() => setSearchQuery("")}
+                                >
+                                    <X size={10} />
+                                </button>
+                            )}
+                        </div>
+                        <span className="pa2-badge pa2-badge-blue" style={{ height: "36px", display: "inline-flex", alignItems: "center", borderRadius: "10px", padding: "0 12px" }}>
+                            {poLoading ? "Loading…" : `${filteredPoRows.length} records`}
+                        </span>
                     </div>
                 </div>
                 <div className="pa2-table-scroll">
                     <table className="pa2-po-tbl">
                         <thead>
                             <tr>
-                                <th className="pa2-po-th">PO NUMBER</th>
-                                <th className="pa2-po-th">PO TYPE</th>
-                                <th className="pa2-po-th">VENDOR / SUPPLIER</th>
-                                <th className="pa2-po-th pa2-po-th--wide">MATERIAL</th>
-                                <th className="pa2-po-th pa2-po-th--r">QTY</th>
-                                <th className="pa2-po-th pa2-po-th--r">VALUE</th>
-                                <th className="pa2-po-th">PO DATE</th>
-                                <th className="pa2-po-th">GRN NO</th>
-                                <th className="pa2-po-th">GRN DATE</th>
+                                {renderSortableTh("PO NUMBER", "po_number")}
+                                {renderSortableTh("PO TYPE", "po_type")}
+                                {renderSortableTh("VENDOR / SUPPLIER", "vendor_name")}
+                                {renderSortableTh("MATERIAL", "material", false, true)}
+                                {renderSortableTh("QTY", "po_qty", true)}
+                                {renderSortableTh("RATE", "rate", true)}
+                                {renderSortableTh("VALUE", "value", true)}
+                                {renderSortableTh("PO DATE", "po_date")}
+                                {renderSortableTh("GRN NO", "grn_no")}
+                                {renderSortableTh("GRN DATE", "grn_date")}
+                                {renderSortableTh("AMND", "amnd")}
                             </tr>
                         </thead>
                         <tbody>
@@ -2599,17 +2884,19 @@ export default function PurchaseAnalysis() {
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "180px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "50px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td" style={{ textAlign: "center" }}><div className="pa2-skeleton pa2-shimmer" style={{ width: "25px", height: "13px", margin: "0 auto" }} /></td>
                                     </tr>
                                 ))
                             )}
-                            {!poLoading && filteredPoRows.length === 0 && (
-                                <tr><td colSpan={9} className="pa2-po-empty">— No records found —</td></tr>
+                            {!poLoading && sortedFilteredPoRows.length === 0 && (
+                                <tr><td colSpan={11} className="pa2-po-empty">No Data found on this period</td></tr>
                             )}
-                            {!poLoading && filteredPoRows.map((r, i) => (
+                            {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
                                     <td className="pa2-po-td pa2-po-link">{r.po_number}</td>
                                     <td className="pa2-po-td">
@@ -2624,6 +2911,9 @@ export default function PurchaseAnalysis() {
                                             : r.material || "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r">{r.po_qty || "–"}</td>
+                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>
+                                        {r.rate > 0 ? `₹${r.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "–"}
+                                    </td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">
                                         ₹{r.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                                     </td>
@@ -2638,6 +2928,9 @@ export default function PurchaseAnalysis() {
                                     <td className="pa2-po-td pa2-po-date">
                                         {r.grn_date ? r.grn_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : <span className="pa2-po-dash">–</span>}
                                     </td>
+                                    <td className="pa2-po-td" style={{ textAlign: "center", fontWeight: "600", color: r.amnd === "Y" ? "#dc2626" : "#64748b" }}>
+                                        {r.amnd || "N"}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -2650,7 +2943,7 @@ export default function PurchaseAnalysis() {
                 <div className="pa2-table-header">
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#8b5cf6" }} />} title="Amended Purchase Order Details" />
                     <div className="pa2-tag-row">
-                        <span className="pa2-badge pa2-badge-purple">{poLoading ? "Loading…" : `${poRows.length} amended records`}</span>
+                        <span className="pa2-badge pa2-badge-purple">{amendedPoLoading ? "Loading…" : `${filteredAmendedPoRows.length} amended records`}</span>
                     </div>
                 </div>
                 <div className="pa2-table-scroll">
@@ -2659,10 +2952,12 @@ export default function PurchaseAnalysis() {
                             <tr>
                                 <th className="pa2-po-th">PO NUMBER</th>
                                 <th className="pa2-po-th">AMND PO NUMBER</th>
+                                <th className="pa2-po-th">AMND DATE</th>
                                 <th className="pa2-po-th">PO TYPE</th>
                                 <th className="pa2-po-th">VENDOR / SUPPLIER</th>
                                 <th className="pa2-po-th pa2-po-th--wide">MATERIAL</th>
                                 <th className="pa2-po-th pa2-po-th--r">QTY</th>
+                                <th className="pa2-po-th pa2-po-th--r">RATE</th>
                                 <th className="pa2-po-th pa2-po-th--r">VALUE</th>
                                 <th className="pa2-po-th">PO DATE</th>
                                 <th className="pa2-po-th">GRN NO</th>
@@ -2670,15 +2965,17 @@ export default function PurchaseAnalysis() {
                             </tr>
                         </thead>
                         <tbody>
-                            {poLoading && (
+                            {amendedPoLoading && (
                                 [1, 2, 3, 4, 5].map(i => (
                                     <tr key={i} className="pa2-po-tr pa2-pulse-loader">
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "110px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "180px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "50px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
@@ -2686,16 +2983,19 @@ export default function PurchaseAnalysis() {
                                     </tr>
                                 ))
                             )}
-                            {!poLoading && poRows.length === 0 && (
-                                <tr><td colSpan={10} className="pa2-po-empty">— No amended records found —</td></tr>
+                            {!amendedPoLoading && filteredAmendedPoRows.length === 0 && (
+                                <tr><td colSpan={12} className="pa2-po-empty">No Data found on this period</td></tr>
                             )}
-                            {!poLoading && poRows.map((r, i) => (
+                            {!amendedPoLoading && filteredAmendedPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
                                     <td className="pa2-po-td pa2-po-link">{r.po_number}</td>
-                                    <td className="pa2-po-td pa2-po-link" style={{ color: "#8b5cf6" }}>{r.po_number}-A{i % 2 === 0 ? "1" : "2"}</td>
+                                    <td className="pa2-po-td pa2-po-link" style={{ color: "#8b5cf6" }}>{r.po_amnd_no || "–"}</td>
+                                    <td className="pa2-po-td pa2-po-date">
+                                        {r.po_amnd_date ? r.po_amnd_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
+                                    </td>
                                     <td className="pa2-po-td">
                                         <span className="pa2-po-type-badge" style={{ background: "rgba(139, 92, 246, 0.08)", border: "1px solid rgba(139, 92, 246, 0.15)", color: "#8b5cf6" }}>
-                                            Amns-Stores Material
+                                            {r.po_type || "–"}
                                         </span>
                                     </td>
                                     <td className="pa2-po-td pa2-po-vendor">{r.vendor_name || "–"}</td>
@@ -2705,6 +3005,9 @@ export default function PurchaseAnalysis() {
                                             : r.material || "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r">{r.po_qty || "–"}</td>
+                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>
+                                        {r.rate > 0 ? `₹${r.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "–"}
+                                    </td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">
                                         ₹{r.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                                     </td>
@@ -2835,7 +3138,7 @@ export default function PurchaseAnalysis() {
                     <SectionHeader
                         icon={<ClipboardList size={16} style={{ color: "#ef4444" }} />}
                         title="Short Close Details"
-                        badge="Partial Delivery"
+                        badge="Early Closures"
                         badgeCls="pa2-badge-red"
                     />
                     <div className="pa2-table-scroll" style={{ maxHeight: "300px", overflowY: "auto", marginTop: "0.5rem" }}>
@@ -2850,19 +3153,41 @@ export default function PurchaseAnalysis() {
                                     <th className="pa2-po-th">UOM</th>
                                     <th className="pa2-po-th pa2-po-th--r">SHORT CLOSE QTY</th>
                                     <th className="pa2-po-th">REASON</th>
+                                    <th className="pa2-po-th">SHORT CLOSE USER</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {shortCloseData.map((row, i) => (
+                                {shortCloseLoading && (
+                                    [1, 2, 3].map(i => (
+                                        <tr key={i} className="pa2-po-tr pa2-pulse-loader">
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "20px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "110px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "140px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "30px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
+                                        </tr>
+                                    ))
+                                )}
+                                {!shortCloseLoading && filteredShortCloseRows.length === 0 && (
+                                    <tr><td colSpan={9} className="pa2-po-empty">No Data found on this period</td></tr>
+                                )}
+                                {!shortCloseLoading && filteredShortCloseRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
                                         <td className="pa2-po-td pa2-po-dash">{row.sno}</td>
-                                        <td className="pa2-po-td" style={{ fontWeight: "600", color: "#2d6de8", whiteSpace: "nowrap" }}>{row.poNo}</td>
-                                        <td className="pa2-po-td pa2-po-date">{row.poDate}</td>
-                                        <td className="pa2-po-td pa2-po-vendor" style={{ whiteSpace: "nowrap" }}>{row.supplier}</td>
-                                        <td className="pa2-po-td" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.partDesc}</td>
+                                        <td className="pa2-po-td" style={{ fontWeight: "600", color: "#2d6de8", whiteSpace: "nowrap" }}>{row.po_number}</td>
+                                        <td className="pa2-po-td pa2-po-date">
+                                            {row.po_date ? row.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
+                                        </td>
+                                        <td className="pa2-po-td pa2-po-vendor" style={{ whiteSpace: "nowrap" }}>{row.supplier_name || "–"}</td>
+                                        <td className="pa2-po-td" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.material || "–"}</td>
                                         <td className="pa2-po-td">{row.uom}</td>
-                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#f5a623" }}>{row.qty.toLocaleString()}</td>
-                                        <td className="pa2-po-td" style={{ color: "#64748b", fontSize: "0.78rem" }}>{row.reason}</td>
+                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#f5a623" }}>{row.short_close_qty.toLocaleString()}</td>
+                                        <td className="pa2-po-td" style={{ color: "#64748b", fontSize: "0.78rem" }}>{row.reason || "–"}</td>
+                                        <td className="pa2-po-td" style={{ color: "#475569", fontWeight: "600", fontSize: "0.78rem" }}>{row.short_close_user || "–"}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -2886,18 +3211,33 @@ export default function PurchaseAnalysis() {
                                     <th className="pa2-po-th">PARTNO-DESC</th>
                                     <th className="pa2-po-th">MONTH</th>
                                     <th className="pa2-po-th pa2-po-th--r">RATE</th>
-                                    <th className="pa2-po-th" style={{ textAlign: "center" }}>COST TREND %</th>
+                                    <th className="pa2-po-th pa2-po-th--r">COST TREND %</th>
                                     <th className="pa2-po-th pa2-po-th--r">COST DIFF</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {priceTrendData.map((row, i) => (
+                                {priceTrendLoading && (
+                                    [1, 2, 3].map(i => (
+                                        <tr key={i} className="pa2-po-tr pa2-pulse-loader">
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "20px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "150px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "50px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "45px", height: "13px", marginLeft: "auto" }} /></td>
+                                            <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
+                                        </tr>
+                                    ))
+                                )}
+                                {!priceTrendLoading && filteredPriceTrendRows.length === 0 && (
+                                    <tr><td colSpan={6} className="pa2-po-empty">No Data found on this period</td></tr>
+                                )}
+                                {!priceTrendLoading && filteredPriceTrendRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
                                         <td className="pa2-po-td pa2-po-dash">{row.sno}</td>
                                         <td className="pa2-po-td pa2-po-vendor" style={{ fontWeight: "700", whiteSpace: "nowrap" }}>{row.partDesc}</td>
                                         <td className="pa2-po-td" style={{ whiteSpace: "nowrap" }}>{row.month}</td>
-                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600" }}>₹{row.rate}</td>
-                                        <td className="pa2-po-td" style={{ textAlign: "center" }}>
+                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600" }}>₹{row.rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                                        <td className="pa2-po-td pa2-po-td--r">
                                             {row.type === "up" ? (
                                                 <span style={{ display: "inline-block", background: "rgba(239, 68, 68, 0.08)", color: "#ef4444", padding: "3px 8px", borderRadius: "6px", fontSize: "0.76rem", fontWeight: "700" }}>
                                                     ↑ {row.pct}%
@@ -2913,7 +3253,7 @@ export default function PurchaseAnalysis() {
                                             )}
                                         </td>
                                         <td className="pa2-po-td pa2-po-td--r pa2-po-value" style={{ color: row.type === "up" ? "#ef4444" : row.type === "down" ? "#10b981" : "#0f172a" }}>
-                                            {row.diff > 0 ? `+₹${row.diff}` : row.diff < 0 ? `-₹${Math.abs(row.diff)}` : "₹0"}
+                                            {row.type === "up" ? `+₹${row.diff.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : row.type === "down" ? `-₹${row.diff.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹0.00"}
                                         </td>
                                     </tr>
                                 ))}
@@ -2956,11 +3296,28 @@ export default function PurchaseAnalysis() {
 
                 {/* Alerts */}
                 <div className="pa2-card pa2-card-premium">
-                    <SectionHeader icon={<AlertTriangle size={16} style={{ color: "#ef4444" }} />} title="Management Alerts" badge="4 Action Needed" badgeCls="pa2-badge-red" />
+                    <SectionHeader 
+                        icon={<AlertTriangle size={16} style={{ color: "#ef4444" }} />} 
+                        title="Management Alerts" 
+                        badge={alertsData?.alerts?.length ? `${alertsData.alerts.length} Action Needed` : "0 Alerts"} 
+                        badgeCls="pa2-badge-red" 
+                    />
                     <div className="pa2-alert-list">
-                        {ALERTS.map((a, i) => (
+                        {alertsLoading && (
+                            [1, 2, 3].map(i => (
+                                <div className="pa2-alert-row pa2-pulse-loader" key={i}>
+                                    <div className="pa2-skeleton pa2-shimmer" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                                    <div className="pa2-alert-body" style={{ display: "flex", flexDirection: "column", gap: "6px", marginLeft: "10px" }}>
+                                        <div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "12px" }} />
+                                        <div className="pa2-skeleton pa2-shimmer" style={{ width: "220px", height: "10px" }} />
+                                    </div>
+                                    <div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "10px", marginLeft: "auto" }} />
+                                </div>
+                            ))
+                        )}
+                        {!alertsLoading && (alertsData?.alerts ?? []).map((a, i) => (
                             <div className={`pa2-alert-row pa2-alert-${a.urgency}`} key={i}>
-                                <span className="pa2-alert-icon" style={{ display: "inline-flex", alignItems: "center" }}>{renderAlertIcon(a.urgency)}</span>
+                                <span className="pa2-alert-icon" style={{ display: "inline-flex", alignItems: "center" }}>{a.icon}</span>
                                 <div className="pa2-alert-body">
                                     <div className="pa2-alert-title">{a.title}</div>
                                     <div className="pa2-alert-sub">{a.sub}</div>
@@ -2968,17 +3325,20 @@ export default function PurchaseAnalysis() {
                                 <span className="pa2-alert-time">{a.time}</span>
                             </div>
                         ))}
+                        {!alertsLoading && (!alertsData?.alerts || alertsData.alerts.length === 0) && (
+                            <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>No alerts found for this period</div>
+                        )}
                     </div>
-                    <div className="pa2-priority-box">
-                        <div className="pa2-priority-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <Pin size={14} style={{ color: "#2d6de8", transform: "rotate(45deg)" }} /> Key Management Action
+                    {!alertsLoading && alertsData?.key_action && (
+                        <div className="pa2-priority-box">
+                            <div className="pa2-priority-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <Pin size={14} style={{ color: "#2d6de8", transform: "rotate(45deg)" }} /> Key Management Action
+                            </div>
+                            <p className="pa2-priority-body">
+                                {alertsData.key_action}
+                            </p>
                         </div>
-                        <p className="pa2-priority-body">
-                            Follow up with <strong>Musk Metals</strong> for DIA 65MM pending lot (325 Nos).
-                            Production scheduling depends on receipt by <strong>05-Mar-2026</strong>.
-                            Also review rate increase ₹88→₹92/kg for formal approval.
-                        </p>
-                    </div>
+                    )}
                 </div>
 
             </div>

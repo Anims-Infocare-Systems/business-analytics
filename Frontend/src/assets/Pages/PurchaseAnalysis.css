@@ -1300,6 +1300,31 @@
     z-index: 2;
 }
 
+.pa2-po-th--sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pa2-po-th--sortable:hover {
+    background: #eff6ff;
+    color: #2d6de8;
+}
+
+.pa2-sort-icon-wrap {
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.pa2-sort-icon-wrap.active {
+    animation: pa2-bounceIcon 0.25s ease-out;
+}
+
+@keyframes pa2-bounceIcon {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-2.5px); }
+    100% { transform: translateY(0); }
+}
+
 .pa2-po-th--r {
     text-align: right;
 }
@@ -2079,4 +2104,82 @@
     background: #2d6de8;
     color: #ffffff;
     box-shadow: 0 2px 8px rgba(45, 109, 232, 0.35);
+}
+
+/* Premium Search Bar above PO Details */
+.pa2-premium-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0 10px 0 32px;
+    height: 36px;
+    width: 240px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.pa2-premium-search-box:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+}
+
+.pa2-premium-search-box:focus-within {
+    width: 320px;
+    border-color: #2d6de8;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(45, 109, 232, 0.1), 0 4px 6px -1px rgba(45, 109, 232, 0.05);
+}
+
+.pa2-premium-search-icon {
+    position: absolute;
+    left: 10px;
+    color: #64748b;
+    pointer-events: none;
+    transition: color 0.3s ease;
+}
+
+.pa2-premium-search-box:focus-within .pa2-premium-search-icon {
+    color: #2d6de8;
+}
+
+.pa2-premium-search-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #1e293b;
+    padding: 0;
+    margin: 0;
+}
+
+.pa2-premium-search-input::placeholder {
+    color: #94a3b8;
+    font-weight: 400;
+}
+
+.pa2-premium-search-clear {
+    position: absolute;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.pa2-premium-search-clear:hover {
+    background: #cbd5e1;
+    color: #0f172a;
 }
