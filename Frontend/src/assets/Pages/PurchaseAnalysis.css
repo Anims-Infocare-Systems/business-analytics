@@ -1195,42 +1195,49 @@
    RESPONSIVE
    ═══════════════════════════════════════════════ */
 
-@media (max-width: 1200px) {
+/* ── 1. Laptop  (1024 – 1279px) ─────────────────────────── */
+@media (max-width: 1279px) {
     .pa2-kpi-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
     }
 
-    .pa2-charts-row {
+    .pa2-donuts-row {
         grid-template-columns: 1fr 1fr;
-    }
-
-    .pa2-charts-row .pa2-chart-wide {
-        grid-column: span 2;
     }
 }
 
-@media (max-width: 960px) {
+/* ── 2. Tablet  (768 – 1023px) ──────────────────────────── */
+@media (max-width: 1023px) {
+    .pa2-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .pa2-donuts-row {
+        grid-template-columns: 1fr;
+    }
+
     .pa2-two-col {
         grid-template-columns: 1fr;
     }
 
-    .pa2-charts-row {
-        grid-template-columns: 1fr;
-    }
-
-    .pa2-charts-row .pa2-chart-wide {
-        grid-column: span 1;
-    }
-
-    .pa2-kpi-grid {
+    .pa2-filter-grid {
+        display: grid;
         grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+
+    .pa2-top-products-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem;
     }
 }
 
-@media (max-width: 700px) {
+/* ── 3. Mobile Landscape  (480 – 767px) ─────────────────── */
+@media (max-width: 767px) {
     .pa2-page-hero {
         flex-direction: column;
         align-items: flex-start;
+        gap: 0.8rem;
     }
 
     .pa2-hero-pills {
@@ -1238,41 +1245,114 @@
         justify-content: flex-start;
     }
 
+    /* Premium horizontal scrollable summary strip */
     .pa2-summary-strip {
-        padding: 0.8rem 1rem;
-        gap: 0.8rem;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        justify-content: flex-start !important;
+        gap: 1.5rem !important;
+        padding: 0.8rem 1.2rem !important;
+        -webkit-overflow-scrolling: touch;
     }
 
     .pa2-summary-strip>*:nth-child(2n) {
-        display: none;
+        display: block !important; /* Keep even elements visible! */
+    }
+
+    .pa2-strip-item {
+        flex-shrink: 0;
+        text-align: left;
     }
 
     .pa2-kpi-grid {
         grid-template-columns: 1fr 1fr;
+        gap: 0.8rem;
     }
 
-    .pa2-filter-grid {
-        grid-template-columns: 1fr 1fr;
+    /* Trend Chart strip wrapping */
+    .pa2-trend-summary-strip {
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        padding: 10px 14px;
+        margin: 0 0.5rem 0.5rem;
+    }
+
+    .pa2-trend-stat {
+        min-width: 120px;
+    }
+
+    /* Table styling for responsive lists */
+    .pa2-po-tbl th,
+    .pa2-po-tbl td {
+        padding: 0.55rem 0.75rem;
+        font-size: 0.76rem;
     }
 }
 
-@media (max-width: 480px) {
-    .pa2-kpi-grid {
-        grid-template-columns: 1fr;
+/* ── 4. Mobile Portrait  (≤ 479px) ──────────────────────── */
+@media (max-width: 479px) {
+    .pa2-root {
+        font-size: 12px;
     }
 
     .pa2-filter-grid {
         grid-template-columns: 1fr;
+        gap: 0.9rem;
+    }
+
+    .pa2-kpi-grid {
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+    }
+
+    .pa2-page-title {
+        font-size: 1.2rem;
+    }
+
+    .pa2-table-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .pa2-tag-row {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .pa2-premium-search-box {
+        width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .pa2-premium-search-box:focus-within {
+        width: 100% !important;
+    }
+
+    .pa2-segment-btn {
+        padding: 4px 10px;
+        font-size: 0.72rem;
+    }
+
+    .pa2-toggle-btn {
+        padding: 4px 10px;
+        font-size: 0.7rem;
+    }
+
+    .pa2-chart-type-toggle {
+        width: 100%;
+        justify-content: space-around;
     }
 
     .pa2-pipe-steps {
-        gap: 0.2rem;
+        gap: 0.25rem;
     }
 
     .pa2-pipe-circle {
-        width: 34px;
-        height: 34px;
-        font-size: 0.75rem;
+        width: 32px;
+        height: 32px;
+        font-size: 0.72rem;
     }
 }
 
@@ -2066,12 +2146,7 @@
     margin-top: 1px;
 }
 
-@media (max-width: 960px) {
-    .pa2-top-products-grid {
-        grid-template-columns: 1fr !important;
-        gap: 1rem;
-    }
-}
+
 
 /* Premium chart toggle buttons for Purchase Value Trend */
 .pa2-chart-type-toggle {
