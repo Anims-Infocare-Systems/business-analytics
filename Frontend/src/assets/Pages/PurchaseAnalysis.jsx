@@ -36,6 +36,37 @@ Chart.register(...registerables, ChartDataLabels);
 const API_BASE = resolveApiBase();
 
 // ─────────────────────────────────────────────
+//  Premium "No Data Found" Empty State
+// ─────────────────────────────────────────────
+const PARTICLES = [
+    { style: { top: "18%", left: "12%",  "--dx": "30px",  "--dy": "-40px", animationDelay: "0s",    animationDuration: "3.5s" } },
+    { style: { top: "70%", left: "8%",   "--dx": "45px",  "--dy": "-20px", animationDelay: "0.6s",  animationDuration: "4.1s" } },
+    { style: { top: "25%", right: "10%", "--dx": "-38px", "--dy": "-35px", animationDelay: "1.1s",  animationDuration: "3.8s" } },
+    { style: { top: "75%", right: "14%", "--dx": "-30px", "--dy": "-50px", animationDelay: "1.8s",  animationDuration: "4.5s" } },
+    { style: { top: "50%", left: "50%",  "--dx": "20px",  "--dy": "-60px", animationDelay: "2.3s",  animationDuration: "3.2s" } },
+];
+
+function PaNoData({ icon = "📭", message = "No data found on this period", compact = false }) {
+    return (
+        <div className={`pa2-nodata-wrap${compact ? " pa2-nodata-wrap--compact" : ""}`}>
+            {PARTICLES.map((p, i) => (
+                <span key={i} className="pa2-nodata-particle" style={p.style} />
+            ))}
+            <div className="pa2-nodata-icon-shell">
+                <div className="pa2-nodata-icon">{icon}</div>
+            </div>
+            <div className="pa2-nodata-title">{message}</div>
+            {!compact && <div className="pa2-nodata-sub">Try adjusting the date range or filters</div>}
+            <div className="pa2-nodata-dots">
+                <span className="pa2-nodata-dot" />
+                <span className="pa2-nodata-dot" />
+                <span className="pa2-nodata-dot" />
+            </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────
 //  Static Data
 // ─────────────────────────────────────────────
 const KPI_CARDS = [
@@ -438,122 +469,23 @@ export default function PurchaseAnalysis() {
 
     const [traceSearch, setTraceSearch] = useState("");
 
-    const traceabilityData = useMemo(() => [
-        {
-            sno: 1,
-            indNo: "IND-2026-0041",
-            indDt: "05-Jan-2026",
-            indQty: 500,
-            indPoNo: "PO-2026-0075",
-            poDt: "10-Jan-2026",
-            poQty: 500,
-            poRate: 250,
-            poValue: 125000,
-            grnNo: "GRN-2026-0081",
-            grnDt: "15-Jan-2026",
-            grnOky: 495,
-            grnRate: 250,
-            grnValue: 123750,
-            routeCardNo: "RC-2026-9041",
-            routeCardDt: "20-Jan-2026",
-            routeCardQty: 490,
-            partNo: "P-1002-39 (Impeller Casting)"
-        },
-        {
-            sno: 2,
-            indNo: "IND-2026-0042",
-            indDt: "08-Jan-2026",
-            indQty: 1000,
-            indPoNo: "PO-2026-0079",
-            poDt: "12-Jan-2026",
-            poQty: 1000,
-            poRate: 180,
-            poValue: 180000,
-            grnNo: "GRN-2026-0089",
-            grnDt: "18-Jan-2026",
-            grnOky: 1000,
-            grnRate: 180,
-            grnValue: 180000,
-            routeCardNo: "RC-2026-9042",
-            routeCardDt: "22-Jan-2026",
-            routeCardQty: 995,
-            partNo: "P-1002-40 (Shaft Pin)"
-        },
-        {
-            sno: 3,
-            indNo: "IND-2026-0043",
-            indDt: "12-Jan-2026",
-            indQty: 350,
-            indPoNo: "PO-2026-0082",
-            poDt: "16-Jan-2026",
-            poQty: 350,
-            poRate: 450,
-            poValue: 157500,
-            grnNo: "GRN-2026-0095",
-            grnDt: "22-Jan-2026",
-            grnOky: 350,
-            grnRate: 450,
-            grnValue: 157500,
-            routeCardNo: "RC-2026-9043",
-            routeCardDt: "25-Jan-2026",
-            routeCardQty: 348,
-            partNo: "P-8094-11 (Metallic Impeller)"
-        },
-        {
-            sno: 4,
-            indNo: "IND-2026-0044",
-            indDt: "15-Jan-2026",
-            indQty: 800,
-            indPoNo: "PO-2026-0084",
-            poDt: "19-Jan-2026",
-            poQty: 800,
-            poRate: 320,
-            poValue: 256000,
-            grnNo: "GRN-2026-0102",
-            grnDt: "26-Jan-2026",
-            grnOky: 790,
-            grnRate: 320,
-            grnValue: 252800,
-            routeCardNo: "RC-2026-9044",
-            routeCardDt: "30-Jan-2026",
-            routeCardQty: 785,
-            partNo: "P-4509-02 (Adapter Ring)"
-        },
-        {
-            sno: 5,
-            indNo: "IND-2026-0045",
-            indDt: "19-Jan-2026",
-            indQty: 250,
-            indPoNo: "PO-2026-0088",
-            poDt: "23-Jan-2026",
-            poQty: 250,
-            poRate: 980,
-            poValue: 245000,
-            grnNo: "GRN-2026-0110",
-            grnDt: "29-Jan-2026",
-            grnOky: 250,
-            grnRate: 980,
-            grnValue: 245000,
-            routeCardNo: "RC-2026-9045",
-            routeCardDt: "04-Feb-2026",
-            routeCardQty: 248,
-            partNo: "P-3321-77 (Bearing Housing)"
-        }
-    ], []);
+    const [traceRows, setTraceRows] = useState([]);
+    const [traceLoading, setTraceLoading] = useState(false);
 
     const filteredTraceData = useMemo(() => {
-        return traceabilityData.filter(row => {
+        return traceRows.filter(row => {
             if (!traceSearch) return true;
             const q = traceSearch.toLowerCase();
             return (
-                (row.partNo || "").toLowerCase().includes(q) ||
-                (row.routeCardNo || "").toLowerCase().includes(q) ||
-                (row.indNo || "").toLowerCase().includes(q) ||
-                (row.indPoNo || "").toLowerCase().includes(q) ||
-                (row.grnNo || "").toLowerCase().includes(q)
+                (row.supplierName || "").toLowerCase().includes(q) ||
+                (row.indNo       || "").toLowerCase().includes(q) ||
+                (row.indPoNo     || "").toLowerCase().includes(q) ||
+                (row.material    || "").toLowerCase().includes(q) ||
+                (row.grnNo       || "").toLowerCase().includes(q) ||
+                (row.poType      || "").toLowerCase().includes(q)
             );
         });
-    }, [traceabilityData, traceSearch]);
+    }, [traceRows, traceSearch]);
 
     const [summaryData, setSummaryData] = useState(null);
     const [supplierRatingData, setSupplierRatingData] = useState(null);
@@ -686,6 +618,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setPoLoading(true);
         fetch(`${API_BASE}/purchase-analysis/po-table/?${params}`, {
@@ -702,7 +637,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch Amended PO table rows ──────────────────────
     useEffect(() => {
@@ -720,6 +655,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setAmendedPoLoading(true);
         fetch(`${API_BASE}/purchase-analysis/amended-po-table/?${params}`, {
@@ -735,7 +673,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAmendedPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch Short Close table rows ──────────────────────
     useEffect(() => {
@@ -753,6 +691,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setShortCloseLoading(true);
         fetch(`${API_BASE}/purchase-analysis/short-close-table/?${params}`, {
@@ -767,7 +708,7 @@ export default function PurchaseAnalysis() {
             .catch(err => {
                 if (err.name !== "AbortError") setShortCloseLoading(false);
             });
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch Price Trend table rows ──────────────────────
     useEffect(() => {
@@ -785,6 +726,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setPriceTrendLoading(true);
         fetch(`${API_BASE}/purchase-analysis/price-trend/?${params}`, {
@@ -800,7 +744,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPriceTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch management alerts ──────────────────────
     useEffect(() => {
@@ -818,6 +762,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setAlertsLoading(true);
         fetch(`${API_BASE}/purchase-analysis/management-alerts/?${params}`, {
@@ -833,7 +780,43 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAlertsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+
+    // ── Fetch Traceability Table data ────────────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
+        const ctrl = new AbortController();
+        setTraceLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/traceability-table/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setTraceRows(data?.rows ?? []);
+                setTraceLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setTraceLoading(false);
+            });
+        return () => ctrl.abort();
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch charts data (donuts + supplier ranking) ─────────────
     const [chartsData, setChartsData] = useState(null);
@@ -852,6 +835,9 @@ export default function PurchaseAnalysis() {
         if (filters.poType && filters.poType !== "All Types") {
             params.set("dtype", filters.poType);
         }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setChartsLoading(true);
         fetch(`${API_BASE}/purchase-analysis/charts/?${params}`, {
@@ -867,7 +853,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setChartsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Redraw donut charts (supplier + category) ─────────────────
     useEffect(() => {
@@ -1004,6 +990,9 @@ export default function PurchaseAnalysis() {
         };
         const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
         if (filters.poType && filters.poType !== "All Types") params.set("dtype", filters.poType);
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setTrendLoading(true);
         fetch(`${API_BASE}/purchase-analysis/weekly-trend/?${params}`, {
@@ -1018,7 +1007,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch summary metrics (KPI cards & strip) ────────────────
     useEffect(() => {
@@ -1031,6 +1020,9 @@ export default function PurchaseAnalysis() {
         };
         const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
         if (filters.poType && filters.poType !== "All Types") params.set("dtype", filters.poType);
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
         const ctrl = new AbortController();
         setSummaryLoading(true);
         fetch(`${API_BASE}/purchase-analysis/summary/?${params}`, {
@@ -1045,7 +1037,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setSummaryLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
 
     // ── Fetch Supplier Rating ───────────────────
     useEffect(() => {
@@ -1132,7 +1124,7 @@ export default function PurchaseAnalysis() {
         const poVals = weeklyTrend?.po_value ?? [];
         const grnVals = weeklyTrend?.grn_received ?? [];
         const fmtL = v => `₹${Number(v).toFixed(2)}L`;
-        
+
         let maxVal = 0;
         if (weeklyChartType === "combo") {
             maxVal = Math.max(0, ...poVals, ...grnVals);
@@ -2005,7 +1997,7 @@ export default function PurchaseAnalysis() {
                         />
                     </div>
                     <div className="pa2-filter-group">
-                        <label className="pa2-filter-label">Search POs</label>
+                        <label className="pa2-filter-label">Search</label>
                         <div className="pa2-search-wrapper">
                             <Search className="pa2-search-icon-inside" size={14} />
                             <input
@@ -2202,69 +2194,7 @@ export default function PurchaseAnalysis() {
                             )}
                         </div>
                     </div>
-                    <div className="pa2-filter-group" ref={statusDropdownRef} style={{ minWidth: "160px" }}>
-                        <label className="pa2-filter-label">Status</label>
-                        <div className={`pa2-custom-select${statusDropdownOpen ? " pa2-active" : ""}`}>
-                            <button
-                                type="button"
-                                className="pa2-custom-select-trigger"
-                                onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "ArrowDown") {
-                                        e.preventDefault();
-                                        if (!statusDropdownOpen) {
-                                            setStatusDropdownOpen(true);
-                                            setStatusFocusedIndex(0);
-                                        } else {
-                                            setStatusFocusedIndex((prev) => (prev + 1) % statusOptions.length);
-                                        }
-                                    } else if (e.key === "ArrowUp") {
-                                        e.preventDefault();
-                                        if (!statusDropdownOpen) {
-                                            setStatusDropdownOpen(true);
-                                            setStatusFocusedIndex(statusOptions.length - 1);
-                                        } else {
-                                            setStatusFocusedIndex((prev) => (prev - 1 + statusOptions.length) % statusOptions.length);
-                                        }
-                                    } else if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        if (statusDropdownOpen) {
-                                            if (statusFocusedIndex >= 0 && statusFocusedIndex < statusOptions.length) {
-                                                setF("status", statusOptions[statusFocusedIndex]);
-                                                setStatusDropdownOpen(false);
-                                            }
-                                        } else {
-                                            setStatusDropdownOpen(true);
-                                        }
-                                    } else if (e.key === "Escape") {
-                                        setStatusDropdownOpen(false);
-                                    }
-                                }}
-                            >
-                                <span>{filters.status || "All Status"}</span>
-                                <span className="pa2-custom-select-arrow">
-                                    <ChevronDown size={14} />
-                                </span>
-                            </button>
-                            {statusDropdownOpen && (
-                                <ul className="pa2-custom-select-options">
-                                    {statusOptions.map((opt, idx) => (
-                                        <li
-                                            key={opt}
-                                            className={`pa2-custom-select-option${filters.status === opt ? " pa2-selected" : ""}${statusFocusedIndex === idx ? " pa2-focused" : ""}`}
-                                            onClick={() => {
-                                                setF("status", opt);
-                                                setStatusDropdownOpen(false);
-                                            }}
-                                            onMouseEnter={() => setStatusFocusedIndex(idx)}
-                                        >
-                                            {opt}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
+
                     {/* Reset Filters */}
                     <button
                         type="button"
@@ -2514,9 +2444,7 @@ export default function PurchaseAnalysis() {
                             </div>
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div className="pa2-no-data-msg" style={{ height: "300px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
-                            No Data found on this period
-                        </div>
+                        <div style={{ height: "300px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📊" /></div>
                     ) : (
                         <div className="pa2-trend-chart-full-wrap" style={{ height: "300px" }}>
                             <canvas ref={monthlyChartRef} />
@@ -2570,9 +2498,7 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-skeleton pa2-shimmer" style={{ width: "80%", height: "180px", borderRadius: "8px" }} />
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div className="pa2-no-data-msg" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
-                            No Data found on this period
-                        </div>
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📈" /></div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={poVsGrnChartRef} />
@@ -2593,9 +2519,7 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "110px", height: "110px", border: "10px solid #f1f5f9" }} />
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div className="pa2-no-data-msg" style={{ height: "250px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
-                            No Data found on this period
-                        </div>
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="🏢" /></div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={deptChartRef} />
@@ -2608,9 +2532,7 @@ export default function PurchaseAnalysis() {
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginBottom: "1.4rem" }}>
                 <SectionHeader icon={<Package size={16} style={{ color: "#f5a623" }} />} title="Top 5 Buying Products Analysis" />
                 {filteredPoRows.length === 0 ? (
-                    <div className="pa2-no-data-msg" style={{ height: "200px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b", fontSize: "0.95rem", fontWeight: "500", background: "rgba(248, 250, 252, 0.4)", borderRadius: "10px", border: "1px dashed #e2e8f0" }}>
-                        No Data found on this period
-                    </div>
+                    <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📦" /></div>
                 ) : (
                     <div className="pa2-top-products-grid" style={{ marginTop: "1.2rem", gridTemplateColumns: `repeat(${finalTopProducts.service.length > 0 ? 3 : 2}, minmax(0, 1fr))` }}>
                         {/* Raw Materials Column */}
@@ -2802,7 +2724,7 @@ export default function PurchaseAnalysis() {
                                 const rankColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
                                 const ranking = chartsData?.supplier_ranking ?? [];
                                 if (!ranking.length) {
-                                    return <div className="pa2-po-empty">— No spend records —</div>;
+                                    return <PaNoData icon="💰" message="No spend records for this period" compact />;
                                 }
                                 const maxPct = Math.max(...ranking.map(x => x.pct), 1);
                                 return ranking.map((s, i) => {
@@ -2894,7 +2816,7 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!poLoading && sortedFilteredPoRows.length === 0 && (
-                                <tr><td colSpan={11} className="pa2-po-empty">No Data found on this period</td></tr>
+                                <tr><td colSpan={11} className="pa2-nodata-td-wrap"><PaNoData icon="🛒" compact /></td></tr>
                             )}
                             {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
@@ -2984,7 +2906,7 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!amendedPoLoading && filteredAmendedPoRows.length === 0 && (
-                                <tr><td colSpan={12} className="pa2-po-empty">No Data found on this period</td></tr>
+                                <tr><td colSpan={12} className="pa2-nodata-td-wrap"><PaNoData icon="✏️" compact /></td></tr>
                             )}
                             {!amendedPoLoading && filteredAmendedPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
@@ -3037,7 +2959,7 @@ export default function PurchaseAnalysis() {
                         <Search size={14} className="pa2-macdetail-search-icon" style={{ position: "absolute", left: "10px", color: "#64748b" }} />
                         <input
                             type="text"
-                            placeholder="Search Traceability Details..."
+                            placeholder="Search by Supplier, Ind No, PO No, Material, GRN No, PO Type..."
                             value={traceSearch}
                             onChange={e => setTraceSearch(e.target.value)}
                             className="pa2-macdetail-search-input"
@@ -3063,30 +2985,31 @@ export default function PurchaseAnalysis() {
                         <thead>
                             <tr>
                                 <th className="pa2-po-th">#</th>
-                                <th className="pa2-po-th">IND NO</th>
-                                <th className="pa2-po-th">IND DT</th>
-                                <th className="pa2-po-th pa2-po-th--r">IND QTY</th>
-                                <th className="pa2-po-th">IND PO NO</th>
-                                <th className="pa2-po-th">PO DT</th>
-                                <th className="pa2-po-th pa2-po-th--r">PO QTY</th>
-                                <th className="pa2-po-th pa2-po-th--r">PO RATE</th>
-                                <th className="pa2-po-th pa2-po-th--r">PO VALUE</th>
-                                <th className="pa2-po-th">GRN NO</th>
-                                <th className="pa2-po-th">GRN DT</th>
-                                <th className="pa2-po-th pa2-po-th--r">GRN OKY</th>
-                                <th className="pa2-po-th pa2-po-th--r">GRN RATE</th>
-                                <th className="pa2-po-th pa2-po-th--r">GRN VALUE</th>
-                                <th className="pa2-po-th">ROUTECARD NO</th>
-                                <th className="pa2-po-th">ROUCARD DT</th>
-                                <th className="pa2-po-th pa2-po-th--r">ROUCARD QTY</th>
-                                <th className="pa2-po-th pa2-po-th--wide">PROD DET/PARTNO</th>
+                                <th className="pa2-po-th">Ind No</th>
+                                <th className="pa2-po-th">Ind Date</th>
+                                <th className="pa2-po-th">PO No</th>
+                                <th className="pa2-po-th">Po Date</th>
+                                <th className="pa2-po-th">Po Type</th>
+                                <th className="pa2-po-th">Supplier Name</th>
+                                <th className="pa2-po-th pa2-po-th--wide">Material</th>
+                                <th className="pa2-po-th pa2-po-th--r">Po Qty</th>
+                                <th className="pa2-po-th pa2-po-th--r">Po Rate</th>
+                                <th className="pa2-po-th pa2-po-th--r">Po value</th>
+                                <th className="pa2-po-th" style={{ textAlign: "center" }}>Approved Status</th>
+                                <th className="pa2-po-th">Grn No</th>
+                                <th className="pa2-po-th">Grn Date</th>
+                                <th className="pa2-po-th pa2-po-th--wide">Grn Material</th>
+                                <th className="pa2-po-th pa2-po-th--r">GRN Ok Qty</th>
+                                <th className="pa2-po-th pa2-po-th--r">Grn Rate</th>
+                                <th className="pa2-po-th pa2-po-th--r">Grn Value</th>
+                                <th className="pa2-po-th" style={{ textAlign: "center" }}>Amnd</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {poLoading && (
+                            {traceLoading && (
                                 Array.from({ length: 4 }).map((_, idx) => (
                                     <tr key={idx} className="pa2-po-tr pa2-pulse-loader">
-                                        {Array.from({ length: 18 }).map((__, tdIdx) => (
+                                        {Array.from({ length: 19 }).map((__, tdIdx) => (
                                             <td key={tdIdx} className="pa2-po-td">
                                                 <div className="pa2-skeleton pa2-shimmer" style={{ width: tdIdx === 0 ? "15px" : "55px", height: "12px" }} />
                                             </td>
@@ -3094,35 +3017,38 @@ export default function PurchaseAnalysis() {
                                     </tr>
                                 ))
                             )}
-                            {!poLoading && filteredTraceData.length === 0 && (
+                            {!traceLoading && filteredTraceData.length === 0 && (
                                 <tr>
-                                    <td colSpan={18} className="pa2-po-empty">— No traceability records found matching search query —</td>
+                                    <td colSpan={19} className="pa2-nodata-td-wrap"><PaNoData icon="🔍" message="No traceability records found" compact /></td>
                                 </tr>
                             )}
-                            {!poLoading && filteredTraceData.map((row, i) => (
+                            {!traceLoading && filteredTraceData.map((row, i) => (
                                 <tr key={i} className="pa2-po-tr">
                                     <td className="pa2-po-td pa2-po-dash">{row.sno}</td>
                                     <td className="pa2-po-td" style={{ fontWeight: "600", color: "#2d6de8" }}>{row.indNo}</td>
                                     <td className="pa2-po-td pa2-po-date">{row.indDt}</td>
-                                    <td className="pa2-po-td pa2-po-td--r">{row.indQty.toLocaleString()}</td>
                                     <td className="pa2-po-td" style={{ fontWeight: "600", color: "#10b981" }}>{row.indPoNo}</td>
                                     <td className="pa2-po-td pa2-po-date">{row.poDt}</td>
+                                    <td className="pa2-po-td">
+                                        <span className="pa2-po-type-badge" style={{ background: "rgba(45, 109, 232, 0.08)", border: "1px solid rgba(45, 109, 232, 0.15)", color: "#2d6de8", fontWeight: "700" }}>{row.poType}</span>
+                                    </td>
+                                    <td className="pa2-po-td pa2-po-vendor" style={{ whiteSpace: "nowrap" }}>{row.supplierName}</td>
+                                    <td className="pa2-po-td pa2-po-material" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.material}</td>
                                     <td className="pa2-po-td pa2-po-td--r">{row.poQty.toLocaleString()}</td>
                                     <td className="pa2-po-td pa2-po-td--r">₹{row.poRate}</td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">₹{row.poValue.toLocaleString("en-IN")}</td>
+                                    <td className="pa2-po-td" style={{ textAlign: "center", fontWeight: "600", color: row.approvedStatus === "Y" ? "#10b981" : "#64748b" }}>
+                                        {row.approvedStatus || "N"}
+                                    </td>
                                     <td className="pa2-po-td" style={{ fontWeight: "600", color: "#f5a623" }}>{row.grnNo}</td>
                                     <td className="pa2-po-td pa2-po-date">{row.grnDt}</td>
+                                    <td className="pa2-po-td pa2-po-material" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.grnMaterial}</td>
                                     <td className="pa2-po-td pa2-po-td--r">{row.grnOky.toLocaleString()}</td>
                                     <td className="pa2-po-td pa2-po-td--r">₹{row.grnRate}</td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">₹{row.grnValue.toLocaleString("en-IN")}</td>
-                                    <td className="pa2-po-td">
-                                        <span className="pa2-po-type-badge" style={{ background: "rgba(139, 92, 246, 0.08)", border: "1px solid rgba(139, 92, 246, 0.15)", color: "#8b5cf6", fontWeight: "700" }}>
-                                            {row.routeCardNo}
-                                        </span>
+                                    <td className="pa2-po-td" style={{ textAlign: "center", fontWeight: "600", color: row.amnd === "Y" ? "#dc2626" : "#64748b" }}>
+                                        {row.amnd || "N"}
                                     </td>
-                                    <td className="pa2-po-td pa2-po-date">{row.routeCardDt}</td>
-                                    <td className="pa2-po-td pa2-po-td--r">{row.routeCardQty.toLocaleString()}</td>
-                                    <td className="pa2-po-td pa2-po-vendor" style={{ fontWeight: "700" }}>{row.partNo}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -3173,7 +3099,7 @@ export default function PurchaseAnalysis() {
                                     ))
                                 )}
                                 {!shortCloseLoading && filteredShortCloseRows.length === 0 && (
-                                    <tr><td colSpan={9} className="pa2-po-empty">No Data found on this period</td></tr>
+                                    <tr><td colSpan={9} className="pa2-nodata-td-wrap"><PaNoData icon="📉" compact /></td></tr>
                                 )}
                                 {!shortCloseLoading && filteredShortCloseRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
@@ -3229,7 +3155,7 @@ export default function PurchaseAnalysis() {
                                     ))
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.length === 0 && (
-                                    <tr><td colSpan={6} className="pa2-po-empty">No Data found on this period</td></tr>
+                                    <tr><td colSpan={6} className="pa2-nodata-td-wrap"><PaNoData icon="💹" compact /></td></tr>
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
@@ -3296,11 +3222,11 @@ export default function PurchaseAnalysis() {
 
                 {/* Alerts */}
                 <div className="pa2-card pa2-card-premium">
-                    <SectionHeader 
-                        icon={<AlertTriangle size={16} style={{ color: "#ef4444" }} />} 
-                        title="Management Alerts" 
-                        badge={alertsData?.alerts?.length ? `${alertsData.alerts.length} Action Needed` : "0 Alerts"} 
-                        badgeCls="pa2-badge-red" 
+                    <SectionHeader
+                        icon={<AlertTriangle size={16} style={{ color: "#ef4444" }} />}
+                        title="Management Alerts"
+                        badge={alertsData?.alerts?.length ? `${alertsData.alerts.length} Action Needed` : "0 Alerts"}
+                        badgeCls="pa2-badge-red"
                     />
                     <div className="pa2-alert-list">
                         {alertsLoading && (

@@ -47,7 +47,7 @@ from .views_production_analysis import (
     production_analysis_report, production_value_report, production_idle_breakdown, daily_production_details
 )
 from .views_purchaseanalysis import (
-    purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts,
+    purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table,
 )
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
@@ -212,6 +212,7 @@ urlpatterns = [
     path('purchase-analysis/short-close-table/', purchase_analysis_short_close_table, name='purchase_analysis_short_close_table'),
     path('purchase-analysis/price-trend/', purchase_analysis_price_trend_table, name='purchase_analysis_price_trend_table'),
     path('purchase-analysis/management-alerts/', purchase_analysis_management_alerts, name='purchase_analysis_management_alerts'),
+    path('purchase-analysis/traceability-table/', purchase_analysis_traceability_table, name='purchase_analysis_traceability_table'),
 
     # ── Quality Analysis ──────────────────────────────────────────────
     path('quality-analysis/summary/', quality_analysis_summary, name='quality_analysis_summary'),
