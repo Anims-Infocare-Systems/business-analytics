@@ -16,7 +16,14 @@ import {
     Users,
     Lock,
     CheckSquare,
-    BarChart3
+    BarChart3,
+    User,
+    Briefcase,
+    KeyRound,
+    X,
+    AlertTriangle,
+    Eye,
+    EyeOff
 } from "lucide-react";
 import "./UserRights.css";
 import { resolveApiBase } from "../../apiBase";
@@ -234,9 +241,7 @@ function SubMenuModal({ isOpen, module, userName, currentRights, onApply, onCanc
                         </div>
                     </div>
                     <button type="button" className="ur-submodal__close" onClick={onCancel} aria-label="Close">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
+                        <X size={16} />
                     </button>
                 </div>
 
@@ -332,6 +337,8 @@ export default function UserRights() {
     });
     const [addError, setAddError] = useState("");
     const [adding, setAdding] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const syncOriginalRights = useCallback((userList) => {
         originalRightsRef.current = new Map(
@@ -450,6 +457,13 @@ export default function UserRights() {
     }, [loadUsers]);
 
     useEffect(() => {
+        if (!showAddModal) {
+            setShowPassword(false);
+            setShowConfirmPassword(false);
+        }
+    }, [showAddModal]);
+
+    useEffect(() => {
         const contentEl = document.querySelector(".dl-content");
         const anyOpen = showAddModal || !!deleteConfirm || !!subModal;
         if (anyOpen) {
@@ -543,8 +557,31 @@ export default function UserRights() {
     const handleGrantAll = (userIdx) => {
         setUsers(prev => prev.map((u, i) => {
             if (i !== userIdx) return u;
-            const allOn = MODULES.every(m => u.rights[m.key]);
-            return { ...u, rights: allRightsOn(!allOn) };
+            const allowedModules = MODULES.filter(m => u.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
+            const allOn = allowedModules.every(m => u.rights[m.key]);
+            
+            const nextVal = !allOn;
+            const nextRights = { ...u.rights };
+            
+            MODULES.forEach(m => {
+                const isAdminOnly = ADMIN_ONLY_MODULES.includes(m.key);
+                if (u.isSuperAdmin || !isAdminOnly) {
+                    nextRights[m.key] = nextVal;
+                    if (SUB_MENUS[m.key]) {
+                        SUB_MENUS[m.key].forEach(sub => {
+                            nextRights[sub] = nextVal;
+                        });
+                    }
+                } else {
+                    nextRights[m.key] = false;
+                    if (SUB_MENUS[m.key]) {
+                        SUB_MENUS[m.key].forEach(sub => {
+                            nextRights[sub] = false;
+                        });
+                    }
+                }
+            });
+            return { ...u, rights: nextRights };
         }));
     };
 
@@ -754,8 +791,9 @@ export default function UserRights() {
                             </thead>
                             <tbody>
                                 {filtered.length > 0 ? filtered.map((user, rowIdx) => {
+                                    const allowedModules = MODULES.filter(m => user.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
                                     const onCount = MODULES.filter(m => user.rights[m.key]).length;
-                                    const allOn = MODULES.every(m => user.rights[m.key]);
+                                    const allOn = allowedModules.every(m => user.rights[m.key]);
                                     const hasAccess = onCount > 0;
 
                                     return (
@@ -920,8 +958,9 @@ export default function UserRights() {
                                     setShowAddModal(false);
                                     setAddError("");
                                 }}
+                                aria-label="Close modal"
                             >
-                                ×
+                                <X size={16} />
                             </button>
                         </div>
                         <form onSubmit={handleAddUserSubmit} autoComplete="off">
@@ -932,54 +971,86 @@ export default function UserRights() {
                                     </div>
                                 )}
                                 <div className="ur-form-group">
-                                    <label className="ur-label">Username <span>*</span></label>
-                                    <input
-                                        type="text"
-                                        className="ur-input"
-                                        placeholder="Enter username"
-                                        value={addForm.userName}
-                                        onChange={e => setAddForm(prev => ({ ...prev, userName: e.target.value }))}
-                                        disabled={adding}
-                                        required
-                                        autoFocus
-                                    />
+                                    <label className="ur-label">Username <span className="ur-required">*</span></label>
+                                    <div className="ur-input-wrapper">
+                                        <User className="ur-input-icon" size={16} />
+                                        <input
+                                            type="text"
+                                            className="ur-input"
+                                            placeholder="Enter username"
+                                            value={addForm.userName}
+                                            onChange={e => setAddForm(prev => ({ ...prev, userName: e.target.value }))}
+                                            disabled={adding}
+                                            required
+                                            autoFocus
+                                        />
+                                    </div>
                                 </div>
                                 <div className="ur-form-group">
                                     <label className="ur-label">Designation</label>
-                                    <input
-                                        type="text"
-                                        className="ur-input"
-                                        placeholder="Enter designation (e.g., Manager)"
-                                        value={addForm.designation}
-                                        onChange={e => setAddForm(prev => ({ ...prev, designation: e.target.value }))}
-                                        disabled={adding}
-                                    />
+                                    <div className="ur-input-wrapper">
+                                        <Briefcase className="ur-input-icon" size={16} />
+                                        <input
+                                            type="text"
+                                            className="ur-input"
+                                            placeholder="Enter designation (e.g., Manager)"
+                                            value={addForm.designation}
+                                            onChange={e => setAddForm(prev => ({ ...prev, designation: e.target.value }))}
+                                            disabled={adding}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="ur-form-group">
-                                    <label className="ur-label">Password <span>*</span></label>
-                                    <input
-                                        type="password"
-                                        className="ur-input"
-                                        placeholder="Min 6 characters"
-                                        value={addForm.password}
-                                        onChange={e => setAddForm(prev => ({ ...prev, password: e.target.value }))}
-                                        disabled={adding}
-                                        required
-                                        autoComplete="new-password"
-                                    />
+                                    <label className="ur-label">Password <span className="ur-required">*</span></label>
+                                    <div className="ur-input-wrapper">
+                                        <KeyRound className="ur-input-icon" size={16} />
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            className="ur-input ur-input--password"
+                                            placeholder="Min 6 characters"
+                                            value={addForm.password}
+                                            onChange={e => setAddForm(prev => ({ ...prev, password: e.target.value }))}
+                                            disabled={adding}
+                                            required
+                                            autoComplete="new-password"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="ur-password-toggle"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            disabled={adding}
+                                            tabIndex={-1}
+                                            aria-label={showPassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="ur-form-group">
-                                    <label className="ur-label">Confirm Password <span>*</span></label>
-                                    <input
-                                        type="password"
-                                        className="ur-input"
-                                        placeholder="Re-enter password"
-                                        value={addForm.confirmPassword}
-                                        onChange={e => setAddForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                                        disabled={adding}
-                                        required
-                                        autoComplete="new-password"
-                                    />
+                                    <label className="ur-label">Confirm Password <span className="ur-required">*</span></label>
+                                    <div className="ur-input-wrapper">
+                                        <KeyRound className="ur-input-icon" size={16} />
+                                        <input
+                                            type={showConfirmPassword ? "text" : "password"}
+                                            className="ur-input ur-input--password"
+                                            placeholder="Re-enter password"
+                                            value={addForm.confirmPassword}
+                                            onChange={e => setAddForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                                            disabled={adding}
+                                            required
+                                            autoComplete="new-password"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="ur-password-toggle"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            disabled={adding}
+                                            tabIndex={-1}
+                                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="ur-modal__footer">
@@ -1019,17 +1090,14 @@ export default function UserRights() {
                                 type="button"
                                 className="ur-modal__close"
                                 onClick={() => setDeleteConfirm(null)}
+                                aria-label="Close confirmation"
                             >
-                                ×
+                                <X size={16} />
                             </button>
                         </div>
                         <div className="ur-modal__body ur-modal__body--confirm">
                             <div className="ur-confirm-icon-wrap">
-                                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ur-confirm-icon">
-                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
+                                <AlertTriangle className="ur-confirm-icon" size={32} />
                             </div>
                             <p className="ur-confirm-text">
                                 Are you sure you want to delete user <strong>"{deleteConfirm.userName}"</strong>?

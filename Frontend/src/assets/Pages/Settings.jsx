@@ -974,7 +974,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                                 <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--white"
-                                    disabled={upgradeBusy || (isPro && !isExpiredMode)}
+                                    disabled={true}
                                     onClick={() => { setSelectedPlan("Pro"); setConfirmBillingCycle("yearly"); setShowConfirmModal(true); }}
                                 >
                                     {isPro ? (isExpiredMode ? 'Renewal' : 'Current Plan') : (upgradeBusy ? 'Upgrading...' : 'Get Pro plan')}
@@ -1006,7 +1006,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                                 <button
                                     className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--blue"
-                                    disabled={upgradeBusy || (isMax && !isExpiredMode)}
+                                    disabled={true}
                                     onClick={() => { setSelectedPlan("Max"); setConfirmBillingCycle("yearly"); setShowConfirmModal(true); }}
                                 >
                                     {isMax ? (isExpiredMode ? 'Renewal' : 'Current Plan') : (upgradeBusy ? 'Upgrading...' : 'Get Max plan')}

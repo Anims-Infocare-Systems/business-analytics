@@ -28,7 +28,9 @@ import {
     Check,
     ArrowUpDown,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    Building2,
+    DollarSign
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -46,14 +48,15 @@ const PARTICLES = [
     { style: { top: "50%", left: "50%",  "--dx": "20px",  "--dy": "-60px", animationDelay: "2.3s",  animationDuration: "3.2s" } },
 ];
 
-function PaNoData({ icon = "📭", message = "No data found on this period", compact = false }) {
+function PaNoData({ icon, message = "No data found on this period", compact = false }) {
+    const defaultIcon = compact ? <ShoppingCart size={16} /> : <ShoppingCart size={22} />;
     return (
         <div className={`pa2-nodata-wrap${compact ? " pa2-nodata-wrap--compact" : ""}`}>
             {PARTICLES.map((p, i) => (
                 <span key={i} className="pa2-nodata-particle" style={p.style} />
             ))}
             <div className="pa2-nodata-icon-shell">
-                <div className="pa2-nodata-icon">{icon}</div>
+                <div className="pa2-nodata-icon">{icon || defaultIcon}</div>
             </div>
             <div className="pa2-nodata-title">{message}</div>
             {!compact && <div className="pa2-nodata-sub">Try adjusting the date range or filters</div>}
@@ -2444,7 +2447,7 @@ export default function PurchaseAnalysis() {
                             </div>
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div style={{ height: "300px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📊" /></div>
+                        <div style={{ height: "300px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon={<TrendingUp size={22} style={{ color: "#2d6de8" }} />} /></div>
                     ) : (
                         <div className="pa2-trend-chart-full-wrap" style={{ height: "300px" }}>
                             <canvas ref={monthlyChartRef} />
@@ -2498,7 +2501,7 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-skeleton pa2-shimmer" style={{ width: "80%", height: "180px", borderRadius: "8px" }} />
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📈" /></div>
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon={<TrendingUp size={22} style={{ color: "#10b981" }} />} /></div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={poVsGrnChartRef} />
@@ -2519,7 +2522,7 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "110px", height: "110px", border: "10px solid #f1f5f9" }} />
                         </div>
                     ) : filteredPoRows.length === 0 ? (
-                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="🏢" /></div>
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon={<Building2 size={22} style={{ color: "#8b5cf6" }} />} /></div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "10px" }}>
                             <canvas ref={deptChartRef} />
@@ -2532,7 +2535,7 @@ export default function PurchaseAnalysis() {
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginBottom: "1.4rem" }}>
                 <SectionHeader icon={<Package size={16} style={{ color: "#f5a623" }} />} title="Top 5 Buying Products Analysis" />
                 {filteredPoRows.length === 0 ? (
-                    <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon="📦" /></div>
+                    <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}><PaNoData icon={<Package size={22} style={{ color: "#f5a623" }} />} /></div>
                 ) : (
                     <div className="pa2-top-products-grid" style={{ marginTop: "1.2rem", gridTemplateColumns: `repeat(${finalTopProducts.service.length > 0 ? 3 : 2}, minmax(0, 1fr))` }}>
                         {/* Raw Materials Column */}
@@ -2724,7 +2727,7 @@ export default function PurchaseAnalysis() {
                                 const rankColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
                                 const ranking = chartsData?.supplier_ranking ?? [];
                                 if (!ranking.length) {
-                                    return <PaNoData icon="💰" message="No spend records for this period" compact />;
+                                    return <PaNoData icon={<DollarSign size={16} style={{ color: "#10b981" }} />} message="No spend records for this period" compact />;
                                 }
                                 const maxPct = Math.max(...ranking.map(x => x.pct), 1);
                                 return ranking.map((s, i) => {
@@ -2816,7 +2819,7 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!poLoading && sortedFilteredPoRows.length === 0 && (
-                                <tr><td colSpan={11} className="pa2-nodata-td-wrap"><PaNoData icon="🛒" compact /></td></tr>
+                                <tr><td colSpan={11} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
                             )}
                             {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
@@ -2906,7 +2909,7 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!amendedPoLoading && filteredAmendedPoRows.length === 0 && (
-                                <tr><td colSpan={12} className="pa2-nodata-td-wrap"><PaNoData icon="✏️" compact /></td></tr>
+                                <tr><td colSpan={12} className="pa2-nodata-td-wrap"><PaNoData icon={<FileEdit size={16} style={{ color: "#8b5cf6" }} />} compact /></td></tr>
                             )}
                             {!amendedPoLoading && filteredAmendedPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
@@ -3019,7 +3022,7 @@ export default function PurchaseAnalysis() {
                             )}
                             {!traceLoading && filteredTraceData.length === 0 && (
                                 <tr>
-                                    <td colSpan={19} className="pa2-nodata-td-wrap"><PaNoData icon="🔍" message="No traceability records found" compact /></td>
+                                    <td colSpan={19} className="pa2-nodata-td-wrap"><PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No traceability records found" compact /></td>
                                 </tr>
                             )}
                             {!traceLoading && filteredTraceData.map((row, i) => (
@@ -3099,7 +3102,7 @@ export default function PurchaseAnalysis() {
                                     ))
                                 )}
                                 {!shortCloseLoading && filteredShortCloseRows.length === 0 && (
-                                    <tr><td colSpan={9} className="pa2-nodata-td-wrap"><PaNoData icon="📉" compact /></td></tr>
+                                    <tr><td colSpan={9} className="pa2-nodata-td-wrap"><PaNoData icon={<AlertCircle size={16} style={{ color: "#ef4444" }} />} compact /></td></tr>
                                 )}
                                 {!shortCloseLoading && filteredShortCloseRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
@@ -3155,7 +3158,7 @@ export default function PurchaseAnalysis() {
                                     ))
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.length === 0 && (
-                                    <tr><td colSpan={6} className="pa2-nodata-td-wrap"><PaNoData icon="💹" compact /></td></tr>
+                                    <tr><td colSpan={6} className="pa2-nodata-td-wrap"><PaNoData icon={<CheckCircle2 size={16} style={{ color: "#10b981" }} />} compact /></td></tr>
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">

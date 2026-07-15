@@ -1843,3 +1843,244 @@
 .dl-expired-footer a:hover {
     text-decoration: underline;
 }
+
+/* ══════════════════════════════════════════════════════════
+   CATEGORY LANDING  (cl- prefix)
+   Premium quick-access card grid shown when clicking a
+   parent menu item with no sub-item selected.
+   ══════════════════════════════════════════════════════════ */
+
+@keyframes cl-rise {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cl-card-in {
+    from { opacity: 0; transform: translateY(22px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cl-page {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 28px 32px 40px;
+    min-height: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* ── Header banner ────────────────────────────────────────── */
+.cl-header {
+    position: relative;
+    border-radius: 22px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1d4ed8 100%);
+    box-shadow:
+        0 20px 50px rgba(29, 78, 216, 0.22),
+        0 1px 0 rgba(255, 255, 255, 0.08) inset;
+    animation: cl-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cl-header__mesh {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 10% 20%, rgba(96, 165, 250, 0.35) 0%, transparent 45%),
+        radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.28) 0%, transparent 40%),
+        radial-gradient(circle at 75% 90%, rgba(45, 212, 191, 0.15) 0%, transparent 42%);
+    pointer-events: none;
+}
+
+.cl-header__inner {
+    position: relative;
+    z-index: 1;
+    padding: 32px 36px;
+}
+
+.cl-header__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(191, 219, 254, 0.90);
+    margin-bottom: 12px;
+}
+
+.cl-header__title {
+    font-size: clamp(1.7rem, 3vw, 2.2rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #fff;
+    margin: 0 0 10px;
+    line-height: 1.15;
+}
+
+.cl-header__desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(226, 232, 240, 0.85);
+    margin: 0;
+    max-width: 520px;
+}
+
+/* ── Cards grid ───────────────────────────────────────────── */
+.cl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+/* ── Individual card ──────────────────────────────────────── */
+.cl-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 18px;
+    text-align: left;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 18px;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+        transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.24s ease,
+        border-color 0.24s ease;
+    animation: cl-card-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 55ms + 0.12s);
+    opacity: 0;
+    font-family: inherit;
+}
+
+.cl-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.10);
+}
+
+/* Glow blob top-right */
+.cl-card__glow {
+    position: absolute;
+    top: -36px;
+    right: -36px;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    opacity: 0.10;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+}
+
+.cl-card:hover .cl-card__glow {
+    opacity: 0.20;
+    transform: scale(1.18);
+}
+
+/* ── Icon circle ──────────────────────────────────────────── */
+.cl-card__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.22s ease;
+}
+
+.cl-card:hover .cl-card__icon {
+    transform: scale(1.08) rotate(-4deg);
+}
+
+/* ── Text body ────────────────────────────────────────────── */
+.cl-card__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cl-card__title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+}
+
+.cl-card__desc {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #64748b;
+}
+
+/* ── Arrow ────────────────────────────────────────────────── */
+.cl-card__arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cl-card:hover .cl-card__arrow {
+    transform: translate(2px, -2px);
+}
+
+/* ── Color tones ──────────────────────────────────────────── */
+.cl-card--blue   .cl-card__icon { background: #eff6ff; color: #2563eb; }
+.cl-card--blue   .cl-card__glow { background: #2563eb; }
+.cl-card--blue:hover { border-color: #bfdbfe; }
+.cl-card--blue:hover .cl-card__arrow { background: #eff6ff; color: #2563eb; }
+
+.cl-card--cyan   .cl-card__icon { background: #ecfeff; color: #0891b2; }
+.cl-card--cyan   .cl-card__glow { background: #0891b2; }
+.cl-card--cyan:hover { border-color: #a5f3fc; }
+.cl-card--cyan:hover .cl-card__arrow { background: #ecfeff; color: #0891b2; }
+
+.cl-card--emerald .cl-card__icon { background: #ecfdf5; color: #059669; }
+.cl-card--emerald .cl-card__glow { background: #059669; }
+.cl-card--emerald:hover { border-color: #a7f3d0; }
+.cl-card--emerald:hover .cl-card__arrow { background: #ecfdf5; color: #059669; }
+
+.cl-card--amber  .cl-card__icon { background: #fffbeb; color: #d97706; }
+.cl-card--amber  .cl-card__glow { background: #d97706; }
+.cl-card--amber:hover { border-color: #fde68a; }
+.cl-card--amber:hover .cl-card__arrow { background: #fffbeb; color: #d97706; }
+
+.cl-card--violet .cl-card__icon { background: #f5f3ff; color: #7c3aed; }
+.cl-card--violet .cl-card__glow { background: #7c3aed; }
+.cl-card--violet:hover { border-color: #ddd6fe; }
+.cl-card--violet:hover .cl-card__arrow { background: #f5f3ff; color: #7c3aed; }
+
+.cl-card--rose   .cl-card__icon { background: #fff1f2; color: #e11d48; }
+.cl-card--rose   .cl-card__glow { background: #e11d48; }
+.cl-card--rose:hover { border-color: #fecdd3; }
+.cl-card--rose:hover .cl-card__arrow { background: #fff1f2; color: #e11d48; }
+
+.cl-card--indigo .cl-card__icon { background: #eef2ff; color: #4f46e5; }
+.cl-card--indigo .cl-card__glow { background: #4f46e5; }
+.cl-card--indigo:hover { border-color: #c7d2fe; }
+.cl-card--indigo:hover .cl-card__arrow { background: #eef2ff; color: #4f46e5; }
+
+.cl-card--slate  .cl-card__icon { background: #f8fafc; color: #475569; }
+.cl-card--slate  .cl-card__glow { background: #475569; }
+.cl-card--slate:hover { border-color: #cbd5e1; }
+.cl-card--slate:hover .cl-card__arrow { background: #f1f5f9; color: #475569; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .cl-page { padding: 16px 16px 28px; gap: 20px; }
+    .cl-header__inner { padding: 22px 22px; }
+    .cl-grid { grid-template-columns: 1fr; gap: 12px; }
+}

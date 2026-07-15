@@ -103,8 +103,89 @@ const HEADING_MAP = {
     "Welcome": "Workspace Overview",
 };
 
+/* ── Sub-item metadata for CategoryLanding cards ──────────── */
+const SUB_ITEM_META = {
+    "Top Management Dashboard": { tone: "blue", desc: "Executive KPIs, sales & quality at a glance" },
+    "Plant Performance Dashboard": { tone: "cyan", desc: "Shop-floor efficiency, shifts & production metrics" },
+    "E-Approval": { tone: "emerald", desc: "Electronic approval workflows & sign-offs" },
+    "T-Approval": { tone: "indigo", desc: "Technical approval workflows & escalations" },
+    "Sales Analysis": { tone: "amber", desc: "Revenue trends, targets & customer insights" },
+    "Purchase Analysis": { tone: "violet", desc: "Procurement analytics & vendor performance" },
+    "Quality Analysis": { tone: "rose", desc: "Defect tracking & quality control metrics" },
+    "Production Analysis": { tone: "slate", desc: "Output tracking, shift data & downtime" },
+    "Idle Time Report": { tone: "cyan", desc: "Machine idle time analysis & shift breakdown" },
+    "Efficiency Report": { tone: "amber", desc: "Operational efficiency scores & benchmarks" },
+    "User Rights": { tone: "indigo", desc: "Team access management & module permissions" },
+};
+
+const CATEGORY_DESC = {
+    Dashboard: "Choose a dashboard to view executive or plant-floor performance metrics.",
+    Approvals: "Process and track electronic or technical approval workflows.",
+    Reports: "Analyze business data across sales, purchase, quality and production.",
+    MIS: "Access management information reports for idle time and efficiency.",
+    Utility: "Manage user access rights and system administration settings.",
+};
+
+/* ── Category Landing (premium card grid on parent click) ─── */
+function CategoryLanding({ menuKey, children, onSubClick }) {
+    const desc = CATEGORY_DESC[menuKey] || `Select a section under ${menuKey}.`;
+    return (
+        <div className="cl-page">
+            {/* Header */}
+            <div className="cl-header">
+                <div className="cl-header__mesh" />
+                <div className="cl-header__inner">
+                    <div className="cl-header__eyebrow">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="13,2 3,14 12,14 11,22 21,10 12,10 13,2" /></svg>
+                        Quick Access
+                    </div>
+                    <h1 className="cl-header__title">{menuKey}</h1>
+                    <p className="cl-header__desc">{desc}</p>
+                </div>
+            </div>
+
+            {/* Cards grid */}
+            <div className="cl-grid">
+                {children.map((sub, i) => {
+                    const meta = SUB_ITEM_META[sub] || { tone: "blue" };
+                    return (
+                        <button
+                            key={sub}
+                            className={`cl-card cl-card--${meta.tone}`}
+                            style={{ "--i": i }}
+                            onClick={() => onSubClick(sub)}
+                        >
+                            <div className="cl-card__glow" />
+                            <div className="cl-card__icon">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                    {sub.includes("Dashboard") && <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>}
+                                    {sub.includes("Approval") && <><circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" /></>}
+                                    {sub.includes("Sales") && <><polyline points="3,17 8,11 13,14 21,6" /><polyline points="17,6 21,6 21,10" /></>}
+                                    {sub.includes("Purchase") && <><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 01-8 0" /></>}
+                                    {sub.includes("Quality") && <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></>}
+                                    {sub.includes("Production") && <><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><line x1="9" y1="2" x2="9" y2="4" /><line x1="15" y1="2" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="22" /><line x1="15" y1="20" x2="15" y2="22" /><line x1="20" y1="9" x2="22" y2="9" /><line x1="20" y1="14" x2="22" y2="14" /><line x1="2" y1="9" x2="4" y2="9" /><line x1="2" y1="14" x2="4" y2="14" /></>}
+                                    {sub.includes("Idle") && <><circle cx="12" cy="12" r="10" /><polyline points="12,6 12,12 16,14" /></>}
+                                    {sub.includes("Efficiency") && <><polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2" /></>}
+                                    {sub.includes("User Rights") && <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></>}
+                                </svg>
+                            </div>
+                            <div className="cl-card__body">
+                                <span className="cl-card__title">{sub}</span>
+                                <span className="cl-card__desc">{meta.desc || `Open ${sub}`}</span>
+                            </div>
+                            <span className="cl-card__arrow">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="7" y1="17" x2="17" y2="7" /><polyline points="7,7 17,7 17,17" /></svg>
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 /* ── Page content with fade+slide transition ─────────────── */
-function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin }) {
+function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems }) {
     const isInitialMount = useRef(true);
     const [visible, setVisible] = useState(true);
     const [content, setContent] = useState({ activeSubItem, activeItem });
@@ -144,19 +225,26 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     else if (si === "Efficiency Report") node = <EfficiencyReport />;
     else if (ai === "Charts") node = <Charts />;
     else if (si === "User Rights") node = <UserRights />;
-    else node = (
-        <div className="dl-content__placeholder dl-content__placeholder--labeled">
-            <div className="dl-placeholder-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                    <rect x="3" y="3" width="18" height="18" rx="3" />
-                    <line x1="3" y1="9" x2="21" y2="9" />
-                    <line x1="9" y1="21" x2="9" y2="9" />
-                </svg>
-            </div>
-            <p className="dl-placeholder-title">{si || ai}</p>
-            {/* <p className="dl-placeholder-sub">This page is under construction</p> */}
-        </div>
-    );
+    else {
+        // Show premium CategoryLanding when a parent menu is active but no sub-item selected
+        const parentItem = (allowedMenuItems || MENU_ITEMS).find(m => m.key === ai);
+        if (parentItem && parentItem.children && parentItem.children.length > 0) {
+            node = <CategoryLanding menuKey={ai} children={parentItem.children} onSubClick={onNavigate} />;
+        } else {
+            node = (
+                <div className="dl-content__placeholder dl-content__placeholder--labeled">
+                    <div className="dl-placeholder-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
+                            <rect x="3" y="3" width="18" height="18" rx="3" />
+                            <line x1="3" y1="9" x2="21" y2="9" />
+                            <line x1="9" y1="21" x2="9" y2="9" />
+                        </svg>
+                    </div>
+                    <p className="dl-placeholder-title">{si || ai}</p>
+                </div>
+            );
+        }
+    }
 
     const isPlant = si === "Plant Performance Dashboard";
     const enterClass = isInitialMount.current
@@ -887,6 +975,7 @@ export default function DashboardLayout() {
                         companyName={companyName}
                         userRights={userRights}
                         isSuperAdmin={isSuperAdmin}
+                        allowedMenuItems={allowedMenuItems}
                     />
                 </main>
             </div>

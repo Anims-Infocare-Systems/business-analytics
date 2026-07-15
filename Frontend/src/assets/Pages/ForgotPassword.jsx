@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
+import { Eye, EyeOff } from "lucide-react";
 import "./ForgotPassword.css";
 
 const API = resolveApiBase();
@@ -315,6 +316,8 @@ function ResetStep({ identity, onDone }) {
     const [errors, setErrors] = useState({});
     const [alert, setAlert] = useState("");
     const [busy, setBusy] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const strength = pwStrength(password);
     const clearErr = (key) => setErrors(e => ({ ...e, [key]: "" }));
@@ -410,11 +413,22 @@ function ResetStep({ identity, onDone }) {
                 <div className="fp-inp-wrap">
                     <span className="fp-inp-icon"><IconLock /></span>
                     <input id="fp-newpw"
-                        className={`fp-inp${errors.password ? " fp-inp--err" : ""}`}
-                        type="password" placeholder="••••••••"
+                        className={`fp-inp fp-input--password${errors.password ? " fp-inp--err" : ""}`}
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
                         autoComplete="new-password"
                         value={password}
                         onChange={e => { setPassword(e.target.value); clearErr("password"); }} />
+                    <button
+                        type="button"
+                        className="fp-password-toggle"
+                        onClick={() => setShowPassword(!showPassword)}
+                        disabled={busy}
+                        tabIndex={-1}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                 </div>
                 {/* Strength bar */}
                 <div className="fp-pw-bar-wrap">
@@ -434,12 +448,23 @@ function ResetStep({ identity, onDone }) {
                 <div className="fp-inp-wrap">
                     <span className="fp-inp-icon"><IconLock /></span>
                     <input id="fp-confirm"
-                        className={`fp-inp${errors.confirm ? " fp-inp--err"
+                        className={`fp-inp fp-input--password${errors.confirm ? " fp-inp--err"
                             : confirm && confirm === password ? " fp-inp--ok" : ""}`}
-                        type="password" placeholder="Re-enter password"
+                        type={showConfirm ? "text" : "password"}
+                        placeholder="Re-enter password"
                         autoComplete="new-password"
                         value={confirm}
                         onChange={e => { setConfirm(e.target.value); clearErr("confirm"); }} />
+                    <button
+                        type="button"
+                        className="fp-password-toggle"
+                        onClick={() => setShowConfirm(!showConfirm)}
+                        disabled={busy}
+                        tabIndex={-1}
+                        aria-label={showConfirm ? "Hide password" : "Show password"}
+                    >
+                        {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                 </div>
                 {errors.confirm && <span className="fp-err-text">{errors.confirm}</span>}
             </div>

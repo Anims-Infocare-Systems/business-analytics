@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import "./Signup.css";
 import { resolveApiBase } from "../../apiBase";
 
@@ -327,6 +328,18 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
     const [formErr, setFormErr] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+    const [employeeSelectOpen, setEmployeeSelectOpen] = useState(false);
+    const employeeDropdownRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (employeeDropdownRef.current && !employeeDropdownRef.current.contains(event.target)) {
+                setEmployeeSelectOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     useEffect(() => {
         const code = currentCode.trim();
@@ -694,7 +707,7 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                             <label className="sg-label" htmlFor="f-employees">
                                 No. of Employees&nbsp;<span className="sg-label__req">*</span>
                             </label>
-                            <div className="sg-inp-wrap">
+                            <div className="sg-inp-wrap" ref={employeeDropdownRef}>
                                 <span className="sg-inp-icon">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2">
@@ -703,17 +716,47 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                         <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
                                     </svg>
                                 </span>
-                                <select id="f-employees"
-                                    className={`sg-select${errors.employees ? " sg-inp--err" : ""}`}
-                                    value={form.employees}
-                                    onChange={e => handleField("employees", e.target.value)}>
-                                    <option value="">Select employee range</option>
-                                    <option value="1-10">1 – 10</option>
-                                    <option value="11-50">11 – 50</option>
-                                    <option value="51-200">51 – 200</option>
-                                    <option value="201-500">201 – 500</option>
-                                    <option value="500+">500+</option>
-                                </select>
+                                <div className={`sg-custom-select-container ${employeeSelectOpen ? "sg-custom-select--open" : ""}`}>
+                                    <button
+                                        type="button"
+                                        id="f-employees"
+                                        className={`sg-custom-select-trigger ${errors.employees ? " sg-custom-select--err" : ""}`}
+                                        onClick={() => setEmployeeSelectOpen(!employeeSelectOpen)}
+                                    >
+                                        <span className="sg-custom-select-trigger-text">
+                                            {form.employees ? form.employees.replace("-", " – ") : "Select employee range"}
+                                        </span>
+                                        <span className="sg-custom-select-arrow">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <polyline points="6 9 12 15 18 9" />
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    {employeeSelectOpen && (
+                                        <ul className="sg-custom-select-options" role="listbox">
+                                            {[
+                                                { value: "1-10", label: "1 – 10" },
+                                                { value: "11-50", label: "11 – 50" },
+                                                { value: "51-200", label: "51 – 200" },
+                                                { value: "201-500", label: "201 – 500" },
+                                                { value: "500+", label: "500+" }
+                                            ].map(opt => (
+                                                <li
+                                                    key={opt.value}
+                                                    className={`sg-custom-select-option ${form.employees === opt.value ? "sg-custom-select-option--selected" : ""}`}
+                                                    role="option"
+                                                    aria-selected={form.employees === opt.value}
+                                                    onClick={() => {
+                                                        handleField("employees", opt.value);
+                                                        setEmployeeSelectOpen(false);
+                                                    }}
+                                                >
+                                                    {opt.label}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
                             </div>
                             {errors.employees && (
                                 <span className="sg-err-text sg-err-text--show" id="err-employees">
@@ -729,27 +772,52 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                 <span className="sg-label__opt" id="users-max-hint">{usersHint}</span>
                             </label>
                             <div className="sg-inp-wrap">
-                                <span className="sg-inp-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2">
-                                        <circle cx="12" cy="8" r="4" />
-                                        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                                    </svg>
-                                </span>
-                                <input id="f-users"
-                                    className={`sg-inp${errors.users ? " sg-inp--err" : ""}`}
-                                    type="number"
-                                    value={form.users}
-                                    onChange={e => {
-                                        let val = e.target.value;
-                                        if (val === "" || val === "-") { handleField("users", val); return; }
-                                        const num = parseInt(val, 10);
-                                        if (!isNaN(num)) {
-                                            const limit = selectedPlan.id === "free" ? 5 : 9999;
-                                            const clamped = Math.max(1, Math.min(num, limit));
+                                <div className={`sg-stepper-wrap ${errors.users ? "sg-stepper-wrap--err" : ""}`}>
+                                    <button
+                                        type="button"
+                                        className="sg-stepper-btn sg-stepper-btn--sub"
+                                        onClick={() => {
+                                            const currentVal = parseInt(form.users, 10) || 1;
+                                            const clamped = Math.max(1, currentVal - 1);
                                             handleField("users", String(clamped));
-                                        }
-                                    }} />
+                                        }}
+                                        disabled={parseInt(form.users, 10) <= 1}
+                                    >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                                            <line x1="5" y1="12" x2="19" y2="12" />
+                                        </svg>
+                                    </button>
+                                    <input id="f-users"
+                                        className="sg-inp sg-inp--stepper"
+                                        type="number"
+                                        value={form.users}
+                                        onChange={e => {
+                                            let val = e.target.value;
+                                            if (val === "" || val === "-") { handleField("users", val); return; }
+                                            const num = parseInt(val, 10);
+                                            if (!isNaN(num)) {
+                                                const limit = selectedPlan.id === "free" ? 5 : 9999;
+                                                const clamped = Math.max(1, Math.min(num, limit));
+                                                handleField("users", String(clamped));
+                                            }
+                                        }} />
+                                    <button
+                                        type="button"
+                                        className="sg-stepper-btn sg-stepper-btn--add"
+                                        onClick={() => {
+                                            const currentVal = parseInt(form.users, 10) || 1;
+                                            const limit = selectedPlan.id === "free" ? 5 : 9999;
+                                            const clamped = Math.min(limit, currentVal + 1);
+                                            handleField("users", String(clamped));
+                                        }}
+                                        disabled={parseInt(form.users, 10) >= (selectedPlan.id === "free" ? 5 : 9999)}
+                                    >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                                            <line x1="12" y1="5" x2="12" y2="19" />
+                                            <line x1="5" y1="12" x2="19" y2="12" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                             {errors.users && (
                                 <span className="sg-err-text sg-err-text--show" id="err-users">
@@ -800,6 +868,8 @@ function AdminModal({ companyCode, onClose, onSubmit }) {
     const [terms, setTerms] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const strength = passwordStrength(password);
     const clearErr = () => setErrors({});
@@ -957,11 +1027,22 @@ function AdminModal({ companyCode, onClose, onSubmit }) {
                                 </svg>
                             </span>
                             <input id="m-password"
-                                className={`sg-inp${errors.password ? " sg-inp--err" : ""}`}
-                                type="password" placeholder="••••••••"
+                                className={`sg-inp sg-input--password${errors.password ? " sg-inp--err" : ""}`}
+                                type={showPassword ? "text" : "password"}
+                                placeholder="••••••••"
                                 autoComplete="new-password"
                                 value={password}
                                 onChange={e => { setPassword(e.target.value); clearErr(); }} />
+                            <button
+                                type="button"
+                                className="sg-password-toggle"
+                                onClick={() => setShowPassword(!showPassword)}
+                                disabled={loading}
+                                tabIndex={-1}
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
                         </div>
                         {/* Strength bar */}
                         <div className="sg-pw-strength">
@@ -992,11 +1073,22 @@ function AdminModal({ companyCode, onClose, onSubmit }) {
                                 </svg>
                             </span>
                             <input id="m-confirm"
-                                className={`sg-inp${errors.confirm ? " sg-inp--err" : ""}`}
-                                type="password" placeholder="Re-enter password"
+                                className={`sg-inp sg-input--password${errors.confirm ? " sg-inp--err" : ""}`}
+                                type={showConfirm ? "text" : "password"}
+                                placeholder="Re-enter password"
                                 autoComplete="new-password"
                                 value={confirm}
                                 onChange={e => { setConfirm(e.target.value); clearErr(); }} />
+                            <button
+                                type="button"
+                                className="sg-password-toggle"
+                                onClick={() => setShowConfirm(!showConfirm)}
+                                disabled={loading}
+                                tabIndex={-1}
+                                aria-label={showConfirm ? "Hide password" : "Show password"}
+                            >
+                                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
                         </div>
                         {errors.confirm && (
                             <span className="sg-err-text sg-err-text--show" id="err-m-confirm">
