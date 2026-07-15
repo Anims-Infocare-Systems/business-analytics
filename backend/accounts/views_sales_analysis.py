@@ -14,6 +14,76 @@ from rest_framework.response import Response
 
 from .views import get_tenant_connection, parse_date_range, table_exists, find_column_ci
 
+def _build_search_sql(cursor, search_q, table_name, alias=""):
+    """
+    Returns (sql_cond, params_list).
+    """
+    if not search_q:
+        return "", []
+
+    candidates_map = {
+        'Bill_Det': ['itcode', 'itdesc', 'partno', 'PRINTPartNO', 'PartNo', 'Part_No'],
+        'In_PoDet': ['itcode', 'itdesc'],
+        'In_PoDet_ShdQty': ['itcode'],
+        'DcInSubDet': ['partno', 'PartNo'],
+        'DcInSubDetAssmPoDet': ['partno', 'PartNo'],
+        'DC_Det': ['PartNo', 'partno'],
+        'DailyDcPlan_Det': ['PartNo', 'partno'],
+        'WithMatMas': ['PartNo', 'partno', 'Description', 'description'],
+        'ProductMast': ['PartNo', 'partno', 'Description', 'description'],
+        'CustJobRawMat': ['partno', 'PartNo', 'Description', 'description'],
+        'ABillDc_Det': ['DcPartNo', 'dcpartno']
+    }
+
+    candidates = candidates_map.get(table_name, [])
+    if not candidates:
+        return "", []
+
+    valid_cols = []
+    for col in candidates:
+        cursor.execute(
+            """
+            SELECT TOP 1 COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = 'dbo' 
+              AND TABLE_NAME = ? 
+              AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
+            """, 
+            (table_name, col)
+        )
+        row = cursor.fetchone()
+        if row:
+            valid_cols.append(row[0])
+
+    if not valid_cols:
+        return "", []
+
+    p = f"{alias}." if alias else ""
+    like_val = f"%{search_q}%"
+
+    conds = [f"LOWER({p}[{col}]) LIKE LOWER(?)" for col in valid_cols]
+    sql_cond = " AND (" + " OR ".join(conds) + ")"
+    params = [like_val] * len(valid_cols)
+
+    return sql_cond, params
+
+
+def _get_invoice_subquery_filter(cursor, search_q, bm_alias="BM"):
+    if not search_q:
+        return "", []
+
+    sql_cond, params = _build_search_sql(cursor, search_q, 'Bill_Det', 'd')
+    if not sql_cond:
+        return "", []
+
+    sql = f""" AND {bm_alias}.invno IN (
+        SELECT DISTINCT d.invno
+        FROM Bill_Det d
+        WHERE ISNULL(d.deleted, 0) = 0
+          {sql_cond}
+    )"""
+    return sql, params
+
 
 
 _MONTH_ABB = [
@@ -195,7 +265,7 @@ def format_period_label(start_date, end_date):
 
 
 
-def _fetch_top_product(cursor, start_date, end_date):
+def _fetch_top_product(cursor, start_date, end_date, search_q=None):
 
     det_filters = _bill_det_join_filters()
 
@@ -205,7 +275,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
         return "", 0.0
 
-
+    search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
 
     cursor.execute(
 
@@ -221,7 +291,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
         INNER JOIN Bill_Mas m ON d.invno = m.invno
 
-        WHERE {det_filters}
+        WHERE {det_filters} {search_sql}
 
           AND NULLIF({product_key}, N'') IS NOT NULL
 
@@ -233,7 +303,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
         """,
 
-        (start_date, end_date),
+        (start_date, end_date) + tuple(search_params),
 
     )
 
@@ -259,7 +329,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
         INNER JOIN Bill_Mas m ON d.invno = m.invno
 
-        WHERE {det_filters}
+        WHERE {det_filters} {search_sql}
 
           AND NULLIF({product_key}, N'') IS NOT NULL
 
@@ -269,7 +339,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
         """,
 
-        (start_date, end_date),
+        (start_date, end_date) + tuple(search_params),
 
     )
 
@@ -285,7 +355,7 @@ def _fetch_top_product(cursor, start_date, end_date):
 
 
 
-def _fetch_top_customer(cursor, start_date, end_date, use_alias):
+def _fetch_top_customer(cursor, start_date, end_date, use_alias, search_q=None):
 
     mas_filters = _bill_mas_filters("m")
 
@@ -293,35 +363,52 @@ def _fetch_top_customer(cursor, start_date, end_date, use_alias):
 
     join_sql = _cust_join_sql(use_alias)
 
+    search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
 
+    if search_q:
+        cursor.execute(
+            f"""
+            SELECT TOP 1
+                m.cid,
+                {name_expr} AS customer_name,
+                ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS revenue
+            FROM Bill_Det d
+            INNER JOIN Bill_Mas m ON d.invno = m.invno
+            {join_sql}
+            WHERE {_bill_det_join_filters()} {search_sql}
+            GROUP BY m.cid, {name_expr}
+            ORDER BY SUM(CAST(d.amt AS FLOAT)) DESC
+            """,
+            (start_date, end_date) + tuple(search_params),
+        )
+    else:
+        cursor.execute(
 
-    cursor.execute(
+            f"""
 
-        f"""
+            SELECT TOP 1
 
-        SELECT TOP 1
+                m.cid,
 
-            m.cid,
+                {name_expr} AS customer_name,
 
-            {name_expr} AS customer_name,
+                ISNULL(SUM(CAST(m.tamt AS FLOAT)), 0) AS revenue
 
-            ISNULL(SUM(CAST(m.tamt AS FLOAT)), 0) AS revenue
+            FROM Bill_Mas m
 
-        FROM Bill_Mas m
+            {join_sql}
 
-        {join_sql}
+            WHERE {mas_filters}
 
-        WHERE {mas_filters}
+            GROUP BY m.cid, {name_expr}
 
-        GROUP BY m.cid, {name_expr}
+            ORDER BY SUM(CAST(m.tamt AS FLOAT)) DESC
 
-        ORDER BY SUM(CAST(m.tamt AS FLOAT)) DESC
+            """,
 
-        """,
+            (start_date, end_date),
 
-        (start_date, end_date),
-
-    )
+        )
 
     row = cursor.fetchone()
 
@@ -357,7 +444,7 @@ def sales_analysis_summary_strip(request):
 
     det_filters = _bill_det_join_filters()
 
-
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     top_product_name, top_product_revenue = "", 0.0
 
@@ -371,31 +458,49 @@ def sales_analysis_summary_strip(request):
 
         cursor = conn.cursor()
 
+        search_sql_det, search_params_det = _build_search_sql(cursor, search_q, "Bill_Det", "d")
+        search_sql_mas, search_params_mas = _get_invoice_subquery_filter(cursor, search_q, "m")
+        search_sql_mas_no_alias, search_params_mas_no_alias = _get_invoice_subquery_filter(cursor, search_q, "Bill_Mas")
+
         use_alias = table_exists(cursor, "CustAliasMast")
 
 
 
-        cursor.execute(
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    ISNULL(SUM(CAST(d.amt AS FLOAT)), 0),
+                    COUNT(DISTINCT m.invno),
+                    COUNT(DISTINCT m.cid)
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {det_filters} {search_sql_det}
+                """,
+                (start_date, end_date) + tuple(search_params_det),
+            )
+        else:
+            cursor.execute(
 
-            f"""
+                f"""
 
-            SELECT
+                SELECT
 
-                ISNULL(SUM(tamt), 0),
+                    ISNULL(SUM(tamt), 0),
 
-                COUNT(DISTINCT invno),
+                    COUNT(DISTINCT invno),
 
-                COUNT(DISTINCT cid)
+                    COUNT(DISTINCT cid)
 
-            FROM Bill_Mas
+                FROM Bill_Mas
 
-            WHERE {mas_filters}
+                WHERE {mas_filters}
 
-            """,
+                """,
 
-            (start_date, end_date),
+                (start_date, end_date),
 
-        )
+            )
 
         mas_row = cursor.fetchone()
         grand_total = float(mas_row[0] or 0) if mas_row else 0.0
@@ -414,11 +519,11 @@ def sales_analysis_summary_strip(request):
 
             INNER JOIN Bill_Mas m ON d.invno = m.invno
 
-            WHERE {det_filters}
+            WHERE {det_filters} {search_sql_det}
 
             """,
 
-            (start_date, end_date),
+            (start_date, end_date) + tuple(search_params_det),
 
         )
 
@@ -427,31 +532,47 @@ def sales_analysis_summary_strip(request):
 
 
 
-        cursor.execute(
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM (
+                    SELECT m.cid
+                    FROM Bill_Det d
+                    INNER JOIN Bill_Mas m ON d.invno = m.invno
+                    WHERE {det_filters} {search_sql_det}
+                    GROUP BY m.cid
+                    HAVING COUNT(DISTINCT m.invno) > 1
+                ) rb
+                """,
+                (start_date, end_date) + tuple(search_params_det),
+            )
+        else:
+            cursor.execute(
 
-            f"""
+                f"""
 
-            SELECT COUNT(*)
+                SELECT COUNT(*)
 
-            FROM (
+                FROM (
 
-                SELECT cid
+                    SELECT cid
 
-                FROM Bill_Mas
+                    FROM Bill_Mas
 
-                WHERE {mas_filters}
+                    WHERE {mas_filters}
 
-                GROUP BY cid
+                    GROUP BY cid
 
-                HAVING COUNT(DISTINCT invno) > 1
+                    HAVING COUNT(DISTINCT invno) > 1
 
-            ) rb
+                ) rb
 
-            """,
+                """,
 
-            (start_date, end_date),
+                (start_date, end_date),
 
-        )
+            )
 
         rb_row = cursor.fetchone()
         repeat_buyers = int(rb_row[0] or 0) if rb_row else 0
@@ -462,7 +583,7 @@ def sales_analysis_summary_strip(request):
 
             top_product_name, top_product_revenue = _fetch_top_product(
 
-                cursor, start_date, end_date,
+                cursor, start_date, end_date, search_q
 
             )
 
@@ -476,7 +597,7 @@ def sales_analysis_summary_strip(request):
 
             top_customer_name, top_customer_revenue = _fetch_top_customer(
 
-                cursor, start_date, end_date, use_alias,
+                cursor, start_date, end_date, use_alias, search_q
 
             )
 
@@ -620,26 +741,48 @@ def sales_analysis_weekly_trend(request):
 
     mas_filters = _bill_mas_filters()
     week_case = _WEEK_OF_MONTH_CASE
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            f"""
-            SELECT
-                YEAR(CAST(invdt AS DATE)) AS yr,
-                MONTH(CAST(invdt AS DATE)) AS mo,
-                {week_case} AS wk,
-                ISNULL(SUM(CAST(tamt AS FLOAT)), 0) AS sales
-            FROM Bill_Mas
-            WHERE {mas_filters}
-            GROUP BY
-                YEAR(CAST(invdt AS DATE)),
-                MONTH(CAST(invdt AS DATE)),
-                {week_case}
-            ORDER BY yr, mo, wk
-            """,
-            (start_date, end_date),
-        )
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    YEAR(CAST(m.invdt AS DATE)) AS yr,
+                    MONTH(CAST(m.invdt AS DATE)) AS mo,
+                    {_WEEK_OF_MONTH_CASE.replace("invdt", "m.invdt")} AS wk,
+                    ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS sales
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {_bill_det_join_filters()} {search_sql}
+                GROUP BY
+                    YEAR(CAST(m.invdt AS DATE)),
+                    MONTH(CAST(m.invdt AS DATE)),
+                    {_WEEK_OF_MONTH_CASE.replace("invdt", "m.invdt")}
+                ORDER BY yr, mo, wk
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT
+                    YEAR(CAST(invdt AS DATE)) AS yr,
+                    MONTH(CAST(invdt AS DATE)) AS mo,
+                    {week_case} AS wk,
+                    ISNULL(SUM(CAST(tamt AS FLOAT)), 0) AS sales
+                FROM Bill_Mas
+                WHERE {mas_filters}
+                GROUP BY
+                    YEAR(CAST(invdt AS DATE)),
+                    MONTH(CAST(invdt AS DATE)),
+                    {week_case}
+                ORDER BY yr, mo, wk
+                """,
+                (start_date, end_date),
+            )
         for yr, mo, wk, sales in cursor.fetchall():
             key = (int(yr), int(mo), int(wk))
             if key in sales_map:
@@ -729,26 +872,44 @@ def sales_analysis_revenue_charts(request):
     start_date, end_date = parse_date_range(request)
     mas_filters = _bill_mas_filters("m")
     det_filters = _bill_det_join_filters()
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
         use_alias = table_exists(cursor, "CustAliasMast")
         name_expr = _cust_name_expr(use_alias)
         join_sql = _cust_join_sql(use_alias)
 
-        cursor.execute(
-            f"""
-            SELECT
-                {name_expr} AS customer_name,
-                ISNULL(SUM(CAST(m.tamt AS FLOAT)), 0) AS revenue
-            FROM Bill_Mas m
-            {join_sql}
-            WHERE {mas_filters}
-            GROUP BY m.cid, {name_expr}
-            ORDER BY revenue DESC
-            """,
-            (start_date, end_date),
-        )
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    {name_expr} AS customer_name,
+                    ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS revenue
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                {join_sql}
+                WHERE {_bill_det_join_filters()} {search_sql}
+                GROUP BY m.cid, {name_expr}
+                ORDER BY revenue DESC
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT
+                    {name_expr} AS customer_name,
+                    ISNULL(SUM(CAST(m.tamt AS FLOAT)), 0) AS revenue
+                FROM Bill_Mas m
+                {join_sql}
+                WHERE {mas_filters}
+                GROUP BY m.cid, {name_expr}
+                ORDER BY revenue DESC
+                """,
+                (start_date, end_date),
+            )
         cust_rows = cursor.fetchall()
         total_revenue = sum(float(r[1] or 0) for r in cust_rows)
         cust_labels, cust_pcts = _pie_slices(
@@ -766,10 +927,10 @@ def sales_analysis_revenue_charts(request):
                 SELECT ISNULL(SUM(CAST(d.qty AS FLOAT)), 0)
                 FROM Bill_Det d
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
-                WHERE {det_filters}
+                WHERE {det_filters} {search_sql}
                   AND NULLIF({part_key}, N'') IS NOT NULL
                 """,
-                (start_date, end_date),
+                (start_date, end_date) + tuple(search_params),
             )
             tqty_row = cursor.fetchone()
             total_qty = float(tqty_row[0] or 0) if tqty_row else 0.0
@@ -781,12 +942,12 @@ def sales_analysis_revenue_charts(request):
                     ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) AS qty
                 FROM Bill_Det d
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
-                WHERE {det_filters}
+                WHERE {det_filters} {search_sql}
                   AND NULLIF({part_key}, N'') IS NOT NULL
                 GROUP BY {part_key}
                 ORDER BY qty DESC
                 """,
-                (start_date, end_date),
+                (start_date, end_date) + tuple(search_params),
             )
             prod_rows = cursor.fetchall()
             prod_labels, prod_pcts = _pie_slices(
@@ -801,13 +962,13 @@ def sales_analysis_revenue_charts(request):
                     COUNT(*) AS line_count
                 FROM Bill_Det d
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
-                WHERE {det_filters}
+                WHERE {det_filters} {search_sql}
                   AND NULLIF({part_key}, N'') IS NULL
                 GROUP BY LTRIM(RTRIM(ISNULL(m.btype, N'')))
                 HAVING ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) > 0
                 ORDER BY qty DESC
                 """,
-                (start_date, end_date),
+                (start_date, end_date) + tuple(search_params),
             )
             missing_partno_by_btype = [
                 {
@@ -949,23 +1110,41 @@ def sales_analysis_month_summary(request):
     mas_by_month = {}
     qty_by_month = {}
     btype_counts = {}
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
 
-        cursor.execute(
-            f"""
-            SELECT
-                YEAR(CAST(invdt AS DATE)) AS yr,
-                MONTH(CAST(invdt AS DATE)) AS mo,
-                COUNT(DISTINCT invno) AS invoices,
-                ISNULL(SUM(CAST(tamt AS FLOAT)), 0) AS amount
-            FROM Bill_Mas
-            WHERE {mas_filters}
-            GROUP BY YEAR(CAST(invdt AS DATE)), MONTH(CAST(invdt AS DATE))
-            """,
-            (start_date, end_date),
-        )
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    YEAR(CAST(m.invdt AS DATE)) AS yr,
+                    MONTH(CAST(m.invdt AS DATE)) AS mo,
+                    COUNT(DISTINCT m.invno) AS invoices,
+                    ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS amount
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {_bill_det_join_filters()} {search_sql}
+                GROUP BY YEAR(CAST(m.invdt AS DATE)), MONTH(CAST(m.invdt AS DATE))
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT
+                    YEAR(CAST(invdt AS DATE)) AS yr,
+                    MONTH(CAST(invdt AS DATE)) AS mo,
+                    COUNT(DISTINCT invno) AS invoices,
+                    ISNULL(SUM(CAST(tamt AS FLOAT)), 0) AS amount
+                FROM Bill_Mas
+                WHERE {mas_filters}
+                GROUP BY YEAR(CAST(invdt AS DATE)), MONTH(CAST(invdt AS DATE))
+                """,
+                (start_date, end_date),
+            )
         for yr, mo, invoices, amount in cursor.fetchall():
             mas_by_month[(int(yr), int(mo))] = {
                 "invoices": int(invoices or 0),
@@ -980,40 +1159,66 @@ def sales_analysis_month_summary(request):
                 ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) AS qty
             FROM Bill_Det d
             INNER JOIN Bill_Mas m ON d.invno = m.invno
-            WHERE {det_filters}
+            WHERE {det_filters} {search_sql}
             GROUP BY YEAR(CAST(m.invdt AS DATE)), MONTH(CAST(m.invdt AS DATE))
             """,
-            (start_date, end_date),
+            (start_date, end_date) + tuple(search_params),
         )
         for yr, mo, qty in cursor.fetchall():
             qty_by_month[(int(yr), int(mo))] = float(qty or 0)
 
-        cursor.execute(
-            f"""
-            SELECT
-                LTRIM(RTRIM(ISNULL(btype, N''))) AS btype,
-                COUNT(DISTINCT invno) AS inv_count
-            FROM Bill_Mas
-            WHERE {inv_status_filters}
-            GROUP BY LTRIM(RTRIM(ISNULL(btype, N'')))
-            """,
-            (start_date, end_date),
-        )
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    LTRIM(RTRIM(ISNULL(m.btype, N''))) AS btype,
+                    COUNT(DISTINCT m.invno) AS inv_count
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {_bill_mas_filters_invoice_status("m")} {search_sql}
+                GROUP BY LTRIM(RTRIM(ISNULL(m.btype, N'')))
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT
+                    LTRIM(RTRIM(ISNULL(btype, N''))) AS btype,
+                    COUNT(DISTINCT invno) AS inv_count
+                FROM Bill_Mas
+                WHERE {inv_status_filters}
+                GROUP BY LTRIM(RTRIM(ISNULL(btype, N'')))
+                """,
+                (start_date, end_date),
+            )
         for btype, inv_count in cursor.fetchall():
             btype_counts[(btype or "").strip()] = int(inv_count or 0)
 
         sales_return_count = btype_counts.pop("Sales Return", 0)
 
-        credit_match = _credit_note_match_sql()
-        cursor.execute(
-            f"""
-            SELECT COUNT(DISTINCT invno)
-            FROM Bill_Mas
-            WHERE {inv_status_filters}
-              AND {credit_match}
-            """,
-            (start_date, end_date),
-        )
+        credit_match = _credit_note_match_sql("m") if search_q else _credit_note_match_sql()
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT COUNT(DISTINCT m.invno)
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {_bill_mas_filters_invoice_status("m")}
+                  AND {credit_match} {search_sql}
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT COUNT(DISTINCT invno)
+                FROM Bill_Mas
+                WHERE {inv_status_filters}
+                  AND {credit_match}
+                """,
+                (start_date, end_date),
+            )
         cn_row = cursor.fetchone()
         credit_note_count = int(cn_row[0] or 0) if cn_row else 0
         existing_cn = sum(
@@ -1110,35 +1315,61 @@ def sales_analysis_invoice_details(request):
     start_date, end_date = parse_date_range(request)
     btype_filter = (request.GET.get("btype") or "").strip()
 
-    base_where = (
-        "ISNULL(BM.deleted, 0) = 0 "
-        "AND ISNULL(BD.deleted, 0) = 0 "
-        "AND ISNULL(BM.btype, '') <> 'Sales Return' "
-        "AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?"
-    )
-    params: list = [start_date, end_date]
-    if btype_filter and btype_filter.lower() not in ("all", ""):
-        base_where += " AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?"
-        params.append(btype_filter)
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql_det, search_params_det = _build_search_sql(cursor, search_q, "Bill_Det", "BD")
+        search_sql_d, search_params_d = _build_search_sql(cursor, search_q, "Bill_Det", "d")
+
+        base_where = (
+            "ISNULL(BM.deleted, 0) = 0 "
+            "AND ISNULL(BD.deleted, 0) = 0 "
+            "AND ISNULL(BM.btype, '') <> 'Sales Return' "
+            "AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?"
+        )
+        params: list = [start_date, end_date]
+        if btype_filter and btype_filter.lower() not in ("all", ""):
+            base_where += " AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?"
+            params.append(btype_filter)
+
+        if search_q:
+            base_where += search_sql_det
+            params.extend(search_params_det)
+
         use_alias = table_exists(cursor, "CustAliasMast")
         cust_expr = _invoice_cust_name_expr(use_alias)
         join_sql = _invoice_cust_join_sql(use_alias)
 
-        cursor.execute(
-            f"""
-            SELECT DISTINCT LTRIM(RTRIM(ISNULL(btype, N''))) AS btype
-            FROM Bill_Mas
-            WHERE ISNULL(deleted, 0) = 0
-              AND ISNULL(btype, '') <> 'Sales Return'
-              AND CAST(invdt AS DATE) BETWEEN ? AND ?
-              AND LTRIM(RTRIM(ISNULL(btype, N''))) <> N''
-            ORDER BY btype
-            """,
-            (start_date, end_date),
-        )
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT DISTINCT LTRIM(RTRIM(ISNULL(m.btype, N''))) AS btype
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE ISNULL(m.deleted, 0) = 0
+                  AND ISNULL(d.deleted, 0) = 0
+                  AND ISNULL(m.btype, '') <> 'Sales Return'
+                  AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
+                  AND LTRIM(RTRIM(ISNULL(m.btype, N''))) <> N''
+                  {search_sql_d}
+                ORDER BY btype
+                """,
+                (start_date, end_date) + tuple(search_params_d),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT DISTINCT LTRIM(RTRIM(ISNULL(btype, N''))) AS btype
+                FROM Bill_Mas
+                WHERE ISNULL(deleted, 0) = 0
+                  AND ISNULL(btype, '') <> 'Sales Return'
+                  AND CAST(invdt AS DATE) BETWEEN ? AND ?
+                  AND LTRIM(RTRIM(ISNULL(btype, N''))) <> N''
+                ORDER BY btype
+                """,
+                (start_date, end_date),
+            )
         btypes = [(row[0] or "").strip() for row in cursor.fetchall() if (row[0] or "").strip()]
 
         cursor.execute(
@@ -1152,10 +1383,19 @@ def sales_analysis_invoice_details(request):
                 ISNULL(CAST(BD.qty AS FLOAT), 0) AS qty,
                 ISNULL(CAST(BD.rate AS FLOAT), 0) AS rate,
                 ISNULL(CAST(BD.amt AS FLOAT), 0) AS amount,
-                LTRIM(RTRIM(ISNULL(BM.einvno, N''))) AS e_invoice
+                LTRIM(RTRIM(ISNULL(BM.einvno, N''))) AS e_invoice,
+                LTRIM(RTRIM(ISNULL(BM.btype, N''))) AS btype,
+                ISNULL(BT.total_tax, 0) AS tax,
+                ISNULL(CAST(BM.tamt AS FLOAT), 0) AS tamt
             FROM Bill_Mas BM
             INNER JOIN Bill_Det BD ON BM.invno = BD.invno
             {join_sql}
+            LEFT JOIN (
+                SELECT invno, SUM(ISNULL(txamt, 0)) AS total_tax
+                FROM Bill_Tax
+                WHERE ISNULL(deleted, 0) = 0
+                GROUP BY invno
+            ) BT ON BM.invno = BT.invno
             WHERE {base_where}
             ORDER BY BM.invdt DESC, BM.invno DESC
             """,
@@ -1178,6 +1418,9 @@ def sales_analysis_invoice_details(request):
                 "rate": float(row[6] or 0),
                 "amount": float(row[7] or 0),
                 "e_invoice": (row[8] or "").strip(),
+                "btype": (row[9] or "").strip(),
+                "tax": float(row[10] or 0),
+                "tamt": float(row[11] or 0),
             })
 
         cursor.close()
@@ -1215,9 +1458,11 @@ def sales_analysis_top_products(request):
 
     start_date, end_date = parse_date_range(request)
     det_filters = _bill_det_join_filters()
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
         cursor.execute(
             f"""
             SELECT
@@ -1228,12 +1473,12 @@ def sales_analysis_top_products(request):
                 ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS revenue
             FROM Bill_Det d
             INNER JOIN Bill_Mas m ON d.invno = m.invno
-            WHERE {det_filters}
+            WHERE {det_filters} {search_sql}
               AND NULLIF(LTRIM(RTRIM(ISNULL(d.itcode, N''))), N'') IS NOT NULL
             GROUP BY LTRIM(RTRIM(ISNULL(d.itcode, N'')))
             ORDER BY revenue DESC
             """,
-            (start_date, end_date),
+            (start_date, end_date) + tuple(search_params),
         )
         products = []
         for row in cursor.fetchall():
@@ -1288,11 +1533,13 @@ def sales_analysis_monthly_sales_trend(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "BD")
         cursor.execute(
-            """
+            f"""
             SELECT
                 DATENAME(MONTH, BM.invdt)   AS MonthName,
                 MONTH(BM.invdt)             AS MonthNo,
@@ -1303,13 +1550,14 @@ def sales_analysis_monthly_sales_trend(request):
                 BD.deleted  = 0
                 AND BM.deleted = 0
                 AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                {search_sql}
             GROUP BY
                 MONTH(BM.invdt),
                 DATENAME(MONTH, BM.invdt)
             ORDER BY
                 MonthNo
             """,
-            (start_date, end_date),
+            (start_date, end_date) + tuple(search_params),
         )
         rows = cursor.fetchall()
         cursor.close()
@@ -1357,32 +1605,60 @@ def sales_analysis_bill_type_revenue(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                DATENAME(MONTH, bm.invdt)           AS MonthName,
-                MONTH(bm.invdt)                     AS MonthNo,
-                LTRIM(RTRIM(ISNULL(bm.btype, N''))) AS BillType,
-                ISNULL(SUM(bm.namt), 0)             AS NetAmount
-            FROM Bill_Mas bm
-            INNER JOIN Bill_Det bd ON bm.invno = bd.invno
-            WHERE
-                bm.deleted = 0
-                AND bd.deleted = 0
-                AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
-            GROUP BY
-                MONTH(bm.invdt),
-                DATENAME(MONTH, bm.invdt),
-                bm.btype
-            ORDER BY
-                MonthNo,
-                bm.btype
-            """,
-            (start_date, end_date),
-        )
+        search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "bd")
+        if search_q:
+            cursor.execute(
+                f"""
+                SELECT
+                    DATENAME(MONTH, bm.invdt)           AS MonthName,
+                    MONTH(bm.invdt)                     AS MonthNo,
+                    LTRIM(RTRIM(ISNULL(bm.btype, N''))) AS BillType,
+                    ISNULL(SUM(bd.amt), 0)              AS NetAmount
+                FROM Bill_Mas bm
+                INNER JOIN Bill_Det bd ON bm.invno = bd.invno
+                WHERE
+                    bm.deleted = 0
+                    AND bd.deleted = 0
+                    AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
+                    {search_sql}
+                GROUP BY
+                    MONTH(bm.invdt),
+                    DATENAME(MONTH, bm.invdt),
+                    bm.btype
+                ORDER BY
+                    MonthNo,
+                    bm.btype
+                """,
+                (start_date, end_date) + tuple(search_params),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT
+                    DATENAME(MONTH, bm.invdt)           AS MonthName,
+                    MONTH(bm.invdt)                     AS MonthNo,
+                    LTRIM(RTRIM(ISNULL(bm.btype, N''))) AS BillType,
+                    ISNULL(SUM(bm.namt), 0)             AS NetAmount
+                FROM Bill_Mas bm
+                INNER JOIN Bill_Det bd ON bm.invno = bd.invno
+                WHERE
+                    bm.deleted = 0
+                    AND bd.deleted = 0
+                    AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
+                GROUP BY
+                    MONTH(bm.invdt),
+                    DATENAME(MONTH, bm.invdt),
+                    bm.btype
+                ORDER BY
+                    MonthNo,
+                    bm.btype
+                """,
+                (start_date, end_date),
+            )
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -1461,11 +1737,13 @@ def sales_analysis_monthly_tax_trend(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     try:
         cursor = conn.cursor()
+        search_sql, search_params = _get_invoice_subquery_filter(cursor, search_q, "BM")
         cursor.execute(
-            """
+            f"""
             SELECT
                 DATENAME(MONTH, BM.invdt)                                   AS MonthName,
                 MONTH(BM.invdt)                                             AS MonthNo,
@@ -1477,6 +1755,7 @@ def sales_analysis_monthly_tax_trend(request):
                 BM.deleted = 0
                 AND BT.deleted = 0
                 AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                {search_sql}
             GROUP BY
                 MONTH(BM.invdt),
                 DATENAME(MONTH, BM.invdt)
@@ -1496,7 +1775,7 @@ def sales_analysis_monthly_tax_trend(request):
                     WHEN 3  THEN 12
                 END
             """,
-            (start_date, end_date),
+            (start_date, end_date) + tuple(search_params),
         )
         rows = cursor.fetchall()
         cursor.close()
@@ -1555,6 +1834,9 @@ def sales_analysis_future_projections(request):
             cust_join = "LEFT JOIN CustMast cm ON p.cid = cm.Id"
 
         # 1. Fetch schedules within the selected PO date range
+        search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+        search_sql_pd, search_params_pd = _build_search_sql(cursor, search_q, "In_PoDet", "pd")
+
         schedules_sql = f"""
         SELECT 
             s.Apono,
@@ -1574,9 +1856,10 @@ def sales_analysis_future_projections(request):
           AND ISNULL(p.deleted, 0) = 0
           AND ISNULL(pd.deleted, 0) = 0
           AND CAST(p.podt AS DATE) BETWEEN ? AND ?
+          {search_sql_pd}
         ORDER BY s.reqdate ASC
         """
-        cursor.execute(schedules_sql, (start_date, end_date))
+        cursor.execute(schedules_sql, (start_date, end_date) + tuple(search_params_pd))
         schedules = []
         for row in cursor.fetchall() or []:
             schedules.append({
@@ -1596,20 +1879,21 @@ def sales_analysis_future_projections(request):
         
         dispatches = []
         if aponos:
+            search_sql_dc, search_params_dc = _build_search_sql(cursor, search_q, "DcInSubDet", "d")
             placeholders = ",".join("?" for _ in aponos)
             dispatches_sql = f"""
             SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
             FROM DcInSubDetAssmPoDet d 
             INNER JOIN DC_Mas m ON d.dcno = m.dcno 
-            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders}) {search_sql_dc}
             UNION ALL 
             SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
             FROM DcInSubDet d 
             INNER JOIN DC_Mas m ON d.dcno = m.dcno 
-            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+            WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders}) {search_sql_dc}
             ORDER BY dcdate ASC
             """
-            cursor.execute(dispatches_sql, aponos + aponos)
+            cursor.execute(dispatches_sql, aponos + list(search_params_dc) + aponos + list(search_params_dc))
             dispatches = cursor.fetchall() or []
 
         cursor.close()
@@ -1760,6 +2044,7 @@ UNIQUE_COMBINATIONS AS
         DPM.deleted = 0
         AND DPD.deleted = 0
         AND DPM.dpldate BETWEEN ? AND ?
+        {uc_plan_filter}
 
     UNION
 
@@ -1774,6 +2059,7 @@ UNIQUE_COMBINATIONS AS
         DM.deleted = 0
         AND DD.deleted = 0
         AND DM.dcdate BETWEEN ? AND ?
+        {uc_dispatch_filter}
 ),
 
 PLAN_DATA AS
@@ -1792,6 +2078,7 @@ PLAN_DATA AS
         DPM.deleted = 0
         AND DPD.deleted = 0
         AND DPM.dpldate BETWEEN ? AND ?
+        {plan_filter}
     GROUP BY
         DPD.CID,
         DPD.PartNo,
@@ -1812,6 +2099,7 @@ DISPATCH_DATA AS
         DM.deleted = 0
         AND DD.deleted = 0
         AND DM.dcdate BETWEEN ? AND ?
+        {dispatch_filter}
     GROUP BY
         DM.CID,
         DD.PartNo,
@@ -1859,6 +2147,8 @@ LEFT JOIN CustMast CM
 LEFT JOIN PART_DESCRIPTION PD
     ON PD.PartNo = UC.PartNo
 
+{search_sql}
+
 GROUP BY
     UC.CID,
     CM.CName,
@@ -1871,14 +2161,60 @@ ORDER BY
     PlanDate;
 """
 
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+    # Build per-table part-no filters for plan (DailyDcPlan_Det) and actual (DC_Det)
+    # Both tables use a PartNo column. We embed the LIKE condition directly inside each CTE
+    # so that planned-only rows AND actual-only rows are both returned when searching.
+    if search_q:
+        like_val = f"%{search_q}%"
+        # Filter applied inside UNIQUE_COMBINATIONS sub-queries so rows with PartNo match
+        # from either source (plan or dispatch) are included.
+        uc_plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
+        uc_dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
+        plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
+        dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
+        # No outer WHERE needed — filtering happens inside each CTE
+        search_sql = ""
+        # We need 8 date params + 4 partno params (one per occurrence)
+        search_params = [like_val, like_val, like_val, like_val]
+    else:
+        uc_plan_filter = ""
+        uc_dispatch_filter = ""
+        plan_filter = ""
+        dispatch_filter = ""
+        search_sql = ""
+        search_params = []
+
+    sql = sql.replace("{search_sql}", search_sql)
+    sql = sql.replace("{uc_plan_filter}", uc_plan_filter)
+    sql = sql.replace("{uc_dispatch_filter}", uc_dispatch_filter)
+    sql = sql.replace("{plan_filter}", plan_filter)
+    sql = sql.replace("{dispatch_filter}", dispatch_filter)
+
     rows = []
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, [
-            start_date, end_date, start_date, end_date,
-            start_date, end_date, start_date, end_date
-        ])
+        if search_q:
+            # Parameter order matches CTE placeholders:
+            # UNIQUE_COMBINATIONS plan branch:  start_date, end_date, like_val
+            # UNIQUE_COMBINATIONS dispatch:     start_date, end_date, like_val
+            # PLAN_DATA:                        start_date, end_date, like_val
+            # DISPATCH_DATA:                    start_date, end_date, like_val
+            like_val = f"%{search_q}%"
+            params = [
+                start_date, end_date, like_val,  # UC plan
+                start_date, end_date, like_val,  # UC dispatch
+                start_date, end_date, like_val,  # PLAN_DATA
+                start_date, end_date, like_val,  # DISPATCH_DATA
+            ]
+        else:
+            params = [
+                start_date, end_date, start_date, end_date,
+                start_date, end_date, start_date, end_date,
+            ]
+        cursor.execute(sql, params)
         for row in cursor.fetchall() or []:
             customer = str(row[1]) if row[1] else "—"
             part_no = str(row[2]) if row[2] else ""
@@ -1933,6 +2269,10 @@ def sales_analysis_po_ledger(request):
             cust_name_expr = "LTRIM(RTRIM(ISNULL(CM.CName, N'')))"
             cust_join = "LEFT JOIN CustMast CM ON PM.CId = CM.Id"
 
+
+        search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+        search_sql, search_params = _build_search_sql(cursor, search_q, "In_PoDet", "PD")
+
         sql = f"""
         WITH DC_SUMMARY AS (
             SELECT 
@@ -1986,10 +2326,11 @@ def sales_analysis_po_ledger(request):
         LEFT JOIN BILL_SUMMARY B ON B.Dcno = D.dcNo AND B.DcPartNo = PD.itcode
         WHERE PM.Deleted = 0 AND PD.Deleted = 0
           AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
+          {search_sql}
         ORDER BY PM.podt DESC, PM.Apono;
         """
 
-        cursor.execute(sql, [start_date, end_date])
+        cursor.execute(sql, [start_date, end_date] + search_params)
         rows = []
         for row in cursor.fetchall() or []:
             po_type = str(row[0]) if row[0] else ""
@@ -2060,7 +2401,17 @@ def sales_analysis_traceability(request):
 
     start_date, end_date = parse_date_range(request)
 
-    sql = """
+
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+
+    rows = []
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        search_sql, search_params = _get_invoice_subquery_filter(cursor, search_q, "BM")
+
+        sql = f"""
     SELECT
         COALESCE(CA.CName, CM.CName) AS [Customer Name],
         BM.invno AS [Invoice No],
@@ -2098,14 +2449,11 @@ def sales_analysis_traceability(request):
     ) RC ON BDO.dcno = RC.dcno
     WHERE BM.deleted = 0
       AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+      {search_sql}
     ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno;
     """
 
-    rows = []
-    cursor = None
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql, [start_date, end_date])
+        cursor.execute(sql, [start_date, end_date] + search_params)
         for row in cursor.fetchall() or []:
             customer = str(row[0]) if row[0] else "—"
             inv_no = str(row[1]) if row[1] else ""
@@ -2132,10 +2480,93 @@ def sales_analysis_traceability(request):
     if cursor: cursor.close()
     conn.close()
 
+
+
     return Response({
         "rows": rows
     })
 
 
+# ════════════════════════════════════════════
+#  Avg Rate Cards  (Per Day / Week / Month / Year)
+# ════════════════════════════════════════════
 
+@api_view(["GET"])
+def sales_analysis_avg_rate_cards(request):
+    """
+    Returns the 4 AVG Selling Rate KPI cards:
+      - Per Day   : grand_total / calendar_days
+      - Per Week  : per_day * 7
+      - Per Month : per_day * 30
+      - Per Year  : per_day * 365
 
+    Data source: Bill_Mas (same filters as summary-strip).
+    Supports ?search= / ?q= for part-number filtering (via Bill_Det join).
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+    mas_filters = _bill_mas_filters()
+    det_filters = _bill_det_join_filters()
+
+    try:
+        cursor = conn.cursor()
+        search_sql_det, search_params_det = _build_search_sql(cursor, search_q, "Bill_Det", "d")
+
+        if search_q:
+            # Filter by matching part-number in Bill_Det rows
+            cursor.execute(
+                f"""
+                SELECT ISNULL(SUM(CAST(d.amt AS FLOAT)), 0)
+                FROM Bill_Det d
+                INNER JOIN Bill_Mas m ON d.invno = m.invno
+                WHERE {det_filters} {search_sql_det}
+                """,
+                (start_date, end_date) + tuple(search_params_det),
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT ISNULL(SUM(tamt), 0)
+                FROM Bill_Mas
+                WHERE {mas_filters}
+                """,
+                (start_date, end_date),
+            )
+
+        row = cursor.fetchone()
+        grand_total = float(row[0] or 0) if row else 0.0
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # Calendar days in the selected date range (inclusive, same as frontend logic)
+    delta = (end_date - start_date).days + 1
+    calendar_days = max(1, delta)
+
+    per_day   = round(grand_total / calendar_days, 2)
+    per_week  = round(per_day * 7, 2)
+    per_month = round(per_day * 30, 2)
+    per_year  = round(per_day * 365, 2)
+
+    return Response({
+        "period":        format_period_label(start_date, end_date),
+        "from":          str(start_date),
+        "to":            str(end_date),
+        "grand_total":   grand_total,
+        "calendar_days": calendar_days,
+        "weeks":         round(calendar_days / 7, 1),
+        "months":        round(calendar_days / 30, 1),
+        "years":         round(calendar_days / 365, 2),
+        "per_day":       per_day,
+        "per_week":      per_week,
+        "per_month":     per_month,
+        "per_year":      per_year,
+    })

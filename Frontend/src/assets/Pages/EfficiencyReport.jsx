@@ -382,9 +382,9 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
 
     /* ── Series ── */
     const SERIES = [
-        { idx: 3, color: '#2d6de8', fill: '#2d6de8', label: 'OA Eff%'  },
+        { idx: 3, color: '#2d6de8', fill: '#2d6de8', label: 'OA Eff%' },
         { idx: 4, color: '#059669', fill: '#059669', label: 'OPR Eff%' },
-        { idx: 5, color: '#f59e0b', fill: '#f59e0b', label: 'QF Eff%'  },
+        { idx: 5, color: '#f59e0b', fill: '#f59e0b', label: 'QF Eff%' },
     ];
 
     /* ── Smooth bezier path builder ── */
@@ -461,8 +461,8 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
                         {/* Vertical gradient fills */}
                         {SERIES.map((s, si) => (
                             <linearGradient key={si} id={`${uniqueId}-ag-${si}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%"   stopColor={s.fill} stopOpacity="0.22" />
-                                <stop offset="100%" stopColor={s.fill} stopOpacity="0.0"  />
+                                <stop offset="0%" stopColor={s.fill} stopOpacity="0.22" />
+                                <stop offset="100%" stopColor={s.fill} stopOpacity="0.0" />
                             </linearGradient>
                         ))}
                         {/* Animated clip-path reveal */}
@@ -476,7 +476,7 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
                         </clipPath>
                         {/* Column hover highlight gradient */}
                         <linearGradient id={`${uniqueId}-col-hl`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor={accentColor} stopOpacity="0.10" />
+                            <stop offset="0%" stopColor={accentColor} stopOpacity="0.10" />
                             <stop offset="100%" stopColor={accentColor} stopOpacity="0.02" />
                         </linearGradient>
                     </defs>
@@ -676,7 +676,7 @@ function readFilterSession(key, defaults) {
     } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function EfficiencyReport() {
@@ -686,7 +686,7 @@ export default function EfficiencyReport() {
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [loading, setLoading] = useState(false);
     const fromDate = dateRange.from ? dateRange.from.toISOString().slice(0, 10) : "";
-    const toDate   = dateRange.to   ? dateRange.to.toISOString().slice(0, 10)   : "";
+    const toDate = dateRange.to ? dateRange.to.toISOString().slice(0, 10) : "";
     const [chkCNC, setChkCNC] = useState(true);
     const [chkConv, setChkConv] = useState(true);
     const [effType, setEffType] = useState("operator");
@@ -780,7 +780,7 @@ export default function EfficiencyReport() {
             if (opFilter && opFilter.length > 0 && !opFilter.includes(r[0])) return false;
             if (macFilter && macFilter.length > 0 && !macFilter.includes(r[2])) return false;
             if (deptName && !(r[1] || "").toLowerCase().includes(deptName.toLowerCase())) return false;
-            
+
             if (oprFilterVal !== "") {
                 const val = parseFloat(oprFilterVal);
                 const oprVal = r[4] || 0;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FiCpu, FiUser, FiLayers, FiCompass, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings } from "react-icons/fi";
+import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
@@ -193,14 +193,14 @@ SORT ICON (utility component)
 ═══════════════════════════════════════════════ */
 const SortIcon = ({ active, direction }) => {
   return (
-    <span style={{ 
-      display: "inline-flex", 
-      alignItems: "center", 
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
       justifyContent: "center",
       transition: "all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
       transform: active && direction === "asc" ? "rotate(180deg)" : "rotate(0deg)",
-      opacity: active ? 1 : 0.45, 
-      marginLeft: "8px", 
+      opacity: active ? 1 : 0.45,
+      marginLeft: "8px",
       color: active ? "#3b82f6" : "#94a3b8",
       verticalAlign: "middle",
       background: active ? "rgba(59, 130, 246, 0.08)" : "transparent",
@@ -790,6 +790,9 @@ export default function ProductionAnalysis() {
   const [mounted, setMounted] = useState(false);
   const [pvMode, setPvMode] = useState("machine"); // "machine" | "month"
   const [oeeMode, setOeeMode] = useState("machine"); // "machine" | "month"
+  const [oeeTrend, setOeeTrend] = useState({ labels: [], data: [] });
+  const [macAddedTrend, setMacAddedTrend] = useState({ labels: [], counts: [], machineList: [] });
+  const [macEffTrend, setMacEffTrend] = useState({ labels: [], data: [] });
   const [pvChartType, setPvChartType] = useState("bar"); // "bar" | "line"
   const [oeeChartType, setOeeChartType] = useState("line"); // "line" | "bar"
   const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("All");
@@ -837,159 +840,123 @@ export default function ProductionAnalysis() {
   });
   const [idleBreakdown, setIdleBreakdown] = useState(_IDLE_BREAKDOWN_EMPTY);
   const [kpiValues, setKpiValues] = useState({
-    totalProductionQty: 0, okAcceptedQty: 0, rejectionQty: 0, overallOee: 0.0, productionHours: 0.0, totalMachineHours: 0.0, idleHours: 0.0, settingHours: 0.0, manEfficiency: 0.0, totalShifts: 0, avgProdPerShift: 0.0, peakShiftOutput: 0, lowestShiftOutput: 0, activeMachines: 0, idleMachines: 0, machineUtilization: 0.0, machineEfficiency: 0.0, operatorEfficiency: 0.0, qualityRate: 0.0, materialRejection: 0.0, machineRejection: 0.0
+    totalProductionQty: 0, okAcceptedQty: 0, rejectionQty: 0, overallOee: 0.0, productionHours: 0.0, totalMachineHours: 0.0, idleHours: 0.0, settingHours: 0.0, manEfficiency: 0.0, totalShifts: 0, avgProdPerShift: 0.0, peakShiftOutput: 0, lowestShiftOutput: 0, activeMachines: 0, idleMachines: 0, machineUtilization: 0.0, machineEfficiency: 0.0, operatorEfficiency: 0.0, qualityRate: 0.0, materialRejection: 0.0, machineRejection: 0.0, totCncMac: 0, totConvMac: 0
   });
+  const [machines, setMachines] = useState([]);
+  const [cardData, setCardData] = useState(null);
+  const [cardLoading, setCardLoading] = useState(false);
   const [tableData, setTableData] = useState([]);
   const [tableLoading, setTableLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-  const [traceSearch, setTraceSearch] = useState("");
 
-  const traceabilityData = [
-    {
-      sno: 1,
-      indNo: "IND-2026-0041",
-      indDt: "05-Jan-2026",
-      indQty: 500,
-      indPoNo: "PO-2026-0075",
-      poDt: "10-Jan-2026",
-      poQty: 500,
-      poRate: 250,
-      poValue: 125000,
-      grnNo: "GRN-2026-0081",
-      grnDt: "15-Jan-2026",
-      grnOky: 495,
-      grnRate: 250,
-      grnValue: 123750,
-      routeCardNo: "RC-2026-9041",
-      routeCardDt: "20-Jan-2026",
-      routeCardQty: 490,
-      partNo: "P-1002-39 (Impeller Casting)"
-    },
-    {
-      sno: 2,
-      indNo: "IND-2026-0042",
-      indDt: "08-Jan-2026",
-      indQty: 1000,
-      indPoNo: "PO-2026-0079",
-      poDt: "12-Jan-2026",
-      poQty: 1000,
-      poRate: 180,
-      poValue: 180000,
-      grnNo: "GRN-2026-0089",
-      grnDt: "18-Jan-2026",
-      grnOky: 1000,
-      grnRate: 180,
-      grnValue: 180000,
-      routeCardNo: "RC-2026-9042",
-      routeCardDt: "22-Jan-2026",
-      routeCardQty: 995,
-      partNo: "P-1002-40 (Shaft Pin)"
-    },
-    {
-      sno: 3,
-      indNo: "IND-2026-0043",
-      indDt: "12-Jan-2026",
-      indQty: 350,
-      indPoNo: "PO-2026-0082",
-      poDt: "16-Jan-2026",
-      poQty: 350,
-      poRate: 450,
-      poValue: 157500,
-      grnNo: "GRN-2026-0095",
-      grnDt: "22-Jan-2026",
-      grnOky: 350,
-      grnRate: 450,
-      grnValue: 157500,
-      routeCardNo: "RC-2026-9043",
-      routeCardDt: "25-Jan-2026",
-      routeCardQty: 348,
-      partNo: "P-8094-11 (Metallic Impeller)"
-    },
-    {
-      sno: 4,
-      indNo: "IND-2026-0044",
-      indDt: "15-Jan-2026",
-      indQty: 800,
-      indPoNo: "PO-2026-0084",
-      poDt: "19-Jan-2026",
-      poQty: 800,
-      poRate: 320,
-      poValue: 256000,
-      grnNo: "GRN-2026-0102",
-      grnDt: "26-Jan-2026",
-      grnOky: 790,
-      grnRate: 320,
-      grnValue: 252800,
-      routeCardNo: "RC-2026-9044",
-      routeCardDt: "30-Jan-2026",
-      routeCardQty: 785,
-      partNo: "P-4509-02 (Adapter Ring)"
-    },
-    {
-      sno: 5,
-      indNo: "IND-2026-0045",
-      indDt: "19-Jan-2026",
-      indQty: 250,
-      indPoNo: "PO-2026-0088",
-      poDt: "23-Jan-2026",
-      poQty: 250,
-      poRate: 980,
-      poValue: 245000,
-      grnNo: "GRN-2026-0110",
-      grnDt: "29-Jan-2026",
-      grnOky: 250,
-      grnRate: 980,
-      grnValue: 245000,
-      routeCardNo: "RC-2026-9045",
-      routeCardDt: "04-Feb-2026",
-      routeCardQty: 248,
-      partNo: "P-3321-77 (Bearing Housing)"
-    }
-  ];
+  // Dynamic filter options states loaded from ERP database
+  const [macOptions, setMacOptions] = useState([
+    { value: "", label: "All Machines" },
+    { value: "BROACHING-1", label: "BROACHING-1" },
+    { value: "SPM-04", label: "SPM-04" },
+    { value: "TC 43 L", label: "TC 43 L" },
+    { value: "TC 50", label: "TC 50" },
+    { value: "TC-59", label: "TC-59" },
+    { value: "TC-60", label: "TC-60" },
+    { value: "VMC-07", label: "VMC-07" },
+    { value: "VMC 18", label: "VMC 18" },
+  ]);
+  const [shiftOptions, setShiftOptions] = useState([
+    { value: "", label: "All Shifts" },
+    { value: "A", label: "Shift A" },
+    { value: "B", label: "Shift B" },
+    { value: "C", label: "Shift C" },
+  ]);
+  const [operatorOptions, setOperatorOptions] = useState([
+    { value: "", label: "All Operators" },
+    { value: "Ramchandra Soran", label: "Ramchandra Soran" },
+    { value: "Santhana Lakshmi", label: "Santhana Lakshmi" },
+    { value: "Akash.A", label: "Akash.A" },
+    { value: "Mohan Kewat", label: "Mohan Kewat" },
+    { value: "Karthi.S", label: "Karthi.S" },
+    { value: "Chandan Kumar", label: "Chandan Kumar" },
+    { value: "Ajith.A", label: "Ajith.A" },
+    { value: "Nagamani", label: "Nagamani" },
+    { value: "Biswanath Dhungia", label: "Biswanath Dhungia" },
+  ]);
 
-  const topUtilizationData = [
-    { rank: 1, machine: "TC-60", utilization: 91, runningHrs: 7.2, idleHrs: 0.8 },
-    { rank: 2, machine: "TC-59", utilization: 88, runningHrs: 6.8, idleHrs: 1.2 },
-    { rank: 3, machine: "VMC-07", utilization: 85, runningHrs: 6.5, idleHrs: 1.5 },
-    { rank: 4, machine: "M/C-09", utilization: 82, runningHrs: 6.2, idleHrs: 1.8 },
-    { rank: 5, machine: "M/C-11", utilization: 80, runningHrs: 6.0, idleHrs: 2.0 },
-    { rank: 6, machine: "M/C-09", utilization: 79, runningHrs: 5.9, idleHrs: 2.1 },
-    { rank: 7, machine: "TC 50", utilization: 74, runningHrs: 5.5, idleHrs: 2.5 },
-    { rank: 8, machine: "M/C-12", utilization: 75, runningHrs: 5.6, idleHrs: 2.4 },
-    { rank: 9, machine: "VMC 18", utilization: 70, runningHrs: 5.2, idleHrs: 2.8 },
-    { rank: 10, machine: "TC 43 L", utilization: 66, runningHrs: 4.8, idleHrs: 3.2 }
-  ];
+  useEffect(() => {
+    fetch(`${API_BASE}/production-analysis/filters/`, { credentials: "include" })
+      .then(res => res.json().catch(() => ({})))
+      .then(data => {
+        if (data && data.status === "success" && data.data) {
+          const d = data.data;
+          if (d.machines && Array.isArray(d.machines)) {
+            setMacOptions([
+              { value: "", label: "All Machines" },
+              ...d.machines
+            ]);
+          }
+          if (d.shifts && Array.isArray(d.shifts)) {
+            setShiftOptions([
+              { value: "", label: "All Shifts" },
+              ...d.shifts
+            ]);
+          }
+          if (d.operators && Array.isArray(d.operators)) {
+            setOperatorOptions([
+              { value: "", label: "All Operators" },
+              ...d.operators
+            ]);
+          }
+        }
+      })
+      .catch(err => console.error("Error fetching production analysis filters:", err));
+  }, []);
 
-  const topOeeData = [
-    { rank: 1, machine: "TC-60", oee: 88, type: "CNC Turning" },
-    { rank: 2, machine: "TC-59", oee: 84, type: "CNC Turning" },
-    { rank: 3, machine: "VMC-07", oee: 82, type: "Milling" },
-    { rank: 4, machine: "M/C-11", oee: 79, type: "Conventional" },
-    { rank: 5, machine: "M/C-09", oee: 78, type: "Conventional" }
-  ];
+  const allMachinesList = useMemo(() => {
+    return machines || [];
+  }, [machines]);
 
-  const leastOeeData = [
-    { rank: 1, machine: "SPM-04", oee: 52, type: "Special Purpose" },
-    { rank: 2, machine: "VMC 18", oee: 58, type: "Milling" },
-    { rank: 3, machine: "TC 50", oee: 62, type: "CNC Turning" },
-    { rank: 4, machine: "TC 43 L", oee: 65, type: "CNC Turning" },
-    { rank: 5, machine: "BROACHING-1", oee: 68, type: "Broaching" }
-  ];
+  const topUtilizationData = useMemo(() => {
+    const sorted = [...allMachinesList]
+      .sort((a, b) => (b.utilization || 0) - (a.utilization || 0))
+      .slice(0, 10);
+    return sorted.map((m, idx) => ({
+      rank: idx + 1,
+      machine: m.name,
+      utilization: m.utilization || 0,
+      runningHrs: m.runningHrs || 0,
+      idleHrs: m.idleHrs || 0
+    }));
+  }, [allMachinesList]);
 
-  const allMachinesList = [
-    { name: "TC-59", type: "CNC Turning", color: "#2563eb" },
-    { name: "TC-60", type: "CNC Turning", color: "#059669" },
-    { name: "TC 50", type: "CNC Turning", color: "#7c3aed" },
-    { name: "TC 43 L", type: "CNC Turning", color: "#ea580c" },
-    { name: "VMC-07", type: "Milling", color: "#0891b2" },
-    { name: "VMC 18", type: "Milling", color: "#be185d" },
-    { name: "SPM-04", type: "Special Purpose", color: "#b45309" },
-    { name: "BROACHING-1", type: "Broaching", color: "#1d4ed8" },
-    { name: "M/C-09", type: "Conventional", color: "#065f46" },
-    { name: "M/C-10", type: "Conventional", color: "#6d28d9" },
-    { name: "M/C-11", type: "Conventional", color: "#0f766e" },
-    { name: "M/C-12", type: "Conventional", color: "#9f1239" },
-  ];
+  const topOeeData = useMemo(() => {
+    const sorted = [...allMachinesList]
+      .sort((a, b) => (b.oee || 0) - (a.oee || 0))
+      .slice(0, 5);
+    return sorted.map((m, idx) => ({
+      rank: idx + 1,
+      machine: m.name,
+      oee: m.oee || 0,
+      type: m.type || "Other"
+    }));
+  }, [allMachinesList]);
+
+  const leastOeeData = useMemo(() => {
+    const sorted = [...allMachinesList]
+      .sort((a, b) => (a.oee || 0) - (b.oee || 0))
+      .slice(0, 5);
+    return sorted.map((m, idx) => ({
+      rank: idx + 1,
+      machine: m.name,
+      oee: m.oee || 0,
+      type: m.type || "Other"
+    }));
+  }, [allMachinesList]);
+
+  const machineCategories = useMemo(() => {
+    const groups = new Set();
+    allMachinesList.forEach((m) => {
+      if (m.type) groups.add(m.type);
+    });
+    return ["All", ...Array.from(groups)];
+  }, [allMachinesList]);
 
   const filteredMachinesList = allMachinesList.filter(m => {
     const matchesTab = selectedMacTypeFilter === "All" || m.type === selectedMacTypeFilter;
@@ -1200,7 +1167,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot CNC Mac",
-      value: 32,
+      value: kpiValues.totCncMac,
       unit: "Macs",
       meta: "Active CNC Machines",
       pos: false
@@ -1213,7 +1180,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Conv Mac",
-      value: 6,
+      value: kpiValues.totConvMac,
       unit: "Macs",
       meta: "Active Conventional",
       pos: false
@@ -1313,18 +1280,6 @@ export default function ProductionAnalysis() {
     },
   ];
 
-  const filteredTraceData = traceabilityData.filter(row => {
-    if (!traceSearch) return true;
-    const q = traceSearch.toLowerCase();
-    return (
-      (row.partNo || "").toLowerCase().includes(q) ||
-      (row.routeCardNo || "").toLowerCase().includes(q) ||
-      (row.indNo || "").toLowerCase().includes(q) ||
-      (row.indPoNo || "").toLowerCase().includes(q) ||
-      (row.grnNo || "").toLowerCase().includes(q)
-    );
-  });
-
   const filteredTableData = tableData.filter(row => {
     // 1. Search Query
     if (searchQuery) {
@@ -1373,7 +1328,7 @@ export default function ProductionAnalysis() {
     return [...filteredTableData].sort((a, b) => {
       let valA = a[dailySortField];
       let valB = b[dailySortField];
-      
+
       if (dailySortField === "MatRej") {
         const getMatRej = r => r.MaterialRejection ?? r.MatRej ?? (r.Rej ? Math.floor(r.Rej * 0.6) : 0);
         valA = getMatRej(a);
@@ -1395,11 +1350,11 @@ export default function ProductionAnalysis() {
         const dateB = valB ? new Date(valB).getTime() : 0;
         return dailySortDirection === "asc" ? dateA - dateB : dateB - dateA;
       }
-      
+
       if (typeof valA === "string") {
         return dailySortDirection === "asc" ? (valA || "").localeCompare(valB || "") : (valB || "").localeCompare(valA || "");
       }
-      
+
       const numA = parseFloat(valA) || 0;
       const numB = parseFloat(valB) || 0;
       return dailySortDirection === "asc" ? numA - numB : numB - numA;
@@ -1423,12 +1378,12 @@ export default function ProductionAnalysis() {
         // Deterministic mock setting times based on operator/machine to look realistic
         const hash = (row.Machine || "").charCodeAt((row.Machine || "").length - 1) || 0;
         const rawSettingTime = 0.5 + ((hash % 4) * 0.4) + ((idx % 3) * 0.2); // e.g. 0.5, 0.9, 1.3...
-        const settingTime = parseFloat(rawSettingTime.toFixed(1));
-        const defSettingTime = parseFloat((0.8 + ((hash % 3) * 0.3)).toFixed(1)); // Standard setting time, e.g. 0.8, 1.1, 1.4...
-        
+        const settingTime = row.SettingTime !== undefined && row.SettingTime !== null ? parseFloat(row.SettingTime) : parseFloat(rawSettingTime.toFixed(1));
+        const defSettingTime = row.DefaultSettingTime !== undefined && row.DefaultSettingTime !== null ? parseFloat(row.DefaultSettingTime) : parseFloat((0.8 + ((hash % 3) * 0.3)).toFixed(1));
+
         // effectiveness = (Standard / Actual) * 100
-        const effectiveness = Math.round((defSettingTime / settingTime) * 100);
-        
+        const effectiveness = settingTime > 0 ? Math.round((defSettingTime / settingTime) * 100) : 0;
+
         return {
           sno: idx + 1,
           date: row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—",
@@ -1477,8 +1432,8 @@ export default function ProductionAnalysis() {
     let labels = [];
     let data = [];
     if (utilFilterMode === "machine") {
-      labels = ["TC-59", "TC-60", "TC 50", "TC 43 L", "VMC-07", "VMC 18", "SPM-04", "BROACHING-1", "M/C-09", "M/C-10", "M/C-11", "M/C-12"];
-      data = [88, 91, 74, 66, 85, 58, 79, 52, 82, 70, 80, 75];
+      labels = allMachinesList.map(m => m.name);
+      data = allMachinesList.map(m => m.utilization !== undefined ? m.utilization : 0);
     } else if (utilFilterMode === "week") {
       labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
       data = [78.5, 82.0, 74.8, 81.2];
@@ -1527,10 +1482,21 @@ export default function ProductionAnalysis() {
     }
 
     return { labels, data };
-  }, [utilFilterMode, utilThresholdVal]);
+  }, [utilFilterMode, utilThresholdVal, allMachinesList]);
 
   /* ── Machine-wise Quality Data calculation ─────── */
   const machineQualityData = useMemo(() => {
+    if (allMachinesList.length > 0 && allMachinesList[0].prodQty !== undefined) {
+      return allMachinesList.map(m => ({
+        machine: m.name,
+        prodQty: m.prodQty || 0,
+        rejQty: m.rejQty || 0,
+        rwQty: m.rwQty || 0,
+        rejPct: m.rejPct || 0,
+        rwPct: m.rwPct || 0
+      }));
+    }
+
     return Object.entries(macDetailData).map(([macName, details]) => {
       const okQtySum = details.runs.reduce((sum, run) => sum + (run.okQty || 0), 0);
       const rej = details.rejQty || 0;
@@ -1547,7 +1513,7 @@ export default function ProductionAnalysis() {
         rwPct
       };
     });
-  }, [macDetailData]);
+  }, [macDetailData, allMachinesList]);
 
   const sortedQualityData = useMemo(() => {
     if (!qualitySortField) return machineQualityData;
@@ -1678,44 +1644,164 @@ export default function ProductionAnalysis() {
     if (!dateRange.from || !dateRange.to) return;
     setPageLoading(true);
     const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    if (filterMachine && filterMachine.length > 0) {
+      params.append("machine", filterMachine.join(","));
+    }
+    if (filterShift) {
+      params.append("shift", filterShift);
+    }
+    if (filterOperator && filterOperator.length > 0) {
+      params.append("operator", filterOperator.join(","));
+    }
+    if (filterMacType) {
+      params.append("mac_type", filterMacType);
+    }
+    if (filterMacGroup) {
+      params.append("mac_group", filterMacGroup);
+    }
+    if (searchQuery) {
+      params.append("search", searchQuery);
+    }
     fetch(`${API_BASE}/production-analysis-report/?${params}`, { credentials: "include" })
       .then(async (res) => { const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data?.error || "Failed to load production analysis report"); return data; })
       .then(data => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
-          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0 });
+          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
+          if (d.machines && Array.isArray(d.machines)) {
+            setMachines(d.machines);
+          }
+          if (d.oeeTrend && Array.isArray(d.oeeTrend.labels) && d.oeeTrend.labels.length > 0) {
+            setOeeTrend(d.oeeTrend);
+          } else {
+            setOeeTrend({ labels: [], data: [] });
+          }
+          if (d.macAddedTrend && Array.isArray(d.macAddedTrend.labels) && d.macAddedTrend.labels.length > 0) {
+            setMacAddedTrend(d.macAddedTrend);
+          } else {
+            setMacAddedTrend({ labels: [], counts: [], machineList: [] });
+          }
+          if (d.macEffTrend && Array.isArray(d.macEffTrend.labels) && d.macEffTrend.labels.length > 0) {
+            setMacEffTrend(d.macEffTrend);
+          } else {
+            setMacEffTrend({ labels: [], data: [] });
+          }
         }
       })
       .catch(err => console.error("Error connecting to production analysis backend:", err))
       .finally(() => {
         setTimeout(() => setPageLoading(false), 700);
       });
-  }, [dateRange.from, dateRange.to]);
+  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
+
+  const handleMachineClick = (m) => {
+    setSelectedMachine(m);
+    setCardLoading(true);
+    setCardData(null);
+    const fromStr = dateRange.from ? dateRange.from.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const toStr = dateRange.to ? dateRange.to.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const params = new URLSearchParams({
+      from: fromStr,
+      to: toStr,
+    });
+    fetch(`${API_BASE}/machines/${encodeURIComponent(m.name)}/card/?${params}`, { credentials: "include" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || "Failed to fetch machine card data");
+        return data;
+      })
+      .then((data) => {
+        setCardData(data);
+      })
+      .catch((err) => {
+        console.error("Error fetching machine card data:", err);
+      })
+      .finally(() => {
+        setCardLoading(false);
+      });
+  };
 
   /* ── Production Value chart fetch ───────────────── */
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
     const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    if (filterMachine && filterMachine.length > 0) {
+      params.append("machine", filterMachine.join(","));
+    }
+    if (filterShift) {
+      params.append("shift", filterShift);
+    }
+    if (filterOperator && filterOperator.length > 0) {
+      params.append("operator", filterOperator.join(","));
+    }
+    if (filterMacType) {
+      params.append("mac_type", filterMacType);
+    }
+    if (filterMacGroup) {
+      params.append("mac_group", filterMacGroup);
+    }
+    if (searchQuery) {
+      params.append("search", searchQuery);
+    }
     fetch(`${API_BASE}/production-value-report/?${params}`, { credentials: "include" })
       .then(r => r.json().catch(() => ({})))
       .then(data => { if (data && data.status === "success" && data.data) setPvChartData(data.data); })
       .catch(err => console.error("Production value report error:", err));
-  }, [dateRange.from, dateRange.to]);
+  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
 
   /* ── Idle Breakdown fetch ───────────────────── */
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
-    const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    const params = new URLSearchParams({
+      from: dateRange.from.toISOString().slice(0, 10),
+      to: dateRange.to.toISOString().slice(0, 10)
+    });
+    if (filterMachine && filterMachine.length > 0) {
+      params.append("machine", filterMachine.join(","));
+    }
+    if (filterShift) {
+      params.append("shift", filterShift);
+    }
+    if (filterOperator && filterOperator.length > 0) {
+      params.append("operator", filterOperator.join(","));
+    }
+    if (filterMacType) {
+      params.append("mac_type", filterMacType);
+    }
+    if (filterMacGroup) {
+      params.append("mac_group", filterMacGroup);
+    }
+    if (searchQuery) {
+      params.append("search", searchQuery);
+    }
     fetch(`${API_BASE}/production-idle-breakdown/?${params}`, { credentials: "include" })
       .then(r => r.json().catch(() => ({})))
       .then(data => { if (data && data.status === "success") setIdleBreakdown({ accepted: data.accepted || _IDLE_BREAKDOWN_EMPTY.accepted, non_accepted: data.non_accepted || _IDLE_BREAKDOWN_EMPTY.non_accepted, summary: data.summary || _IDLE_BREAKDOWN_EMPTY.summary }); })
       .catch(err => console.error("Idle breakdown error:", err));
-  }, [dateRange.from, dateRange.to]);
+  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
 
   /* ── Daily Production Details fetch ─────────── */
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
     const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    if (filterMachine && filterMachine.length > 0) {
+      params.append("machine", filterMachine.join(","));
+    }
+    if (filterShift) {
+      params.append("shift", filterShift);
+    }
+    if (filterOperator && filterOperator.length > 0) {
+      params.append("operator", filterOperator.join(","));
+    }
+    if (filterMacType) {
+      params.append("mac_type", filterMacType);
+    }
+    if (filterMacGroup) {
+      params.append("mac_group", filterMacGroup);
+    }
+    if (searchQuery) {
+      params.append("search", searchQuery);
+    }
     setTableLoading(true);
     fetch(`${API_BASE}/production-analysis/daily-details/?${params}`, { credentials: "include" })
       .then(r => r.json().catch(() => ({})))
@@ -1728,7 +1814,7 @@ export default function ProductionAnalysis() {
       })
       .catch(err => { console.error("Daily production details error:", err); setTableData([]); })
       .finally(() => setTableLoading(false));
-  }, [dateRange.from, dateRange.to]);
+  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
 
   /* ── Derived idle totals from live data ─────── */
   const totalAcceptedHrs = idleBreakdown.accepted.total_hours || 0;
@@ -1846,10 +1932,10 @@ export default function ProductionAnalysis() {
     const isMachine = oeeMode === "machine";
     const labels = isMachine
       ? allMachinesList.map(m => m.name)
-      : ["Jan 26", "Feb 26", "Mar 26", "Apr 26", "May 26", "Jun 26", "Jul 26"];
+      : oeeTrend.labels;
     const oeeData = isMachine
-      ? allMachinesList.map(m => macDetailData[m.name]?.oee || 0)
-      : [73, 75, 72, 78, 81, 84, 82];
+      ? allMachinesList.map(m => m.oee !== undefined ? m.oee : (macDetailData[m.name]?.oee || 0))
+      : oeeTrend.data;
 
     oeeChartInst.current = new Chart(ctx, {
       type: oeeChartType,
@@ -1945,7 +2031,7 @@ export default function ProductionAnalysis() {
       }
     });
     return () => oeeChartInst.current?.destroy();
-  }, [pvChartData, oeeMode, oeeChartType, pageLoading]);
+  }, [pvChartData, oeeMode, oeeChartType, pageLoading, allMachinesList, oeeTrend]);
 
   /* ── Setting Time Machine Wise Chart ─────── */
   useEffect(() => {
@@ -2241,7 +2327,7 @@ export default function ProductionAnalysis() {
 
   const mhrTrendChartData = useMemo(() => {
     const machineNames = ["HTC 1", "HTC 2", "HTC 3", "VMC 1", "VMC 2", "VTL 1", "VTL 2", "VTL 3", "VTL 4", "VMC-3", "MANUAL 1"];
-    
+
     const palette = [
       "rgba(37, 99, 235, 0.78)",
       "rgba(59, 130, 246, 0.78)",
@@ -2333,29 +2419,15 @@ export default function ProductionAnalysis() {
     gradient.addColorStop(0, "rgba(249, 115, 22, 0.85)");
     gradient.addColorStop(1, "rgba(249, 115, 22, 0.2)");
 
-    const machineListByMonth = [
-      "TC-59",
-      "TC-60, TC 50",
-      "None",
-      "TC 43 L",
-      "VMC-07, VMC 18, SPM-04",
-      "BROACHING-1, M/C-09"
-    ];
+    const machineListByMonth = macAddedTrend.machineList;
 
     macAddedChartInst.current = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: [
-          "Jan 26 (TC-59)",
-          "Feb 26 (TC-60, TC 50)",
-          "Mar 26",
-          "Apr 26 (TC 43 L)",
-          "May 26 (VMC/SPM)",
-          "Jun 26 (BRO/MC)"
-        ],
+        labels: macAddedTrend.labels,
         datasets: [{
           label: "Machines Added",
-          data: [1, 2, 0, 1, 3, 2],
+          data: macAddedTrend.counts,
           backgroundColor: gradient,
           borderColor: "#f97316",
           borderWidth: 1.5,
@@ -2372,7 +2444,8 @@ export default function ProductionAnalysis() {
             callbacks: {
               label: context => {
                 const idx = context.dataIndex;
-                return ` Added: ${context.parsed.y} machine(s) (${machineListByMonth[idx]})`;
+                const macs = machineListByMonth[idx] || "None";
+                return ` Added: ${context.parsed.y} machine(s) (${macs})`;
               }
             }
           },
@@ -2391,8 +2464,8 @@ export default function ProductionAnalysis() {
             formatter: (v, context) => {
               if (v === 0) return "";
               const idx = context.dataIndex;
-              // Return first machine name to fit nicely
-              const firstMac = machineListByMonth[idx].split(",")[0];
+              const rawList = machineListByMonth[idx] || "";
+              const firstMac = rawList.split(",")[0] || "";
               return `+${v} (${firstMac})`;
             },
             font: { size: 9, weight: "700", family: "'Plus Jakarta Sans',sans-serif" },
@@ -2414,7 +2487,7 @@ export default function ProductionAnalysis() {
       }
     });
     return () => macAddedChartInst.current?.destroy();
-  }, [pvChartData, pageLoading]);
+  }, [macAddedTrend, pageLoading]);
 
   /* ── Machine Efficiency% Trend Chart ─────── */
   useEffect(() => {
@@ -2429,10 +2502,10 @@ export default function ProductionAnalysis() {
     macEffTrendChartInst.current = new Chart(ctx, {
       type: "line",
       data: {
-        labels: ["Jan 26", "Feb 26", "Mar 26", "Apr 26", "May 26", "Jun 26"],
+        labels: macEffTrend.labels,
         datasets: [{
           label: "Avg Efficiency %",
-          data: [78, 80, 83, 81, 85, 87],
+          data: macEffTrend.data,
           borderColor: "#06b6d4",
           borderWidth: 3,
           pointBackgroundColor: "#ffffff",
@@ -2488,7 +2561,7 @@ export default function ProductionAnalysis() {
       }
     });
     return () => macEffTrendChartInst.current?.destroy();
-  }, [pvChartData, pageLoading]);
+  }, [macEffTrend, pageLoading]);
 
 
 
@@ -2532,7 +2605,7 @@ export default function ProductionAnalysis() {
               </svg>
               <input
                 type="text"
-                placeholder="Search routecard, operator, part..."
+                placeholder="Search Partno"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -2553,47 +2626,21 @@ export default function ProductionAnalysis() {
             value={filterMachine}
             onChange={setFilterMachine}
             placeholder="All Machines"
-            options={[
-              { value: "", label: "All Machines" },
-              { value: "BROACHING-1", label: "BROACHING-1" },
-              { value: "SPM-04", label: "SPM-04" },
-              { value: "TC 43 L", label: "TC 43 L" },
-              { value: "TC 50", label: "TC 50" },
-              { value: "TC-59", label: "TC-59" },
-              { value: "TC-60", label: "TC-60" },
-              { value: "VMC-07", label: "VMC-07" },
-              { value: "VMC 18", label: "VMC 18" },
-            ]}
+            options={macOptions}
           />
           <PremiumSelect
             label="Shift"
             value={filterShift}
             onChange={setFilterShift}
             placeholder="All Shifts"
-            options={[
-              { value: "", label: "All Shifts" },
-              { value: "A", label: "Shift A" },
-              { value: "B", label: "Shift B" },
-              { value: "C", label: "Shift C" },
-            ]}
+            options={shiftOptions}
           />
           <PremiumSelectMulti
             label="Operator"
             value={filterOperator}
             onChange={setFilterOperator}
             placeholder="All Operators"
-            options={[
-              { value: "", label: "All Operators" },
-              { value: "Ramchandra Soran", label: "Ramchandra Soran" },
-              { value: "Santhana Lakshmi", label: "Santhana Lakshmi" },
-              { value: "Akash.A", label: "Akash.A" },
-              { value: "Mohan Kewat", label: "Mohan Kewat" },
-              { value: "Karthi.S", label: "Karthi.S" },
-              { value: "Chandan Kumar", label: "Chandan Kumar" },
-              { value: "Ajith.A", label: "Ajith.A" },
-              { value: "Nagamani", label: "Nagamani" },
-              { value: "Biswanath Dhungia", label: "Biswanath Dhungia" },
-            ]}
+            options={operatorOptions}
           />
           <PremiumSelect
             label="Mac Type"
@@ -2711,7 +2758,7 @@ export default function ProductionAnalysis() {
               )}
             </div>
             <div className="pa2-macdetail-tabs">
-              {["All", "CNC Turning", "Milling", "Special Purpose", "Broaching", "Conventional"].map((tab) => (
+              {machineCategories.map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -2746,13 +2793,16 @@ export default function ProductionAnalysis() {
           ) : filteredMachinesList.length > 0 ? (
             <div className="pa2-machinedetails-grid">
               {filteredMachinesList.map((m, i) => {
-                const macDetails = macDetailData[m.name] || { oprEff: 0, oee: 0 };
+                const macDetails = {
+                  oprEff: m.oprEff !== undefined ? m.oprEff : (macDetailData[m.name]?.oprEff ?? 0),
+                  oee: m.oee !== undefined ? m.oee : (macDetailData[m.name]?.oee ?? 0)
+                };
                 return (
                   <div
                     key={i}
                     className="pa2-mac-chip"
                     style={{ "--ci": i, "--cc1": m.color }}
-                    onClick={() => setSelectedMachine({ ...m, ...macDetailData[m.name] })}
+                    onClick={() => handleMachineClick(m)}
                   >
                     <div className="pa2-mac-chip-accent" />
                     <div className="pa2-mac-chip-body" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -2764,30 +2814,30 @@ export default function ProductionAnalysis() {
                       <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-end", flexShrink: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span style={{ fontSize: "9px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.2px" }}>Eff</span>
-                          <span style={{ 
-                            fontSize: "11px", 
-                            fontWeight: "800", 
-                            color: macDetails.oprEff >= 80 ? "#059669" : "#ea580c", 
-                            background: macDetails.oprEff >= 80 ? "#e6fcf5" : "#fff7ed", 
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: "800",
+                            color: macDetails.oprEff >= 80 ? "#059669" : "#ea580c",
+                            background: macDetails.oprEff >= 80 ? "#e6fcf5" : "#fff7ed",
                             border: macDetails.oprEff >= 80 ? "1px solid rgba(5, 150, 105, 0.15)" : "1px solid rgba(234, 88, 12, 0.15)",
-                            padding: "1px 5px", 
-                            borderRadius: "5px", 
-                            minWidth: "36px", 
+                            padding: "1px 5px",
+                            borderRadius: "5px",
+                            minWidth: "36px",
                             textAlign: "center",
                             fontVariantNumeric: "tabular-nums"
                           }}>{macDetails.oprEff}%</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span style={{ fontSize: "9px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.2px" }}>OEE</span>
-                          <span style={{ 
-                            fontSize: "11px", 
-                            fontWeight: "800", 
-                            color: macDetails.oee >= 75 ? "#2563eb" : "#dc2626", 
-                            background: macDetails.oee >= 75 ? "#eff6ff" : "#fff5f5", 
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: "800",
+                            color: macDetails.oee >= 75 ? "#2563eb" : "#dc2626",
+                            background: macDetails.oee >= 75 ? "#eff6ff" : "#fff5f5",
                             border: macDetails.oee >= 75 ? "1px solid rgba(37, 99, 235, 0.15)" : "1px solid rgba(220, 38, 38, 0.15)",
-                            padding: "1px 5px", 
-                            borderRadius: "5px", 
-                            minWidth: "36px", 
+                            padding: "1px 5px",
+                            borderRadius: "5px",
+                            minWidth: "36px",
                             textAlign: "center",
                             fontVariantNumeric: "tabular-nums"
                           }}>{macDetails.oee}%</span>
@@ -2810,11 +2860,28 @@ export default function ProductionAnalysis() {
 
       {/* ── MACHINE DETAIL MODAL ── */}
       {selectedMachine && (() => {
-        const totalRunHrs = selectedMachine.runs.reduce((acc, r) => acc + r.runHrs, 0).toFixed(1);
-        const totalOkQty = selectedMachine.runs.reduce((acc, r) => acc + r.okQty, 0);
+        const card = cardData?.card || {
+          oee_pct: 0,
+          oper_eff_pct: 0,
+          run_hrs: 0,
+          idle_hrs: 0,
+          total_ok_qty: 0,
+          total_rej_qty: 0,
+          total_rework_qty: 0,
+          machine_run_pct: 0
+        };
+        const shiftLogs = cardData?.shift_logs || [];
+
         return createPortal(
           <div className="pa2-modal-overlay" onClick={() => setSelectedMachine(null)}>
             <div className="pa2-modal" onClick={e => e.stopPropagation()}>
+              <style>{`
+                @keyframes pa2-spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+
               {/* Modal Header */}
               <div className="pa2-modal-hdr" style={{ "--mc": selectedMachine.color }}>
                 <div className="pa2-modal-hdr-left">
@@ -2831,95 +2898,116 @@ export default function ProductionAnalysis() {
                 </button>
               </div>
 
-              {/* KPI Strip */}
-              <div className="pa2-modal-kpi-strip">
-                {[
-                  { label: "OEE %", value: `${selectedMachine.oee}%`, icon: <FiActivity />, color: selectedMachine.oee >= 75 ? "#059669" : "#dc2626" },
-                  { label: "Opr Eff %", value: `${selectedMachine.oprEff}%`, icon: <FiUser />, color: selectedMachine.oprEff >= 80 ? "#059669" : "#f59e0b" },
-                  { label: "Run Hrs", value: `${totalRunHrs} hrs`, icon: <FiClock />, color: "#2563eb" },
-                  { label: "Idle Hrs", value: `${selectedMachine.idleHrs} hrs`, icon: <FiAlertTriangle />, color: "#94a3b8" },
-                ].map((k, i) => (
-                  <div key={i} className="pa2-modal-kpi-card" style={{ "--di": i }}>
-                    <div className="pa2-modal-kpi-icon" style={{ color: k.color }}>{k.icon}</div>
-                    <div className="pa2-modal-kpi-val" style={{ color: k.color }}>{k.value}</div>
-                    <div className="pa2-modal-kpi-lbl">{k.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Multiple Operator / Part / Process Run Logs */}
-              <div className="pa2-modal-section-title" style={{ "--di": 4 }}>Shift Logs</div>
-              <div className="pa2-modal-table-wrapper" style={{ "--di": 5 }}>
-                <table className="pa2-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Operator</th>
-                      <th>Part No.</th>
-                      <th>Process</th>
-                      <th style={{ textAlign: "right" }}>Hrs</th>
-                      <th style={{ textAlign: "right" }}>OK Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedMachine.runs.map((r, idx) => (
-                      <tr key={idx}>
-                        <td className="pa2-modal-td-operator">
-                          <div className="pa2-modal-op-avatar" style={{ background: selectedMachine.color }}>{r.operator.charAt(0)}</div>
-                          <span>{r.operator}</span>
-                        </td>
-                        <td><span className="pa2-modal-badge-part">{r.partNo}</span></td>
-                        <td><span className="pa2-modal-text-process">{r.process}</span></td>
-                        <td style={{ textAlign: "right", fontWeight: 600, color: "#475569" }}>{r.runHrs}h</td>
-                        <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>{r.okQty}</td>
-                      </tr>
+              {cardLoading ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", gap: "12px", color: "#64748b" }}>
+                  <div className="pa2-loading-spinner" style={{
+                    width: "28px",
+                    height: "28px",
+                    border: "3px solid #f1f5f9",
+                    borderTopColor: "#2563eb",
+                    borderRadius: "50%",
+                    animation: "pa2-spin 0.8s linear infinite"
+                  }} />
+                  <span style={{ fontSize: "12px", fontWeight: "600" }}>Fetching machine metrics...</span>
+                </div>
+              ) : (
+                <>
+                  {/* KPI Strip */}
+                  <div className="pa2-modal-kpi-strip">
+                    {[
+                      { label: "OEE %", value: `${card.oee_pct}%`, icon: <FiActivity />, color: "#ef4444" },
+                      { label: "OPR EFF %", value: `${card.oper_eff_pct}%`, icon: <FiUser />, color: "#f97316" },
+                      { label: "RUN HRS", value: `${card.run_hrs.toFixed(1)} hrs`, icon: <FiClock />, color: "#2563eb" },
+                      { label: "IDLE HRS", value: `${Math.round(card.idle_hrs)} hrs`, icon: <FiAlertTriangle />, color: "#94a3b8" },
+                    ].map((k, i) => (
+                      <div key={i} className="pa2-modal-kpi-card" style={{ "--di": i }}>
+                        <div className="pa2-modal-kpi-icon" style={{ color: k.color }}>{k.icon}</div>
+                        <div className="pa2-modal-kpi-val" style={{ color: k.color }}>{k.value}</div>
+                        <div className="pa2-modal-kpi-lbl">{k.label}</div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
 
-              {/* Production Qty Row */}
-              <div className="pa2-modal-section-title" style={{ "--di": 6 }}>Total Production Quantities</div>
-              <div className="pa2-modal-qty-row" style={{ "--di": 7 }}>
-                <div className="pa2-modal-qty pa2-modal-qty--ok">
-                  <div className="pa2-modal-qty-val">
-                    <FiCheckCircle size={18} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
-                    {totalOkQty}
+                  {/* Multiple Operator / Part / Process Run Logs */}
+                  <div className="pa2-modal-section-title" style={{ "--di": 4 }}>Shift Logs</div>
+                  <div className="pa2-modal-table-wrapper" style={{ "--di": 5 }}>
+                    <table className="pa2-modal-table">
+                      <thead>
+                        <tr>
+                          <th>Operator</th>
+                          <th>Part No.</th>
+                          <th>Process</th>
+                          <th style={{ textAlign: "right" }}>Hrs</th>
+                          <th style={{ textAlign: "right" }}>OK Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shiftLogs.map((r, idx) => (
+                          <tr key={idx}>
+                            <td className="pa2-modal-td-operator">
+                              <div className="pa2-modal-op-avatar" style={{ background: selectedMachine.color }}>{(r.operator || "").charAt(0)}</div>
+                              <span>{r.operator}</span>
+                            </td>
+                            <td><span className="pa2-modal-badge-part">{r.part_no}</span></td>
+                            <td><span className="pa2-modal-text-process">{r.process}</span></td>
+                            <td style={{ textAlign: "right", fontWeight: 600, color: "#475569" }}>{r.hrs}h</td>
+                            <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>{r.ok_qty}</td>
+                          </tr>
+                        ))}
+                        {shiftLogs.length === 0 && (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: "center", color: "#94a3b8", padding: "16px" }}>No shift logs found for this machine</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="pa2-modal-qty-lbl">OK Qty</div>
-                </div>
-                <div className="pa2-modal-qty pa2-modal-qty--rej">
-                  <div className="pa2-modal-qty-val">
-                    <FiXCircle size={18} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
-                    {selectedMachine.rejQty}
-                  </div>
-                  <div className="pa2-modal-qty-lbl">Rej Qty</div>
-                </div>
-                <div className="pa2-modal-qty pa2-modal-qty--rw">
-                  <div className="pa2-modal-qty-val">
-                    <FiRefreshCw size={16} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
-                    {selectedMachine.rwQty}
-                  </div>
-                  <div className="pa2-modal-qty-lbl">Rework Qty</div>
-                </div>
-              </div>
 
-              {/* OEE & Efficiency Progress Bars */}
-              <div className="pa2-modal-section-title" style={{ "--di": 8, marginTop: "18px" }}>Efficiency Overview</div>
-              <div className="pa2-modal-bar-list" style={{ "--di": 9 }}>
-                {[
-                  { label: "OEE %", pct: selectedMachine.oee, color: selectedMachine.oee >= 75 ? "#059669" : "#dc2626" },
-                  { label: "Operator Eff %", pct: selectedMachine.oprEff, color: selectedMachine.oprEff >= 80 ? "#059669" : "#f59e0b" },
-                  { label: "Machine Run %", pct: Math.round((totalRunHrs / 8) * 100), color: "#2563eb" },
-                ].map((b, i) => (
-                  <div key={i} className="pa2-modal-bar-row">
-                    <div className="pa2-modal-bar-label">{b.label}</div>
-                    <div className="pa2-modal-bar-track">
-                      <div className="pa2-modal-bar-fill" style={{ "--bw": `${b.pct}%`, background: b.color }} />
+                  {/* Production Qty Row */}
+                  <div className="pa2-modal-section-title" style={{ "--di": 6 }}>Total Production Quantities</div>
+                  <div className="pa2-modal-qty-row" style={{ "--di": 7 }}>
+                    <div className="pa2-modal-qty pa2-modal-qty--ok">
+                      <div className="pa2-modal-qty-val">
+                        <FiCheckCircle size={18} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
+                        {card.total_ok_qty}
+                      </div>
+                      <div className="pa2-modal-qty-lbl">OK Qty</div>
                     </div>
-                    <div className="pa2-modal-bar-pct" style={{ color: b.color }}>{b.pct}%</div>
+                    <div className="pa2-modal-qty pa2-modal-qty--rej">
+                      <div className="pa2-modal-qty-val">
+                        <FiXCircle size={18} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
+                        {card.total_rej_qty}
+                      </div>
+                      <div className="pa2-modal-qty-lbl">Rej Qty</div>
+                    </div>
+                    <div className="pa2-modal-qty pa2-modal-qty--rw">
+                      <div className="pa2-modal-qty-val">
+                        <FiRefreshCw size={16} style={{ marginRight: 6, verticalAlign: "middle", opacity: 0.8 }} />
+                        {card.total_rework_qty}
+                      </div>
+                      <div className="pa2-modal-qty-lbl">Rework Qty</div>
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* OEE & Efficiency Progress Bars */}
+                  <div className="pa2-modal-section-title" style={{ "--di": 8, marginTop: "18px" }}>Efficiency Overview</div>
+                  <div className="pa2-modal-bar-list" style={{ "--di": 9 }}>
+                    {[
+                      { label: "OEE %", pct: card.oee_pct, color: card.oee_pct >= 75 ? "#059669" : "#dc2626" },
+                      { label: "Operator Eff %", pct: card.oper_eff_pct, color: card.oper_eff_pct >= 80 ? "#059669" : "#f59e0b" },
+                      { label: "Machine Run %", pct: card.machine_run_pct, color: "#2563eb" },
+                    ].map((b, i) => (
+                      <div key={i} className="pa2-modal-bar-row">
+                        <div className="pa2-modal-bar-label">{b.label}</div>
+                        <div className="pa2-modal-bar-track">
+                          <div className="pa2-modal-bar-fill" style={{ "--bw": `${b.pct}%`, background: b.color }} />
+                        </div>
+                        <div className="pa2-modal-bar-pct" style={{ color: b.color }}>{b.pct}%</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           , document.body);
@@ -3008,22 +3096,22 @@ export default function ProductionAnalysis() {
       <div className="pa2-card pa2-anim" style={{ "--d": "105ms", marginTop: "18px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem", paddingBottom: "12px", borderBottom: "1.5px solid #eef2ff" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Machine Hour Rate (MHR) Cost Analysis" sub="Machine-wise comparative analysis of hourly operating rates (₹/hr)" />
-          
-          <button 
-            className="pa2-pv-tab pa2-pv-tab--active" 
+
+          <button
+            className="pa2-pv-tab pa2-pv-tab--active"
             onClick={() => setMhrModalOpen(true)}
-            style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: "6px", 
-              background: "#2563eb", 
-              color: "#ffffff", 
-              padding: "6px 14px", 
-              borderRadius: "8px", 
-              fontSize: "12px", 
-              fontWeight: "700", 
-              border: "none", 
-              cursor: "pointer" 
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "#2563eb",
+              color: "#ffffff",
+              padding: "6px 14px",
+              borderRadius: "8px",
+              fontSize: "12px",
+              fontWeight: "700",
+              border: "none",
+              cursor: "pointer"
             }}
           >
             <FiSettings size={13} style={{ verticalAlign: "middle" }} /> MHR Rates & Inputs
@@ -3050,20 +3138,20 @@ export default function ProductionAnalysis() {
           {["HTC 1", "HTC 2", "HTC 3", "VMC 1", "VMC 2", "VTL 1", "VTL 2", "VTL 3", "VTL 4", "VMC-3", "MANUAL 1"].map(mac => {
             const rate = calculateMachineMhr(mac);
             return (
-              <div 
-                key={mac} 
-                className="pa2-mhr-bottom-rate-tag" 
+              <div
+                key={mac}
+                className="pa2-mhr-bottom-rate-tag"
                 onClick={() => { setMhrSelectedMachine(mac); setMhrModalOpen(true); }}
-                style={{ 
-                  background: "#f8fafc", 
-                  border: "1.5px solid #e2e8f0", 
-                  padding: "5px 10px", 
-                  borderRadius: "8px", 
-                  fontSize: "11px", 
-                  fontWeight: "600", 
-                  color: "#334155", 
+                style={{
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  padding: "5px 10px",
+                  borderRadius: "8px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  color: "#334155",
                   cursor: "pointer",
-                  transition: "all 0.2s ease" 
+                  transition: "all 0.2s ease"
                 }}
               >
                 <span style={{ color: "#64748b" }}>{mac}:</span> <strong style={{ color: "#1e3a8a", fontVariantNumeric: "tabular-nums" }}>₹{rate.toFixed(2)}/h</strong>
@@ -3077,12 +3165,12 @@ export default function ProductionAnalysis() {
       {mhrModalOpen && (() => {
         const inputs = mhrMachinesInputs[mhrSelectedMachine] || MHR_PRESETS["Custom (Manual)"];
         const hrs = inputs.annualHours || 1;
-        
+
         // Fixed Calculations
         const depreciation = inputs.machineCost / (inputs.machineLife || 1);
         const interest = inputs.machineCost * (inputs.interestRate / 100);
         const totalFixedCostAnnual = depreciation + inputs.insurance + inputs.allocatedRent + inputs.supervisorSalary + interest;
-        
+
         const depHr = depreciation / hrs;
         const insHr = inputs.insurance / hrs;
         const rentHr = inputs.allocatedRent / hrs;
@@ -3092,7 +3180,7 @@ export default function ProductionAnalysis() {
 
         // Variable Calculations
         const totalVariableCostAnnual = inputs.operatorSalary + inputs.electricity + inputs.maintenance + inputs.consumables + inputs.toolWear;
-        
+
         const oprHr = inputs.operatorSalary / hrs;
         const eleHr = inputs.electricity / hrs;
         const mntHr = inputs.maintenance / hrs;
@@ -3122,20 +3210,20 @@ export default function ProductionAnalysis() {
             <div className="pa2-mhr-input-field">
               <label style={{ fontSize: "9px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.2px", marginBottom: "4px" }}>{label}</label>
               <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #cbd5e1", borderRadius: "8px", background: "#ffffff", overflow: "hidden", height: "30px" }}>
-                <button 
+                <button
                   type="button"
                   onClick={() => updateVal(val - step)}
                   style={{ width: "28px", height: "100%", background: "#f1f5f9", border: "none", color: "#475569", fontWeight: "700", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s ease" }}
                   onMouseEnter={e => e.target.style.background = "#e2e8f0"}
                   onMouseLeave={e => e.target.style.background = "#f1f5f9"}
                 >-</button>
-                <input 
-                  type="number" 
-                  value={val} 
-                  onChange={(e) => updateVal(parseFloat(e.target.value) || 0)} 
+                <input
+                  type="number"
+                  value={val}
+                  onChange={(e) => updateVal(parseFloat(e.target.value) || 0)}
                   style={{ flex: 1, border: "none", textAlign: "center", fontSize: "12px", fontWeight: "600", color: "#1e293b", width: "100%", outline: "none", padding: 0 }}
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => updateVal(val + step)}
                   style={{ width: "28px", height: "100%", background: "#f1f5f9", border: "none", color: "#475569", fontWeight: "700", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s ease" }}
@@ -3150,7 +3238,7 @@ export default function ProductionAnalysis() {
         return createPortal(
           <div className="pa2-modal-overlay" onClick={() => setMhrModalOpen(false)}>
             <div className="pa2-modal pa2-modal--mhr" onClick={e => e.stopPropagation()}>
-              
+
               {/* Modal Header */}
               <div className="pa2-modal-hdr pa2-modal-hdr--mhr" style={{ "--mc": "#2563eb" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -3166,8 +3254,8 @@ export default function ProductionAnalysis() {
                 {/* Preset Picker inside Modal Header */}
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#475569", textTransform: "uppercase" }}>Machine:</span>
-                  <select 
-                    value={mhrSelectedMachine} 
+                  <select
+                    value={mhrSelectedMachine}
                     onChange={(e) => handleMhrPresetChange(e.target.value)}
                     style={{
                       padding: "6px 12px",
@@ -3193,7 +3281,7 @@ export default function ProductionAnalysis() {
 
               {/* Modal Content - Responsive Columns */}
               <div className="pa2-mhr-modal-split">
-                
+
                 {/* 1. CALCULATOR INPUTS */}
                 <div className="pa2-mhr-inputs-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>
                   <h4 className="pa2-mhr-section-subtitle">1. CALCULATOR INPUTS</h4>
@@ -3307,7 +3395,7 @@ export default function ProductionAnalysis() {
               </div>
             </div>
           </div>
-        , document.body);
+          , document.body);
       })()}
 
       {/* ── MACHINE OEE GRAPH ── */}
@@ -3345,7 +3433,7 @@ export default function ProductionAnalysis() {
       <div className="pa2-card pa2-anim" style={{ "--d": "120ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Setup Time Machine-Wise" sub={`Setup / setting hours comparison grouped by ${setupFilterMode}`} />
-          
+
           {/* Custom Premium Dropdown Filter & Part Filter */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <div ref={setupDropdownRef} style={{ position: "relative" }}>
@@ -3613,7 +3701,7 @@ export default function ProductionAnalysis() {
                     sortedSettingTableData.map((row, i) => {
                       const effColor = row.effectiveness >= 100 ? "#10b981" : row.effectiveness >= 80 ? "#3b82f6" : "#ef4444";
                       const effBg = row.effectiveness >= 100 ? "rgba(16, 185, 129, 0.08)" : row.effectiveness >= 80 ? "rgba(59, 130, 246, 0.08)" : "rgba(239, 68, 68, 0.08)";
-                      
+
                       return (
                         <tr key={i} className="pa2-anim" style={{ "--d": `${i * 30}ms` }}>
                           <td className="pa2-td-muted">{row.sno}</td>
@@ -3648,7 +3736,7 @@ export default function ProductionAnalysis() {
       <div className="pa2-card pa2-anim" style={{ "--d": "130ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiActivity size={16} />} title="Machine Utilization (%)" sub={`Active machine running time as percentage of total hours grouped by ${utilFilterMode}`} />
-          
+
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             {/* Grouping Filter Dropdown */}
             <div ref={utilFilterDropdownRef} style={{ position: "relative" }}>
@@ -3882,7 +3970,7 @@ export default function ProductionAnalysis() {
                   </svg>
                 </button>
               </div>
-              
+
               {utilThresholdOpen && (
                 <div
                   className="pa2-ps-menu"
@@ -4378,90 +4466,6 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
           </table>
         </div>
       </div>
-      {/* ── TRACEABILITY TABLE ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "90ms", marginBottom: "18px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
-          <SectionHeader icon={<FiCompass size={16} />} title="Traceability Table" sub="Trace parts and routing by Route Card and Operator" />
-          <div className="pa2-macdetail-search-wrapper" style={{ margin: 0, width: "240px" }}>
-            <svg className="pa2-macdetail-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search Route Card / Part..."
-              value={traceSearch}
-              onChange={e => setTraceSearch(e.target.value)}
-              className="pa2-macdetail-search-input"
-            />
-          </div>
-        </div>
-        <div className="pa2-table-wrap" style={{ maxHeight: "300px" }}>
-          <table className="pa2-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Ind No</th>
-                <th>Ind Dt</th>
-                <th style={{ textAlign: "right" }}>Ind Qty</th>
-                <th>Ind Po No</th>
-                <th>Po Dt</th>
-                <th style={{ textAlign: "right" }}>Po Qty</th>
-                <th style={{ textAlign: "right" }}>Po Rate</th>
-                <th style={{ textAlign: "right" }}>Po Value</th>
-                <th>Grn No</th>
-                <th>Grn Dt</th>
-                <th style={{ textAlign: "right" }}>Grn Oky</th>
-                <th style={{ textAlign: "right" }}>Grn rate</th>
-                <th style={{ textAlign: "right" }}>Grn Value</th>
-                <th>Routecard No</th>
-                <th>Roucard Dt</th>
-                <th style={{ textAlign: "right" }}>Roucard Qty</th>
-                <th>Prod Det/Partno</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageLoading ? (
-                Array.from({ length: 4 }).map((_, idx) => (
-                  <tr key={idx}>
-                    {Array.from({ length: 18 }).map((__, tdIdx) => (
-                      <td key={tdIdx}>
-                        <div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : "55px", height: "12px" }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-                filteredTraceData.map((row, i) => (
-                  <tr key={i} className="pa2-anim" style={{ "--d": `${i * 45}ms` }}>
-                    <td className="pa2-td-muted">{row.sno}</td>
-                    <td style={{ fontWeight: "600", color: "#2d6de8", whiteSpace: "nowrap" }}>{row.indNo}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{row.indDt}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.indQty.toLocaleString()}</td>
-                    <td style={{ fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>{row.indPoNo}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{row.poDt}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.poQty.toLocaleString()}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>₹{row.poRate}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right", fontWeight: "600" }}>₹{row.poValue.toLocaleString("en-IN")}</td>
-                    <td style={{ fontWeight: "600", color: "#f5a623", whiteSpace: "nowrap" }}>{row.grnNo}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{row.grnDt}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.grnOky.toLocaleString()}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>₹{row.grnRate}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right", fontWeight: "600" }}>₹{row.grnValue.toLocaleString("en-IN")}</td>
-                    <td>
-                      <span className="pa2-badge" style={{ background: "rgba(139, 92, 246, 0.08)", border: "1px solid rgba(139, 92, 246, 0.15)", color: "#8b5cf6", fontWeight: "700", whiteSpace: "nowrap" }}>
-                        {row.routeCardNo}
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: "nowrap" }}>{row.routeCardDt}</td>
-                    <td className="pa2-td-num" style={{ textAlign: "right" }}>{row.routeCardQty.toLocaleString()}</td>
-                    <td className="pa2-td-part" style={{ fontWeight: "700", whiteSpace: "nowrap" }}>{row.partNo}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* ── DAILY PRODUCTION DETAILS ── */}
       <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
@@ -4568,12 +4572,12 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     const isRejected = row.Status === "Rejected";
                     const badge = isRejected ? "pa2-badge--bad" : "pa2-badge--ok";
                     const formattedDate = row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—";
-                    
+
                     const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
                     const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
                     const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
                     const idleHrs = row.IdleHours ?? row.IdleHrs ?? (row.Rej > 0 || row.OKQty < row.Target ? parseFloat((Math.max(0.2, (row.Target - row.OKQty) * 0.1)).toFixed(1)) : 0);
-                    
+
                     return (
                       <tr key={i} className="pa2-anim" style={{ "--d": `${i * 40}ms` }}>
                         <td className="pa2-td-muted">{row.SNo}</td>

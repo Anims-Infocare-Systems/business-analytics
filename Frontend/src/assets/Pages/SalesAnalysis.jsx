@@ -54,6 +54,23 @@ function formatQty(qty) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
+function initChartWhenReady(canvasRef, initCallback, delay = 50) {
+  let timer;
+  let attempts = 0;
+  const checkAndInit = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if ((canvas.clientWidth > 0 && canvas.clientHeight > 0) || attempts >= 10) {
+      initCallback(canvas);
+    } else {
+      attempts++;
+      timer = setTimeout(checkAndInit, delay);
+    }
+  };
+  checkAndInit();
+  return () => clearTimeout(timer);
+}
+
 function formatLakhs(rupees) {
   const n = Number(rupees);
   if (!Number.isFinite(n)) return "—";
@@ -712,6 +729,7 @@ export default function SalesAnalysis() {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(true);
   const [summary, setSummary] = useState(null);
+  const [avgRateData, setAvgRateData] = useState(null);
   const [weeklyTrend, setWeeklyTrend] = useState(null);
   const [revenueCharts, setRevenueCharts] = useState(null);
   const [monthSummary, setMonthSummary] = useState(null);
@@ -723,6 +741,13 @@ export default function SalesAnalysis() {
   const [invoiceBtypes, setInvoiceBtypes] = useState([]);
   const [invoiceBtype, setInvoiceBtype] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef(null);
@@ -762,20 +787,26 @@ export default function SalesAnalysis() {
 
   const [topProductsRaw, setTopProductsRaw] = useState(null);
   const [monthlyTrendData, setMonthlyTrendData] = useState(null);
-  const monthlyAvg = useMemo(() => {
-    if (!monthlyTrendData?.sales_values_lakhs?.length) return 0;
-    const vals = monthlyTrendData.sales_values_lakhs;
-    const sum = vals.reduce((s, v) => s + v, 0);
-    return sum / vals.length;
-  }, [monthlyTrendData]);
   const [billTypeRevenueData, setBillTypeRevenueData] = useState(null);
   const [monthlyTaxData, setMonthlyTaxData] = useState(null);
   const [invoiceDropdownOpen, setInvoiceDropdownOpen] = useState(false);
   const invoiceDropdownRef = useRef(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const optionsList = useMemo(() => ["", ...invoiceBtypes], [invoiceBtypes]);
+  const filteredProjections = useMemo(() => {
+    return projections.filter(
+      (r) => selectedCustomers.length === 0 || selectedCustomers.includes(r.customer)
+    );
+  }, [projections, selectedCustomers]);
+
+  const filteredTraceability = useMemo(() => {
+    return traceability.filter(
+      (r) => selectedCustomers.length === 0 || selectedCustomers.includes(r.customer)
+    );
+  }, [traceability, selectedCustomers]);
+
   const projectionTotals = useMemo(() => {
-    return projections.reduce(
+    return filteredProjections.reduce(
       (acc, row) => {
         acc.pos += row.pos;
         acc.totQty += row.totQty;
@@ -788,7 +819,7 @@ export default function SalesAnalysis() {
       },
       { pos: 0, totQty: 0, totAmt: 0, schdQty: 0, dispQty: 0, pendQty: 0, pendVal: 0 }
     );
-  }, [projections]);
+  }, [filteredProjections]);
 
   const processedPoLedger = useMemo(() => {
     return poLedger.map((row) => {
@@ -817,6 +848,7 @@ export default function SalesAnalysis() {
   const filteredPoLedger = useMemo(() => {
     return processedPoLedger.filter((row) => {
       if (poPendingOnly && row.pendingQty <= 0) return false;
+      if (selectedCustomers.length > 0 && !selectedCustomers.includes(row.custName)) return false;
       const q = poSearchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
@@ -827,7 +859,7 @@ export default function SalesAnalysis() {
         (row.dcNo && row.dcNo.toLowerCase().includes(q))
       );
     });
-  }, [processedPoLedger, poSearchQuery, poPendingOnly]);
+  }, [processedPoLedger, poSearchQuery, poPendingOnly, selectedCustomers]);
 
   const sortedPoLedger = useMemo(() => {
     const sorted = [...filteredPoLedger];
@@ -932,6 +964,7 @@ export default function SalesAnalysis() {
       const rowDate = new Date(row.date);
       if (dateRange.from && rowDate < dateRange.from) return false;
       if (dateRange.to && rowDate > dateRange.to) return false;
+      if (selectedCustomers.length > 0 && !selectedCustomers.includes(row.customer)) return false;
 
       const q = planSearchQuery.toLowerCase().trim();
       if (q) {
@@ -942,7 +975,7 @@ export default function SalesAnalysis() {
       }
       return true;
     });
-  }, [dateRange, planSearchQuery, planVsActual]);
+  }, [dateRange, planSearchQuery, planVsActual, selectedCustomers]);
 
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
@@ -1013,7 +1046,7 @@ export default function SalesAnalysis() {
   };
 
   const sortedProjections = useMemo(() => {
-    const sorted = [...projections];
+    const sorted = [...filteredProjections];
     sorted.sort((a, b) => {
       let valA = a[projSortField];
       let valB = b[projSortField];
@@ -1040,7 +1073,7 @@ export default function SalesAnalysis() {
       }
     });
     return sorted;
-  }, [projSortField, projSortAsc, projections]);
+  }, [projSortField, projSortAsc, filteredProjections]);
 
   const handleProjSort = (field) => {
     if (projSortField === field) {
@@ -1126,7 +1159,7 @@ export default function SalesAnalysis() {
   const kpiCards = useMemo(() => buildKpiCards(derivedSummary), [derivedSummary]);
 
   const avgRateCards = useMemo(() => {
-    if (!derivedSummary) {
+    if (!avgRateData) {
       return [
         { label: "AVG SELLING RATE (Per Day)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#3b82f6", type: "neutral" },
         { label: "AVG SELLING RATE (Per Week)", value: "—", sub: "—", trend: "—", icon: Scale, iconColor: "#10b981", type: "neutral" },
@@ -1135,60 +1168,480 @@ export default function SalesAnalysis() {
       ];
     }
 
-    const grandTotal = derivedSummary.grand_total ?? 0;
-    let days = 1;
-    if (dateRange.from && dateRange.to) {
-      const diffTime = Math.abs(dateRange.to - dateRange.from);
-      days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
-    }
+    // Calendar metadata always comes from the backend (date-range based)
+    const { calendar_days, weeks, months, years } = avgRateData;
 
-    const perDay = grandTotal / days;
-    const perWeek = perDay * 7;
-    const perMonth = perDay * 30;
-    const perYear = perDay * 365;
+    // Revenue: use customer-filtered derivedSummary when a customer filter is active,
+    // otherwise fall back to the backend grand_total (same value when no filter)
+    const grandTotal = derivedSummary ? (derivedSummary.grand_total ?? 0) : (avgRateData.grand_total ?? 0);
+
+    const per_day   = grandTotal / Math.max(1, calendar_days);
+    const per_week  = per_day * 7;
+    const per_month = per_day * 30;
+    const per_year  = per_day * 365;
 
     return [
       {
         label: "AVG SELLING RATE (Per Day)",
-        value: `₹${formatRupees(perDay)}`,
+        value: `₹${formatRupees(per_day)}`,
         sub: "Per calendar day",
-        trend: `${days} days total`,
+        trend: `${calendar_days} days total`,
         icon: Scale,
         iconColor: "#3b82f6",
         type: "neutral"
       },
       {
         label: "AVG SELLING RATE (Per Week)",
-        value: `₹${formatRupees(perWeek)}`,
+        value: `₹${formatRupees(per_week)}`,
         sub: "Per calendar week",
-        trend: `${(days / 7).toFixed(1)} weeks total`,
+        trend: `${weeks} weeks total`,
         icon: Scale,
         iconColor: "#10b981",
         type: "neutral"
       },
       {
         label: "AVG SELLING RATE (Per Month)",
-        value: `₹${formatRupees(perMonth)}`,
+        value: `₹${formatRupees(per_month)}`,
         sub: "Per calendar month (30d)",
-        trend: `${(days / 30).toFixed(1)} months total`,
+        trend: `${months} months total`,
         icon: Scale,
         iconColor: "#f97316",
         type: "neutral"
       },
       {
         label: "AVG SELLING RATE (Per Year)",
-        value: `₹${formatRupees(perYear)}`,
+        value: `₹${formatRupees(per_year)}`,
         sub: "Annualized rate (365d)",
-        trend: `${(days / 365).toFixed(2)} years total`,
+        trend: `${years} years total`,
         icon: Scale,
         iconColor: "#8b5cf6",
         type: "neutral"
       }
     ];
-  }, [derivedSummary, dateRange]);
+  }, [avgRateData, derivedSummary]);
+
+  // Helper function to round values in JS
+  const jsRound = (val, decimals = 2) => {
+    const multiplier = Math.pow(10, decimals);
+    return Math.round((val + Number.EPSILON) * multiplier) / multiplier;
+  };
+
+  // Helper to determine if an invoice type is a credit note
+  const isCreditNoteType = (btype, invNo) => {
+    const bt = (btype || "").toLowerCase().trim();
+    const inv = (invNo || "").toUpperCase().trim();
+    return (
+      bt === "sales return" ||
+      (bt.includes("credit") && bt.includes("note")) ||
+      inv.startsWith("CN")
+    );
+  };
+
+  // Helper to calculate month slots between two dates
+  const getMonthSlotsInRange = (from, to) => {
+    const slots = [];
+    if (!from || !to) return slots;
+    const start = new Date(from.getFullYear(), from.getMonth(), 1);
+    const end = new Date(to.getFullYear(), to.getMonth(), 1);
+    let curr = new Date(start);
+    while (curr <= end) {
+      slots.push({
+        year: curr.getFullYear(),
+        month: curr.getMonth() + 1 // 1-indexed
+      });
+      curr.setMonth(curr.getMonth() + 1);
+    }
+    return slots;
+  };
+
+  // Helper to format month-week labels
+  const getInvoiceWeekLabelString = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const day = d.getDate();
+    let wk = 5;
+    if (day <= 7) wk = 1;
+    else if (day <= 14) wk = 2;
+    else if (day <= 21) wk = 3;
+    else if (day <= 28) wk = 4;
+    const monthShort = d.toLocaleString("en-US", { month: "short" });
+    return `W${wk} ${monthShort}`;
+  };
+
+  // Derived Revenue Charts (Donuts & Rankings)
+  const derivedRevenueCharts = useMemo(() => {
+    if (!revenueCharts) return null;
+    if (selectedCustomers.length === 0) return revenueCharts;
+
+    const custMap = {};
+    let totalRevenue = 0;
+    filteredInvoices.forEach(r => {
+      const cust = r.customer || "Unknown";
+      custMap[cust] = (custMap[cust] || 0) + (r.amount || 0);
+      totalRevenue += (r.amount || 0);
+    });
+
+    const sortedCusts = Object.entries(custMap)
+      .map(([name, revenue]) => ({
+        name,
+        revenue,
+        revenue_lakhs: jsRound(revenue / 100_000, 2),
+        pct: totalRevenue > 0 ? jsRound((revenue / totalRevenue) * 100, 1) : 0
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    let custLabels = [];
+    let custPercentages = [];
+    if (sortedCusts.length > 0) {
+      const top4 = sortedCusts.slice(0, 4);
+      custLabels = top4.map(c => c.name);
+      custPercentages = top4.map(c => c.pct);
+      
+      if (sortedCusts.length > 4) {
+        const others = sortedCusts.slice(4);
+        const othersRevenue = others.reduce((sum, c) => sum + c.revenue, 0);
+        const othersPct = totalRevenue > 0 ? jsRound((othersRevenue / totalRevenue) * 100, 1) : 0;
+        custLabels.push("Others");
+        custPercentages.push(othersPct);
+      }
+    }
+
+    const prodMap = {};
+    let totalQty = 0;
+    filteredInvoices.forEach(r => {
+      const prod = r.description || r.part_no || "Unknown";
+      prodMap[prod] = (prodMap[prod] || 0) + (r.qty || 0);
+      totalQty += (r.qty || 0);
+    });
+
+    const sortedProds = Object.entries(prodMap)
+      .map(([name, qty]) => ({ name, qty }))
+      .sort((a, b) => b.qty - a.qty);
+
+    const top5Prods = sortedProds.slice(0, 5);
+    const prodLabels = top5Prods.map(p => p.name);
+    const prodPercentages = top5Prods.map(p => totalQty > 0 ? jsRound((p.qty / totalQty) * 100, 1) : 0);
+
+    return {
+      customer: {
+        labels: custLabels,
+        percentages: custPercentages
+      },
+      customer_ranking: sortedCusts,
+      product: {
+        labels: prodLabels,
+        percentages: prodPercentages
+      }
+    };
+  }, [revenueCharts, filteredInvoices, selectedCustomers]);
+
+  // Derived Weekly Trend
+  const derivedWeeklyTrend = useMemo(() => {
+    if (!weeklyTrend) return null;
+    if (selectedCustomers.length === 0) return weeklyTrend;
+
+    const salesMap = {};
+    const labels = weeklyTrend.labels || [];
+    labels.forEach(lbl => {
+      salesMap[lbl] = 0;
+    });
+
+    filteredInvoices.forEach(r => {
+      const lbl = getInvoiceWeekLabelString(r.date);
+      if (lbl && salesMap[lbl] !== undefined) {
+        salesMap[lbl] += r.amount || 0;
+      }
+    });
+
+    const sales = labels.map(lbl => jsRound(salesMap[lbl], 2));
+    const cumulative = [];
+    let running = 0;
+    sales.forEach(v => {
+      running += v;
+      cumulative.push(jsRound(running, 2));
+    });
+
+    return {
+      ...weeklyTrend,
+      sales,
+      cumulative,
+      total: jsRound(running, 2),
+      turn_over_lakhs: jsRound(running / 100_000, 2)
+    };
+  }, [weeklyTrend, filteredInvoices, selectedCustomers]);
+
+  // Derived Month Summary
+  const derivedMonthSummary = useMemo(() => {
+    if (!monthSummary) return null;
+    if (selectedCustomers.length === 0) return monthSummary;
+
+    const monthMap = {};
+    filteredInvoices.forEach(r => {
+      if (!r.date) return;
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      if (!monthMap[key]) {
+        monthMap[key] = {
+          invNos: new Set(),
+          qty: 0,
+          amount: 0
+        };
+      }
+      if (r.invoice_no) monthMap[key].invNos.add(r.invoice_no);
+      monthMap[key].qty += r.qty || 0;
+      monthMap[key].amount += r.amount || 0;
+    });
+
+    const MONTH_FULL = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ];
+
+    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    let prevAmount = null;
+    let totalQty = 0;
+    let totalAmount = 0;
+    const uniqueInvoicesTotal = new Set();
+
+    const rows = slots.map(slot => {
+      const key = `${slot.year}-${slot.month}`;
+      const data = monthMap[key] || { invNos: new Set(), qty: 0, amount: 0 };
+      const amount = data.amount;
+      
+      let growth_pct = null;
+      if (prevAmount !== null && prevAmount !== 0) {
+        growth_pct = jsRound(((amount - prevAmount) / prevAmount) * 100, 1);
+      }
+      prevAmount = amount;
+
+      totalQty += data.qty;
+      totalAmount += amount;
+      data.invNos.forEach(inv => uniqueInvoicesTotal.add(inv));
+
+      return {
+        month: `${MONTH_FULL[slot.month - 1]} ${slot.year}`,
+        invoices: data.invNos.size,
+        qty_sold: jsRound(data.qty, 2),
+        amount: jsRound(amount, 2),
+        growth_pct
+      };
+    });
+
+    const btypeCounts = {};
+    const invoiceBtypesSeen = {};
+    filteredInvoices.forEach(r => {
+      if (r.invoice_no) {
+        if (!invoiceBtypesSeen[r.invoice_no]) {
+          let bt = r.btype || "";
+          if (isCreditNoteType(bt, r.invoice_no)) {
+            bt = "Credit Note";
+          }
+          invoiceBtypesSeen[r.invoice_no] = bt;
+          btypeCounts[bt] = (btypeCounts[bt] || 0) + 1;
+        }
+      }
+    });
+
+    const statusSpecs = [
+      {
+        key: "with_material",
+        label: "With Material",
+        btypes: ["With Material", "Debit Note", "Credit Note", "General / Rework", "With Material Rejection", "Scrap"],
+        bg: "#dbeafe", fg: "#1d4ed8", vfg: "#1e3a8a",
+      },
+      {
+        key: "labour_charges",
+        label: "Labour Charges",
+        btypes: ["Labour Charges", "General Labour"],
+        bg: "#fef9c3", fg: "#92400e", vfg: "#78350f",
+      },
+      {
+        key: "export_only",
+        label: "Export Only",
+        btypes: ["Export Invoice"],
+        bg: "#dcfce7", fg: "#15803d", vfg: "#14532d",
+      }
+    ];
+
+    const invoice_status = statusSpecs.map(spec => {
+      let groupTotal = 0;
+      const items = spec.btypes.map(bt => {
+        const count = btypeCounts[bt] || 0;
+        groupTotal += count;
+        return { btype: bt, count };
+      });
+      return {
+        key: spec.key,
+        label: spec.label,
+        total: groupTotal,
+        items,
+        bg: spec.bg, fg: spec.fg, vfg: spec.vfg
+      };
+    });
+
+    return {
+      period: derivedSummary?.period ?? monthSummary.period,
+      rows,
+      totals: {
+        invoices: uniqueInvoicesTotal.size,
+        qty_sold: jsRound(totalQty, 2),
+        amount: jsRound(totalAmount, 2),
+      },
+      invoice_status
+    };
+  }, [monthSummary, filteredInvoices, selectedCustomers, dateRange, derivedSummary]);
+
+  // Derived Monthly Trend Data
+  const derivedMonthlyTrendData = useMemo(() => {
+    if (!monthlyTrendData) return null;
+    if (selectedCustomers.length === 0) return monthlyTrendData;
+
+    const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+
+    const monthMap = {};
+    filteredInvoices.forEach(r => {
+      if (!r.date) return;
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      monthMap[key] = (monthMap[key] || 0) + (r.amount || 0);
+    });
+
+    const labels = slots.map(s => `${MONTH_SHORT[s.month - 1]}`);
+    const sales_values = slots.map(s => {
+      const key = `${s.year}-${s.month}`;
+      return jsRound(monthMap[key] || 0, 2);
+    });
+    const sales_values_lakhs = sales_values.map(v => jsRound(v / 100_000, 2));
+    const total = jsRound(sales_values.reduce((sum, v) => sum + v, 0), 2);
+
+    return {
+      ...monthlyTrendData,
+      labels,
+      sales_values,
+      sales_values_lakhs,
+      total,
+      total_lakhs: jsRound(total / 100_000, 2)
+    };
+  }, [monthlyTrendData, filteredInvoices, selectedCustomers, dateRange]);
+
+  const monthlyAvg = useMemo(() => {
+    if (!derivedMonthlyTrendData?.sales_values_lakhs?.length) return 0;
+    const vals = derivedMonthlyTrendData.sales_values_lakhs;
+    const sum = vals.reduce((s, v) => s + v, 0);
+    return sum / vals.length;
+  }, [derivedMonthlyTrendData]);
+
+  // Derived Bill Type Revenue Data
+  const derivedBillTypeRevenueData = useMemo(() => {
+    if (!billTypeRevenueData) return null;
+    if (selectedCustomers.length === 0) return billTypeRevenueData;
+
+    const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    const labels = slots.map(s => `${MONTH_SHORT[s.month - 1]}`);
+
+    const btypesSet = billTypeRevenueData.bill_types || [];
+    const btypeMonthMap = {};
+
+    btypesSet.forEach(bt => {
+      btypeMonthMap[bt] = {};
+    });
+
+    filteredInvoices.forEach(r => {
+      if (!r.date) return;
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      let bt = r.btype || "(Blank)";
+      if (isCreditNoteType(bt, r.invoice_no)) {
+        bt = "Credit Note";
+      }
+      if (btypeMonthMap[bt] !== undefined) {
+        btypeMonthMap[bt][key] = (btypeMonthMap[bt][key] || 0) + (r.amount || 0);
+      }
+    });
+
+    const datasets = btypesSet.map(bt => {
+      const data = slots.map(s => {
+        const key = `${s.year}-${s.month}`;
+        return jsRound(btypeMonthMap[bt][key] || 0, 2);
+      });
+      const data_lakhs = data.map(v => jsRound(v / 100_000, 2));
+      return {
+        bill_type: bt,
+        data,
+        data_lakhs
+      };
+    });
+
+    return {
+      ...billTypeRevenueData,
+      labels,
+      bill_types: btypesSet,
+      datasets
+    };
+  }, [billTypeRevenueData, filteredInvoices, selectedCustomers, dateRange]);
+
+  // Derived Monthly Tax Data
+  const derivedMonthlyTaxData = useMemo(() => {
+    if (!monthlyTaxData) return null;
+    if (selectedCustomers.length === 0) return monthlyTaxData;
+
+    const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const fyOrder = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+
+    const sortedSlots = [...slots].sort((a, b) => {
+      const idxA = fyOrder.indexOf(a.month);
+      const idxB = fyOrder.indexOf(b.month);
+      if (a.year !== b.year) {
+        return a.year - b.year;
+      }
+      return idxA - idxB;
+    });
+
+    const monthUniqueInvoices = {};
+    const invoiceTaxMap = {};
+    
+    filteredInvoices.forEach(r => {
+      if (!r.date || !r.invoice_no) return;
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      if (!monthUniqueInvoices[key]) {
+        monthUniqueInvoices[key] = new Set();
+      }
+      monthUniqueInvoices[key].add(r.invoice_no);
+      invoiceTaxMap[r.invoice_no] = r.tax || 0;
+    });
+
+    const labels = sortedSlots.map(s => `${MONTH_SHORT[s.month - 1]}`);
+    const tax_values = sortedSlots.map(s => {
+      const key = `${s.year}-${s.month}`;
+      const invSet = monthUniqueInvoices[key] || new Set();
+      let monthTax = 0;
+      invSet.forEach(inv => {
+        monthTax += invoiceTaxMap[inv] || 0;
+      });
+      return jsRound(monthTax, 2);
+    });
+
+    const tax_values_lakhs = tax_values.map(v => jsRound(v / 100_000, 2));
+    const total = jsRound(tax_values.reduce((sum, v) => sum + v, 0), 2);
+
+    return {
+      ...monthlyTaxData,
+      labels,
+      tax_values,
+      tax_values_lakhs,
+      total,
+      total_lakhs: jsRound(total / 100_000, 2)
+    };
+  }, [monthlyTaxData, filteredInvoices, selectedCustomers, dateRange]);
+
   const customerRanking = useMemo(
-    () => buildCustomerRanking(revenueCharts?.customer_ranking),
-    [revenueCharts],
+    () => buildCustomerRanking(derivedRevenueCharts ? derivedRevenueCharts.customer_ranking : []),
+    [derivedRevenueCharts],
   );
   const topProducts = useMemo(
     () => buildTopProducts(topProductsRaw?.products),
@@ -1227,11 +1680,31 @@ export default function SalesAnalysis() {
     writeFilterSession("ba_filter_sales", { from: dateRange.from, to: dateRange.to });
   }, [dateRange.from, dateRange.to]);
 
-  const custLabels = useMemo(() => revenueCharts?.customer?.labels ?? [], [revenueCharts]);
-  const custPercentages = useMemo(() => revenueCharts?.customer?.percentages ?? [], [revenueCharts]);
+  // ✅ Force window resize triggers after loading finishes to guarantee proper chart rendering dimensions
+  useEffect(() => {
+    if (!loading) {
+      const t1 = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 360);
+      const t2 = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 600);
+      const t3 = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 1000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [loading]);
 
-  const prodLabels = useMemo(() => revenueCharts?.product?.labels ?? [], [revenueCharts]);
-  const prodPercentages = useMemo(() => revenueCharts?.product?.percentages ?? [], [revenueCharts]);
+  const custLabels = useMemo(() => derivedRevenueCharts?.customer?.labels ?? [], [derivedRevenueCharts]);
+  const custPercentages = useMemo(() => derivedRevenueCharts?.customer?.percentages ?? [], [derivedRevenueCharts]);
+
+  const prodLabels = useMemo(() => derivedRevenueCharts?.product?.labels ?? [], [derivedRevenueCharts]);
+  const prodPercentages = useMemo(() => derivedRevenueCharts?.product?.percentages ?? [], [derivedRevenueCharts]);
 
   const getCustValue = (pct) => {
     const total = derivedSummary?.grand_total || 0;
@@ -1303,735 +1776,385 @@ export default function SalesAnalysis() {
 
   useEffect(() => {
     if (!custRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(custRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+      const labels = derivedRevenueCharts?.customer?.labels ?? [];
+      const gradientColors = GRADIENTS_CUSTOMER.slice(0, labels.length).map((g) => {
+        const gr = ctx.createLinearGradient(0, 0, 0, 200);
+        gr.addColorStop(0, g.start);
+        gr.addColorStop(1, g.end);
+        return gr;
+      });
 
-    const ctx = custRef.current.getContext("2d");
-    const labels = revenueCharts?.customer?.labels ?? [];
-    const gradientColors = GRADIENTS_CUSTOMER.slice(0, labels.length).map((g) => {
-      const gr = ctx.createLinearGradient(0, 0, 0, 200);
-      gr.addColorStop(0, g.start);
-      gr.addColorStop(1, g.end);
-      return gr;
+      custChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels,
+          datasets: [{
+            data: derivedRevenueCharts?.customer?.percentages ?? [],
+            backgroundColor: gradientColors,
+            borderColor: "#fff",
+            borderWidth: 2,
+            hoverOffset: 12,
+            hoverBorderColor: "#fff",
+            hoverBorderWidth: 3,
+          }],
+        },
+        options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
+          const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
+          setHoveredCustIndex(prev => (prev === newIndex ? prev : newIndex));
+        }),
+      });
+      custChart.current = chartInstance;
     });
 
-    custChart.current?.destroy();
-    custChart.current = new Chart(custRef.current, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [{
-          data: revenueCharts?.customer?.percentages ?? [],
-          backgroundColor: gradientColors,
-          borderColor: "#fff",
-          borderWidth: 2,
-          hoverOffset: 12,
-          hoverBorderColor: "#fff",
-          hoverBorderWidth: 3,
-        }],
-      },
-      options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
-        const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
-        setHoveredCustIndex(prev => (prev === newIndex ? prev : newIndex));
-      }),
-    });
-    return () => custChart.current?.destroy();
-  }, [revenueCharts, loading]);
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      custChart.current?.destroy();
+    };
+  }, [derivedRevenueCharts, loading]);
 
   useEffect(() => {
     if (!prodRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(prodRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+      const labels = derivedRevenueCharts?.product?.labels ?? [];
+      const gradientColors = GRADIENTS_PRODUCT.slice(0, labels.length).map((g) => {
+        const gr = ctx.createLinearGradient(0, 0, 0, 200);
+        gr.addColorStop(0, g.start);
+        gr.addColorStop(1, g.end);
+        return gr;
+      });
 
-    const ctx = prodRef.current.getContext("2d");
-    const labels = revenueCharts?.product?.labels ?? [];
-    const gradientColors = GRADIENTS_PRODUCT.slice(0, labels.length).map((g) => {
-      const gr = ctx.createLinearGradient(0, 0, 0, 200);
-      gr.addColorStop(0, g.start);
-      gr.addColorStop(1, g.end);
-      return gr;
+      prodChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels,
+          datasets: [{
+            data: derivedRevenueCharts?.product?.percentages ?? [],
+            backgroundColor: gradientColors,
+            borderColor: "#fff",
+            borderWidth: 2,
+            hoverOffset: 12,
+            hoverBorderColor: "#fff",
+            hoverBorderWidth: 3,
+          }],
+        },
+        options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
+          const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
+          setHoveredProdIndex(prev => (prev === newIndex ? prev : newIndex));
+        }),
+      });
+      prodChart.current = chartInstance;
     });
 
-    prodChart.current?.destroy();
-    prodChart.current = new Chart(prodRef.current, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [{
-          data: revenueCharts?.product?.percentages ?? [],
-          backgroundColor: gradientColors,
-          borderColor: "#fff",
-          borderWidth: 2,
-          hoverOffset: 12,
-          hoverBorderColor: "#fff",
-          hoverBorderWidth: 3,
-        }],
-      },
-      options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
-        const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
-        setHoveredProdIndex(prev => (prev === newIndex ? prev : newIndex));
-      }),
-    });
-    return () => prodChart.current?.destroy();
-  }, [revenueCharts, loading]);
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      prodChart.current?.destroy();
+    };
+  }, [derivedRevenueCharts, loading]);
 
   useEffect(() => {
     if (!trendRef.current) return;
-    const ctx = trendRef.current.getContext("2d");
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(trendRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
 
-    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
-    const labels = (weeklyTrend?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-    const sales = weeklyTrend?.sales ?? [];
-    const cumulative = weeklyTrend?.cumulative ?? [];
+      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const labels = (derivedWeeklyTrend?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      const sales = derivedWeeklyTrend?.sales ?? [];
+      const cumulative = derivedWeeklyTrend?.cumulative ?? [];
 
-    const peakSales = Math.max(0, ...sales) || 1;
-    const peakCumulative = Math.max(0, ...cumulative) || 1;
+      const peakSales = Math.max(0, ...sales) || 1;
+      const peakCumulative = Math.max(0, ...cumulative) || 1;
 
-    const gradBlue = ctx.createLinearGradient(0, 0, 0, 300);
-    gradBlue.addColorStop(0, "rgba(45, 109, 232, 0.85)");
-    gradBlue.addColorStop(1, "rgba(45, 109, 232, 0.15)");
+      const gradBlue = ctx.createLinearGradient(0, 0, 0, 300);
+      gradBlue.addColorStop(0, "rgba(45, 109, 232, 0.85)");
+      gradBlue.addColorStop(1, "rgba(45, 109, 232, 0.15)");
 
-    const gradBlueArea = ctx.createLinearGradient(0, 0, 0, 300);
-    gradBlueArea.addColorStop(0, "rgba(45, 109, 232, 0.45)");
-    gradBlueArea.addColorStop(1, "rgba(45, 109, 232, 0.02)");
+      const gradBlueArea = ctx.createLinearGradient(0, 0, 0, 300);
+      gradBlueArea.addColorStop(0, "rgba(45, 109, 232, 0.45)");
+      gradBlueArea.addColorStop(1, "rgba(45, 109, 232, 0.02)");
 
-    const gradGreenArea = ctx.createLinearGradient(0, 0, 0, 300);
-    gradGreenArea.addColorStop(0, "rgba(16, 185, 129, 0.45)");
-    gradGreenArea.addColorStop(1, "rgba(16, 185, 129, 0.02)");
+      const gradGreenArea = ctx.createLinearGradient(0, 0, 0, 300);
+      gradGreenArea.addColorStop(0, "rgba(16, 185, 129, 0.45)");
+      gradGreenArea.addColorStop(1, "rgba(16, 185, 129, 0.02)");
 
-    trendChart.current?.destroy();
+      let datasets = [];
+      let scales = {};
 
-    let datasets = [];
-    let scales = {};
-
-    if (weeklyChartType === "combo") {
-      datasets = [
-        {
-          label: "Weekly sales",
-          data: sales,
-          backgroundColor: gradBlue,
-          borderColor: "#2d6de8",
-          borderWidth: 1.5,
-          borderRadius: 4,
-          type: "bar",
-          yAxisID: "y",
-          datalabels: {
-            display: (context) => {
-              const val = context.dataset.data[context.dataIndex];
-              return val && val >= 10000;
-            },
-            align: "top",
-            anchor: "end",
-            offset: 4,
-            formatter: (value, context) => {
-              const idx = context.dataIndex;
-              const prev = context.dataset.data[idx - 1];
-              let label = "";
-              if (value >= 100000) {
-                label = `₹${(value / 100000).toFixed(1)}L`;
-              } else {
-                label = `₹${(value / 1000).toFixed(0)}K`;
-              }
-              if (prev && prev > 0) {
-                const pct = ((value - prev) / prev) * 100;
-                const sign = pct >= 0 ? "↑" : "↓";
-                label += ` (${sign}${Math.abs(pct).toFixed(0)}%)`;
-              }
-              return label;
-            },
-            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
-            color: "#2d6de8",
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            borderColor: "rgba(45, 109, 232, 0.4)",
+      if (weeklyChartType === "combo") {
+        datasets = [
+          {
+            label: "Weekly Sales (Lakhs)",
+            type: "bar",
+            data: sales.map((v) => v / 100000),
+            backgroundColor: gradBlue,
+            borderColor: "rgba(45, 109, 232, 1)",
             borderWidth: 1.5,
-            borderRadius: 6,
-            padding: { top: 4, bottom: 4, left: 6, right: 6 }
-          }
-        },
-        {
-          label: "Cumulative",
-          data: cumulative,
-          borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.04)",
-          borderWidth: 3,
-          tension: 0.4,
-          fill: false,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: "#10b981",
-          pointBorderColor: "#fff",
-          pointBorderWidth: 1.5,
-          type: "line",
-          yAxisID: "y1",
-          datalabels: {
-            display: false
-          }
-        }
-      ];
-
-      scales = {
-        y: {
-          beginAtZero: true,
-          max: Math.ceil(peakSales * 1.35),
-          grid: { color: "rgba(45,109,232,0.07)" },
-          ticks: { font: { size: 9, family: 'Plus Jakarta Sans' }, color: '#3b82f6', callback: formatAxisLakhs },
-          border: { display: false },
-          title: { display: true, text: "Weekly Sales (Lakhs)", font: { size: 9, weight: '700', family: 'Plus Jakarta Sans' }, color: '#3b82f6' },
-        },
-        y1: {
-          position: "right",
-          beginAtZero: true,
-          max: Math.ceil(peakCumulative * 1.2),
-          grid: { display: false },
-          ticks: { font: { size: 9, family: 'Plus Jakarta Sans' }, color: '#10b981', callback: formatAxisLakhs },
-          border: { display: false },
-          title: { display: true, text: "Cumulative Sales (Lakhs)", font: { size: 9, weight: '700', family: 'Plus Jakarta Sans' }, color: '#10b981' },
-        },
-        x: {
-          grid: { display: false },
-          ticks: {
-            font: { size: 9, family: 'Plus Jakarta Sans' },
-            color: '#312e81',
-            autoSkip: false,
-            maxRotation: 0,
-            minRotation: 0
+            borderRadius: 4,
+            yAxisID: "ySales",
+            datalabels: {
+              display: false
+            }
           },
-          border: { display: false },
-        }
-      };
-    } else if (weeklyChartType === "cumulative") {
-      datasets = [
-        {
-          label: "Cumulative Sales",
-          data: cumulative,
-          borderColor: "#10b981",
-          backgroundColor: gradGreenArea,
-          borderWidth: 3,
+          {
+            label: "Cumulative (Lakhs)",
+            type: "line",
+            data: cumulative.map((v) => v / 100000),
+            borderColor: "rgba(16, 185, 129, 1)",
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: false,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "rgba(16, 185, 129, 1)",
+            pointBorderWidth: 1.5,
+            yAxisID: "yCum",
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 2,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              color: "#10b981",
+              formatter: (v) => `₹${v.toFixed(1)}L`
+            }
+          }
+        ];
+
+        scales = {
+          ySales: {
+            type: "linear",
+            position: "left",
+            grid: { color: "rgba(99, 102, 241, 0.05)" },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#2d6de8', callback: (v) => `₹${v}L` },
+            title: { display: true, text: "Weekly Sales", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#2d6de8' }
+          },
+          yCum: {
+            type: "linear",
+            position: "right",
+            grid: { drawOnChartArea: false },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#10b981', callback: (v) => `₹${v}L` },
+            title: { display: true, text: "Cumulative Sales", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#10b981' }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+          }
+        };
+      } else if (weeklyChartType === "weekly") {
+        datasets = [{
+          label: "Weekly Sales (Lakhs)",
+          type: "line",
+          data: sales.map((v) => v / 100000),
+          borderColor: "rgba(45, 109, 232, 1)",
+          backgroundColor: gradBlueArea,
+          borderWidth: 2.5,
           tension: 0.4,
           fill: true,
           pointRadius: 4,
           pointHoverRadius: 6,
           pointBackgroundColor: "#ffffff",
-          pointBorderColor: "#10b981",
+          pointBorderColor: "rgba(45, 109, 232, 1)",
           pointBorderWidth: 2,
-          type: "line",
           yAxisID: "y",
-          datalabels: {
-            display: (context) => {
-              const val = context.dataset.data[context.dataIndex];
-              return val && val >= 10000;
-            },
-            align: "top",
-            anchor: "end",
-            offset: 8,
-            formatter: (value) => {
-              if (value >= 100000) return `₹${(value / 100000).toFixed(2)}L`;
-              return `₹${(value / 1000).toFixed(0)}K`;
-            },
-            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
-            color: "#10b981",
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            borderColor: "rgba(16, 185, 129, 0.4)",
-            borderWidth: 1.5,
-            borderRadius: 6,
-            padding: { top: 4, bottom: 4, left: 6, right: 6 }
-          }
-        }
-      ];
-
-      scales = {
-        y: {
-          beginAtZero: true,
-          max: Math.ceil(peakCumulative * 1.25),
-          grid: { color: "rgba(45,109,232,0.07)" },
-          ticks: { font: { size: 9, family: 'Plus Jakarta Sans' }, color: '#10b981', callback: formatAxisLakhs },
-          border: { display: false },
-          title: { display: true, text: "Cumulative Sales (Lakhs)", font: { size: 9, weight: '700', family: 'Plus Jakarta Sans' }, color: '#10b981' },
-        },
-        x: {
-          grid: { display: false },
-          ticks: {
-            font: { size: 9, family: 'Plus Jakarta Sans' },
-            color: '#312e81',
-            autoSkip: false,
-            maxRotation: 0,
-            minRotation: 0
-          },
-          border: { display: false },
-        }
-      };
-    } else {
-      datasets = [
-        {
-          label: "Weekly Sales",
-          data: sales,
-          backgroundColor: gradBlue,
-          borderColor: "#2d6de8",
-          borderWidth: 1.5,
-          borderRadius: 4,
-          type: "bar",
-          yAxisID: "y",
-          datalabels: {
-            display: (context) => {
-              const val = context.dataset.data[context.dataIndex];
-              return val && val >= 10000;
-            },
-            align: "top",
-            anchor: "end",
-            offset: 4,
-            formatter: (value, context) => {
-              const idx = context.dataIndex;
-              const prev = context.dataset.data[idx - 1];
-              let label = "";
-              if (value >= 100000) {
-                label = `₹${(value / 100000).toFixed(1)}L`;
-              } else {
-                label = `₹${(value / 1000).toFixed(0)}K`;
-              }
-              if (prev && prev > 0) {
-                const pct = ((value - prev) / prev) * 100;
-                const sign = pct >= 0 ? "↑" : "↓";
-                label += ` (${sign}${Math.abs(pct).toFixed(0)}%)`;
-              }
-              return label;
-            },
-            font: { size: 10, weight: "700", family: 'Plus Jakarta Sans' },
-            color: "#2d6de8",
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            borderColor: "rgba(45, 109, 232, 0.4)",
-            borderWidth: 1.5,
-            borderRadius: 6,
-            padding: { top: 4, bottom: 4, left: 6, right: 6 }
-          }
-        }
-      ];
-
-      scales = {
-        y: {
-          beginAtZero: true,
-          max: Math.ceil(peakSales * 1.35),
-          grid: { color: "rgba(45,109,232,0.07)" },
-          ticks: { font: { size: 9, family: 'Plus Jakarta Sans' }, color: '#3b82f6', callback: formatAxisLakhs },
-          border: { display: false },
-          title: { display: true, text: "Weekly Sales (Lakhs)", font: { size: 9, weight: '700', family: 'Plus Jakarta Sans' }, color: '#3b82f6' },
-        },
-        x: {
-          grid: { display: false },
-          ticks: {
-            font: { size: 9, family: 'Plus Jakarta Sans' },
-            color: '#312e81',
-            autoSkip: false,
-            maxRotation: 0,
-            minRotation: 0
-          },
-          border: { display: false },
-        }
-      };
-    }
-
-    trendChart.current = new Chart(trendRef.current, {
-      type: "bar",
-      data: {
-        labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        animation: {
-          delay: (context) => {
-            let delay = 0;
-            if (context.type === 'data' && context.mode === 'default') {
-              delay = context.dataIndex * 50; // 50ms stagger per item
-            }
-            return delay;
-          },
-          duration: 1000,
-          easing: "easeOutBack", // Premium springy animation
-        },
-        plugins: {
-          legend: {
-            labels: { font: { size: 10, weight: "600", family: 'Plus Jakarta Sans' }, boxWidth: 12, padding: 14 },
-          },
-          tooltip: {
-            callbacks: {
-              label(ctx) {
-                const val = ctx.parsed.y ?? 0;
-                const idx = ctx.dataIndex;
-                const dataset = ctx.dataset;
-                const prev = dataset.data[idx - 1];
-                let text = `${dataset.label}: ${formatTooltipLakhs(val)}`;
-                if (dataset.label.toLowerCase().includes("weekly") && prev && prev > 0) {
-                  const pct = ((val - prev) / prev) * 100;
-                  const diff = val - prev;
-                  const diffText = diff >= 0 ? `+₹${(diff / 100000).toFixed(2)}L` : `-₹${(Math.abs(diff) / 100000).toFixed(2)}L`;
-                  text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% WoW, ${diffText})`;
-                }
-                return text;
-              },
-            },
-          },
-          datalabels: {
-            display: (context) => {
-              const d = context.dataset.datalabels?.display;
-              if (typeof d === 'function') {
-                return d(context);
-              }
-              return d ?? false;
-            }
-          }
-        },
-        scales
-      }
-    });
-
-    return () => trendChart.current?.destroy();
-  }, [weeklyTrend, loading, weeklyChartType]);
-
-  useEffect(() => {
-    if (!monthlyTrendRef.current) return;
-    const ctx = monthlyTrendRef.current.getContext("2d");
-    const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-    const isBar = performanceChartType === "bar";
-    const isShare = performanceChartType === "share";
-
-    // Pull real labels & values from API data
-    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
-    const apiLabels = (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-    const apiValuesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
-
-    // Compute MoM growth for "share" view
-    const growthData = apiValuesLakhs.map((v, i) => {
-      if (i === 0 || apiValuesLakhs[i - 1] === 0) return 0;
-      return parseFloat(((v - apiValuesLakhs[i - 1]) / apiValuesLakhs[i - 1] * 100).toFixed(1));
-    });
-
-    if (isBar) {
-      gradient.addColorStop(0, "rgba(99, 102, 241, 0.9)");
-      gradient.addColorStop(1, "rgba(99, 102, 241, 0.15)");
-    } else {
-      gradient.addColorStop(0, "rgba(99, 102, 241, 0.45)");
-      gradient.addColorStop(1, "rgba(99, 102, 241, 0.02)");
-    }
-
-    monthlyTrendChart.current?.destroy();
-    monthlyTrendChart.current = new Chart(monthlyTrendRef.current, {
-      type: isBar ? "bar" : "line",
-      data: {
-        labels: apiLabels,
-        datasets: [
-          {
-            label: isShare ? "Growth Rate (%)" : "Sales Value (Lakhs)",
-            data: isShare ? growthData : apiValuesLakhs,
-            backgroundColor: gradient,
-            borderColor: "rgba(99, 102, 241, 1)",
-            borderWidth: isBar ? 1.5 : 2.5,
-            borderRadius: isBar ? 6 : 0,
-            fill: !isBar,
-            tension: isBar ? 0 : 0.4,
-            pointRadius: isBar ? 0 : 4,
-            pointHoverRadius: isBar ? 0 : 6,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "rgba(99, 102, 241, 1)",
-            pointBorderWidth: 2,
-            yAxisID: "y",
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          delay: (context) => {
-            let delay = 0;
-            if (context.type === 'data' && context.mode === 'default') {
-              delay = context.dataIndex * 100; // 100ms staggered delay
-            }
-            return delay;
-          },
-          duration: 1000,
-          easing: "easeOutBack", // Premium springy animation
-        },
-        plugins: {
-          legend: {
-            display: false
-          },
-          tooltip: {
-            callbacks: {
-              label(ctx) {
-                const val = ctx.parsed.y ?? 0;
-                const idx = ctx.dataIndex;
-                const dataset = ctx.dataset;
-                const prev = dataset.data[idx - 1];
-                let text = "";
-                if (isShare) {
-                  text = `${ctx.label}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + val.toFixed(1) + "%"}`;
-                } else {
-                  text = `Sales Value: ₹${val.toFixed(2)}L`;
-                  if (prev && prev > 0) {
-                    const pct = ((val - prev) / prev) * 100;
-                    const diff = val - prev;
-                    const diffText = diff >= 0 ? `+₹${diff.toFixed(2)}L` : `-₹${Math.abs(diff).toFixed(2)}L`;
-                    text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% MoM, ${diffText})`;
-                  }
-                }
-                return text;
-              }
-            }
-          },
           datalabels: {
             display: true,
             align: "top",
             anchor: "end",
-            offset: 8,
-            font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+            offset: 4,
+            font: { family: 'Plus Jakarta Sans', size: 9.5, weight: '700' },
             backgroundColor: "rgba(255, 255, 255, 0.95)",
             borderWidth: 1.5,
-            borderRadius: 6,
-            padding: { top: 4, bottom: 4, left: 6, right: 6 },
-            borderColor: (ctx) => {
-              if (isShare) {
-                const val = ctx.dataset.data[ctx.dataIndex];
-                return val === 0 ? "rgba(100, 116, 139, 0.4)" : (val > 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)");
-              }
-              return "rgba(99, 102, 241, 0.4)";
-            },
-            color: (ctx) => {
-              if (isShare) {
-                const val = ctx.dataset.data[ctx.dataIndex];
-                return val === 0 ? "#64748b" : (val > 0 ? "#10b981" : "#ef4444");
-              }
-              return "#4f46e5";
-            },
-            formatter: (v, context) => {
-              if (isShare) {
-                return v === 0 ? "—" : `${v > 0 ? "↑" : "↓"} ${Math.abs(v).toFixed(1)}%`;
-              }
-              let label = `₹${v.toFixed(1)}L`;
-              const idx = context.dataIndex;
-              const prev = context.dataset.data[idx - 1];
-              if (prev && prev > 0) {
-                const pct = ((v - prev) / prev) * 100;
-                const sign = pct >= 0 ? "↑" : "↓";
-                label += ` (${sign}${Math.abs(pct).toFixed(1)}%)`;
-              }
-              return label;
-            }
+            borderRadius: 4,
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
+            borderColor: "rgba(45, 109, 232, 0.4)",
+            color: "#2d6de8",
+            formatter: (v) => `₹${v.toFixed(1)}L`
           }
-        },
-        scales: {
+        }];
+
+        scales = {
           y: {
             type: "linear",
             position: "left",
-            max: isShare ? undefined : Math.ceil((Math.max(0, ...apiValuesLakhs) || 1) * 1.25),
+            max: Math.ceil((peakSales / 100000) * 1.2),
             grid: { color: "rgba(99, 102, 241, 0.05)" },
-            ticks: {
-              font: { family: 'Plus Jakarta Sans', size: 9 },
-              color: '#312e81',
-              callback: (v) => isShare ? `${v}%` : `₹${v}L`
-            }
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
           },
           x: {
             grid: { display: false },
             ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
           }
-        }
-      }
-    });
-    return () => monthlyTrendChart.current?.destroy();
-  }, [loading, performanceChartType, monthlyTrendData]);
-
-  useEffect(() => {
-    if (!billTypeRef.current) return;
-    const ctx = billTypeRef.current.getContext("2d");
-    const isBar = performanceChartType === "bar";
-    const isShare = performanceChartType === "share";
-    const isBarOrShare = isBar || isShare;
-
-    // Palette of gradients — one per bill type (cycled)
-    const PALETTE_STOPS = [
-      ["rgba(79, 70, 229, 0.95)",  "rgba(79, 70, 229, 0.4)",  "rgba(79, 70, 229, 0.5)",  "rgba(79, 70, 229, 0.05)",  "rgba(79, 70, 229, 1)"],
-      ["rgba(124, 58, 237, 0.95)", "rgba(124, 58, 237, 0.4)", "rgba(124, 58, 237, 0.5)", "rgba(124, 58, 237, 0.05)", "rgba(124, 58, 237, 1)"],
-      ["rgba(168, 85, 247, 0.95)", "rgba(168, 85, 247, 0.4)", "rgba(168, 85, 247, 0.5)", "rgba(168, 85, 247, 0.05)", "rgba(168, 85, 247, 1)"],
-      ["rgba(192, 132, 252, 0.9)", "rgba(192, 132, 252, 0.35)","rgba(192, 132, 252, 0.5)","rgba(192, 132, 252, 0.05)","rgba(192, 132, 252, 1)"],
-      ["rgba(59, 130, 246, 0.95)", "rgba(59, 130, 246, 0.4)", "rgba(59, 130, 246, 0.5)", "rgba(59, 130, 246, 0.05)", "rgba(59, 130, 246, 1)"],
-      ["rgba(16, 185, 129, 0.95)", "rgba(16, 185, 129, 0.4)", "rgba(16, 185, 129, 0.5)", "rgba(16, 185, 129, 0.05)", "rgba(16, 185, 129, 1)"],
-    ];
-
-    // Build real datasets from API
-    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
-    const apiLabels = (billTypeRevenueData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-    const apiDatasets = billTypeRevenueData?.datasets ?? [];
-
-    // Compute per-month totals for share view
-    const monthTotals = apiLabels.map((_, mi) =>
-      apiDatasets.reduce((sum, ds) => sum + (ds.data_lakhs?.[mi] ?? 0), 0)
-    );
-
-    const chartDatasets = apiDatasets.map((ds, i) => {
-      const stops = PALETTE_STOPS[i % PALETTE_STOPS.length];
-      const grad = ctx.createLinearGradient(0, 0, 0, 240);
-      grad.addColorStop(0, isBarOrShare ? stops[0] : stops[2]);
-      grad.addColorStop(1, isBarOrShare ? stops[1] : stops[3]);
-
-      const shareData = ds.data_lakhs?.map((v, mi) =>
-        monthTotals[mi] > 0 ? parseFloat(((v / monthTotals[mi]) * 100).toFixed(1)) : 0
-      ) ?? [];
-
-      return {
-        label: ds.bill_type,
-        data: isShare ? shareData : (ds.data_lakhs ?? []),
-        backgroundColor: grad,
-        borderColor: stops[4],
-        borderWidth: isBarOrShare ? 1 : 2,
-        borderRadius: isBarOrShare ? 4 : 0,
-        fill: !isBarOrShare,
-        tension: isBarOrShare ? 0 : 0.3,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      };
-    });
-
-    billTypeChart.current?.destroy();
-    billTypeChart.current = new Chart(billTypeRef.current, {
-      type: isBarOrShare ? "bar" : "line",
-      data: {
-        labels: apiLabels,
-        datasets: chartDatasets,
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'top',
-            labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
-          },
+        };
+      } else {
+        datasets = [{
+          label: "Cumulative Sales (Lakhs)",
+          type: "line",
+          data: cumulative.map((v) => v / 100000),
+          borderColor: "rgba(16, 185, 129, 1)",
+          backgroundColor: gradGreenArea,
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "rgba(16, 185, 129, 1)",
+          pointBorderWidth: 2,
+          yAxisID: "y",
           datalabels: {
-            display: isBarOrShare ? (ctx) => {
-              const val = ctx.dataset.data[ctx.dataIndex];
-              return isShare ? val > 4 : val > 0.8;
-            } : false,
-            color: "#ffffff",
-            font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-            formatter: (v) => isShare ? `${v.toFixed(0)}%` : `₹${v.toFixed(1)}L`
+            display: true,
+            align: "top",
+            anchor: "end",
+            offset: 4,
+            font: { family: 'Plus Jakarta Sans', size: 9.5, weight: '700' },
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderWidth: 1.5,
+            borderRadius: 4,
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
+            borderColor: "rgba(16, 185, 129, 0.4)",
+            color: "#10b981",
+            formatter: (v) => `₹${v.toFixed(1)}L`
           }
-        },
-        scales: {
+        }];
+
+        scales = {
           y: {
-            stacked: true,
-            max: isShare ? 100 : undefined,
+            type: "linear",
+            position: "left",
+            max: Math.ceil((peakCumulative / 100000) * 1.15),
             grid: { color: "rgba(99, 102, 241, 0.05)" },
-            ticks: {
-              font: { family: 'Plus Jakarta Sans', size: 9 },
-              color: '#312e81',
-              callback: (v) => isShare ? `${v}%` : `₹${v}L`
-            }
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
           },
           x: {
-            stacked: isBarOrShare,
             grid: { display: false },
             ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
           }
-        }
+        };
       }
-    });
-    return () => billTypeChart.current?.destroy();
-  }, [loading, performanceChartType, billTypeRevenueData]);
 
-  useEffect(() => {
-    if (!taxRef.current) return;
-    const ctx = taxRef.current.getContext("2d");
-    const isBar = performanceChartType === "bar";
-    const isShare = performanceChartType === "share";
-
-    // Real data from API
-    const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
-    const apiLabels = (monthlyTaxData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-    const apiTaxLakhs = monthlyTaxData?.tax_values_lakhs ?? [];
-    // Sales lakhs for combo view (line view) from monthly trend API
-    const apiSalesLakhs = monthlyTrendData?.sales_values_lakhs ?? [];
-
-    taxChart.current?.destroy();
-
-    if (isBar) {
-      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-      gradient.addColorStop(0, "rgba(139, 92, 246, 0.95)");
-      gradient.addColorStop(1, "rgba(139, 92, 246, 0.15)");
-
-      taxChart.current = new Chart(taxRef.current, {
+      trendChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
         type: "bar",
         data: {
-          labels: apiLabels,
-          datasets: [
-            {
-              label: "Tax Value (Lakhs)",
-              data: apiTaxLakhs,
-              backgroundColor: gradient,
-              borderColor: "rgba(139, 92, 246, 1)",
-              borderWidth: 1.5,
-              borderRadius: 6,
-              yAxisID: "y",
-            }
-          ]
+          labels,
+          datasets
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          animation: {
+            delay: (context) => {
+              let delay = 0;
+              if (context.type === 'data' && context.mode === 'default') {
+                delay = context.dataIndex * 50;
+              }
+              return delay;
+            },
+            duration: 1000,
+            easing: "easeOutBack",
+          },
           plugins: {
             legend: {
-              display: false
+              labels: { font: { size: 10, weight: "600", family: 'Plus Jakarta Sans' }, boxWidth: 12, padding: 14 },
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const val = ctx.parsed.y ?? 0;
+                  const idx = ctx.dataIndex;
+                  const dataset = ctx.dataset;
+                  const prev = dataset.data[idx - 1];
+                  let text = `${dataset.label}: ${formatTooltipLakhs(val * 100000)}`;
+                  if (dataset.label.toLowerCase().includes("weekly") && prev && prev > 0) {
+                    const pct = ((val - prev) / prev) * 100;
+                    const diff = val - prev;
+                    const diffText = diff >= 0 ? `+₹${(diff).toFixed(2)}L` : `-₹${(Math.abs(diff)).toFixed(2)}L`;
+                    text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% WoW, ${diffText})`;
+                  }
+                  return text;
+                },
+              },
             },
             datalabels: {
-              display: true,
-              align: "end",
-              anchor: "end",
-              offset: 2,
-              font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-              color: "#7c3aed",
-              formatter: (v) => `₹${Number(v).toFixed(2)}L`
+              display: (context) => {
+                const d = context.dataset.datalabels?.display;
+                if (typeof d === 'function') {
+                  return d(context);
+                }
+                return d ?? false;
+              }
             }
           },
-          scales: {
-            y: {
-              type: "linear",
-              position: "left",
-              grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
-            }
-          }
+          scales
         }
       });
-    } else if (isShare) {
-      // Effective tax rate = taxLakhs / salesLakhs * 100
-      const effectiveTaxRate = apiTaxLakhs.map((t, i) => {
-        const s = apiSalesLakhs[i];
-        return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
-      });
-      const shareLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      trendChart.current = chartInstance;
+    });
 
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      trendChart.current?.destroy();
+    };
+  }, [derivedWeeklyTrend, loading, weeklyChartType]);
+  useEffect(() => {
+    if (!monthlyTrendRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(monthlyTrendRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
       const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-      gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
-      gradient.addColorStop(1, "rgba(139, 92, 246, 0.02)");
+      const isBar = performanceChartType === "bar";
+      const isShare = performanceChartType === "share";
 
-      taxChart.current = new Chart(taxRef.current, {
-        type: "line",
+      // Pull real labels & values from API data
+      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const apiLabels = (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      const apiValuesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
+
+      // Compute MoM growth for "share" view
+      const growthData = apiValuesLakhs.map((v, i) => {
+        if (i === 0 || apiValuesLakhs[i - 1] === 0) return 0;
+        return parseFloat(((v - apiValuesLakhs[i - 1]) / apiValuesLakhs[i - 1] * 100).toFixed(1));
+      });
+
+      if (isBar) {
+        gradient.addColorStop(0, "rgba(99, 102, 241, 0.95)");
+        gradient.addColorStop(1, "rgba(99, 102, 241, 0.15)");
+      } else {
+        gradient.addColorStop(0, "rgba(99, 102, 241, 0.45)");
+        gradient.addColorStop(1, "rgba(99, 102, 241, 0.02)");
+      }
+
+      monthlyTrendChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        type: isBar ? "bar" : "line",
         data: {
-          labels: shareLabels,
+          labels: apiLabels,
           datasets: [
             {
-              label: "Effective Tax Rate (%)",
-              data: effectiveTaxRate,
+              label: isShare ? "Growth Rate (%)" : "Sales Value (Lakhs)",
+              data: isShare ? growthData : apiValuesLakhs,
               backgroundColor: gradient,
-              borderColor: "rgba(139, 92, 246, 1)",
-              borderWidth: 2.5,
-              fill: true,
-              tension: 0.4,
-              pointRadius: 4,
-              pointHoverRadius: 6,
+              borderColor: "rgba(99, 102, 241, 1)",
+              borderWidth: isBar ? 1.5 : 2.5,
+              borderRadius: isBar ? 6 : 0,
+              fill: !isBar,
+              tension: isBar ? 0 : 0.4,
+              pointRadius: isBar ? 0 : 4,
+              pointHoverRadius: isBar ? 0 : 6,
               pointBackgroundColor: "#ffffff",
-              pointBorderColor: "rgba(139, 92, 246, 1)",
+              pointBorderColor: "rgba(99, 102, 241, 1)",
               pointBorderWidth: 2,
               yAxisID: "y",
             }
@@ -2040,26 +2163,95 @@ export default function SalesAnalysis() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: {
+            delay: (context) => {
+              let delay = 0;
+              if (context.type === 'data' && context.mode === 'default') {
+                delay = context.dataIndex * 100; // 100ms staggered delay
+              }
+              return delay;
+            },
+            duration: 1000,
+            easing: "easeOutBack", // Premium springy animation
+          },
           plugins: {
             legend: {
               display: false
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const val = ctx.parsed.y ?? 0;
+                  const idx = ctx.dataIndex;
+                  const dataset = ctx.dataset;
+                  const prev = dataset.data[idx - 1];
+                  let text = "";
+                  if (isShare) {
+                    text = `${ctx.label}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + val.toFixed(1) + "%"}`;
+                  } else {
+                    text = `Sales Value: ₹${val.toFixed(2)}L`;
+                    if (prev && prev > 0) {
+                       const pct = ((val - prev) / prev) * 100;
+                       const diff = val - prev;
+                       const diffText = diff >= 0 ? `+₹${diff.toFixed(2)}L` : `-₹${Math.abs(diff).toFixed(2)}L`;
+                       text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% MoM, ${diffText})`;
+                    }
+                  }
+                  return text;
+                }
+              }
             },
             datalabels: {
               display: true,
               align: "top",
               anchor: "end",
-              offset: 4,
+              offset: 8,
               font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-              color: "#7c3aed",
-              formatter: (v) => `${Number(v).toFixed(2)}%`
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1.5,
+              borderRadius: 6,
+              padding: { top: 4, bottom: 4, left: 6, right: 6 },
+              borderColor: (ctx) => {
+                if (isShare) {
+                  const val = ctx.dataset.data[ctx.dataIndex];
+                  return val === 0 ? "rgba(100, 116, 139, 0.4)" : (val > 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)");
+                }
+                return "rgba(99, 102, 241, 0.4)";
+              },
+              color: (ctx) => {
+                if (isShare) {
+                  const val = ctx.dataset.data[ctx.dataIndex];
+                  return val === 0 ? "#64748b" : (val > 0 ? "#10b981" : "#ef4444");
+                }
+                return "#4f46e5";
+              },
+              formatter: (v, context) => {
+                if (isShare) {
+                  return v === 0 ? "—" : `${v > 0 ? "↑" : "↓"} ${Math.abs(v).toFixed(1)}%`;
+                }
+                let label = `₹${v.toFixed(1)}L`;
+                const idx = context.dataIndex;
+                const prev = context.dataset.data[idx - 1];
+                if (prev && prev > 0) {
+                  const pct = ((v - prev) / prev) * 100;
+                  const sign = pct >= 0 ? "↑" : "↓";
+                  label += ` (${sign}${Math.abs(pct).toFixed(1)}%)`;
+                }
+                return label;
+              }
             }
           },
           scales: {
             y: {
               type: "linear",
               position: "left",
+              max: isShare ? undefined : Math.ceil((Math.max(0, ...apiValuesLakhs) || 1) * 1.25),
               grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `${v.toFixed(2)}%` }
+              ticks: {
+                font: { family: 'Plus Jakarta Sans', size: 9 },
+                color: '#312e81',
+                callback: (v) => isShare ? `${v}%` : `₹${v}L`
+              }
             },
             x: {
               grid: { display: false },
@@ -2068,55 +2260,597 @@ export default function SalesAnalysis() {
           }
         }
       });
-    } else {
-      // Trend / Line View: combo bar (sales) + line (tax)
-      const gradSales = ctx.createLinearGradient(0, 0, 0, 240);
-      gradSales.addColorStop(0, "rgba(59, 130, 246, 0.85)");
-      gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
+      monthlyTrendChart.current = chartInstance;
+    });
 
-      // Use tax labels if available, else fall back to sales trend labels
-      const comboLabels = apiLabels.length ? apiLabels : (monthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      monthlyTrendChart.current?.destroy();
+    };
+  }, [loading, performanceChartType, derivedMonthlyTrendData]);
+  useEffect(() => {
+    if (!billTypeRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(billTypeRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+      const isBar = performanceChartType === "bar";
+      const isShare = performanceChartType === "share";
+      const isBarOrShare = isBar || isShare;
 
-      taxChart.current = new Chart(taxRef.current, {
-        type: "bar",
+      // Palette of gradients — one per bill type (cycled)
+      const PALETTE_STOPS = [
+        ["rgba(79, 70, 229, 0.95)",  "rgba(79, 70, 229, 0.4)",  "rgba(79, 70, 229, 0.5)",  "rgba(79, 70, 229, 0.05)",  "rgba(79, 70, 229, 1)"],
+        ["rgba(124, 58, 237, 0.95)", "rgba(124, 58, 237, 0.4)", "rgba(124, 58, 237, 0.5)", "rgba(124, 58, 237, 0.05)", "rgba(124, 58, 237, 1)"],
+        ["rgba(168, 85, 247, 0.95)", "rgba(168, 85, 247, 0.4)", "rgba(168, 85, 247, 0.5)", "rgba(168, 85, 247, 0.05)", "rgba(168, 85, 247, 1)"],
+        ["rgba(192, 132, 252, 0.9)", "rgba(192, 132, 252, 0.35)","rgba(192, 132, 252, 0.5)","rgba(192, 132, 252, 0.05)","rgba(192, 132, 252, 1)"],
+        ["rgba(59, 130, 246, 0.95)", "rgba(59, 130, 246, 0.4)", "rgba(59, 130, 246, 0.5)", "rgba(59, 130, 246, 0.05)", "rgba(59, 130, 246, 1)"],
+        ["rgba(16, 185, 129, 0.95)", "rgba(16, 185, 129, 0.4)", "rgba(16, 185, 129, 0.5)", "rgba(16, 185, 129, 0.05)", "rgba(16, 185, 129, 1)"],
+      ];
+
+      // Build real datasets from API
+      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const apiLabels = (derivedBillTypeRevenueData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      const apiDatasets = derivedBillTypeRevenueData?.datasets ?? [];
+
+      // Compute per-month totals for share view
+      const monthTotals = apiLabels.map((_, mi) =>
+        apiDatasets.reduce((sum, ds) => sum + (ds.data_lakhs?.[mi] ?? 0), 0)
+      );
+
+      const chartDatasets = apiDatasets.map((ds, i) => {
+        const stops = PALETTE_STOPS[i % PALETTE_STOPS.length];
+        const grad = ctx.createLinearGradient(0, 0, 0, 240);
+        grad.addColorStop(0, isBarOrShare ? stops[0] : stops[2]);
+        grad.addColorStop(1, isBarOrShare ? stops[1] : stops[3]);
+
+        const shareData = ds.data_lakhs?.map((v, mi) =>
+          monthTotals[mi] > 0 ? parseFloat(((v / monthTotals[mi]) * 100).toFixed(1)) : 0
+        ) ?? [];
+
+        return {
+          label: ds.bill_type,
+          data: isShare ? shareData : (ds.data_lakhs ?? []),
+          backgroundColor: grad,
+          borderColor: stops[4],
+          borderWidth: isBarOrShare ? 1 : 2,
+          borderRadius: isBarOrShare ? 4 : 0,
+          fill: !isBarOrShare,
+          tension: isBarOrShare ? 0 : 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        };
+      });
+
+      billTypeChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        type: isBarOrShare ? "bar" : "line",
         data: {
-          labels: comboLabels,
-          datasets: [
-            {
-              label: "Sales Value (Lakhs)",
-              type: "bar",
-              data: apiSalesLakhs,
-              backgroundColor: gradSales,
-              borderColor: "rgba(59, 130, 246, 1)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-              yAxisID: "ySales",
-              datalabels: {
-                display: false
+          labels: apiLabels,
+          datasets: chartDatasets,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
+            },
+            datalabels: {
+              display: isBarOrShare ? (ctx) => {
+                const val = ctx.dataset.data[ctx.dataIndex];
+                return isShare ? val > 4 : val > 0.8;
+              } : false,
+              color: "#ffffff",
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              formatter: (v) => isShare ? `${v.toFixed(0)}%` : `₹${v.toFixed(1)}L`
+            }
+          },
+          scales: {
+            y: {
+              stacked: true,
+              max: isShare ? 100 : undefined,
+              grid: { color: "rgba(99, 102, 241, 0.05)" },
+              ticks: {
+                font: { family: 'Plus Jakarta Sans', size: 9 },
+                color: '#312e81',
+                callback: (v) => isShare ? `${v}%` : `₹${v}L`
               }
             },
+            x: {
+              stacked: isBarOrShare,
+              grid: { display: false },
+              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+            }
+          }
+        }
+      });
+      billTypeChart.current = chartInstance;
+    });
+
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      billTypeChart.current?.destroy();
+    };
+  }, [loading, performanceChartType, derivedBillTypeRevenueData]);
+
+
+
+  useEffect(() => {
+    if (!taxRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(taxRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+      const isBar = performanceChartType === "bar";
+      const isShare = performanceChartType === "share";
+
+      // Real data from API
+      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const apiLabels = (derivedMonthlyTaxData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      const apiTaxLakhs = derivedMonthlyTaxData?.tax_values_lakhs ?? [];
+      // Sales lakhs for combo view (line view) from monthly trend API
+      const apiSalesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
+
+      taxChart.current?.destroy();
+
+      if (isBar) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        gradient.addColorStop(0, "rgba(139, 92, 246, 0.95)");
+        gradient.addColorStop(1, "rgba(139, 92, 246, 0.15)");
+
+        chartInstance = new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: apiLabels,
+            datasets: [
+              {
+                label: "Tax Value (Lakhs)",
+                data: apiTaxLakhs,
+                backgroundColor: gradient,
+                borderColor: "rgba(139, 92, 246, 1)",
+                borderWidth: 1.5,
+                borderRadius: 6,
+                yAxisID: "y",
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              datalabels: {
+                display: true,
+                align: "end",
+                anchor: "end",
+                offset: 2,
+                font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+                color: "#7c3aed",
+                formatter: (v) => `₹${Number(v).toFixed(2)}L`
+              }
+            },
+            scales: {
+              y: {
+                type: "linear",
+                position: "left",
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
+              },
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              }
+            }
+          }
+        });
+      } else if (isShare) {
+        // Effective tax rate = taxLakhs / salesLakhs * 100
+        const effectiveTaxRate = apiTaxLakhs.map((t, i) => {
+          const s = apiSalesLakhs[i];
+          return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
+        });
+        const shareLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
+        gradient.addColorStop(1, "rgba(139, 92, 246, 0.02)");
+
+        chartInstance = new Chart(canvas, {
+          type: "line",
+          data: {
+            labels: shareLabels,
+            datasets: [
+              {
+                label: "Effective Tax Rate (%)",
+                data: effectiveTaxRate,
+                backgroundColor: gradient,
+                borderColor: "rgba(139, 92, 246, 1)",
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "#ffffff",
+                pointBorderColor: "rgba(139, 92, 246, 1)",
+                pointBorderWidth: 2,
+                yAxisID: "y",
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 4,
+                font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+                color: "#7c3aed",
+                formatter: (v) => `${Number(v).toFixed(2)}%`
+              }
+            },
+            scales: {
+              y: {
+                type: "linear",
+                position: "left",
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `${v.toFixed(2)}%` }
+              },
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              }
+            }
+          }
+        });
+      } else {
+        // Trend / Line View: combo bar (sales) + line (tax)
+        const gradSales = ctx.createLinearGradient(0, 0, 0, 240);
+        gradSales.addColorStop(0, "rgba(59, 130, 246, 0.85)");
+        gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
+
+        // Use tax labels if available, else fall back to sales trend labels
+        const comboLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+
+        chartInstance = new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: comboLabels,
+            datasets: [
+              {
+                label: "Sales Value (Lakhs)",
+                type: "bar",
+                data: apiSalesLakhs,
+                backgroundColor: gradSales,
+                borderColor: "rgba(59, 130, 246, 1)",
+                borderWidth: 1.5,
+                borderRadius: 4,
+                yAxisID: "ySales",
+                datalabels: {
+                  display: false
+                }
+              },
+              {
+                label: "Tax Value (Lakhs)",
+                type: "line",
+                data: apiTaxLakhs,
+                borderColor: "rgba(139, 92, 246, 1)",
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: false,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: "#ffffff",
+                pointBorderColor: "rgba(139, 92, 246, 1)",
+                pointBorderWidth: 1.5,
+                yAxisID: "yTax",
+                datalabels: {
+                  display: true,
+                  align: "top",
+                  anchor: "end",
+                  offset: 2,
+                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  color: "#7c3aed",
+                  formatter: (v) => `₹${Number(v).toFixed(2)}L`
+                }
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top',
+                labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
+              }
+            },
+            scales: {
+              ySales: {
+                type: "linear",
+                position: "left",
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#2563eb', callback: (v) => `₹${v}L` },
+                title: { display: true, text: "Sales Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#2563eb' }
+              },
+              yTax: {
+                type: "linear",
+                position: "right",
+                grid: { drawOnChartArea: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${Number(v).toFixed(2)}L` },
+                title: { display: true, text: "Tax Liability", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#7c3aed' }
+              },
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              }
+            }
+          }
+        });
+      }
+      taxChart.current = chartInstance;
+    });
+
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      taxChart.current?.destroy();
+    };
+  }, [loading, performanceChartType, derivedMonthlyTaxData, derivedMonthlyTrendData]);
+
+  useEffect(() => {
+    if (!planRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(planRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+
+      const labels = filteredPlanVsActual.map((row) => row.partNoDesc.split(" - ")[0]);
+      const planned = filteredPlanVsActual.map((row) => row.planQty);
+      const dispatched = filteredPlanVsActual.map((row) => row.dispatchQty);
+
+      const gradPlanned = ctx.createLinearGradient(0, 0, 0, 240);
+      gradPlanned.addColorStop(0, "rgba(139, 92, 246, 0.95)");
+      gradPlanned.addColorStop(1, "rgba(139, 92, 246, 0.15)");
+
+      const gradDispatched = ctx.createLinearGradient(0, 0, 0, 240);
+      gradDispatched.addColorStop(0, "rgba(16, 185, 129, 0.95)");
+      gradDispatched.addColorStop(1, "rgba(16, 185, 129, 0.15)");
+
+      planChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [
             {
-              label: "Tax Value (Lakhs)",
-              type: "line",
-              data: apiTaxLakhs,
+              label: "Planned Quantity",
+              data: planned,
+              backgroundColor: gradPlanned,
               borderColor: "rgba(139, 92, 246, 1)",
-              borderWidth: 2.5,
-              tension: 0.4,
-              fill: false,
-              pointRadius: 3,
-              pointHoverRadius: 5,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "rgba(139, 92, 246, 1)",
-              pointBorderWidth: 1.5,
-              yAxisID: "yTax",
+              borderWidth: 1.5,
+              borderRadius: 4,
+            },
+            {
+              label: "Dispatched Quantity",
+              data: dispatched,
+              backgroundColor: gradDispatched,
+              borderColor: "rgba(16, 185, 129, 1)",
+              borderWidth: 1.5,
+              borderRadius: 4,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            delay: (context) => {
+              let delay = 0;
+              if (context.type === 'data' && context.mode === 'default') {
+                delay = context.dataIndex * 80;
+              }
+              return delay;
+            },
+            duration: 1000,
+            easing: "easeOutBack",
+          },
+          plugins: {
+            legend: {
+              position: "top",
+              labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const row = filteredPlanVsActual[ctx.dataIndex];
+                  if (ctx.datasetIndex === 0) {
+                    return `Planned: ${ctx.parsed.y} qty (${row.partNoDesc})`;
+                  } else {
+                    return `Dispatched: ${ctx.parsed.y} qty / ${row.planQty} planned`;
+                  }
+                }
+              }
+            },
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 4,
+              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderWidth: 1,
+              borderRadius: 4,
+              padding: { top: 2, bottom: 2, left: 4, right: 4 },
+              borderColor: (ctx) => ctx.datasetIndex === 0 ? "rgba(139, 92, 246, 0.4)" : "rgba(16, 185, 129, 0.4)",
+              color: (ctx) => ctx.datasetIndex === 0 ? "#7c3aed" : "#10b981",
+              formatter: (v) => formatQty(v)
+            }
+          },
+          scales: {
+            y: {
+              type: "linear",
+              max: Math.ceil((Math.max(0, ...planned) || 1) * 1.25),
+              grid: { color: "rgba(99, 102, 241, 0.05)" },
+              ticks: {
+                font: { family: 'Plus Jakarta Sans', size: 9 },
+                color: '#312e81'
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+            }
+          }
+        }
+      });
+      planChart.current = chartInstance;
+    });
+
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      planChart.current?.destroy();
+    };
+  }, [filteredPlanVsActual]);
+  useEffect(() => {
+    if (!projRef.current) return;
+    let chartInstance = null;
+    const cancelReady = initChartWhenReady(projRef, (canvas) => {
+      const ctx = canvas.getContext("2d");
+
+      const labels = filteredProjections.map((row) => row.customer.split(" ")[0]);
+      const dispatchedQty = filteredProjections.map((row) => row.dispQty);
+      const pendingQty = filteredProjections.map((row) => row.pendQty);
+      const totalAmtLakhs = filteredProjections.map((row) => row.totAmt / 100_000);
+      const pendingValLakhs = filteredProjections.map((row) => row.pendVal / 100_000);
+
+      const gradDisp = ctx.createLinearGradient(0, 0, 0, 240);
+      gradDisp.addColorStop(0, "rgba(16, 185, 129, 0.85)");
+      gradDisp.addColorStop(1, "rgba(16, 185, 129, 0.15)");
+
+      const gradPend = ctx.createLinearGradient(0, 0, 0, 240);
+      gradPend.addColorStop(0, "rgba(249, 115, 22, 0.85)");
+      gradPend.addColorStop(1, "rgba(249, 115, 22, 0.15)");
+
+      projChart.current?.destroy();
+      chartInstance = new Chart(canvas, {
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Dispatched Qty (Units)",
+              data: dispatchedQty,
+              backgroundColor: gradDisp,
+              borderColor: "rgba(16, 185, 129, 1)",
+              borderWidth: 1.5,
+              borderRadius: 4,
+              yAxisID: "yQty",
               datalabels: {
                 display: true,
                 align: "top",
                 anchor: "end",
                 offset: 2,
                 font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                color: "#7c3aed",
-                formatter: (v) => `₹${Number(v).toFixed(2)}L`
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                borderColor: "rgba(16, 185, 129, 0.4)",
+                color: "#10b981",
+                formatter: (v) => formatQty(v)
+              }
+            },
+            {
+              type: "bar",
+              label: "Pending Qty (Units)",
+              data: pendingQty,
+              backgroundColor: gradPend,
+              borderColor: "rgba(249, 115, 22, 1)",
+              borderWidth: 1.5,
+              borderRadius: 4,
+              yAxisID: "yQty",
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 2,
+                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                borderColor: "rgba(249, 115, 22, 0.4)",
+                color: "#ea580c",
+                formatter: (v) => formatQty(v)
+              }
+            },
+            {
+              type: "line",
+              label: "Total Order Value (Lakhs)",
+              data: totalAmtLakhs,
+              borderColor: "rgba(79, 70, 229, 1)",
+              borderWidth: 2.5,
+              tension: 0.4,
+              fill: false,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "rgba(79, 70, 229, 1)",
+              pointBorderWidth: 2,
+              yAxisID: "yValue",
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 6,
+                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1.5,
+                borderRadius: 4,
+                padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                borderColor: "rgba(79, 70, 229, 0.4)",
+                color: "#4f46e5",
+                formatter: (v) => `₹${v.toFixed(1)}L`
+              }
+            },
+            {
+              type: "line",
+              label: "Pending Value (Lakhs)",
+              data: pendingValLakhs,
+              borderColor: "rgba(239, 68, 68, 1)",
+              borderWidth: 2.5,
+              tension: 0.4,
+              fill: false,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "rgba(239, 68, 68, 1)",
+              pointBorderWidth: 2,
+              yAxisID: "yValue",
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 6,
+                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1.5,
+                borderRadius: 4,
+                padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                borderColor: "rgba(239, 68, 68, 0.4)",
+                color: "#ef4444",
+                formatter: (v) => `₹${v.toFixed(1)}L`
               }
             }
           ]
@@ -2124,27 +2858,58 @@ export default function SalesAnalysis() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: {
+            delay: (context) => {
+              let delay = 0;
+              if (context.type === 'data' && context.mode === 'default') {
+                delay = context.dataIndex * 100;
+              }
+              return delay;
+            },
+            duration: 1000,
+            easing: "easeOutBack",
+          },
           plugins: {
             legend: {
-              display: true,
-              position: 'top',
-              labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
+              position: "top",
+              labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const row = filteredProjections[ctx.dataIndex];
+                  const val = ctx.parsed.y ?? 0;
+                  if (ctx.dataset.type === "bar") {
+                    return `${ctx.dataset.label}: ${formatQty(val)} units (Customer: ${row.customer})`;
+                  } else {
+                    return `${ctx.dataset.label}: ₹${val.toFixed(2)} Lakhs (Customer: ${row.customer})`;
+                  }
+                }
+              }
             }
           },
           scales: {
-            ySales: {
+            yQty: {
               type: "linear",
               position: "left",
               grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#2563eb', callback: (v) => `₹${v}L` },
-              title: { display: true, text: "Sales Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#2563eb' }
+              ticks: {
+                font: { family: 'Plus Jakarta Sans', size: 9 },
+                color: '#312e81',
+                callback: (v) => `${v} units`
+              },
+              title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
             },
-            yTax: {
+            yValue: {
               type: "linear",
               position: "right",
               grid: { drawOnChartArea: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${Number(v).toFixed(2)}L` },
-              title: { display: true, text: "Tax Liability", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#7c3aed' }
+              ticks: {
+                font: { family: 'Plus Jakarta Sans', size: 9 },
+                color: '#4f46e5',
+                callback: (v) => `₹${v}L`
+              },
+              title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
             },
             x: {
               grid: { display: false },
@@ -2153,314 +2918,15 @@ export default function SalesAnalysis() {
           }
         }
       });
-    }
-    return () => taxChart.current?.destroy();
-  }, [loading, performanceChartType, monthlyTaxData, monthlyTrendData]);
-
-  useEffect(() => {
-    if (!planRef.current) return;
-    const ctx = planRef.current.getContext("2d");
-
-    const labels = filteredPlanVsActual.map((row) => row.partNoDesc.split(" - ")[0]);
-    const planned = filteredPlanVsActual.map((row) => row.planQty);
-    const dispatched = filteredPlanVsActual.map((row) => row.dispatchQty);
-
-    const gradPlanned = ctx.createLinearGradient(0, 0, 0, 240);
-    gradPlanned.addColorStop(0, "rgba(139, 92, 246, 0.9)");
-    gradPlanned.addColorStop(1, "rgba(139, 92, 246, 0.15)");
-
-    const gradDispatched = ctx.createLinearGradient(0, 0, 0, 240);
-    gradDispatched.addColorStop(0, "rgba(16, 185, 129, 0.9)");
-    gradDispatched.addColorStop(1, "rgba(16, 185, 129, 0.15)");
-
-    planChart.current?.destroy();
-    planChart.current = new Chart(planRef.current, {
-      type: "bar",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: "Planned Quantity",
-            data: planned,
-            backgroundColor: gradPlanned,
-            borderColor: "rgba(139, 92, 246, 1)",
-            borderWidth: 1.5,
-            borderRadius: 4,
-          },
-          {
-            label: "Dispatched Quantity",
-            data: dispatched,
-            backgroundColor: gradDispatched,
-            borderColor: "rgba(16, 185, 129, 1)",
-            borderWidth: 1.5,
-            borderRadius: 4,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          delay: (context) => {
-            let delay = 0;
-            if (context.type === 'data' && context.mode === 'default') {
-              delay = context.dataIndex * 80;
-            }
-            return delay;
-          },
-          duration: 1000,
-          easing: "easeOutBack",
-        },
-        plugins: {
-          legend: {
-            position: "top",
-            labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
-          },
-          tooltip: {
-            callbacks: {
-              label(ctx) {
-                const row = filteredPlanVsActual[ctx.dataIndex];
-                if (ctx.datasetIndex === 0) {
-                  return `Planned: ${ctx.parsed.y} qty (${row.partNoDesc})`;
-                } else {
-                  return `Dispatched: ${ctx.parsed.y} qty / ${row.planQty} planned`;
-                }
-              }
-            }
-          },
-          datalabels: {
-            display: true,
-            align: "top",
-            anchor: "end",
-            offset: 4,
-            font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            borderWidth: 1,
-            borderRadius: 4,
-            padding: { top: 2, bottom: 2, left: 4, right: 4 },
-            borderColor: (ctx) => ctx.datasetIndex === 0 ? "rgba(139, 92, 246, 0.4)" : "rgba(16, 185, 129, 0.4)",
-            color: (ctx) => ctx.datasetIndex === 0 ? "#7c3aed" : "#10b981",
-            formatter: (v) => formatQty(v)
-          }
-        },
-        scales: {
-          y: {
-            type: "linear",
-            max: Math.ceil((Math.max(0, ...planned) || 1) * 1.25),
-            grid: { color: "rgba(99, 102, 241, 0.05)" },
-            ticks: {
-              font: { family: 'Plus Jakarta Sans', size: 9 },
-              color: '#312e81'
-            }
-          },
-          x: {
-            grid: { display: false },
-            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
-          }
-        }
-      }
+      projChart.current = chartInstance;
     });
 
-    return () => planChart.current?.destroy();
-  }, [filteredPlanVsActual]);
-
-  useEffect(() => {
-    if (!projRef.current) return;
-    const ctx = projRef.current.getContext("2d");
-
-    const labels = projections.map((row) => row.customer.split(" ")[0]);
-    const dispatchedQty = projections.map((row) => row.dispQty);
-    const pendingQty = projections.map((row) => row.pendQty);
-    const totalAmtLakhs = projections.map((row) => row.totAmt / 100_000);
-    const pendingValLakhs = projections.map((row) => row.pendVal / 100_000);
-
-    const gradDisp = ctx.createLinearGradient(0, 0, 0, 240);
-    gradDisp.addColorStop(0, "rgba(16, 185, 129, 0.85)");
-    gradDisp.addColorStop(1, "rgba(16, 185, 129, 0.15)");
-
-    const gradPend = ctx.createLinearGradient(0, 0, 0, 240);
-    gradPend.addColorStop(0, "rgba(249, 115, 22, 0.85)");
-    gradPend.addColorStop(1, "rgba(249, 115, 22, 0.15)");
-
-    projChart.current?.destroy();
-    projChart.current = new Chart(projRef.current, {
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            type: "bar",
-            label: "Dispatched Qty (Units)",
-            data: dispatchedQty,
-            backgroundColor: gradDisp,
-            borderColor: "rgba(16, 185, 129, 1)",
-            borderWidth: 1.5,
-            borderRadius: 4,
-            yAxisID: "yQty",
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 2,
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1,
-              borderRadius: 4,
-              padding: { top: 2, bottom: 2, left: 4, right: 4 },
-              borderColor: "rgba(16, 185, 129, 0.4)",
-              color: "#10b981",
-              formatter: (v) => formatQty(v)
-            }
-          },
-          {
-            type: "bar",
-            label: "Pending Qty (Units)",
-            data: pendingQty,
-            backgroundColor: gradPend,
-            borderColor: "rgba(249, 115, 22, 1)",
-            borderWidth: 1.5,
-            borderRadius: 4,
-            yAxisID: "yQty",
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 2,
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1,
-              borderRadius: 4,
-              padding: { top: 2, bottom: 2, left: 4, right: 4 },
-              borderColor: "rgba(249, 115, 22, 0.4)",
-              color: "#ea580c",
-              formatter: (v) => formatQty(v)
-            }
-          },
-          {
-            type: "line",
-            label: "Total Order Value (Lakhs)",
-            data: totalAmtLakhs,
-            borderColor: "rgba(79, 70, 229, 1)",
-            borderWidth: 2.5,
-            tension: 0.4,
-            fill: false,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "rgba(79, 70, 229, 1)",
-            pointBorderWidth: 2,
-            yAxisID: "yValue",
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 6,
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-              padding: { top: 2, bottom: 2, left: 5, right: 5 },
-              borderColor: "rgba(79, 70, 229, 0.4)",
-              color: "#4f46e5",
-              formatter: (v) => `₹${v.toFixed(1)}L`
-            }
-          },
-          {
-            type: "line",
-            label: "Pending Value (Lakhs)",
-            data: pendingValLakhs,
-            borderColor: "rgba(239, 68, 68, 1)",
-            borderWidth: 2.5,
-            tension: 0.4,
-            fill: false,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "rgba(239, 68, 68, 1)",
-            pointBorderWidth: 2,
-            yAxisID: "yValue",
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 6,
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-              padding: { top: 2, bottom: 2, left: 5, right: 5 },
-              borderColor: "rgba(239, 68, 68, 0.4)",
-              color: "#ef4444",
-              formatter: (v) => `₹${v.toFixed(1)}L`
-            }
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          delay: (context) => {
-            let delay = 0;
-            if (context.type === 'data' && context.mode === 'default') {
-              delay = context.dataIndex * 100;
-            }
-            return delay;
-          },
-          duration: 1000,
-          easing: "easeOutBack",
-        },
-        plugins: {
-          legend: {
-            position: "top",
-            labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
-          },
-          tooltip: {
-            callbacks: {
-              label(ctx) {
-                const row = projections[ctx.dataIndex];
-                const val = ctx.parsed.y ?? 0;
-                if (ctx.dataset.type === "bar") {
-                  return `${ctx.dataset.label}: ${formatQty(val)} units (Customer: ${row.customer})`;
-                } else {
-                  return `${ctx.dataset.label}: ₹${val.toFixed(2)} Lakhs (Customer: ${row.customer})`;
-                }
-              }
-            }
-          }
-        },
-        scales: {
-          yQty: {
-            type: "linear",
-            position: "left",
-            grid: { color: "rgba(99, 102, 241, 0.05)" },
-            ticks: {
-              font: { family: 'Plus Jakarta Sans', size: 9 },
-              color: '#312e81',
-              callback: (v) => `${v} units`
-            },
-            title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
-          },
-          yValue: {
-            type: "linear",
-            position: "right",
-            grid: { drawOnChartArea: false },
-            ticks: {
-              font: { family: 'Plus Jakarta Sans', size: 9 },
-              color: '#4f46e5',
-              callback: (v) => `₹${v}L`
-            },
-            title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
-          },
-          x: {
-            grid: { display: false },
-            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
-          }
-        }
-      }
-    });
-
-    return () => projChart.current?.destroy();
-  }, [projections]);
+    return () => {
+      cancelReady();
+      chartInstance?.destroy();
+      projChart.current?.destroy();
+    };
+  }, [filteredProjections]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
@@ -2469,6 +2935,9 @@ export default function SalesAnalysis() {
       from: toIsoDate(dateRange.from),
       to: toIsoDate(dateRange.to),
     });
+    if (debouncedSearchQuery) {
+      params.set("search", debouncedSearchQuery);
+    }
     const ctrl = new AbortController();
     const fetchOpts = { credentials: "include", signal: ctrl.signal };
 
@@ -2676,14 +3145,31 @@ export default function SalesAnalysis() {
         }
       });
 
-    Promise.all([p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12]).finally(() => {
+    const p13 = fetch(`${API_BASE}/sales-analysis/avg-rate-cards/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Avg rate cards:", data?.error || r.statusText);
+          setAvgRateData(null);
+          return;
+        }
+        setAvgRateData(data);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Avg rate cards fetch failed:", err);
+          setAvgRateData(null);
+        }
+      });
+
+    Promise.all([p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13]).finally(() => {
       if (!ctrl.signal.aborted) {
         setLoading(false);
       }
     });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to]);
+  }, [dateRange.from, dateRange.to, debouncedSearchQuery]);
 
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
@@ -2693,6 +3179,7 @@ export default function SalesAnalysis() {
       to: toIsoDate(dateRange.to),
     });
     if (invoiceBtype) params.set("btype", invoiceBtype);
+    if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
     const ctrl = new AbortController();
 
     fetch(`${API_BASE}/sales-analysis/invoice-details/?${params}`, {
@@ -2724,7 +3211,7 @@ export default function SalesAnalysis() {
       });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, invoiceBtype]);
+  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
 
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
@@ -3182,7 +3669,7 @@ export default function SalesAnalysis() {
             <div className="sa-card sa-card--chart" style={{ width: "100%" }}>
               <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
                 <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && weeklyTrend?.period ? ` (${weeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
+                  <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && derivedWeeklyTrend?.period ? ` (${derivedWeeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div className="sa-chart-type-toggle">
@@ -3208,8 +3695,8 @@ export default function SalesAnalysis() {
                   <span className="sa-badge sa-badge--blue" style={{ margin: 0 }}>
                     {loading ? (
                       <div className="sa-skeleton" style={{ width: '50px', height: '10px' }} />
-                    ) : weeklyTrend != null ? (
-                      `₹${Number(weeklyTrend.turn_over_lakhs ?? 0).toFixed(2)}L Total`
+                    ) : derivedWeeklyTrend != null ? (
+                      `₹${Number(derivedWeeklyTrend.turn_over_lakhs ?? 0).toFixed(2)}L Total`
                     ) : summary ? (
                       `₹${Number(summary.turn_over_lakhs ?? 0).toFixed(2)}L Total`
                     ) : "—"}
@@ -3499,7 +3986,7 @@ export default function SalesAnalysis() {
                   {loading ? (
                     <div className="sa-skeleton" style={{ width: '40px', height: '10px' }} />
                   ) : (
-                    monthSummary?.period ?? summary?.period ?? "—"
+                    derivedMonthSummary?.period ?? summary?.period ?? "—"
                   )}
                 </span>
               </div>
@@ -3527,8 +4014,8 @@ export default function SalesAnalysis() {
                       ))
                     ) : (
                       (() => {
-                        const maxMonthAmount = Math.max(...(monthSummary?.rows?.map(r => r.amount || 0) || [1])) || 1;
-                        return (monthSummary?.rows?.length ? monthSummary.rows : []).map((row, i) => (
+                        const maxMonthAmount = Math.max(...(derivedMonthSummary?.rows?.map(r => r.amount || 0) || [1])) || 1;
+                        return (derivedMonthSummary?.rows?.length ? derivedMonthSummary.rows : []).map((row, i) => (
                           <tr key={i} className="sa-month-row">
                             <td><strong className="sa-month-lbl">{row.month}</strong></td>
                             <td className="sa-num"><span className="sa-month-invoices">{row.invoices}</span></td>
@@ -3561,7 +4048,7 @@ export default function SalesAnalysis() {
                         ));
                       })()
                     )}
-                    {!loading && !monthSummary?.rows?.length && (
+                    {!loading && !derivedMonthSummary?.rows?.length && (
                       <tr>
                         <td colSpan={5} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
                       </tr>
@@ -3573,15 +4060,15 @@ export default function SalesAnalysis() {
                 <div style={{ padding: '12px 20px' }}>
                   <div className="sa-skeleton" style={{ width: '100%', height: '24px', borderRadius: '4px' }} />
                 </div>
-              ) : monthSummary?.totals ? (
+              ) : derivedMonthSummary?.totals ? (
                 <table className="sa-mini-table sa-mini-table--total">
                   <tbody>
                     <tr className="sa-mini-table__total">
                       <td><strong>Total</strong></td>
-                      <td className="sa-num"><strong>{monthSummary.totals.invoices}</strong></td>
-                      <td className="sa-num"><strong>{formatQty(monthSummary.totals.qty_sold)}</strong></td>
+                      <td className="sa-num"><strong>{derivedMonthSummary.totals.invoices}</strong></td>
+                      <td className="sa-num"><strong>{formatQty(derivedMonthSummary.totals.qty_sold)}</strong></td>
                       <td className="sa-num">
-                        <div className="sa-month-total-amt">{formatRupees(monthSummary.totals.amount)}</div>
+                        <div className="sa-month-total-amt">{formatRupees(derivedMonthSummary.totals.amount)}</div>
                       </td>
                       <td className="sa-num">—</td>
                     </tr>
@@ -3598,7 +4085,7 @@ export default function SalesAnalysis() {
                         <div className="sa-skeleton" style={{ width: '30px', height: '14px' }} />
                       </div>
                     ))
-                  ) : (monthSummary?.invoice_status ?? []).map((group) => (
+                  ) : (derivedMonthSummary?.invoice_status ?? []).map((group) => (
                     <div
                       key={group.key}
                       className={`sa-inv-status__box sa-inv-status__box--group sa-inv-status__box--${group.key}`}
@@ -3617,7 +4104,7 @@ export default function SalesAnalysis() {
                       </div>
                     </div>
                   ))}
-                  {!loading && !monthSummary?.invoice_status?.length && (
+                  {!loading && !derivedMonthSummary?.invoice_status?.length && (
                     <>
                       {["With Material", "Labour Charges", "Export Only"].map((label) => (
                         <div key={label} className="sa-inv-status__box" style={{ background: "#f1f5f9" }}>
@@ -3715,7 +4202,7 @@ export default function SalesAnalysis() {
                 <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
               </span>
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span className="sa-badge sa-badge--purple">6 Active Customers</span>
+                <span className="sa-badge sa-badge--purple">{new Set(filteredProjections.map((r) => r.customer)).size} Active Customers</span>
                 <span className="sa-badge sa-badge--blue" style={{ background: 'rgba(45, 109, 232, 0.08)', color: '#2d6de8', border: '1px solid rgba(45, 109, 232, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Total Amt: ₹{formatRupees(projectionTotals.totAmt)}</span>
                 <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
               </div>
@@ -4001,7 +4488,7 @@ export default function SalesAnalysis() {
                       </tr>
                     ))
                   ) : (
-                    traceability.map((row, i) => (
+                    filteredTraceability.map((row, i) => (
                       <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
                         <td>{i + 1}</td>
                         <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>

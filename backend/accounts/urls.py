@@ -39,12 +39,13 @@ from .views_sales_analysis import (
     sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
     sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
-    sales_analysis_traceability,
+    sales_analysis_traceability, sales_analysis_avg_rate_cards,
 )
 from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
 from .views_production_analysis import (
-    production_analysis_report, production_value_report, production_idle_breakdown, daily_production_details
+    production_analysis_report, production_value_report, production_idle_breakdown, daily_production_details,
+    machine_card_data, production_analysis_filters
 )
 from .views_purchaseanalysis import (
     purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table,
@@ -185,6 +186,7 @@ urlpatterns = [
     path('sales-analysis/plan-vs-actual/', sales_analysis_plan_vs_actual, name='sales_analysis_plan_vs_actual'),
     path('sales-analysis/po-ledger/', sales_analysis_po_ledger, name='sales_analysis_po_ledger'),
     path('sales-analysis/traceability/', sales_analysis_traceability, name='sales_analysis_traceability'),
+    path('sales-analysis/avg-rate-cards/', sales_analysis_avg_rate_cards, name='sales_analysis_avg_rate_cards'),
 
     # ── Idle Time Report ──────────────────────────────────────────────
     path('idle-time-report/', idle_time_report, name='idle_time_report'),
@@ -197,6 +199,8 @@ urlpatterns = [
     path('production-value-report/', production_value_report, name='production_value_report'),
     path('production-idle-breakdown/', production_idle_breakdown, name='production_idle_breakdown'),
     path('production-analysis/daily-details/', daily_production_details, name='daily_production_details'),
+    path('production-analysis/filters/', production_analysis_filters, name='production_analysis_filters'),
+    path('machines/<path:macno>/card/', machine_card_data, name='machine_card_data'),
 
     # ── Purchase Analysis ─────────────────────────────────────────────
     path('purchase-analysis/summary/', purchase_analysis_summary, name='purchase_analysis_summary'),
