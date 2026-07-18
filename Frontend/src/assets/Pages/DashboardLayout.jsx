@@ -3,6 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
 import "./Welcome.css";
+import {
+    MdOutlineTimerOff,
+    MdCheckCircleOutline,
+    MdLogout,
+} from "react-icons/md";
+
+/* ── Idle session constants ───────────────────────────────── */
+const IDLE_TIMEOUT_MS  = 15 * 60 * 1000;  // 15 minutes total
+const IDLE_WARN_MS     = 14 * 60 * 1000;  // show warning after 14 min
+const IDLE_WARN_SECS   = 60;              // countdown seconds shown in modal
+/* ─────────────────────────────────────────────────────────── */
 
 const API = resolveApiBase();
 import Dashboard1 from "./Dashboard1";
@@ -523,6 +534,14 @@ export default function DashboardLayout() {
         try { return sessionStorage.getItem("ba_settings_open") === "1"; }
         catch { return false; }
     });
+
+    /* ── Idle / auto-logout state ────────────────────────── */
+    const [idleWarning, setIdleWarning] = useState(false);  // show warning modal
+    const [countdown, setCountdown] = useState(IDLE_WARN_SECS);
+    const idleTimerRef    = useRef(null);
+    const warnTimerRef    = useRef(null);
+    const countdownRef    = useRef(null);
+    /* ─────────────────────────────────────────────────────── */
     const [erpUnavailable, setErpUnavailable] = useState(() => {
         try {
             const stored = sessionStorage.getItem("ba_erp_unavailable");
@@ -613,6 +632,21 @@ export default function DashboardLayout() {
         }
     }, [planId, allowedMenuItems, activeItem, activeSubItem]);
 
+    /* ── Transaction logging ───────────────────────────────────────────────
+       Logs any report/dashboard accessed by the logged-in user to
+       tenants_usersTransaction table.
+    ─────────────────────────────────────────────────────────────────────── */
+    useEffect(() => {
+        const moduleToLog = activeSubItem || (["Charts", "User Rights", "Settings"].includes(activeItem) ? activeItem : null);
+        if (moduleToLog && isAuthenticated) {
+            const queryParams = new URLSearchParams({ module_name: moduleToLog });
+            fetch(`${API}/log-transaction/?${queryParams.toString()}`, {
+                method: "GET",
+                credentials: "include"
+            }).catch(() => {});
+        }
+    }, [activeSubItem, activeItem, isAuthenticated]);
+
     /* Background heartbeat to check session validity (idle users only — active users are covered by the global 401 interceptor) */
     useEffect(() => {
         const checkSession = () => {
@@ -622,6 +656,88 @@ export default function DashboardLayout() {
         const interval = setInterval(checkSession, 300000); // Check every 5 minutes
         return () => clearInterval(interval);
     }, []);
+
+    /* ── Presence heartbeat ────────────────────────────────────────────────
+       Sends GET /heartbeat/ every 2 minutes to refresh last_seen in the DB.
+       When the tab is closed, heartbeats stop → after 5 min the backend's
+       admin utility query treats the session as stale and excludes it from
+       the "Live Users" count, fixing the ghost-session problem.
+    ─────────────────────────────────────────────────────────────────────── */
+    useEffect(() => {
+        const sendHeartbeat = () => {
+            fetch(`${API}/heartbeat/`, {
+                method: "GET",
+                credentials: "include",
+            }).catch(() => { }); // Non-critical — never show errors to user
+        };
+
+        // Fire immediately so login registers at once (don't wait 2 min)
+        sendHeartbeat();
+
+        // Then repeat every 2 minutes (120 000 ms)
+        const interval = setInterval(sendHeartbeat, 120000);
+
+        // Also refresh on tab focus restore (user switches back to tab)
+        const onVisible = () => {
+            if (document.visibilityState === "visible") sendHeartbeat();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, []);
+
+    /* ── Idle auto-logout — 15-minute inactivity timer ────────────────────
+       Activity events: mousemove, mousedown, keydown, scroll, touchstart
+       • At 14 min  → show warning modal with 60 s countdown
+       • At 15 min  → auto-logout
+       • "Stay Logged In" button calls resetIdleTimer() to clear everything
+    ─────────────────────────────────────────────────────────────────────── */
+    const resetIdleTimer = useCallback(() => {
+        clearTimeout(idleTimerRef.current);
+        clearTimeout(warnTimerRef.current);
+        clearInterval(countdownRef.current);
+
+        // Dismiss the warning if it was showing
+        setIdleWarning(false);
+        setCountdown(IDLE_WARN_SECS);
+
+        // Warn at 14 minutes
+        warnTimerRef.current = setTimeout(() => {
+            setIdleWarning(true);
+            setCountdown(IDLE_WARN_SECS);
+            countdownRef.current = setInterval(() => {
+                setCountdown(prev => {
+                    if (prev <= 1) { clearInterval(countdownRef.current); return 0; }
+                    return prev - 1;
+                });
+            }, 1000);
+        }, IDLE_WARN_MS);
+
+        // Hard logout at 15 minutes
+        idleTimerRef.current = setTimeout(() => {
+            clearInterval(countdownRef.current);
+            handleLogout();
+        }, IDLE_TIMEOUT_MS);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
+        const onActivity = () => {
+            // While warning is showing, ignore activity — user must click "Stay Logged In"
+            if (!idleWarning) resetIdleTimer();
+        };
+        ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }));
+        resetIdleTimer(); // kick off the timer on mount
+        return () => {
+            ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, onActivity));
+            clearTimeout(idleTimerRef.current);
+            clearTimeout(warnTimerRef.current);
+            clearInterval(countdownRef.current);
+        };
+    }, [idleWarning, resetIdleTimer]);
 
     /* responsive resize handler */
     useEffect(() => {
@@ -982,6 +1098,55 @@ export default function DashboardLayout() {
 
             {/* Settings Overlay Modal */}
             <Settings isOpen={settingsOpen} onClose={() => { setSettingsOpen(false); refreshProfile(); }} isExpiredMode={isExpired} />
+
+            {/* ── Idle Session Warning Modal ── */}
+            {idleWarning && (
+                <div className="dl-idle-overlay" role="dialog" aria-modal="true" aria-labelledby="dl-idle-title">
+                    <div className="dl-idle-modal">
+                        {/* Animated ring countdown */}
+                        <div className="dl-idle-ring">
+                            <svg viewBox="0 0 64 64" width="80" height="80">
+                                <circle cx="32" cy="32" r="28" className="dl-idle-ring__track" />
+                                <circle
+                                    cx="32" cy="32" r="28"
+                                    className="dl-idle-ring__fill"
+                                    style={{ strokeDashoffset: `${175.9 - (175.9 * countdown / IDLE_WARN_SECS)}` }}
+                                />
+                            </svg>
+                            <span className="dl-idle-ring__count">{countdown}</span>
+                        </div>
+
+                        <div className="dl-idle-icon">
+                            <MdOutlineTimerOff size={28} />
+                        </div>
+
+                        <h2 className="dl-idle-title" id="dl-idle-title">Session Timeout Warning</h2>
+                        <p className="dl-idle-msg">
+                            You have been inactive for <strong>14 minutes</strong>.<br />
+                            You will be logged out automatically in<br />
+                            <span className="dl-idle-secs">{countdown} second{countdown !== 1 ? "s" : ""}</span>.
+                        </p>
+
+                        <div className="dl-idle-actions">
+                            <button
+                                className="dl-idle-btn dl-idle-btn--stay"
+                                onClick={resetIdleTimer}
+                                autoFocus
+                            >
+                                <MdCheckCircleOutline size={18} />
+                                Stay Logged In
+                            </button>
+                            <button
+                                className="dl-idle-btn dl-idle-btn--logout"
+                                onClick={handleLogout}
+                            >
+                                <MdLogout size={18} />
+                                Logout Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -8,22 +8,22 @@ import { createPortal } from "react-dom";
 import "./SalesAnalysisDatePicker.css";
 
 const PAD  = n => String(n).padStart(2, "0");
-const FMT  = d => d ? `${PAD(d.getDate())}-${PAD(d.getMonth() + 1)}-${d.getFullYear()}` : "";
+const FMT  = d => d ? `${PAD(d.getDate())}/${PAD(d.getMonth() + 1)}/${d.getFullYear()}` : "";
 const MONTHS     = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
 const toInputFmt = d => {
   if (!d) return "";
   const p = n => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}`;
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
 };
 
 const autoFmtDate = (raw, prev) => {
   let digits = raw.replace(/\D/g, "");
   if (digits.length > 8) digits = digits.slice(0, 8);
   let out = digits;
-  if (digits.length > 4) out = digits.slice(0,2) + "-" + digits.slice(2,4) + "-" + digits.slice(4);
-  else if (digits.length > 2) out = digits.slice(0,2) + "-" + digits.slice(2);
+  if (digits.length > 4) out = digits.slice(0,2) + "/" + digits.slice(2,4) + "/" + digits.slice(4);
+  else if (digits.length > 2) out = digits.slice(0,2) + "/" + digits.slice(2);
   return out;
 };
 
@@ -283,7 +283,7 @@ export default function SalesAnalysisDatePicker({ from, to, onChange }) {
                                     <input
                                         className={`sadp-footer__input ${inputErr.includes("From") ? "sadp-footer__input--err" : from ? "sadp-footer__input--set" : ""}`}
                                         type="text"
-                                        placeholder="DD-MM-YYYY"
+                                        placeholder="DD/MM/YYYY"
                                         value={fromInput}
                                         onChange={e => { setFromInput(autoFmtDate(e.target.value, fromInput)); setInputErr(""); }}
                                         onKeyDown={e => e.key === "Enter" && handleApply()}
@@ -298,7 +298,7 @@ export default function SalesAnalysisDatePicker({ from, to, onChange }) {
                                     <input
                                         className={`sadp-footer__input ${inputErr.includes("To") ? "sadp-footer__input--err" : to ? "sadp-footer__input--set" : ""}`}
                                         type="text"
-                                        placeholder="DD-MM-YYYY"
+                                        placeholder="DD/MM/YYYY"
                                         value={toInput}
                                         onChange={e => { setToInput(autoFmtDate(e.target.value, toInput)); setInputErr(""); }}
                                         onKeyDown={e => e.key === "Enter" && handleApply()}

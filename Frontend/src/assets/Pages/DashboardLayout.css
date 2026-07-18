@@ -2084,3 +2084,195 @@
     .cl-header__inner { padding: 22px 22px; }
     .cl-grid { grid-template-columns: 1fr; gap: 12px; }
 }
+
+/* ============================================================
+   IDLE SESSION WARNING MODAL  —  prefix: dl-idle-
+   ============================================================ */
+.dl-idle-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(6, 9, 18, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: dl-idle-fade-in 0.25s ease-out both;
+}
+
+@keyframes dl-idle-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.dl-idle-modal {
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 40px 36px 36px;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(251, 191, 36, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    animation: dl-idle-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.dl-idle-modal::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.5), transparent);
+}
+
+@keyframes dl-idle-slide-up {
+    from { opacity: 0; transform: translateY(28px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+/* ── SVG ring countdown ─── */
+.dl-idle-ring {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 4px;
+}
+
+.dl-idle-ring svg {
+    transform: rotate(-90deg);
+}
+
+.dl-idle-ring__track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.07);
+    stroke-width: 5;
+}
+
+.dl-idle-ring__fill {
+    fill: none;
+    stroke: #f59e0b;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 175.9;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 0.9s linear;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+}
+
+.dl-idle-ring__count {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #f59e0b;
+    letter-spacing: -0.02em;
+}
+
+/* ── Icon ─── */
+.dl-idle-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fbbf24;
+    margin-top: -4px;
+}
+
+/* ── Text ─── */
+.dl-idle-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.dl-idle-msg {
+    font-size: 13.5px;
+    color: #94a3b8;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.dl-idle-secs {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fbbf24;
+}
+
+/* ── Action buttons ─── */
+.dl-idle-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-top: 6px;
+}
+
+.dl-idle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    transition: all 0.22s ease;
+    font-family: inherit;
+}
+
+.dl-idle-btn--stay {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+}
+
+.dl-idle-btn--stay:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
+}
+
+.dl-idle-btn--stay:active {
+    transform: translateY(0);
+}
+
+.dl-idle-btn--logout {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+.dl-idle-btn--logout:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+@media (max-width: 480px) {
+    .dl-idle-modal { padding: 30px 22px 26px; }
+}

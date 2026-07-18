@@ -136,35 +136,14 @@ function formatInvDate(iso) {
   if (!iso) return "—";
   const parts = String(iso).slice(0, 10).split("-");
   if (parts.length !== 3) return iso;
-  return `${parts[1]}/${parts[2]}/${parts[0]}`; // MM/DD/YYYY
+  return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
 }
 
-function formatToMmDdYyyy(dateStr) {
+function formatToDdMmYyyy(dateStr) {
   if (!dateStr || dateStr === "—" || dateStr === "-") return dateStr;
   const s = String(dateStr).trim();
-
-  // Case 1: Parentheses with slash date, e.g. "INV-260192 (15/06/2026)"
-  if (s.includes("(")) {
-    return s.replace(/\((\d{2})\/(\d{2})\/(\d{4})\)/, "($2/$1/$3)");
-  }
-
-  // Case 2: ISO Date, e.g. "2026-05-10"
-  if (s.includes("-")) {
-    const parts = s.slice(0, 10).split("-");
-    if (parts.length === 3) {
-      return `${parts[1]}/${parts[2]}/${parts[0]}`;
-    }
-  }
-
-  // Case 3: DD/MM/YYYY slash date, e.g. "12/06/2026"
-  if (s.includes("/")) {
-    const parts = s.split("/");
-    if (parts.length === 3) {
-      return `${parts[1]}/${parts[0]}/${parts[2]}`;
-    }
-  }
-
-  return dateStr;
+  // Convert any YYYY-MM-DD format to DD/MM/YYYY
+  return s.replace(/(\d{4})-(\d{2})-(\d{2})/g, "$3/$2/$1");
 }
 
 const KPI_CARD_META = [
@@ -716,8 +695,15 @@ const MOCK_PLAN_VS_ACTUAL = [
   }
 ];
 
+function getTodayMonthRange() {
+  const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  return { from: startOfMonth, to: endOfMonth };
+}
+
 export default function SalesAnalysis() {
-  const _dflt = { from: new Date(2026, 0, 1), to: new Date(2026, 1, 28) };
+  const _dflt = getTodayMonthRange();
   const _saved = readFilterSession("ba_filter_sales", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
   const [filters, setFilters] = useState({
@@ -881,12 +867,32 @@ export default function SalesAnalysis() {
     return sorted;
   }, [filteredPoLedger, poSortField, poSortAsc]);
 
-  const poPageSize = 5;
+  const poPageSize = 12;
   const totalPoPages = Math.ceil(sortedPoLedger.length / poPageSize) || 1;
   const paginatedPoLedger = useMemo(() => {
     const start = (poPage - 1) * poPageSize;
     return sortedPoLedger.slice(start, start + poPageSize);
   }, [sortedPoLedger, poPage]);
+
+  const getPageNumbers = useMemo(() => {
+    const pages = [];
+    const delta = 1;
+    for (let i = 1; i <= totalPoPages; i++) {
+      if (
+        i === 1 ||
+        i === totalPoPages ||
+        (i >= poPage - delta && i <= poPage + delta)
+      ) {
+        pages.push(i);
+      } else if (
+        (i === 2 && poPage - delta > 2) ||
+        (i === totalPoPages - 1 && poPage + delta < totalPoPages - 1)
+      ) {
+        pages.push("...");
+      }
+    }
+    return pages.filter((item, index, self) => self.indexOf(item) === index);
+  }, [totalPoPages, poPage]);
 
   useEffect(() => {
     if (poPage > totalPoPages) {
@@ -916,7 +922,7 @@ export default function SalesAnalysis() {
       row.type,
       row.apoNo,
       row.poNo,
-      formatToMmDdYyyy(row.poDate),
+      formatToDdMmYyyy(row.poDate),
       row.custName,
       row.partDesc,
       row.poSlNo || "—",
@@ -925,12 +931,12 @@ export default function SalesAnalysis() {
       row.rate,
       row.value,
       row.dcNo,
-      formatToMmDdYyyy(row.dcDate),
+      formatToDdMmYyyy(row.dcDate),
       row.dcQty,
       row.pendingQty,
       row.pendingValue,
       row.ageDays,
-      formatToMmDdYyyy(row.invNoDt)
+      formatToDdMmYyyy(row.invNoDt)
     ]);
 
     const csvContent = [
@@ -1673,7 +1679,7 @@ export default function SalesAnalysis() {
   const projRef = useRef(null);
   const projChart = useRef(null);
 
-  const CHART_FONT = "'Segoe UI', system-ui, sans-serif";
+  const CHART_FONT = "'Plus Jakarta Sans', system-ui, sans-serif";
 
   // ✅ Persist date range to sessionStorage on every change
   useEffect(() => {
@@ -3215,7 +3221,7 @@ export default function SalesAnalysis() {
 
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
-    setDateRange({ from: new Date(2026, 0, 1), to: new Date(2026, 1, 28) });
+    setDateRange(getTodayMonthRange());
     setSearchQuery("");
     setInvoiceBtype("");
     setSelectedCustomers([]);
@@ -4409,7 +4415,7 @@ export default function SalesAnalysis() {
                       return (
                         <tr key={i} className="sa-po-row" style={{ "--ri": i }}>
                           <td>{i + 1}</td>
-                          <td className="sa-date">{formatToMmDdYyyy(row.date)}</td>
+                          <td className="sa-date">{formatToDdMmYyyy(row.date)}</td>
                           <td><span className="sa-po-cust-name" title={row.customer}>{row.customer}</span></td>
                           <td><span className="sa-po-part-desc" title={row.partNoDesc}>{row.partNoDesc}</span></td>
                           <td className="sa-num">{formatQty(row.planQty)}</td>
@@ -4493,9 +4499,9 @@ export default function SalesAnalysis() {
                         <td>{i + 1}</td>
                         <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
                         <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
-                        <td className="sa-date">{formatToMmDdYyyy(row.invDate)}</td>
+                        <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
                         <td>{row.dcNo}</td>
-                        <td className="sa-date">{formatToMmDdYyyy(row.dcDate)}</td>
+                        <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
                         <td><span className="sa-trace-po">{row.grnPo}</span></td>
                         <td><span className="sa-trace-code">{row.rcNo}</span></td>
                       </tr>
@@ -4652,7 +4658,7 @@ export default function SalesAnalysis() {
                           </td>
                           <td><span className="sa-po-apo-code">{row.apoNo}</span></td>
                           <td><strong className="sa-po-code">{row.poNo}</strong></td>
-                          <td className="sa-date">{formatToMmDdYyyy(row.poDate)}</td>
+                          <td className="sa-date">{formatToDdMmYyyy(row.poDate)}</td>
                           <td><span className="sa-po-cust-name" title={row.custName}>{row.custName}</span></td>
                           <td><span className="sa-po-part-desc" title={row.partDesc}>{row.partDesc}</span></td>
                           <td><span className="sa-po-sl-no" style={{ fontWeight: '600', color: '#475569' }}>{row.poSlNo || "—"}</span></td>
@@ -4667,7 +4673,7 @@ export default function SalesAnalysis() {
                               <strong className="sa-po-dc-code">{row.dcNo}</strong>
                             )}
                           </td>
-                          <td className="sa-date">{formatToMmDdYyyy(row.dcDate)}</td>
+                          <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
                           <td className="sa-num">{formatQty(row.dcQty)}</td>
                           <td className="sa-num">
                             {row.pendingQty === 0 ? (
@@ -4698,7 +4704,7 @@ export default function SalesAnalysis() {
                             {row.invNoDt === "—" ? (
                               <span className="sa-dash-gray">—</span>
                             ) : (
-                              <span className="sa-po-inv-details">{formatToMmDdYyyy(row.invNoDt)}</span>
+                              <span className="sa-po-inv-details">{formatToDdMmYyyy(row.invNoDt)}</span>
                             )}
                           </td>
                         </tr>
@@ -4726,15 +4732,24 @@ export default function SalesAnalysis() {
                   ◀ Previous
                 </button>
                 <div className="sa-pagination-pages">
-                  {[...Array(totalPoPages)].map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setPoPage(idx + 1)}
-                      className={`sa-pagination-page-btn ${poPage === idx + 1 ? 'active' : ''}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
+                  {getPageNumbers.map((item, idx) => {
+                    if (item === "...") {
+                      return (
+                        <span key={`ellipsis-${idx}`} className="sa-pagination-ellipsis">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={item}
+                        onClick={() => setPoPage(item)}
+                        className={`sa-pagination-page-btn ${poPage === item ? 'active' : ''}`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
                 </div>
                 <button
                   onClick={() => setPoPage(p => Math.min(totalPoPages, p + 1))}

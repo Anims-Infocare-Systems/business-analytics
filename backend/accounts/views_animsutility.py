@@ -98,8 +98,55 @@ def admin_utility_clients(request):
                         days_left = (end_dt - date.today()).days
 
                 # 1. Active users count & live details
+                #    Only count sessions with a recent heartbeat (last_seen within 5 minutes).
+                #    Sessions without last_seen (pre-migration rows) are treated as stale.
+                #    Also purge stale rows so the table stays clean over time.
+                # First, find stale sessions and log them as timed out in activity feed
                 cursor.execute(
-                    "SELECT username, system_name FROM tenants_userssession WHERE company_code = %s",
+                    """
+                    SELECT tenant_id, company_code, username
+                    FROM tenants_userssession
+                    WHERE company_code = %s
+                      AND (last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE()))
+                    """,
+                    [company_code]
+                )
+                stale_sessions = cursor.fetchall()
+                for t_id, c_code, u_name in stale_sessions:
+                    try:
+                        cursor.execute(
+                            """
+                            INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+                            VALUES (%s, %s, 'disconnect', %s, 'session timed out', GETUTCDATE())
+                            """,
+                            [t_id, c_code, u_name]
+                        )
+                        # Log to tenants_usersTransaction
+                        cursor.execute(
+                            """
+                            INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                            VALUES (%s, %s, %s, 'Session Timeout', GETUTCDATE())
+                            """,
+                            [t_id, c_code, u_name]
+                        )
+                    except Exception:
+                        pass
+
+                cursor.execute(
+                    """
+                    DELETE FROM tenants_userssession
+                    WHERE company_code = %s
+                      AND (last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE()))
+                    """,
+                    [company_code]
+                )
+                cursor.execute(
+                    """
+                    SELECT username, system_name
+                    FROM tenants_userssession
+                    WHERE company_code = %s
+                      AND last_seen >= DATEADD(MINUTE, -5, GETUTCDATE())
+                    """,
                     [company_code]
                 )
                 active_sessions = cursor.fetchall()

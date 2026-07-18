@@ -557,3 +557,101 @@ def admin_delete_tenant_user(request, user_id):
         return Response({"success": True, "message": "User deleted successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_user_transactions(request):
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+    company_code = request.GET.get("company_code", "all")
+    username = request.GET.get("username", "all")
+    module_name = request.GET.get("module_name", "all")
+    report_type = request.GET.get("report_type", "date_wise")
+
+    params = []
+    where_clauses = []
+
+    if from_date:
+        where_clauses.append("ut.created_at >= %s")
+        params.append(f"{from_date} 00:00:00")
+    if to_date:
+        where_clauses.append("ut.created_at <= %s")
+        params.append(f"{to_date} 23:59:59")
+    if company_code and company_code != "all":
+        where_clauses.append("ut.company_code = %s")
+        params.append(company_code)
+    if username and username != "all":
+        where_clauses.append("ut.username = %s")
+        params.append(username)
+    if module_name and module_name != "all":
+        where_clauses.append("ut.module_name = %s")
+        params.append(module_name)
+
+    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    # Ordering based on report type
+    if report_type == "user_wise":
+        order_sql = "ORDER BY ut.username ASC, ut.created_at DESC"
+    else:
+        order_sql = "ORDER BY ut.created_at DESC"
+
+    query = f"""
+        SELECT 
+            ut.id, 
+            ut.created_at, 
+            ut.username, 
+            ut.module_name, 
+            ut.company_code,
+            t.company_name,
+            t.erp_database
+        FROM tenants_usersTransaction ut
+        LEFT JOIN tenants t ON ut.company_code = t.company_code
+        {where_sql}
+        {order_sql}
+    """
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            transactions = []
+            for r in rows:
+                tx_id, created_at, uname, mname, ccode, cname, dbname = r
+                iso_time = (created_at.isoformat() + "Z") if created_at else ""
+                transactions.append({
+                    "id": tx_id,
+                    "timestamp": iso_time,
+                    "username": uname,
+                    "module_name": mname,
+                    "company_code": ccode,
+                    "company_name": cname or ccode,
+                    "erp_database": dbname or "—"
+                })
+
+            # Also fetch all distinct company codes & usernames for filters
+            cursor.execute("SELECT DISTINCT company_code, company_name FROM tenants ORDER BY company_name")
+            companies = [{"company_code": row[0], "company_name": row[1]} for row in cursor.fetchall()]
+
+            cursor.execute("SELECT DISTINCT username FROM tenants_usersTransaction ORDER BY username")
+            usernames = [row[0] for row in cursor.fetchall()]
+
+            cursor.execute("SELECT DISTINCT module_name FROM tenants_usersTransaction ORDER BY module_name")
+            modules = [row[0] for row in cursor.fetchall()]
+
+            return Response({
+                "success": True,
+                "transactions": transactions,
+                "companies": companies,
+                "usernames": usernames,
+                "modules": modules
+            })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+

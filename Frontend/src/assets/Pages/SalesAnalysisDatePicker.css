@@ -24,7 +24,7 @@
     --sadp-radius:     12px;
     --sadp-tr:         .22s cubic-bezier(.23,1,.32,1);
 
-    font-family: 'Segoe UI', 'Nunito', -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     font-size: 13px;
     color: var(--sadp-text);
 }

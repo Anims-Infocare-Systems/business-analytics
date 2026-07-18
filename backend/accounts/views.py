@@ -400,14 +400,14 @@ def login_view(request):
                 if old_session_key and old_session_key != new_session_key:
                     Session.objects.filter(session_key=old_session_key).delete()
                 cursor.execute(
-                    "UPDATE tenants_userssession SET session_key = %s, system_name = %s, created_at = GETDATE() WHERE company_code = %s AND username = %s",
+                    "UPDATE tenants_userssession SET session_key = %s, system_name = %s, last_seen = GETUTCDATE(), created_at = GETUTCDATE() WHERE company_code = %s AND username = %s",
                     [new_session_key, system_name, company_code, username]
                 )
             else:
                 cursor.execute(
                     """
-                    INSERT INTO tenants_userssession (tenant_id, company_code, username, session_key, system_name, created_at)
-                    VALUES (%s, %s, %s, %s, %s, GETDATE())
+                    INSERT INTO tenants_userssession (tenant_id, company_code, username, session_key, system_name, last_seen, created_at)
+                    VALUES (%s, %s, %s, %s, %s, GETUTCDATE(), GETUTCDATE())
                     """,
                     [tenant.id, company_code, username, new_session_key, system_name]
                 )
@@ -416,7 +416,15 @@ def login_view(request):
             cursor.execute(
                 """
                 INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
-                VALUES (%s, %s, 'login', %s, 'logged in', GETDATE())
+                VALUES (%s, %s, 'login', %s, 'logged in', GETUTCDATE())
+                """,
+                [tenant.id, company_code, username]
+            )
+            # Log to tenants_usersTransaction
+            cursor.execute(
+                """
+                INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                VALUES (%s, %s, %s, 'Login', GETUTCDATE())
                 """,
                 [tenant.id, company_code, username]
             )
@@ -459,10 +467,94 @@ def logout_view(request):
                         "DELETE FROM tenants_userssession WHERE company_code = %s AND username = %s",
                         [company_code, username]
                     )
+                    # Log disconnect activity to tenants_clientactivity
+                    cursor.execute(
+                        """
+                        INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+                        VALUES (%s, %s, 'disconnect', %s, 'logged out', GETUTCDATE())
+                        """,
+                        [tenant.get("tenant_id"), company_code, username]
+                    )
+                    # Log to tenants_usersTransaction
+                    cursor.execute(
+                        """
+                        INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                        VALUES (%s, %s, %s, 'Logout', GETUTCDATE())
+                        """,
+                        [tenant.get("tenant_id"), company_code, username]
+                    )
             except Exception:
                 pass
     request.session.flush()
     return Response({"message": "Logout successful"}, status=200)
+
+
+# ─────────────────────────────────────────────────────────────
+#  HEARTBEAT  — keeps session alive while tab is open
+#  Called by frontend every 2 minutes via GET /heartbeat/
+#  If tab is closed, heartbeats stop → last_seen goes stale
+#  → admin utility query filters out sessions > 5 min old
+# ─────────────────────────────────────────────────────────────
+@api_view(['GET'])
+def heartbeat_view(request):
+    from django.db import connection
+    tenant = request.session.get("tenant")
+    print(f"DEBUG: Heartbeat tick received. Tenant session: {tenant}", flush=True)
+    if not tenant:
+        print("DEBUG: Heartbeat failed - no session.", flush=True)
+        return Response({"ok": False, "reason": "no_session"}, status=200)
+    company_code = tenant.get("company_code")
+    username = tenant.get("username")
+    print(f"DEBUG: Heartbeat updating last_seen for {company_code} - {username}", flush=True)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE tenants_userssession SET last_seen = GETUTCDATE() WHERE company_code = %s AND username = %s",
+                [company_code, username]
+            )
+            rows_updated = cursor.rowcount
+            print(f"DEBUG: Heartbeat database update complete. Rows updated: {rows_updated}", flush=True)
+    except Exception as e:
+        print(f"DEBUG: Heartbeat database update failed with error: {str(e)}", flush=True)
+        pass
+    return Response({"ok": True}, status=200)
+
+
+# ─────────────────────────────────────────────────────────────
+#  LOG USER TRANSACTION
+#  Called by frontend to record user report/dashboard access
+# ─────────────────────────────────────────────────────────────
+@api_view(['GET'])
+def log_transaction(request):
+    from django.db import connection
+    tenant = request.session.get("tenant")
+    print(f"DEBUG: log_transaction received. Tenant session: {tenant}", flush=True)
+    if not tenant:
+        print("DEBUG: log_transaction failed - no session.", flush=True)
+        return Response({"error": "Unauthorized"}, status=401)
+    company_code = tenant.get("company_code")
+    username = tenant.get("username")
+    tenant_id = tenant.get("tenant_id")
+    module_name = request.GET.get("module_name")
+    
+    print(f"DEBUG: log_transaction logging {module_name} for {company_code} - {username}", flush=True)
+    if not module_name:
+        return Response({"error": "module_name is required"}, status=400)
+        
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                VALUES (%s, %s, %s, %s, GETUTCDATE())
+                """,
+                [tenant_id, company_code, username, module_name]
+            )
+            print("DEBUG: log_transaction database insert successful.", flush=True)
+        return Response({"success": True}, status=200)
+    except Exception as e:
+        print(f"DEBUG: log_transaction database insert failed: {str(e)}", flush=True)
+        return Response({"error": f"Failed to log transaction: {str(e)}"}, status=500)
 
 
 # ─────────────────────────────────────────────────────────────

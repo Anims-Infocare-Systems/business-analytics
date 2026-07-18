@@ -17,12 +17,15 @@
 }
 
 .ap-root {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, var(--ap-bg-dark) 70%);
   color: var(--ap-text-main);
   font-family: 'Outfit', 'Inter', sans-serif;
-  overflow-x: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Background Glowing Orbs */
@@ -57,8 +60,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  flex: 1;
+  height: 100%;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .ap-login-card {
@@ -259,6 +264,10 @@
   margin: 0 auto;
   position: relative;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 /* Stats Counter Grid */
@@ -335,6 +344,11 @@
   padding: 30px;
   backdrop-filter: blur(12px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ap-table-header {
@@ -366,30 +380,123 @@
   min-width: 250px;
 }
 
-.ap-filter-select {
-  background: rgba(17, 24, 39, 0.6);
+/* Reusable Custom Select Dropdown inside Admin Panel */
+.ap-custom-select-container {
+  position: relative;
+  width: 170px;
+  z-index: 50; /* Ensure it stays in front of table rows! */
+}
+
+.ap-custom-select-trigger {
+  width: 100%;
+  height: 38px;
+  background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--ap-card-border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: #fff;
-  padding: 10px 16px;
+  padding: 0 16px;
   font-size: 13px;
-  outline: none;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   cursor: pointer;
-  transition: all 0.3s ease;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
 }
 
-.ap-filter-select:focus {
+.ap-custom-select-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ap-custom-select-trigger--open {
   border-color: var(--ap-accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-.ap-filter-select option {
-  background: #111827;
+.ap-custom-select-arrow {
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  transition: transform 0.25s ease;
+}
+
+.ap-custom-select-trigger--open .ap-custom-select-arrow {
+  transform: rotate(180deg);
+  color: var(--ap-accent-primary);
+}
+
+/* Options dropdown popover */
+.ap-custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  box-sizing: border-box;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: ap-select-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top center;
+}
+
+@keyframes ap-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ap-custom-select-option {
+  width: 100%;
+  height: 34px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  outline: none;
+}
+
+.ap-custom-select-option:hover {
+  background: rgba(255, 255, 255, 0.05);
   color: #fff;
+}
+
+.ap-custom-select-option--selected {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6 !important;
+  font-weight: 600;
+}
+
+.ap-custom-select-option-check {
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
 }
 
 /* Data Table Styles */
 .ap-table-wrapper {
-  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -402,7 +509,7 @@
 }
 
 .ap-th {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(17, 24, 39, 0.92);
   color: var(--ap-text-muted);
   font-weight: 600;
   padding: 16px 20px;
@@ -410,6 +517,10 @@
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.05em;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(8px);
 }
 
 .ap-tr {
@@ -842,7 +953,9 @@ input:checked + .ap-slider:before {
  * ───────────────────────────────────────────────────────────── */
 .ap-dashboard-layout {
   display: flex;
-  min-height: 100vh;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
   width: 100%;
 }
 
@@ -986,6 +1099,9 @@ input:checked + .ap-slider:before {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .ap-main-utility {
@@ -1270,5 +1386,173 @@ input:checked + .ap-slider:before {
   .ap-toast {
     padding: 14px 38px 14px 16px;
   }
+}
+
+/* Custom Single Date Picker styling inside modal */
+.ap-custom-datepicker-container {
+  position: relative;
+  width: 100%;
+}
+
+.ap-custom-datepicker-trigger {
+  width: 100%;
+  height: 42px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #fff;
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.ap-custom-datepicker-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ap-custom-datepicker-trigger--open {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.ap-datepicker-trigger-text {
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.ap-datepicker-trigger-icon {
+  color: #64748b;
+  display: flex;
+  align-items: center;
+}
+
+.ap-custom-datepicker-trigger--open .ap-datepicker-trigger-icon {
+  color: #3b82f6;
+}
+
+/* Dropdown Calendar */
+.ap-custom-datepicker-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 290px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 1050; /* Needs to be very high to overlay modal content! */
+  padding: 12px;
+  box-sizing: border-box;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: ap-datepicker-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top center;
+}
+
+@keyframes ap-datepicker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ap-datepicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ap-datepicker-month-year {
+  font-weight: 700;
+  color: #fff;
+  font-size: 13px;
+}
+
+.ap-datepicker-nav-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ap-datepicker-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.ap-datepicker-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.ap-datepicker-weekday {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 20px;
+}
+
+.ap-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.ap-datepicker-day {
+  height: 30px;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+
+.ap-datepicker-day:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.ap-datepicker-day--disabled {
+  opacity: 0.15;
+  cursor: default;
+  pointer-events: none;
+}
+
+.ap-datepicker-day--selected {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  color: #fff !important;
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(59, 130, 246, 0.4);
 }
 

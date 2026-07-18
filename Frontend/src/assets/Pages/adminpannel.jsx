@@ -1,13 +1,258 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { resolveApiBase } from "../../apiBase";
 import { adminFetch, setAdminToken } from "../../adminAuth";
 import "./adminpannel.css";
 import AnimsUtility from "./AnimsUtility";
+import UserTransactionReport from "./UserTransactionReport";
+
 
 const API = resolveApiBase();
 const ADMIN_AUTH_CODE = "admin_auth_required";
+
+function CustomSingleDatePicker({ value, onChange }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    const parsedDate = value ? new Date(value) : null;
+    const initialViewDate = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate : new Date();
+    
+    const [viewMonth, setViewMonth] = useState(initialViewDate.getMonth());
+    const [viewYear, setViewYear] = useState(initialViewDate.getFullYear());
+
+    const getFormattedDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDisplay = (val) => {
+        if (!val) return "Select End Date";
+        const parts = val.split("-");
+        if (parts.length === 3) {
+            return `${parts[1]}/${parts[2]}/${parts[0]}`; // MM/DD/YYYY
+        }
+        return val;
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        if (isOpen) {
+            const d = value ? new Date(value) : new Date();
+            if (!isNaN(d.getTime())) {
+                setViewMonth(d.getMonth());
+                setViewYear(d.getFullYear());
+            }
+        }
+    }, [isOpen, value]);
+
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
+
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    const handlePrevMonth = () => {
+        if (viewMonth === 0) {
+            setViewMonth(11);
+            setViewYear(viewYear - 1);
+        } else {
+            setViewMonth(viewMonth - 1);
+        }
+    };
+
+    const handleNextMonth = () => {
+        if (viewMonth === 11) {
+            setViewMonth(0);
+            setViewYear(viewYear + 1);
+        } else {
+            setViewMonth(viewMonth + 1);
+        }
+    };
+
+    const handleDayClick = (dayNum) => {
+        const selected = new Date(viewYear, viewMonth, dayNum);
+        onChange(getFormattedDate(selected));
+        setIsOpen(false);
+    };
+
+    const calendarCells = [];
+    const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+        calendarCells.push({
+            dayNum: prevMonthDays - i,
+            isCurrentMonth: false,
+            key: `prev-${prevMonthDays - i}`
+        });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+        calendarCells.push({
+            dayNum: i,
+            isCurrentMonth: true,
+            key: `curr-${i}`
+        });
+    }
+    const totalCells = 42;
+    const nextMonthPadding = totalCells - calendarCells.length;
+    for (let i = 1; i <= nextMonthPadding; i++) {
+        calendarCells.push({
+            dayNum: i,
+            isCurrentMonth: false,
+            key: `next-${i}`
+        });
+    }
+
+    return (
+        <div className="ap-custom-datepicker-container" ref={containerRef}>
+            <button 
+                type="button"
+                className={`ap-custom-datepicker-trigger ${isOpen ? "ap-custom-datepicker-trigger--open" : ""}`}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className="ap-datepicker-trigger-text">{formatDisplay(value)}</span>
+                <span className="ap-datepicker-trigger-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="ap-custom-datepicker-dropdown">
+                    <div className="ap-datepicker-header">
+                        <button type="button" className="ap-datepicker-nav-btn" onClick={handlePrevMonth}>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="15 18 9 12 15 6" />
+                            </svg>
+                        </button>
+                        <span className="ap-datepicker-month-year">
+                            {monthNames[viewMonth]} {viewYear}
+                        </span>
+                        <button type="button" className="ap-datepicker-nav-btn" onClick={handleNextMonth}>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="ap-datepicker-weekdays">
+                        {dayNames.map(day => (
+                            <span key={day} className="ap-datepicker-weekday">{day}</span>
+                        ))}
+                    </div>
+
+                    <div className="ap-datepicker-grid">
+                        {calendarCells.map(cell => {
+                            if (!cell.isCurrentMonth) {
+                                return (
+                                    <span key={cell.key} className="ap-datepicker-day ap-datepicker-day--disabled">
+                                        {cell.dayNum}
+                                    </span>
+                                );
+                            }
+
+                            const cellDateObj = new Date(viewYear, viewMonth, cell.dayNum);
+                            const cellStr = getFormattedDate(cellDateObj);
+                            const isSelected = value === cellStr;
+
+                            return (
+                                <button
+                                    type="button"
+                                    key={cell.key}
+                                    className={`ap-datepicker-day ${isSelected ? "ap-datepicker-day--selected" : ""}`}
+                                    onClick={() => handleDayClick(cell.dayNum)}
+                                >
+                                    <span>{cell.dayNum}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CustomDropdown({ value, onChange, options, placeholder }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    const selectedOption = options.find(opt => opt.value === value) || { label: placeholder || "Select...", value };
+
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
+    const handleSelectOption = (optValue) => {
+        onChange({ target: { value: optValue } });
+        setIsOpen(false);
+    };
+
+    return (
+        <div className="ap-custom-select-container" ref={dropdownRef}>
+            <button 
+                type="button"
+                className={`ap-custom-select-trigger ${isOpen ? "ap-custom-select-trigger--open" : ""}`}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span>{selectedOption.label}</span>
+                <span className="ap-custom-select-arrow">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="ap-custom-select-dropdown">
+                    {options.map((opt) => {
+                        const isSelected = opt.value === value;
+                        return (
+                            <button
+                                type="button"
+                                key={opt.value}
+                                className={`ap-custom-select-option ${isSelected ? "ap-custom-select-option--selected" : ""}`}
+                                onClick={() => handleSelectOption(opt.value)}
+                            >
+                                <span className="ap-custom-select-option-text">{opt.label}</span>
+                                {isSelected && (
+                                    <span className="ap-custom-select-option-check">
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3">
+                                            <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
 
 const IconToastSuccess = () => (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -759,6 +1004,19 @@ export default function AdminPanel() {
                                 </svg>
                                 <span className="ap-sidebar-text">Anims Utility</span>
                             </button>
+
+                            <button 
+                                className={`ap-sidebar-item ${activeTab === "user_transaction_report" ? "ap-sidebar-item--active" : ""}`}
+                                onClick={() => setActiveTab("user_transaction_report")}
+                            >
+                                <svg className="ap-sidebar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                    <line x1="9" y1="9" x2="15" y2="9" />
+                                    <line x1="9" y1="13" x2="15" y2="13" />
+                                    <line x1="9" y1="17" x2="13" y2="17" />
+                                </svg>
+                                <span className="ap-sidebar-text">User Transaction Report</span>
+                            </button>
                         </div>
 
                         <div className="ap-sidebar-footer">
@@ -828,25 +1086,27 @@ export default function AdminPanel() {
                                                 onChange={e => setSearchQuery(e.target.value)}
                                             />
                                         </div>
-                                        <select 
-                                            className="ap-filter-select"
+                                        <CustomDropdown
                                             value={statusFilter}
                                             onChange={e => setStatusFilter(e.target.value)}
-                                        >
-                                            <option value="all">All Statuses</option>
-                                            <option value="active">Active Tiers</option>
-                                            <option value="inactive">Blocked / Inactive</option>
-                                        </select>
-                                        <select 
-                                            className="ap-filter-select"
+                                            options={[
+                                                { label: "All Statuses", value: "all" },
+                                                { label: "Active Tiers", value: "active" },
+                                                { label: "Blocked / Inactive", value: "inactive" }
+                                            ]}
+                                            placeholder="All Statuses"
+                                        />
+                                        <CustomDropdown
                                             value={planFilter}
                                             onChange={e => setPlanFilter(e.target.value)}
-                                        >
-                                            <option value="all">All Plans</option>
-                                            <option value="free">Free Tiers</option>
-                                            <option value="pro">Pro Tiers</option>
-                                            <option value="max">Max Tiers</option>
-                                        </select>
+                                            options={[
+                                                { label: "All Plans", value: "all" },
+                                                { label: "Free Tiers", value: "free" },
+                                                { label: "Pro Tiers", value: "pro" },
+                                                { label: "Max Tiers", value: "max" }
+                                            ]}
+                                            placeholder="All Plans"
+                                        />
                                         <button className="ap-icon-btn" onClick={fetchTenants} title="Refresh Table data">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
@@ -950,9 +1210,13 @@ export default function AdminPanel() {
                                     )}
                                 </div>
                             </main>
-                        ) : (
+                        ) : activeTab === "anims_utility" ? (
                             <main className="ap-main-utility">
                                 <AnimsUtility onAuthLost={handleAdminSessionLost} />
+                            </main>
+                        ) : (
+                            <main className="ap-main-utility">
+                                <UserTransactionReport onAuthLost={handleAdminSessionLost} />
                             </main>
                         )}
                     </div>
@@ -1206,11 +1470,9 @@ export default function AdminPanel() {
 
                                             <div className="ap-field">
                                                 <label className="ap-label">End Date (Override)</label>
-                                                <input 
-                                                    type="date" 
-                                                    className="ap-input" 
+                                                <CustomSingleDatePicker 
                                                     value={endDate}
-                                                    onChange={e => setEndDate(e.target.value)}
+                                                    onChange={setEndDate}
                                                 />
                                             </div>
 
@@ -1456,11 +1718,9 @@ export default function AdminPanel() {
 
                                             <div className="ap-field">
                                                 <label className="ap-label">End Date</label>
-                                                <input 
-                                                    type="date" 
-                                                    className="ap-input" 
+                                                <CustomSingleDatePicker 
                                                     value={endDate}
-                                                    onChange={e => setEndDate(e.target.value)}
+                                                    onChange={setEndDate}
                                                 />
                                             </div>
 

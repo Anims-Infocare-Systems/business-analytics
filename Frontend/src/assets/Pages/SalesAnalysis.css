@@ -72,7 +72,7 @@
    ROOT
 ────────────────────────────────────────── */
 .sa-root {
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   color: #1a2a5e;
   padding-bottom: 2.5rem;
 }
@@ -700,6 +700,11 @@
 
 .sa-mini-table--total {
   border-top: 1px solid rgba(45, 109, 232, .08);
+}
+
+.sa-mini-table .sa-num {
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .sa-num {
@@ -2745,6 +2750,18 @@
   border-color: #2d6de8;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(45, 109, 232, 0.25);
+}
+
+.sa-pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #94a3b8;
+  user-select: none;
 }
 
 /* ── Month-wise Sales Summary Card Premium Styling ── */

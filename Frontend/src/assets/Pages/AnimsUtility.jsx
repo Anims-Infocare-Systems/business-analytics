@@ -242,12 +242,19 @@ export default function AnimsUtility({ onAuthLost }) {
     const [lastRefresh, setLastRefresh] = useState(new Date());
 
     useEffect(() => {
-        fetchData();
+        fetchData({ silent: false });
+        // Set up periodic automatic polling every 15 seconds to sync live activity/users silently
+        const interval = setInterval(() => {
+            fetchData({ silent: true });
+        }, 15000);
+        return () => clearInterval(interval);
     }, []);
 
-    const fetchData = async () => {
-        setLoading(true);
-        setErrorMsg("");
+    const fetchData = async ({ silent = false } = {}) => {
+        if (!silent) {
+            setLoading(true);
+            setErrorMsg("");
+        }
         try {
             const clientsRes = await adminFetch(`${API}/admin/utility/clients/`);
             const clientsData = await clientsRes.json();
@@ -259,7 +266,7 @@ export default function AnimsUtility({ onAuthLost }) {
                 setClients(clientsData.clients || []);
                 setActivityFeed(activityData.activity || []);
                 setLastRefresh(new Date());
-            } else {
+            } else if (!silent) {
                 const authLost =
                     (clientsRes.status === 403 && clientsData?.code === "admin_auth_required") ||
                     (activityRes.status === 403 && activityData?.code === "admin_auth_required");
@@ -270,9 +277,13 @@ export default function AnimsUtility({ onAuthLost }) {
                 }
             }
         } catch (err) {
-            setErrorMsg("Network error. Could not connect to API.");
+            if (!silent) {
+                setErrorMsg("Network error. Could not connect to API.");
+            }
         } finally {
-            setLoading(false);
+            if (!silent) {
+                setLoading(false);
+            }
         }
     };
 

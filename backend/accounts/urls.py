@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     # Health & Authentication
-    health_check, login_view, logout_view, get_company,
+    health_check, login_view, logout_view, heartbeat_view, log_transaction, get_company,
     forgot_password_verify, forgot_password_reset,
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise, mac_rejection_ppm, otd_report,
@@ -59,7 +59,7 @@ from .views_settings import settings_profile, settings_change_password, settings
 from .views_adminpannel import (
     admin_login, admin_logout, admin_check_session,
     admin_list_tenants, admin_create_tenant, admin_update_tenant, admin_patch_tenant_status, admin_delete_tenant,
-    admin_list_tenant_users, admin_delete_tenant_user
+    admin_list_tenant_users, admin_delete_tenant_user, admin_user_transactions
 )
 from .views_animsutility import admin_utility_clients, admin_utility_activity
 
@@ -69,6 +69,9 @@ urlpatterns = [
     path('health/', health_check, name='health_check'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
+    path('heartbeat/', heartbeat_view, name='heartbeat'),
+    path('log-transaction/', log_transaction, name='log_transaction'),
+
     path('company/<str:code>/', get_company, name='get_company'),
     path('signup/', signup_view, name='signup'),
     path('forgot-password/verify/', forgot_password_verify, name='forgot_password_verify'),
@@ -263,4 +266,6 @@ urlpatterns = [
     path('admin/tenants/users/<int:user_id>/', admin_delete_tenant_user, name='admin_delete_tenant_user'),
     path('admin/utility/clients/', admin_utility_clients, name='admin_utility_clients'),
     path('admin/utility/activity/', admin_utility_activity, name='admin_utility_activity'),
+    path('admin/reports/user-transactions/', admin_user_transactions, name='admin_user_transactions'),
+
 ]
