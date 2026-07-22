@@ -501,6 +501,8 @@ function pp1DataLabelsPercent({ maxPoints = 96, skipLabels = [], accentColor = "
   const labelOpts = { skipLabels };
   return {
     display: (ctx) => {
+      const cType = ctx.chart?.config?.type || ctx.dataset?.type;
+      if (cType === "radar" || ctx.chart?.config?.options?.type === "radar") return false;
       const count = ctx.chart.data.labels?.length || 0;
       if (count > maxPoints) return false;
       const label = ctx.dataset.label || "";
@@ -557,6 +559,8 @@ function pp1IsTargetDataset(label = "") {
 }
 
 function pp1ShouldShowDataLabel(ctx, { maxPoints = 18, skipLabels = [] } = {}) {
+  const cType = ctx.chart?.config?.type || ctx.dataset?.type;
+  if (cType === "radar" || ctx.chart?.config?.options?.type === "radar") return false;
   const count = ctx.chart.data.labels?.length || 0;
   if (count > maxPoints) return false;
   const label = ctx.dataset.label || "";
@@ -686,7 +690,8 @@ function pp1EnhanceChartConfig(config, {
   const existingLegend = existingPlugins.legend;
   const existingTooltip = existingPlugins.tooltip || {};
   const existingDatalabels = existingPlugins.datalabels;
-  const skipLabels = ["pie", "doughnut", "polarArea"].includes(rootType);
+  const isRadarChart = rootType === "radar" || cfg.type === "radar" || (cfg.data?.datasets || []).some(ds => ds?.type === "radar");
+  const skipLabels = ["pie", "doughnut", "polarArea", "radar"].includes(rootType) || isRadarChart;
   const seriesCount = (cfg.data?.datasets || []).filter(
     (ds) => ds && !pp1IsTargetDataset(ds.label || "")
   ).length;
@@ -720,9 +725,11 @@ function pp1EnhanceChartConfig(config, {
       ...existingTooltip,
       callbacks: { ...(existingTooltip.callbacks || {}) },
     },
-    datalabels: existingDatalabels !== undefined
-      ? existingDatalabels
-      : (enableDatalabels && !skipLabels ? pp1DataLabelsAuto({ valueMode }) : false),
+    datalabels: isRadarChart
+      ? { display: false }
+      : (existingDatalabels !== undefined
+          ? existingDatalabels
+          : (enableDatalabels && !skipLabels ? pp1DataLabelsAuto({ valueMode }) : false)),
   };
 
   if (opts.scales && typeof opts.scales === "object") {
@@ -17762,6 +17769,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
           order: 1,
           datalabels: {
             display: (ctx) => {
+              if (isRadar) return false;
               const v = Number(ctx.dataset.data[ctx.dataIndex]);
               return v > 0;
             },
@@ -17796,6 +17804,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
         order: 2,
         datalabels: {
           display: (ctx) => {
+            if (isRadar) return false;
             const v = Number(ctx.dataset.data[ctx.dataIndex]);
             return v > 0;
           },
@@ -17829,6 +17838,7 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
         order: 3,
         datalabels: {
           display: (ctx) => {
+            if (isRadar) return false;
             const v = Number(ctx.dataset.data[ctx.dataIndex]);
             return v > 0;
           },
@@ -20763,56 +20773,61 @@ class DashboardErrorBoundary extends React.Component {
   }
 }
 
+/* ── sessionStorage filter & cache helpers ── */
+function readPP1Session(key, defaults) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return defaults;
+    const p = JSON.parse(raw);
+    if (p.dateRange) {
+      if (p.dateRange.from) p.dateRange.from = new Date(p.dateRange.from);
+      if (p.dateRange.to) p.dateRange.to = new Date(p.dateRange.to);
+    }
+    return { ...defaults, ...p };
+  } catch { return defaults; }
+}
+function writePP1Session(key, data) {
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+}
+
 export default function PlantPerformance1() {
-  const today = new Date();
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+  const monthStart = useMemo(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  }, []);
+
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const day = String(today.getDate()).padStart(2, "0");
   const defaultFrom = `${year}-${month}-01`;
   const defaultTo = `${year}-${month}-${day}`;
 
-  const [selKpi, setSelKpi] = useState(0);
-  const [selAction, setSelAction] = useState("customer_po_vs_sales_analysis");
-  const [centerKey, setCenterKey] = useState(0);
-  const [activePeriod, setActivePeriod] = useState("month");
-  const [dateRange, setDateRange] = useState({ from: null, to: null });
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState(null);
-  const [data, setData] = useState({});
-  const [networkLoading, setNetworkLoading] = useState(false);
-  const [mobileActiveTab, setMobileActiveTab] = useState("center");
-
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    let activeRequests = 0;
-    let loadingTimeout = null;
-
-    window.fetch = async (...args) => {
-      activeRequests++;
-      setNetworkLoading(true);
-      if (loadingTimeout) clearTimeout(loadingTimeout);
-
-      try {
-        return await originalFetch(...args);
-      } finally {
-        activeRequests--;
-        if (activeRequests <= 0) {
-          loadingTimeout = setTimeout(() => {
-            setNetworkLoading(false);
-          }, 250);
-        }
-      }
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-      if (loadingTimeout) clearTimeout(loadingTimeout);
-    };
+  const _saved = useMemo(() => readPP1Session("ba_filter_plantperformance", {}), []);
+  const _cachedData = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem("ba_cache_plantperformance");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   }, []);
 
+  const [selKpi, setSelKpi] = useState(_saved.selKpi ?? 0);
+  const [selAction, setSelAction] = useState(_saved.selAction !== undefined ? _saved.selAction : "customer_po_vs_sales_analysis");
+  const [centerKey, setCenterKey] = useState(0);
+  const [activePeriod, setActivePeriod] = useState(_saved.activePeriod || "month");
+  const [dateRange, setDateRange] = useState(_saved.dateRange || { from: monthStart, to: today });
+  const [data, setData] = useState(_cachedData || {});
+  const [loading, setLoading] = useState(!_cachedData || Object.keys(_cachedData).length === 0);
+  const [fetchError, setFetchError] = useState(null);
+  const [mobileActiveTab, setMobileActiveTab] = useState("center");
 
 
-  const [poFilters, setPoFilters] = useState({
+
+  const [poFilters, setPoFilters] = useState(_saved.poFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
@@ -20820,7 +20835,7 @@ export default function PlantPerformance1() {
     partNumber: "",
     category: "",
   });
-  const [otdFilters, setOtdFilters] = useState({
+  const [otdFilters, setOtdFilters] = useState(_saved.otdFilters || {
     fromDate: "",
     toDate: "",
     customer: "",
@@ -20842,45 +20857,45 @@ export default function PlantPerformance1() {
   const [srPanelData, setSrPanelData] = useState(null);
   const [vrPanelData, setVrPanelData] = useState(null);
   const [stockPanelData, setStockPanelData] = useState(null);
-  const [supplierFilters, setSupplierFilters] = useState({
+  const [supplierFilters, setSupplierFilters] = useState(_saved.supplierFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     supplier: [],
     partNo: "",
   });
-  const [vendorFilters, setVendorFilters] = useState({
+  const [vendorFilters, setVendorFilters] = useState(_saved.vendorFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     vendor: [],
     partNo: "",
   });
-  const [fgFilters, setFgFilters] = useState({
+  const [fgFilters, setFgFilters] = useState(_saved.fgFilters || {
     customer: [],
     itemCode: "",
   });
-  const [dailyProductionFilters, setDailyProductionFilters] = useState({
+  const [dailyProductionFilters, setDailyProductionFilters] = useState(_saved.dailyProductionFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     machineNo: "",
   });
-  const [targetVsActualFilters, setTargetVsActualFilters] = useState({
+  const [targetVsActualFilters, setTargetVsActualFilters] = useState(_saved.targetVsActualFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
   });
-  const [operatorEfficiencyFilters, setOperatorEfficiencyFilters] = useState({
+  const [operatorEfficiencyFilters, setOperatorEfficiencyFilters] = useState(_saved.operatorEfficiencyFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     operator: "",
     effLimit: "",
   });
-  const [machineEfficiencyFilters, setMachineEfficiencyFilters] = useState({
+  const [machineEfficiencyFilters, setMachineEfficiencyFilters] = useState(_saved.machineEfficiencyFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     machine: "",
     effLimit: "",
   });
-  const [capaFilters, setCapaFilters] = useState({
+  const [capaFilters, setCapaFilters] = useState(_saved.capaFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
@@ -20889,27 +20904,27 @@ export default function PlantPerformance1() {
   const [selectedCapaId, setSelectedCapaId] = useState(null);
   const [poActiveSlide, setPoActiveSlide] = useState(0);
   const [poShowTargetOnly, setPoShowTargetOnly] = useState(false);
-  const [purFilters, setPurFilters] = useState({
+  const [purFilters, setPurFilters] = useState(_saved.purFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     supplier: "",
     category: "",
     partNumber: "",
   });
-  const [purchaseValueFilters, setPurchaseValueFilters] = useState({
+  const [purchaseValueFilters, setPurchaseValueFilters] = useState(_saved.purchaseValueFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     supplier: "",
     category: "",
     partNumber: "",
   });
-  const [salesFilters, setSalesFilters] = useState({
+  const [salesFilters, setSalesFilters] = useState(_saved.salesFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
     region: "",
   });
-  const [prodFilters, setProdFilters] = useState({
+  const [prodFilters, setProdFilters] = useState(_saved.prodFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     team: "",
@@ -20917,39 +20932,39 @@ export default function PlantPerformance1() {
     operator: "",
     customer: "",
   });
-  const [prodXAxisGroup, setProdXAxisGroup] = useState("Machine");
-  const [idleFilters, setIdleFilters] = useState({
+  const [prodXAxisGroup, setProdXAxisGroup] = useState(_saved.prodXAxisGroup || "Machine");
+  const [idleFilters, setIdleFilters] = useState(_saved.idleFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     machine: "",
     operator: "",
     idleReason: "",
   });
-  const [idleActiveTab, setIdleActiveTab] = useState("chart1");
-  const [nonAccFilters, setNonAccFilters] = useState({
+  const [idleActiveTab, setIdleActiveTab] = useState(_saved.idleActiveTab || "chart1");
+  const [nonAccFilters, setNonAccFilters] = useState(_saved.nonAccFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     machine: "",
     team: "",
     reason: "",
   });
-  const [compFilters, setCompFilters] = useState({
+  const [compFilters, setCompFilters] = useState(_saved.compFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
     status: ""
   });
-  const [oeeFilters, setOeeFilters] = useState({
+  const [oeeFilters, setOeeFilters] = useState(_saved.oeeFilters || {
     month: "",
     year: "",
     team: "",
     machineType: "",
     machine: "",
   });
-  const [oeeActiveTab, setOeeActiveTab] = useState("machine_oee");
-  const [oeeCompActiveTab, setOeeCompActiveTab] = useState("month_comparison");
-  const [rejActiveTab, setRejActiveTab] = useState("machine_wise_rejection");
-  const [oeeCompFilters, setOeeCompFilters] = useState({
+  const [oeeActiveTab, setOeeActiveTab] = useState(_saved.oeeActiveTab || "machine_oee");
+  const [oeeCompActiveTab, setOeeCompActiveTab] = useState(_saved.oeeCompActiveTab || "month_comparison");
+  const [rejActiveTab, setRejActiveTab] = useState(_saved.rejActiveTab || "machine_wise_rejection");
+  const [oeeCompFilters, setOeeCompFilters] = useState(_saved.oeeCompFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     month: "",
@@ -20958,9 +20973,9 @@ export default function PlantPerformance1() {
     machineType: "",
     machine: "",
   });
-  const [oeeCompXAxisGroup, setOeeCompXAxisGroup] = useState("Overall");
-  const [effXAxisGroup, setEffXAxisGroup] = useState("Overall");
-  const [effFilters, setEffFilters] = useState({
+  const [oeeCompXAxisGroup, setOeeCompXAxisGroup] = useState(_saved.oeeCompXAxisGroup || "Overall");
+  const [effXAxisGroup, setEffXAxisGroup] = useState(_saved.effXAxisGroup || "Overall");
+  const [effFilters, setEffFilters] = useState(_saved.effFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     month: "",
@@ -20971,7 +20986,7 @@ export default function PlantPerformance1() {
     machine: "",
     operatorName: "",
   });
-  const [rejFilters, setRejFilters] = useState({
+  const [rejFilters, setRejFilters] = useState(_saved.rejFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
@@ -20979,20 +20994,68 @@ export default function PlantPerformance1() {
     rejType: "",
     rejReason: "",
   });
-  const [rewFilters, setRewFilters] = useState({
+  const [rewFilters, setRewFilters] = useState(_saved.rewFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     customer: "",
     partNo: "",
     reworkReason: "",
   });
-  const [reworkXAxisGroup, setReworkXAxisGroup] = useState("Overall");
-  const [stockFilters, setStockFilters] = useState({
+  const [reworkXAxisGroup, setReworkXAxisGroup] = useState(_saved.reworkXAxisGroup || "Overall");
+  const [stockFilters, setStockFilters] = useState(_saved.stockFilters || {
     fromDate: defaultFrom,
     toDate: defaultTo,
     category: [],
     itemCode: "",
   });
+
+  // ✅ Persist filters and selections to sessionStorage on every change
+  useEffect(() => {
+    writePP1Session("ba_filter_plantperformance", {
+      selKpi,
+      selAction,
+      activePeriod,
+      dateRange,
+      poFilters,
+      otdFilters,
+      supplierFilters,
+      vendorFilters,
+      fgFilters,
+      dailyProductionFilters,
+      targetVsActualFilters,
+      operatorEfficiencyFilters,
+      machineEfficiencyFilters,
+      capaFilters,
+      purFilters,
+      purchaseValueFilters,
+      salesFilters,
+      prodFilters,
+      prodXAxisGroup,
+      idleFilters,
+      idleActiveTab,
+      nonAccFilters,
+      compFilters,
+      oeeFilters,
+      oeeActiveTab,
+      oeeCompActiveTab,
+      rejActiveTab,
+      oeeCompFilters,
+      oeeCompXAxisGroup,
+      effXAxisGroup,
+      effFilters,
+      rejFilters,
+      rewFilters,
+      reworkXAxisGroup,
+      stockFilters,
+    });
+  }, [
+    selKpi, selAction, activePeriod, dateRange, poFilters, otdFilters, supplierFilters,
+    vendorFilters, fgFilters, dailyProductionFilters, targetVsActualFilters, operatorEfficiencyFilters,
+    machineEfficiencyFilters, capaFilters, purFilters, purchaseValueFilters, salesFilters,
+    prodFilters, prodXAxisGroup, idleFilters, idleActiveTab, nonAccFilters, compFilters,
+    oeeFilters, oeeActiveTab, oeeCompActiveTab, rejActiveTab, oeeCompFilters,
+    oeeCompXAxisGroup, effXAxisGroup, effFilters, rejFilters, rewFilters, reworkXAxisGroup, stockFilters
+  ]);
   const fetchAbortRef = useRef(null);
 
   const [showTargetPopover, setShowTargetPopover] = useState(false);
@@ -21210,18 +21273,19 @@ export default function PlantPerformance1() {
   };
 
   const fetchAll = useCallback(async (from, to, signal) => {
-    setLoading(true);
     setFetchError(null);
     const bundleUrl = buildUrl("/api/plant-performance/bundle/", from, to);
     try {
       const res = await fetch(bundleUrl, { credentials: "include", signal });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.data) {
-        setData({});
         setFetchError(json?.error || json?.detail || `Load failed (${res.status})`);
         return;
       }
       setData(json.data);
+      try {
+        sessionStorage.setItem("ba_cache_plantperformance", JSON.stringify(json.data));
+      } catch {}
       setRejPanelData(null);
       setRewPanelData(null);
       setCompPanelData(null);
@@ -21248,14 +21312,15 @@ export default function PlantPerformance1() {
   }, []);
 
   useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    setDateRange({ from: monthStart, to: today });
+    const from = dateRange.from || monthStart;
+    const to = dateRange.to || today;
+    if (!data || Object.keys(data).length === 0) {
+      setLoading(true);
+    }
     fetchAbortRef.current?.abort();
     const ctrl = new AbortController();
     fetchAbortRef.current = ctrl;
-    fetchAll(monthStart, today, ctrl.signal);
+    fetchAll(from, to, ctrl.signal);
     return () => ctrl.abort();
   }, [fetchAll]);
 
@@ -21290,6 +21355,7 @@ export default function PlantPerformance1() {
 
   const handleRangeChange = ({ from, to }) => {
     setDateRange({ from, to });
+    setLoading(true);
     fetchAbortRef.current?.abort();
     const ctrl = new AbortController();
     fetchAbortRef.current = ctrl;
@@ -23105,7 +23171,7 @@ export default function PlantPerformance1() {
             <section className="pp1-center" ref={centerRef}>
             <div className="pp1-center__glow" />
             <div className="pp1-center__scroll">
-              <CenterTransitionWrapper uid={centerKey} loading={loading || networkLoading}>
+              <CenterTransitionWrapper uid={centerKey} loading={loading}>
                 <DashboardErrorBoundary>
                   {selectionId === "customer_po_vs_sales_analysis" ? (
                     <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
