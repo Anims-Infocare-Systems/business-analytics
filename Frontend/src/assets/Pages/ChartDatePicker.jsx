@@ -284,7 +284,9 @@ export default function ChartDatePicker({ from, to, onChange }) {
     if (!picking) {
       setPicking(day);
       setHovered(null);
-      onChange({ from: day, to: null });
+      const autoTo = tod();
+      const [f, t] = day > autoTo ? [autoTo, day] : [day, autoTo];
+      onChange({ from: f, to: t });
       setActivePreset(null);
     } else {
       const [f, t] = day < picking ? [day, picking] : [picking, day];
@@ -332,13 +334,17 @@ export default function ChartDatePicker({ from, to, onChange }) {
 
   const handleApply = () => {
     const f = parseTyped(fromInput);
-    const t = parseTyped(toInput);
+    let t = parseTyped(toInput);
     if (fromInput && !f) { setInputErr("Invalid From date"); return; }
     if (toInput   && !t) { setInputErr("Invalid To date");   return; }
+    if (f && !t) { t = tod(); }
     if (f && t && f > t) { setInputErr("From must be ≤ To"); return; }
     setInputErr("");
     if (f || t) {
-      onChange({ from: f || from, to: t || to });
+      const finalFrom = f || from;
+      let finalTo = t || to;
+      if (finalFrom && !finalTo) finalTo = tod();
+      onChange({ from: finalFrom, to: finalTo });
       if (f) setLeftMonth(addMo(f, -1));
       setActivePreset(null);
       setPicking(null);

@@ -36,36 +36,94 @@ def dashboard2_customer_po_vs_sales(request):
         return Response({"error": str(e)}, status=401)
 
     sql = """
-WITH PO_DATA AS
+WITH SHD_PO_DET AS
 (
+    SELECT DISTINCT
+        S.Apono,
+        S.pono,
+        S.itcode,
+        S.poslno
+    FROM In_PoDet_ShdQty S
+    WHERE ISNULL(S.deleted, 0) = 0
+),
+
+PO_DATA AS
+(
+    /* 1. PO items WITH Schedule Date (from In_PoDet_ShdQty) */
+    SELECT
+        YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POYear,
+        MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POMonth,
+        DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS MonthName,
+        CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE) AS PODate,
+        ISNULL(CM.CName, N'—') AS CustomerName,
+
+        PM.Apono,
+        PD.ItCode,
+        ISNULL(PM.type, N'') AS PoType,
+
+        SUM(ISNULL(S.shdQty, 0) * ISNULL(PD.Rate, 0)) AS POValue,
+        ISNULL(MAX(PD.Rate), 0) AS PORate
+
+    FROM In_PoMas PM
+    INNER JOIN In_PoDet PD
+        ON PM.PONO = PD.PONO
+    INNER JOIN In_PoDet_ShdQty S
+        ON (S.Apono = PM.Apono OR S.pono = PM.PONO)
+       AND S.itcode = PD.ItCode
+       AND S.poslno = PD.poslno
+    LEFT JOIN CustMast CM
+        ON PM.CId = CM.Id
+    WHERE PM.Deleted = 0
+      AND PD.Deleted = 0
+      AND ISNULL(S.deleted, 0) = 0
+    GROUP BY
+        YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
+        MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
+        DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
+        CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE),
+        CM.CName,
+        PM.Apono,
+        PD.ItCode,
+        PM.type
+
+    UNION ALL
+
+    /* 2. PO items WITHOUT Schedule (fallback to PO Date and Amt) */
     SELECT
         YEAR(PM.PODT) AS POYear,
         MONTH(PM.PODT) AS POMonth,
-        DATENAME(MONTH,PM.PODT) AS MonthName,
+        DATENAME(MONTH, PM.PODT) AS MonthName,
         CAST(PM.PODT AS DATE) AS PODate,
         ISNULL(CM.CName, N'—') AS CustomerName,
 
         PM.Apono,
         PD.ItCode,
+        ISNULL(PM.type, N'') AS PoType,
 
-        SUM(ISNULL(PD.Amt,0))  AS POValue,
-        ISNULL(MAX(PD.Rate),0) AS PORate
+        SUM(ISNULL(PD.Amt, 0)) AS POValue,
+        ISNULL(MAX(PD.Rate), 0) AS PORate
 
     FROM In_PoMas PM
     INNER JOIN In_PoDet PD
         ON PM.PONO = PD.PONO
     LEFT JOIN CustMast CM
         ON PM.CId = CM.Id
+    LEFT JOIN SHD_PO_DET SPD
+        ON (SPD.Apono = PM.Apono OR SPD.pono = PM.PONO)
+       AND SPD.itcode = PD.ItCode
+       AND SPD.poslno = PD.poslno
     WHERE PM.Deleted = 0
       AND PD.Deleted = 0
+      AND SPD.itcode IS NULL
     GROUP BY
         YEAR(PM.PODT),
         MONTH(PM.PODT),
-        DATENAME(MONTH,PM.PODT),
+        DATENAME(MONTH, PM.PODT),
         CAST(PM.PODT AS DATE),
         CM.CName,
         PM.Apono,
-        PD.ItCode
+        PD.ItCode,
+        PM.type
 ),
 
 
@@ -132,6 +190,7 @@ SELECT
     P.PODate,
     P.Apono,
     P.ItCode,
+    P.PoType,
 
     SUM(P.POValue) AS POValue,
 
@@ -162,7 +221,8 @@ GROUP BY
     P.MonthName,
     P.PODate,
     P.Apono,
-    P.ItCode
+    P.ItCode,
+    P.PoType
 
 ORDER BY
     P.PODate,
@@ -183,20 +243,22 @@ ORDER BY
             date_str = str(row[4])[:10] if row[4] else ""
             po_number = str(row[5]) if row[5] else ""
             part_number = str(row[6]) if row[6] else ""
+            po_type = str(row[7]).strip() if row[7] else ""
             
-            po_val = float(row[7] or 0) / 100000.0
-            sales_val = float(row[8] or 0) / 100000.0
-            pending_val = float(row[9] or 0) / 100000.0
+            po_val = float(row[8] or 0) / 100000.0
+            sales_val = float(row[9] or 0) / 100000.0
+            pending_val = float(row[10] or 0) / 100000.0
             
             rows.append({
                 "customer": customer,
                 "month": month_label,
                 "date": date_str,
-                "orderValue": round(po_val, 3),
-                "salesValue": round(sales_val, 3),
-                "pendingValue": round(pending_val, 3),
+                "orderValue": round(po_val, 4),
+                "salesValue": round(sales_val, 4),
+                "pendingValue": round(pending_val, 4),
                 "poNumber": po_number,
-                "partNumber": part_number
+                "partNumber": part_number,
+                "poType": po_type
             })
     except Exception as e:
         if cursor: cursor.close()
@@ -225,36 +287,31 @@ def dashboard2_grn_value(request):
 SELECT
     GM.grnno,
     GM.grndate,
-    GM.dtype,
-    CM.CName AS SupplierName,
-    GD.partno,
-    GD.description,
-    SUM(ISNULL(GD.qty,0)) AS Qty,
-    SUM(ISNULL(GRD.Amount,0)) AS Amount
+    ISNULL(GM.dtype, '') AS dtype,
+    ISNULL(CM.CName, ISNULL(CA.CName, '—')) AS SupplierName,
+    ISNULL(GRD.partno, '') AS partno,
+    '' AS description,
+    0 AS Qty,
+    SUM(ISNULL(GRD.Amount, 0)) AS Amount
 FROM grn_mas GM
-INNER JOIN CustMast CM
-    ON GM.cid = CM.Id
-INNER JOIN grn_det GD
-    ON GM.grnno = GD.grnno
-    AND GD.deleted = 0
-LEFT JOIN Grn_RateDet GRD
+INNER JOIN Grn_RateDet GRD
     ON GM.grnno = GRD.grnno
-    AND GRD.partno = GD.partno
-    AND GRD.deleted = 0
+    AND ISNULL(GRD.deleted, 0) = 0
+LEFT JOIN CustMast CM
+    ON GM.cid = CM.Id
+LEFT JOIN CustAliasMast CA
+    ON GM.cid = CA.Id
 WHERE
-    GM.deleted = 0
-    AND GM.dtype IN ('Raw Material','Stores Material','Service')
+    ISNULL(GM.deleted, 0) = 0
 GROUP BY
     GM.grnno,
     GM.grndate,
-    GM.dtype,
-    CM.CName,
-    GD.partno,
-    GD.description
+    ISNULL(GM.dtype, ''),
+    ISNULL(CM.CName, ISNULL(CA.CName, '—')),
+    ISNULL(GRD.partno, '')
 ORDER BY
     GM.grndate,
-    GM.grnno,
-    GD.partno;
+    GM.grnno;
     """
 
     rows = []
@@ -301,7 +358,7 @@ ORDER BY
                 "partNo": part_no,
                 "description": description,
                 "qty": qty,
-                "amount": round(amount, 2),
+                "amount": round(amount, 4),
             })
     except Exception as e:
         if cursor:
@@ -551,8 +608,7 @@ PLAN_DATA AS
         DPD.PartNo,
         CAST(DPM.dpldate AS DATE) AS PlanDate,
         SUM(ISNULL(DPD.PlanQty,0)) AS PlanQty,
-        SUM(ISNULL(DPD.PlanReqQty,0)) AS PlanReqQty,
-        SUM(ISNULL(DPD.AvailQty,0)) AS AvailableQty
+        SUM(ISNULL(DPD.PlanReqQty,0)) AS PlanReqQty
     FROM DailyDcPlan_Det DPD
     INNER JOIN DailyDcPlan_Mas DPM
         ON DPM.dplno = DPD.dplno
@@ -584,6 +640,35 @@ DISPATCH_DATA AS
         DM.CID,
         DD.PartNo,
         CAST(DM.dcdate AS DATE)
+),
+
+-- Live available stock from RouteCardStock and ProdCurrentStock (finalinspqty only)
+STOCK_AVAIL AS
+(
+    SELECT
+        partno,
+        SUM(ISNULL(finalinspqty, 0)) AS AvailQty,
+        SUM(ISNULL(dcqty, 0))        AS DcQty
+    FROM RouteCardStock
+    GROUP BY partno
+
+    UNION ALL
+
+    SELECT
+        partno,
+        SUM(ISNULL(finalinspqty, 0)) AS AvailQty,
+        SUM(ISNULL(dcqty, 0))        AS DcQty
+    FROM ProdCurrentStock
+    GROUP BY partno
+),
+
+STOCK_AVAIL_TOTAL AS
+(
+    SELECT
+        partno,
+        SUM(AvailQty) AS AvailableQty
+    FROM STOCK_AVAIL
+    GROUP BY partno
 )
 
 SELECT
@@ -593,7 +678,7 @@ SELECT
     MAX(ISNULL(PD.Description, N'')) AS Description,
     UC.ComboDate AS PlanDate,
     SUM(ISNULL(P.PlanQty,0)) AS PlanQty,
-    SUM(ISNULL(P.AvailableQty,0)) AS AvailableQty,
+    ISNULL(MAX(SA.AvailableQty), 0) AS AvailableQty,
     SUM(ISNULL(P.PlanReqQty,0)) AS PlanReqQty,
     SUM(ISNULL(D.DispatchQty,0)) AS DispatchQty,
 
@@ -626,6 +711,9 @@ LEFT JOIN CustMast CM
 
 LEFT JOIN PART_DESCRIPTION PD
     ON PD.PartNo = UC.PartNo
+
+LEFT JOIN STOCK_AVAIL_TOTAL SA
+    ON SA.partno = UC.PartNo
 
 GROUP BY
     UC.CID,
@@ -728,8 +816,25 @@ SELECT
 FROM Bill_Mas m
 {join_sql}
 WHERE ISNULL(m.deleted, 0) = 0
-  AND ISNULL(m.btype, '') NOT IN ('Credit Note')
-  AND LTRIM(RTRIM(ISNULL(m.btype, N''))) <> N'Sales Return'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT IN (
+        'with material rejection',
+        'raw material insp rej',
+        'raw material insp rejection',
+        'stores material insp rej',
+        'stores material insp rejection',
+        'debit note',
+        'sales return',
+        'credit note',
+        'reverse charge',
+        'revese charge'
+  )
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%credit%note%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%debit%note%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%sales%return%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%reverse%charge%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%revese%charge%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%material%rej%'
+  AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT LIKE '%insp%rej%'
 ORDER BY m.invdt, m.invno;
         """
 
@@ -760,7 +865,7 @@ ORDER BY m.invdt, m.invno;
                     month_name = _MONTH_FULL[mo - 1]
 
             customer = str(row[2]).strip() if row[2] else "—"
-            amount_l = round(float(row[3] or 0) / 100000.0, 2)
+            amount_l = round(float(row[3] or 0) / 100000.0, 4)
 
             rows.append({
                 "invoiceNo": inv_no,
@@ -1269,6 +1374,16 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
         if schema.get("mac_name")
         else "RD.MacNo"
     )
+    mac_group_sel = (
+        f"MAX(ISNULL(CAST(M.{_q(schema['mac_group'])} AS NVARCHAR(256)), N'—'))"
+        if schema.get("mac_group")
+        else "N'—'"
+    )
+    mac_group_sel_detail = (
+        f"ISNULL(CAST(M.{_q(schema['mac_group'])} AS NVARCHAR(256)), N'—')"
+        if schema.get("mac_group")
+        else "N'—'"
+    )
 
     machine_sql = ""
     if machine_filter:
@@ -1298,11 +1413,12 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
         SELECT
             R.MacNo AS MachineNo,
             {mac_name_sel} AS MacName,
+            {mac_group_sel} AS MacGroup,
             CAST(SUM(S.ShiftSecs) / 3600.0 AS FLOAT) AS PlannedHours,
             CAST(SUM({capped}) / 3600.0 AS FLOAT) AS RunningHours,
             CAST(MAX({rate_expr}) AS FLOAT) AS RatePerHr,
-            CAST((SUM(S.ShiftSecs) / 3600.0) * MAX({rate_expr}) AS FLOAT) AS ProductionValue,
-            CAST((SUM({capped}) / 3600.0) * MAX({rate_expr}) AS FLOAT) AS ActualValue,
+            CAST((SUM(S.ShiftSecs) / 60.0) * (MAX({rate_expr}) / 60.0) AS FLOAT) AS ProductionValue,
+            CAST((SUM({capped}) / 60.0) * (MAX({rate_expr}) / 60.0) AS FLOAT) AS ActualValue,
             CAST(
                 CASE
                     WHEN SUM(S.ShiftSecs) = 0 THEN 0.0
@@ -1310,7 +1426,7 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 END AS FLOAT
             ) AS ActualPct,
             CAST(
-                ((SUM(S.ShiftSecs) - SUM({capped})) / 3600.0) * MAX({rate_expr})
+                ((SUM(S.ShiftSecs) - SUM({capped})) / 60.0) * (MAX({rate_expr}) / 60.0)
                 AS FLOAT
             ) AS LossValue
         FROM RUNSUMMARY R
@@ -1342,11 +1458,12 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
             RD.Shift AS ShiftName,
             RD.MacNo,
             {mac_name_sel_detail} AS MacName,
+            {mac_group_sel_detail} AS MacGroup,
             CAST({rate_expr} AS FLOAT) AS RatePerHr,
             CAST(ISNULL(S.ShiftSecs, 0) / 3600.0 AS FLOAT) AS PlannedHours,
             CAST({capped_rd} / 3600.0 AS FLOAT) AS RunningHours,
-            CAST((ISNULL(S.ShiftSecs, 0) / 3600.0) * ({rate_expr}) AS FLOAT) AS ProductionValue,
-            CAST(({capped_rd} / 3600.0) * ({rate_expr}) AS FLOAT) AS ActualValue,
+            CAST((ISNULL(S.ShiftSecs, 0) / 60.0) * (({rate_expr}) / 60.0) AS FLOAT) AS ProductionValue,
+            CAST(({capped_rd} / 60.0) * (({rate_expr}) / 60.0) AS FLOAT) AS ActualValue,
             CAST(
                 CASE
                     WHEN ISNULL(S.ShiftSecs, 0) = 0 THEN 0.0
@@ -1354,7 +1471,7 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 END AS FLOAT
             ) AS ActualPct,
             CAST(
-                ((ISNULL(S.ShiftSecs, 0) - {capped_rd}) / 3600.0) * ({rate_expr})
+                ((ISNULL(S.ShiftSecs, 0) - {capped_rd}) / 60.0) * (({rate_expr}) / 60.0)
                 AS FLOAT
             ) AS LossValue
         FROM RUNSUMMARY RD
@@ -1398,6 +1515,7 @@ def _pv_machine_row_to_payload(rec):
     return {
         "machine": mac,
         "machineName": str(rec.get("MacName") or mac or "—").strip(),
+        "macGroup": str(rec.get("MacGroup") or "—").strip(),
         "plannedHours": round(float(rec.get("PlannedHours") or 0), 2),
         "runningHours": round(float(rec.get("RunningHours") or 0), 2),
         "ratePerHr": round(float(rec.get("RatePerHr") or 0), 2),
@@ -1415,6 +1533,7 @@ def _pv_detail_row_to_payload(rec):
         "shift": str(rec.get("ShiftName") or "—").strip(),
         "machine": mac,
         "machineName": str(rec.get("MacName") or mac or "—").strip(),
+        "macGroup": str(rec.get("MacGroup") or "—").strip(),
         "operator": "—",
         "team": "—",
         "ratePerHr": round(float(rec.get("RatePerHr") or 0), 2),
@@ -1444,6 +1563,7 @@ def _pv_detail_from_daily_row(row):
         "shift": row.get("shift") or "—",
         "machine": row.get("machine") or "—",
         "machineName": row.get("machineName") or row.get("machine") or "—",
+        "macGroup": row.get("macGroup") or row.get("MacGroup") or "—",
         "operator": "—",
         "team": "—",
         "ratePerHr": round(float(row.get("rate") or 0), 2),
@@ -1464,6 +1584,7 @@ def _pv_aggregate_machines_from_detail(detail_rows):
             mac_from_detail[mac] = {
                 "machine": mac,
                 "machineName": row.get("machineName") or mac,
+                "macGroup": row.get("macGroup") or "—",
                 "plannedHours": 0.0,
                 "runningHours": 0.0,
                 "ratePerHr": 0.0,
@@ -1489,6 +1610,7 @@ def _pv_aggregate_machines_from_detail(detail_rows):
         display_machine.append({
             "machine": g["machine"],
             "machineName": g["machineName"],
+            "macGroup": g["macGroup"],
             "plannedHours": round(g["plannedHours"], 2),
             "runningHours": round(g["runningHours"], 2),
             "ratePerHr": round(g["ratePerHr"], 2),
@@ -1606,7 +1728,7 @@ def _pv_enrich_operator_team(cursor, detail_rows, start_date, end_date):
 
 
 def _build_production_value_compare_payload(
-    cursor, start_date, end_date, machine_filter=None, load_full_fy=True
+    cursor, start_date, end_date, machine_filter=None, load_full_fy=False
 ):
     from datetime import date
 
@@ -1633,6 +1755,7 @@ def _build_production_value_compare_payload(
     for row in display_detail:
         row.setdefault("operator", "—")
         row.setdefault("team", "—")
+        row.setdefault("macGroup", "—")
     _pv_enrich_operator_team(cursor, display_detail, query_start, query_end)
 
     # If prev-FY fallback returned a wider range, scope rows to the requested filter dates.
@@ -1693,6 +1816,9 @@ def _build_production_value_compare_payload(
         {(r.get("machineName") or r.get("machine")) for r in display_machine if r.get("machine")},
         key=lambda x: str(x).lower(),
     )
+    macGroups = sorted({r.get("macGroup") for r in display_machine if r.get("macGroup") and r.get("macGroup") != "—"})
+    if not macGroups:
+        macGroups = sorted({r.get("macGroup") for r in display_detail if r.get("macGroup") and r.get("macGroup") != "—"})
     operators = sorted({r.get("operator") for r in display_detail if r.get("operator") and r.get("operator") != "—"})
     teams = sorted({r.get("team") for r in display_detail if r.get("team") and r.get("team") != "—"})
 
@@ -1717,6 +1843,7 @@ def _build_production_value_compare_payload(
         "filterOptions": {
             "machines": machines,
             "machineNames": machineNames,
+            "macGroups": macGroups,
             "operators": operators,
             "teams": teams,
         },
@@ -1735,7 +1862,7 @@ def dashboard2_production_value(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
-    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), True)
+    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), False)
     machine_filter = (request.GET.get("machineNo") or request.GET.get("machine") or "").strip() or None
 
     cursor = None
@@ -2348,6 +2475,7 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
     det_mt = find_column_ci(cursor, sch_det, nm_det, ["mattype", "MatType", "MATTYPE", "Mat_Type"])
     det_uom = find_column_ci(cursor, sch_det, nm_det, ["uom", "UOM", "Uom", "Unit"])
     det_qty = find_column_ci(cursor, sch_det, nm_det, ["qty", "Qty", "QTY", "Quantity"])
+    det_qtykgs = find_column_ci(cursor, sch_det, nm_det, ["QtyKgs", "qtykgs", "QTYKGS", "Qty_Kgs", "qty_kgs", "QtyMtrsKgs"])
     det_amt = find_column_ci(cursor, sch_det, nm_det, ["amount", "Amount", "AMOUNT", "Amt", "Value"])
     det_rate = find_column_ci(cursor, sch_det, nm_det, ["rate", "Rate", "RATE", "UnitRate"])
     det_icode = find_column_ci(cursor, sch_det, nm_det, ["icode", "ICode", "ICODE", "itmcode", "ItemCode", "rmname", "RMName"])
@@ -2382,7 +2510,7 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
     if po_dtype:
         exclude_filter = (
             f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) "
-            f"NOT IN (N'', N'JOB ORDER', N'GENERAL')"
+            f"<> N'JOB ORDER'"
         )
 
     company_sql = ""
@@ -2402,8 +2530,16 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
     )
 
     if det_qty and det_uom:
+        if det_qtykgs:
+            effective_qty_sql = (
+                f"CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')))) NOT IN (N'NOS', N'NOS.') "
+                f"THEN ISNULL(D.[{det_qtykgs}], 0) ELSE ISNULL(D.[{det_qty}], 0) END"
+            )
+        else:
+            effective_qty_sql = f"ISNULL(D.[{det_qty}], 0)"
+
         po_qty_sql = (
-            f"CAST(ROUND(ISNULL(D.[{det_qty}], 0), 2) AS NVARCHAR(50))"
+            f"CAST(ROUND({effective_qty_sql}, 2) AS NVARCHAR(50))"
             f" + N' ' + ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')"
         )
     elif det_qty:
@@ -2477,7 +2613,7 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
             po_date_str = str(po_dt).strip()[:10] if po_dt else ""
 
         month_short, month_name = _po_month_labels(po_dt)
-        amount_l = round(value_raw / 100_000.0, 2)
+        amount_l = value_raw / 100_000.0
 
         if rate_raw > 0:
             rate_display = f"₹{rate_raw:,.0f}"
@@ -2512,7 +2648,7 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
             "qty": po_qty or "—",
             "rate": rate_display,
             "amount": amount_l,
-            "valueRaw": round(value_raw, 2),
+            "valueRaw": value_raw,
         })
 
     cursor.close()
@@ -2575,7 +2711,18 @@ def _build_otd_charts_cte(customer="", part=""):
     extra_sql, _ = _otd_filter_clause(customer, part)
     return f"""
 WITH AllSchedules AS (
-    SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shdQty,
+    SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shddate, s.shdQty,
+           COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           ) AS targetdate,
            YEAR(p.podt) AS PoYear, MONTH(p.podt) AS PoMonth
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
@@ -2585,51 +2732,45 @@ WITH AllSchedules AS (
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
 ),
 AllDeliveries AS (
-    SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty
+    SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
     FROM DcInSubDetAssmPoDet d
     INNER JOIN DC_Mas m ON d.dcno = m.dcno
     WHERE d.deleted = 0
     UNION ALL
-    SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty
+    SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
     FROM DcInSubDet d
     INNER JOIN DC_Mas m ON d.dcno = m.dcno
     WHERE d.deleted = 0
 ),
-ScheduleWithDeliveries AS (
-    SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shdQty, sch.PoYear, sch.PoMonth,
-           del.dcdate, del.okqty
+DeliverySummary AS (
+    SELECT sch.Apono, sch.partno, sch.poslno, sch.shdQty, sch.targetdate, sch.PoYear, sch.PoMonth,
+           ISNULL(SUM(CASE WHEN del.dcdate <= sch.targetdate THEN del.okqty ELSE 0 END), 0) AS OnTimeDelQty,
+           ISNULL(SUM(CASE WHEN del.dcdate > sch.targetdate THEN del.okqty ELSE 0 END), 0) AS DelayedDelQty,
+           ISNULL(SUM(del.okqty), 0) AS TotalDelQty,
+           MAX(CASE WHEN del.dcdate > sch.targetdate THEN del.dcdate ELSE NULL END) AS LastDelayedDcDate
     FROM AllSchedules sch
     LEFT JOIN AllDeliveries del
         ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno
-),
-CumulativeDeliveries AS (
-    SELECT Apono, partno, poslno, reqdate, shdQty, PoYear, PoMonth, dcdate, okqty,
-           SUM(okqty) OVER (
-               PARTITION BY Apono, partno, poslno, reqdate ORDER BY dcdate
-           ) AS CumQty
-    FROM ScheduleWithDeliveries
-    WHERE dcdate IS NOT NULL
-),
-Completion AS (
-    SELECT Apono, partno, poslno, reqdate, shdQty, PoYear, PoMonth,
-           MIN(dcdate) AS CompletionDate
-    FROM CumulativeDeliveries
-    WHERE CumQty >= shdQty
-    GROUP BY Apono, partno, poslno, reqdate, shdQty, PoYear, PoMonth
+    GROUP BY sch.Apono, sch.partno, sch.poslno, sch.shdQty, sch.targetdate, sch.PoYear, sch.PoMonth
 ),
 OTDCalc AS (
-    SELECT comp.PoYear, comp.PoMonth,
-           comp.shdQty,
-           comp.CompletionDate,
-           comp.reqdate,
-           CASE WHEN comp.CompletionDate <= comp.reqdate THEN 100.0
-                ELSE ISNULL(r.RatingFor, 0.0) END AS OTDScore,
-           CASE WHEN comp.CompletionDate <= comp.reqdate
-                THEN ISNULL(CAST(comp.shdQty AS FLOAT), 0) ELSE 0 END AS on_time_qty,
-           CASE WHEN comp.CompletionDate > comp.reqdate THEN 1 ELSE 0 END AS delayed_flag
-    FROM Completion comp
-    LEFT JOIN CustPoOTDRating r
-        ON DATEDIFF(DAY, comp.reqdate, comp.CompletionDate) BETWEEN r.RatingFrom AND r.RatingTo
+    SELECT ds.PoYear, ds.PoMonth,
+           ds.shdQty,
+           ds.TotalDelQty,
+           ds.OnTimeDelQty AS on_time_qty,
+           CASE WHEN ds.DelayedDelQty > 0 THEN 1 ELSE 0 END AS delayed_flag,
+           CASE
+               WHEN ds.TotalDelQty = 0 THEN 0.0
+               WHEN ds.DelayedDelQty = 0 THEN 100.0
+               ELSE ISNULL(
+                   (SELECT TOP 1 r2.RatingFor FROM CustPoOTDRating r2
+                    WHERE DATEDIFF(DAY, ds.targetdate, ds.LastDelayedDcDate)
+                          BETWEEN r2.RatingFrom AND r2.RatingTo),
+                   0.0
+               )
+           END AS OTDScore
+    FROM DeliverySummary ds
+    WHERE ds.TotalDelQty > 0
 )
 """
 
@@ -2639,6 +2780,17 @@ def _build_otd_detail_sql(customer="", part=""):
     return f"""
 WITH AllSchedules AS (
     SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shdQty, s.shddate,
+           COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           ) AS targetdate,
            MONTH(p.podt) AS PoMonth, p.pono, p.refno, p.cid
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
@@ -2648,56 +2800,58 @@ WITH AllSchedules AS (
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
 ),
 AllDeliveries AS (
-    SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty
+    SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
     FROM DcInSubDetAssmPoDet d
     INNER JOIN DC_Mas m ON d.dcno = m.dcno
     WHERE d.deleted = 0
     UNION ALL
-    SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty
+    SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
     FROM DcInSubDet d
     INNER JOIN DC_Mas m ON d.dcno = m.dcno
     WHERE d.deleted = 0
 ),
-ScheduleWithDeliveries AS (
-    SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shdQty, sch.shddate,
-           sch.PoMonth, sch.pono, sch.refno, sch.cid, del.dcdate, del.okqty
+DeliverySummary AS (
+    SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shdQty, sch.shddate, sch.targetdate,
+           sch.PoMonth, sch.pono, sch.refno, sch.cid,
+           ISNULL(SUM(CASE WHEN del.dcdate <= sch.targetdate THEN del.okqty ELSE 0 END), 0) AS OnTimeDelQty,
+           ISNULL(SUM(CASE WHEN del.dcdate > sch.targetdate THEN del.okqty ELSE 0 END), 0) AS DelayedDelQty,
+           ISNULL(SUM(del.okqty), 0) AS TotalDelQty,
+           MAX(CASE WHEN del.dcdate > sch.targetdate THEN del.dcdate ELSE NULL END) AS LastDelayedDcDate
     FROM AllSchedules sch
     LEFT JOIN AllDeliveries del
         ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno
-),
-CumulativeDeliveries AS (
-    SELECT Apono, partno, poslno, reqdate, shdQty, shddate, PoMonth, pono, refno, cid,
-           dcdate, okqty,
-           SUM(okqty) OVER (
-               PARTITION BY Apono, partno, poslno, reqdate ORDER BY dcdate
-           ) AS CumQty
-    FROM ScheduleWithDeliveries
-    WHERE dcdate IS NOT NULL
-),
-Completion AS (
-    SELECT Apono, partno, poslno, reqdate, shdQty, shddate, PoMonth, pono, refno, cid,
-           MIN(dcdate) AS CompletionDate
-    FROM CumulativeDeliveries
-    WHERE CumQty >= shdQty
-    GROUP BY Apono, partno, poslno, reqdate, shdQty, shddate, PoMonth, pono, refno, cid
+    GROUP BY sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shdQty, sch.shddate, sch.targetdate,
+             sch.PoMonth, sch.pono, sch.refno, sch.cid
 )
 SELECT TOP 5000
     ISNULL(LTRIM(RTRIM(cm.CName)), N'—') AS CustomerName,
-    LTRIM(RTRIM(CAST(c.pono AS NVARCHAR(128)))) AS PONumber,
-    LTRIM(RTRIM(CAST(c.Apono AS NVARCHAR(128)))) AS PORefNumber,
-    LTRIM(RTRIM(CAST(c.partno AS NVARCHAR(128)))) AS PartNumber,
-    CAST(c.shddate AS DATE) AS SchdDt,
-    CAST(c.reqdate AS DATE) AS ReqDt,
-    ISNULL(CAST(c.shdQty AS FLOAT), 0) AS OrderQty,
-    ISNULL(CAST(c.shdQty AS FLOAT), 0) AS DeliveryQty,
-    CASE WHEN c.CompletionDate <= c.reqdate THEN N'On Time' ELSE N'Delayed' END AS Status,
-    ISNULL(CAST(pd.rate AS FLOAT), 0) * ISNULL(CAST(c.shdQty AS FLOAT), 0) AS Value
-FROM Completion c
-LEFT JOIN CustMast cm ON c.cid = cm.Id
+    LTRIM(RTRIM(CAST(ds.pono AS NVARCHAR(128)))) AS PONumber,
+    LTRIM(RTRIM(CAST(ds.Apono AS NVARCHAR(128)))) AS PORefNumber,
+    LTRIM(RTRIM(CAST(ds.partno AS NVARCHAR(128)))) AS PartNumber,
+    CAST(ds.shddate AS DATE) AS SchdDt,
+    CAST(ds.reqdate AS DATE) AS ReqDt,
+    ISNULL(CAST(ds.shdQty AS FLOAT), 0) AS OrderQty,
+    ISNULL(CAST(ds.TotalDelQty AS FLOAT), 0) AS DeliveryQty,
+    CASE WHEN ds.DelayedDelQty = 0 AND ds.TotalDelQty > 0 THEN N'On Time' ELSE N'Delayed' END AS Status,
+    ISNULL(CAST(pd.rate AS FLOAT), 0) * ISNULL(CAST(ds.shdQty AS FLOAT), 0) AS Value,
+    ISNULL(CAST(ds.OnTimeDelQty AS FLOAT), 0) AS OnTimeDelQty,
+    ISNULL(CAST(ds.DelayedDelQty AS FLOAT), 0) AS DelayedDelQty,
+    CASE
+        WHEN ds.TotalDelQty = 0 THEN 0.0
+        WHEN ds.DelayedDelQty = 0 THEN 100.0
+        ELSE ISNULL(
+            (SELECT TOP 1 r2.RatingFor FROM CustPoOTDRating r2
+             WHERE DATEDIFF(DAY, ds.targetdate, ds.LastDelayedDcDate) BETWEEN r2.RatingFrom AND r2.RatingTo),
+            0.0
+        )
+    END AS OtdPct
+FROM DeliverySummary ds
+LEFT JOIN CustMast cm ON ds.cid = cm.Id
 LEFT JOIN In_PoDet pd
-    ON pd.Apono = c.Apono AND pd.itcode = c.partno AND pd.poslno = c.poslno
+    ON pd.Apono = ds.Apono AND pd.itcode = ds.partno AND pd.poslno = ds.poslno
    AND ISNULL(pd.deleted, 0) = 0
-ORDER BY c.reqdate DESC, c.pono, c.partno
+WHERE ds.TotalDelQty > 0
+ORDER BY ds.targetdate DESC, ds.pono, ds.partno
 """
 
 
@@ -2862,6 +3016,12 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
         po_ref = str(row[2] or "").strip()
         if not po_ref:
             po_ref = "—"
+        del_qty = round(float(row[7] or 0), 2)
+        status = str(row[8] or "—").strip()
+        on_time_del_qty = round(float(row[10] or 0), 2) if len(row) > 10 else (del_qty if status == "On Time" else 0.0)
+        delayed_del_qty = round(float(row[11] or 0), 2) if len(row) > 11 else (del_qty if status == "Delayed" else 0.0)
+        otd_pct = round(float(row[12] or 0), 2) if len(row) > 12 else (100.0 if status == "On Time" else 85.0)
+
         rows.append({
             "customerName": customer,
             "poNumber": str(row[1] or "—").strip(),
@@ -2871,8 +3031,11 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
             "schdDate": _format_otd_date(row[4]),
             "reqDate": _format_otd_date(row[5]),
             "orderQty": round(float(row[6] or 0), 2),
-            "deliveryQty": round(float(row[7] or 0), 2),
-            "status": str(row[8] or "—").strip(),
+            "deliveryQty": del_qty,
+            "onTimeDelQty": on_time_del_qty,
+            "delayedDelQty": delayed_del_qty,
+            "otdPct": otd_pct,
+            "status": status,
             "value": round(float(row[9] or 0), 2),
         })
     return rows, sorted(customers), sorted(parts)
@@ -2975,7 +3138,135 @@ dashboard3_otd = plant_performance_otd
 plant_performance_kpis = dashboard2_kpis
 plant_performance_final_inspection_kpi = dashboard2_final_inspection_kpi
 plant_performance_production_by_shift = dashboard2_production_by_shift
-plant_performance_idle_hours = dashboard2_idle_hours
+@api_view(["GET"])
+def plant_performance_idle_hours(request):
+    """
+    Plant Performance — Idle Hours Report based on exact IdleData CTE query.
+    Calculates TotalEntries, TotalIdleSeconds, Hours, Minutes, and formatted TotalIdleTime ('X Hrs Y Mins').
+    """
+    try:
+        from .views import get_tenant_connection, parse_date_range
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    sql = """
+;WITH IdleData AS
+(
+    --------------------------------------------------------------------
+    -- ProductionEntry
+    --------------------------------------------------------------------
+    SELECT
+        DATEDIFF(SECOND,'19000101',ISNULL(idlTime,'19000101')) AS IdleSeconds
+    FROM ProductionEntry
+    WHERE deleted = 0
+      AND proddate >= ?
+      AND proddate < DATEADD(DAY, 1, ?)
+
+    UNION ALL
+
+    --------------------------------------------------------------------
+    -- ConvProductionEntry
+    --------------------------------------------------------------------
+    SELECT
+        DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
+    FROM ConvProductionEntry
+    WHERE deleted = 0
+      AND entrydate >= ?
+      AND entrydate < DATEADD(DAY, 1, ?)
+
+    UNION ALL
+
+    --------------------------------------------------------------------
+    -- ConvProductionEntryRod
+    --------------------------------------------------------------------
+    SELECT
+        DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
+    FROM ConvProductionEntryRod
+    WHERE deleted = 0
+      AND entrydate >= ?
+      AND entrydate < DATEADD(DAY, 1, ?)
+
+    UNION ALL
+
+    --------------------------------------------------------------------
+    -- Machine_IdleEntryDet (Date from Machine_IdleEntryMas)
+    --------------------------------------------------------------------
+    SELECT
+        DATEDIFF(SECOND,'19000101',ISNULL(D.tottime,'19000101'))
+    FROM Machine_IdleEntryDet D
+    INNER JOIN Machine_IdleEntryMas M
+        ON D.prodid = M.prodid
+    WHERE D.deleted = 0
+      AND M.deleted = 0
+      AND M.proddate >= ?
+      AND M.proddate < DATEADD(DAY, 1, ?)
+)
+SELECT
+    ISNULL(COUNT(*), 0) AS TotalEntries,
+    ISNULL(SUM(IdleSeconds), 0) AS TotalIdleSeconds,
+    ISNULL(SUM(IdleSeconds) / 3600, 0) AS Hours,
+    ISNULL((SUM(IdleSeconds) % 3600) / 60, 0) AS Minutes
+FROM IdleData;
+    """
+
+    params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
+
+    total_entries = 0
+    total_idle_seconds = 0
+    hours = 0
+    minutes = 0
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+        if row:
+            total_entries = int(row[0] or 0)
+            total_idle_seconds = int(row[1] or 0)
+            hours = int(row[2] or 0) if row[2] is not None else (total_idle_seconds // 3600)
+            minutes = int(row[3] or 0) if row[3] is not None else ((total_idle_seconds % 3600) // 60)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    total_idle_time_str = f"{hours} Hrs {minutes} Mins"
+    decimal_hours = round(total_idle_seconds / 3600.0, 2)
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "company_code": tenant.get("company_code", "") or "",
+        "from": str(start_date),
+        "to": str(end_date),
+        "summary": {
+            "total_entries": total_entries,
+            "total_idle_seconds": total_idle_seconds,
+            "hours": hours,
+            "minutes": minutes,
+            "total_idle_time": total_idle_time_str,
+            "formatted_idle_time": total_idle_time_str,
+            "total_idle_hours": decimal_hours,
+            "accepted_hours": decimal_hours,
+            "non_accepted_hours": 0.0,
+            "other_hours": 0.0,
+        },
+        "total_idle_time": total_idle_time_str,
+        "formatted_idle_time": total_idle_time_str,
+        "hours": hours,
+        "minutes": minutes,
+        "total_idle_seconds": total_idle_seconds,
+        "accepted": [],
+        "non_accepted": []
+    })
 plant_performance_po_pipeline = dashboard2_po_pipeline
 
 # ── Action to be Taken (9 cards) ────────────────────────────────────────────
@@ -3676,200 +3967,271 @@ ORDER BY cm.CName;
 
 @api_view(["GET"])
 def plant_performance_store_stock_value(request):
+    """
+    Store Stock Value report.
+
+    Net stock qty per part is derived from 7 movement sources (all filtered
+    to the selected date range on their own date column), then valued at
+    the latest BaseRate/NetRate from Commer_BaseRateDet.
+
+        + inspdet          (dtype = 'Stores Material')   -> ADD  (goods received)
+        - MatIssDet                                       -> REDUCE (material issued)
+        + MatRetDet                                        -> ADD  (material returned)
+        +/- MatAdjDet      (per adjustfor: Add / Deduct)  -> ADD or REDUCE
+        - ReturnableDcIss_Det (Calibration/Service Issue) -> REDUCE
+        + ReturnableDcInc_Det (Calibration/Service Return)-> ADD
+        - DC_Det           (dtype = 'Stores Material')    -> REDUCE (delivered out)
+
+    NOTE: the source queries you supplied for ReturnableDcIss/Inc had an
+    operator-precedence bug:
+        WHERE (dtype = 'A') OR (dtype = 'B') AND (deleted = 0) AND (date BETWEEN ..)
+    SQL evaluates AND before OR, so 'dtype = A' rows were being pulled in
+    regardless of deleted/date. Fixed below by parenthesizing the OR clause.
+    """
     try:
         from .views import get_tenant_connection, parse_date_range
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
-        
+
     start_date, end_date = parse_date_range(request)
     category_param = (request.GET.get("category") or "").strip()
     item_code_param = (request.GET.get("itemCode") or "").strip()
 
-    extra_where = ""
-    kpi_params = []
-    
+    # ---- shared filter fragments -------------------------------------
+    # NS.PartNo   used in kpi / table queries (aggregated NetStock CTE)
+    # MD.PartNo   used in chart query (row-level MovementDetail CTE)
+    kpi_extra_where = ""
+    chart_extra_where = ""
+    extra_params = []
+
     if category_param:
         categories = [c.strip() for c in category_param.split(",") if c.strip()]
         if categories:
             placeholders = ",".join(["?"] * len(categories))
-            extra_where += f" AND RPM.SGroup IN ({placeholders})"
-            kpi_params.extend(categories)
-            
-    if item_code_param:
-        extra_where += " AND ID.partno = ?"
-        kpi_params.append(item_code_param)
+            kpi_extra_where += f" AND RPM.SGroup IN ({placeholders})"
+            chart_extra_where += f" AND RPM.SGroup IN ({placeholders})"
+            extra_params.extend(categories)  # NOTE: appended twice below (once per query use)
 
-    # 1. KPI Value Query
+    item_extra_kpi = ""
+    item_extra_chart = ""
+    item_param_value = []
+    if item_code_param:
+        item_codes = [c.strip() for c in item_code_param.split(",") if c.strip()]
+        if item_codes:
+            if len(item_codes) == 1:
+                item_extra_kpi = " AND NS.PartNo = ?"
+                item_extra_chart = " AND MD.PartNo = ?"
+            else:
+                ph = ",".join(["?"] * len(item_codes))
+                item_extra_kpi = f" AND NS.PartNo IN ({ph})"
+                item_extra_chart = f" AND MD.PartNo IN ({ph})"
+            item_param_value = item_codes
+
+    # ---- the shared MovementDetail CTE (7 UNIONed sources, 14 date params) --
+    MOVEMENT_DETAIL_CTE = """
+    MovementDetail AS (
+        -- 1. Inspection Receipt (Stores Material) -> ADD
+        SELECT ID.partno AS PartNo, ISNULL(ID.okqty,0) AS Qty, IM.irdate AS MovDate
+        FROM inspdet ID
+        INNER JOIN inspmas IM ON IM.irno = ID.irno AND IM.deleted = 0
+        WHERE ID.deleted = 0 AND ID.dtype = 'Stores Material'
+          AND IM.irdate BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 2. Material Issue -> REDUCE
+        SELECT MID.codeno AS PartNo, -ISNULL(MID.qty,0) AS Qty, MIM.Issdate AS MovDate
+        FROM MatIssDet MID
+        INNER JOIN MatIssMas MIM ON MIM.Issno = MID.issno AND MIM.deleted = 0
+        WHERE MID.deleted = 0
+          AND MIM.Issdate BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 3. Material Return -> ADD
+        SELECT MRD.codeno AS PartNo, ISNULL(MRD.qty,0) AS Qty, MRM.Retdate AS MovDate
+        FROM MatRetDet MRD
+        INNER JOIN MatRetMas MRM ON MRM.Retno = MRD.Retno AND MRM.deleted = 0
+        WHERE MRD.deleted = 0
+          AND MRM.Retdate BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 4. Material Adjustment -> ADD or DEDUCT per adjustfor
+        SELECT MAD.codeno AS PartNo,
+            CASE
+                WHEN MAD.adjustfor = 'Add' THEN ISNULL(MAD.qty,0)
+                WHEN MAD.adjustfor = 'Deduct' THEN -ISNULL(MAD.qty,0)
+                ELSE 0
+            END AS Qty,
+            MAM.adjdate AS MovDate
+        FROM MatAdjDet MAD
+        INNER JOIN MatAdjMas MAM ON MAM.adjno = MAD.adjno AND MAM.deleted = 0
+        WHERE MAD.deleted = 0
+          AND MAM.adjdate BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 5. Returnable DC Issue (Calibration/Service Issue) -> REDUCE
+        SELECT RID.itcode AS PartNo, -ISNULL(RID.qty,0) AS Qty, RIM.retissdt AS MovDate
+        FROM ReturnableDcIss_Det RID
+        INNER JOIN ReturnableDcIss_Mas RIM ON RIM.retissno = RID.retissno AND RIM.deleted = 0
+        WHERE RID.deleted = 0
+          AND (RIM.dtype = 'Calibration Issue' OR RIM.dtype = 'Service Issue')
+          AND RIM.retissdt BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 6. Returnable DC Income (Calibration/Service Return) -> ADD
+        SELECT RCD.itcode AS PartNo, ISNULL(RCD.qty,0) AS Qty, RCM.retincdt AS MovDate
+        FROM ReturnableDcInc_Det RCD
+        INNER JOIN ReturnableDcInc_Mas RCM ON RCM.retincno = RCD.retincno AND RCM.deleted = 0
+        WHERE RCD.deleted = 0
+          AND (RCM.dtype = 'Calibration Return' OR RCM.dtype = 'Service Return')
+          AND RCM.retincdt BETWEEN ? AND ?
+
+        UNION ALL
+
+        -- 7. Delivery Challan (Stores Material) -> REDUCE
+        SELECT DCD.partno AS PartNo, -ISNULL(DCD.okqty,0) AS Qty, DCM.dcdate AS MovDate
+        FROM DC_Det DCD
+        INNER JOIN DC_Mas DCM ON DCM.dcno = DCD.dcno AND DCM.deleted = 0
+        WHERE DCD.deleted = 0 AND DCM.dtype = 'Stores Material'
+          AND DCM.dcdate BETWEEN ? AND ?
+    )
+    """
+
+    def date_params():
+        # 7 sources, each needs [start_date, end_date]
+        p = []
+        for _ in range(7):
+            p.extend([start_date, end_date])
+        return p
+
+    # 1. KPI Value Query -------------------------------------------------
     kpi_sql = f"""
     ;WITH LatestRate AS (
-        SELECT
-            PartNo,
-            BaseRate,
-            NetRate,
-            ROW_NUMBER() OVER (
-                PARTITION BY PartNo
-                ORDER BY BReffdt DESC
-            ) AS RN
+        SELECT PartNo, BaseRate, NetRate,
+            ROW_NUMBER() OVER (PARTITION BY PartNo ORDER BY BReffdt DESC) AS RN
         FROM Commer_BaseRateDet
         WHERE deleted = 0
+    ),
+    {MOVEMENT_DETAIL_CTE},
+    NetStock AS (
+        SELECT PartNo, SUM(Qty) AS NetQty
+        FROM MovementDetail
+        GROUP BY PartNo
     )
     SELECT
         SUM(
-            ISNULL(ID.okqty,0) *
+            NS.NetQty *
             (
                 CASE
-                    WHEN ISNULL(LR.NetRate,0)=0
-                         THEN ISNULL(LR.BaseRate,0)
+                    WHEN ISNULL(LR.NetRate,0)=0 THEN ISNULL(LR.BaseRate,0)
                     ELSE LR.NetRate
                 END
             )
         ) AS TotalStoreStockValue
-    FROM inspdet ID
-    INNER JOIN inspmas IM
-        ON IM.irno = ID.irno
-        AND IM.deleted = 0
-    LEFT JOIN RawProdMast RPM
-        ON RPM.Codeno = ID.partno
-        AND RPM.Deleted = 0
-    LEFT JOIN LatestRate LR
-        ON LR.PartNo = ID.partno
-        AND LR.RN = 1
-    WHERE ID.deleted = 0
-      AND ID.dtype = 'Stores Material'
-      AND IM.irdate BETWEEN ? AND ?
-      {extra_where}
+    FROM NetStock NS
+    LEFT JOIN RawProdMast RPM ON RPM.Codeno = NS.PartNo AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR ON LR.PartNo = NS.PartNo AND LR.RN = 1
+    WHERE 1=1
+      {kpi_extra_where}
+      {item_extra_kpi}
     """
-    
-    # 2. Chart Query (Month Wise) — structure mirrors KPI query exactly
+
+    # 2. Chart Query (Month Wise) ----------------------------------------
     chart_sql = f"""
     ;WITH LatestRate AS (
-        SELECT
-            PartNo,
-            BaseRate,
-            NetRate,
-            ROW_NUMBER() OVER (
-                PARTITION BY PartNo
-                ORDER BY BReffdt DESC
-            ) AS RN
+        SELECT PartNo, BaseRate, NetRate,
+            ROW_NUMBER() OVER (PARTITION BY PartNo ORDER BY BReffdt DESC) AS RN
         FROM Commer_BaseRateDet
         WHERE deleted = 0
-    )
+    ),
+    {MOVEMENT_DETAIL_CTE}
     SELECT
-        FORMAT(IM.irdate,'MMM-yy') AS Month,
+        FORMAT(MD.MovDate,'MMM-yy') AS Month,
         SUM(
-            ISNULL(ID.okqty,0) *
+            MD.Qty *
             (
                 CASE
-                    WHEN ISNULL(LR.NetRate,0)=0
-                        THEN ISNULL(LR.BaseRate,0)
+                    WHEN ISNULL(LR.NetRate,0)=0 THEN ISNULL(LR.BaseRate,0)
                     ELSE LR.NetRate
                 END
             )
         ) AS StockValue
-    FROM inspdet ID
-    INNER JOIN inspmas IM
-        ON IM.irno = ID.irno
-        AND IM.deleted = 0
-    LEFT JOIN RawProdMast RPM
-        ON RPM.Codeno = ID.partno
-        AND RPM.Deleted = 0
-    LEFT JOIN LatestRate LR
-        ON LR.PartNo = ID.partno
-        AND LR.RN = 1
-    WHERE ID.deleted = 0
-      AND ID.dtype = 'Stores Material'
-      AND IM.irdate BETWEEN ? AND ?
-      {extra_where}
-    GROUP BY
-        YEAR(IM.irdate),
-        MONTH(IM.irdate),
-        FORMAT(IM.irdate,'MMM-yy')
-    ORDER BY
-        YEAR(IM.irdate),
-        MONTH(IM.irdate)
+    FROM MovementDetail MD
+    LEFT JOIN RawProdMast RPM ON RPM.Codeno = MD.PartNo AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR ON LR.PartNo = MD.PartNo AND LR.RN = 1
+    WHERE 1=1
+      {chart_extra_where}
+      {item_extra_chart}
+    GROUP BY YEAR(MD.MovDate), MONTH(MD.MovDate), FORMAT(MD.MovDate,'MMM-yy')
+    ORDER BY YEAR(MD.MovDate), MONTH(MD.MovDate)
     """
 
-
-    # 3. Table Query
+    # 3. Table Query -------------------------------------------------------
     table_sql = f"""
     ;WITH LatestRate AS (
-        SELECT
-            PartNo,
-            BaseRate,
-            NetRate,
-            BReffdt,
-            ROW_NUMBER() OVER (
-                PARTITION BY PartNo
-                ORDER BY BReffdt DESC
-            ) AS RN
+        SELECT PartNo, BaseRate, NetRate,
+            ROW_NUMBER() OVER (PARTITION BY PartNo ORDER BY BReffdt DESC) AS RN
         FROM Commer_BaseRateDet
         WHERE deleted = 0
+    ),
+    {MOVEMENT_DETAIL_CTE},
+    NetStock AS (
+        SELECT PartNo, SUM(Qty) AS NetQty
+        FROM MovementDetail
+        GROUP BY PartNo
     )
     SELECT
         RPM.SGroup AS [Group],
-        ID.partno,
+        NS.PartNo,
         RPM.Description,
-        SUM(ISNULL(ID.okqty,0)) AS TotalQty,
+        NS.NetQty AS TotalQty,
         CASE
-            WHEN ISNULL(LR.NetRate,0)=0
-                THEN ISNULL(LR.BaseRate,0)
+            WHEN ISNULL(LR.NetRate,0)=0 THEN ISNULL(LR.BaseRate,0)
             ELSE LR.NetRate
         END AS Rate,
-        SUM(
-            ISNULL(ID.okqty,0) *
-            (
-                CASE
-                    WHEN ISNULL(LR.NetRate,0)=0
-                        THEN ISNULL(LR.BaseRate,0)
-                    ELSE LR.NetRate
-                END
-            )
+        NS.NetQty *
+        (
+            CASE
+                WHEN ISNULL(LR.NetRate,0)=0 THEN ISNULL(LR.BaseRate,0)
+                ELSE LR.NetRate
+            END
         ) AS StockValue
-    FROM inspdet ID
-    INNER JOIN inspmas IM
-        ON IM.irno = ID.irno
-        AND IM.deleted = 0
-    LEFT JOIN RawProdMast RPM
-        ON RPM.Codeno = ID.partno
-        AND RPM.Deleted = 0
-    LEFT JOIN LatestRate LR
-        ON LR.PartNo = ID.partno
-        AND LR.RN = 1
-    WHERE ID.deleted = 0
-      AND ID.dtype = 'Stores Material'
-      AND IM.irdate BETWEEN ? AND ?
-      {extra_where}
-    GROUP BY
-        RPM.SGroup,
-        ID.partno,
-        RPM.Description,
-        LR.BaseRate,
-        LR.NetRate
-    ORDER BY
-        RPM.SGroup,
-        ID.partno
+    FROM NetStock NS
+    LEFT JOIN RawProdMast RPM ON RPM.Codeno = NS.PartNo AND RPM.Deleted = 0
+    LEFT JOIN LatestRate LR ON LR.PartNo = NS.PartNo AND LR.RN = 1
+    WHERE 1=1
+      {kpi_extra_where}
+      {item_extra_kpi}
+    ORDER BY RPM.SGroup, NS.PartNo
     """
 
     try:
         cursor = conn.cursor()
-        
+
         # KPI
-        cursor.execute(kpi_sql, [start_date, end_date] + kpi_params)
+        kpi_params = date_params() + list(extra_params) + item_param_value
+        cursor.execute(kpi_sql, kpi_params)
         kpi_row = cursor.fetchone()
         total_val = float(kpi_row[0] or 0) if kpi_row else 0.0
         total_val_lakhs = round(total_val / 100000.0, 2)
-        
+
         # Chart
-        cursor.execute(chart_sql, [start_date, end_date] + kpi_params)
+        chart_params = date_params() + list(extra_params) + item_param_value
+        cursor.execute(chart_sql, chart_params)
         chart_labels = []
         chart_values = []
         for r in cursor.fetchall() or []:
             chart_labels.append(str(r[0]))
             chart_values.append(round(float(r[1] or 0) / 100000.0, 2))
-            
+
         # Table Rows
-        cursor.execute(table_sql, [start_date, end_date] + kpi_params)
+        table_params = date_params() + list(extra_params) + item_param_value
+        cursor.execute(table_sql, table_params)
         table_rows = []
         for idx, r in enumerate(cursor.fetchall() or []):
             grp = str(r[0]).strip() if r[0] else "—"
@@ -3878,7 +4240,7 @@ def plant_performance_store_stock_value(request):
             qty = float(r[3] or 0)
             rate = float(r[4] or 0)
             val = float(r[5] or 0)
-            
+
             table_rows.append({
                 "id": idx + 1,
                 "group": grp,
@@ -3888,26 +4250,31 @@ def plant_performance_store_stock_value(request):
                 "rate": rate,
                 "stockValue": val
             })
-            
-        # Filter Options
+
+        # Filter Options — single query builds both groups list + group→item map + flat item codes
         cursor.execute("""
-            SELECT DISTINCT LTRIM(RTRIM(SGroup)) 
-            FROM RawProdMast 
-            WHERE Deleted = 0 AND SGroup IS NOT NULL AND SGroup <> '' 
-            ORDER BY LTRIM(RTRIM(SGroup))
+            SELECT LTRIM(RTRIM(SGroup)), LTRIM(RTRIM(Codeno))
+            FROM RawProdMast
+            WHERE Deleted = 0 AND SGroup IS NOT NULL AND SGroup <> ''
+              AND Codeno IS NOT NULL AND Codeno <> ''
+            ORDER BY LTRIM(RTRIM(SGroup)), LTRIM(RTRIM(Codeno))
         """)
-        groups_opt = [str(r[0]) for r in cursor.fetchall() if r[0]]
-        
-        cursor.execute("""
-            SELECT DISTINCT LTRIM(RTRIM(partno)) 
-            FROM inspdet 
-            WHERE deleted = 0 AND dtype = 'Stores Material' AND partno IS NOT NULL AND partno <> '' 
-            ORDER BY LTRIM(RTRIM(partno))
-        """)
-        items_opt = [str(r[0]) for r in cursor.fetchall() if r[0]]
-        
+        group_item_map = {}
+        all_item_codes_set = set()
+        for r in cursor.fetchall():
+            grp = str(r[0]).strip()
+            code = str(r[1]).strip()
+            if grp not in group_item_map:
+                group_item_map[grp] = []
+            group_item_map[grp].append(code)
+            all_item_codes_set.add(code)
+
+        # Derive flat lists from single query result
+        groups_opt = sorted(group_item_map.keys())
+        items_opt = sorted(all_item_codes_set)
+
         cursor.close()
-        
+
         return Response({
             "kpi": {
                 "totalStockValue": total_val,
@@ -3920,7 +4287,8 @@ def plant_performance_store_stock_value(request):
             "rows": table_rows,
             "filterOptions": {
                 "groups": groups_opt,
-                "itemCodes": items_opt
+                "itemCodes": items_opt,
+                "groupItemCodes": group_item_map
             }
         })
     except Exception as e:
@@ -4190,4 +4558,201 @@ __all__ = [
     "dashboard2_target_vs_actual",
     "dashboard3_target_vs_actual",
     "plant_performance_store_stock_value",
+    "plant_performance_target_criteria",
 ]
+
+MODULE_NAME_MAP = {
+    "customer_po": "Customer PO vs Sales Value",
+    "production_analysis": "Production Value Vs Actual Value",
+    "grn_value": "GRN Value",
+    "purchase_value": "Purchase Value",
+    "sales_analysis": "Sales Analysis",
+    "idle_hours": "Idle Hours",
+    "idle_hours_non_accepted": "Idle Hours Non-Accepted Reason Loss",
+    "oee": "OEE Overall",
+    "oee_comparison": "OEE Comparison",
+    "rejection": "Rejection",
+    "rework": "Rework",
+    "efficiency": "Efficiency",
+    "otd": "OTD",
+    "supplier_rating": "Supplier Rating",
+    "vendor_rating": "Vendor Rating",
+    "fg_value": "FG Value",
+    "daily_production": "Daily Production",
+    "target_vs_actual": "Target Vs Actual",
+    "operator_efficiency": "Operator Efficiency",
+    "store_stock_value": "Store Stock Value",
+}
+
+def ensure_cloud_target_criteria_table(cloud_cursor):
+    """
+    Ensures target_criteria_plant_performance table is created in Cloud DB SASSMMS (default Django connection).
+    """
+    tbl_name = "target_criteria_plant_performance"
+    create_sql = f"""
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{tbl_name}')
+    BEGIN
+        CREATE TABLE {tbl_name} (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            company_code NVARCHAR(64) NOT NULL DEFAULT 'DEFAULT',
+            ModuleKey NVARCHAR(100) NOT NULL,
+            ModuleName NVARCHAR(255) NULL,
+            TargetValue NVARCHAR(MAX) NULL,
+            Value NVARCHAR(MAX) NULL,
+            ConfigJson NVARCHAR(MAX) NULL,
+            UpdatedAt DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_{tbl_name}_Comp_Mod UNIQUE (company_code, ModuleKey)
+        );
+    END
+    """
+    try:
+        cloud_cursor.execute(create_sql)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"ensure_cloud_target_criteria_table warning: {e}")
+
+    try:
+        cloud_cursor.execute(f"""
+        IF NOT EXISTS (
+            SELECT * FROM sys.columns 
+            WHERE object_id = OBJECT_ID('{tbl_name}') AND name = 'company_code'
+        )
+        BEGIN
+            ALTER TABLE {tbl_name} ADD company_code NVARCHAR(64) NOT NULL DEFAULT 'DEFAULT';
+        END
+        """)
+    except Exception:
+        pass
+
+
+@api_view(["GET", "POST"])
+def plant_performance_target_criteria(request):
+    """
+    Saves and fetches Target Criteria configuration exclusively to/from Cloud DB SASSMMS table:
+    target_criteria_plant_performance using django.db.connection.
+    """
+    try:
+        from .views import get_tenant_connection
+        _, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    company_code = tenant.get("company_code") or tenant.get("tenant_id") or "DEFAULT"
+
+    from django.db import connection as cloud_connection
+
+    try:
+        with cloud_connection.cursor() as cloud_cursor:
+            ensure_cloud_target_criteria_table(cloud_cursor)
+
+            tbl = "target_criteria_plant_performance"
+
+            if request.method == "POST":
+                raw_data = request.data or {}
+                target_config = raw_data.get("targetConfig") or raw_data.get("config") or raw_data
+                if not target_config or not isinstance(target_config, dict):
+                    return Response({"error": "Invalid targetConfig payload."}, status=400)
+
+                config_str = json.dumps(target_config)
+
+                # Save composite 'ALL_MODULES'
+                upsert_all_sql = f"""
+                IF EXISTS (SELECT 1 FROM {tbl} WHERE company_code = %s AND ModuleKey = 'ALL_MODULES')
+                BEGIN
+                    UPDATE {tbl} SET ModuleName = 'All Modules', TargetValue = %s, Value = %s, ConfigJson = %s, UpdatedAt = GETDATE()
+                    WHERE company_code = %s AND ModuleKey = 'ALL_MODULES'
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO {tbl} (company_code, ModuleKey, ModuleName, TargetValue, Value, ConfigJson, UpdatedAt)
+                    VALUES (%s, 'ALL_MODULES', 'All Modules', %s, %s, %s, GETDATE())
+                END
+                """
+                cloud_cursor.execute(upsert_all_sql, [
+                    company_code, config_str, config_str, config_str, company_code,
+                    company_code, config_str, config_str, config_str
+                ])
+
+                # Save individual module rows
+                for k, v in target_config.items():
+                    m_name = MODULE_NAME_MAP.get(k, str(k).replace("_", " ").title())
+                    v_str = json.dumps(v)
+                    val_display = str(v) if not isinstance(v, dict) else json.dumps(v)
+
+                    upsert_mod_sql = f"""
+                    IF EXISTS (SELECT 1 FROM {tbl} WHERE company_code = %s AND ModuleKey = %s)
+                    BEGIN
+                        UPDATE {tbl} SET ModuleName = %s, TargetValue = %s, Value = %s, ConfigJson = %s, UpdatedAt = GETDATE()
+                        WHERE company_code = %s AND ModuleKey = %s
+                    END
+                    ELSE
+                    BEGIN
+                        INSERT INTO {tbl} (company_code, ModuleKey, ModuleName, TargetValue, Value, ConfigJson, UpdatedAt)
+                        VALUES (%s, %s, %s, %s, %s, %s, GETDATE())
+                    END
+                    """
+                    cloud_cursor.execute(upsert_mod_sql, [
+                        company_code, k,
+                        m_name, v_str, val_display, v_str,
+                        company_code, k,
+                        company_code, k, m_name, v_str, val_display, v_str
+                    ])
+
+                return Response({
+                    "status": "success",
+                    "message": "Target Criteria saved successfully to Cloud DB SASSMMS target_criteria_plant_performance table.",
+                    "targetConfig": target_config
+                })
+
+            else: # GET
+                loaded_config = None
+                try:
+                    cloud_cursor.execute(
+                        f"SELECT ConfigJson, TargetValue, Value FROM {tbl} WHERE company_code = %s AND ModuleKey = 'ALL_MODULES'",
+                        [company_code]
+                    )
+                    row = cloud_cursor.fetchone()
+                    if not row:
+                        cloud_cursor.execute(
+                            f"SELECT ConfigJson, TargetValue, Value FROM {tbl} WHERE company_code = 'DEFAULT' AND ModuleKey = 'ALL_MODULES'"
+                        )
+                        row = cloud_cursor.fetchone()
+
+                    if row:
+                        json_txt = row[0] or row[1] or row[2]
+                        if json_txt:
+                            loaded_config = json.loads(json_txt)
+                except Exception:
+                    pass
+
+                if not loaded_config:
+                    try:
+                        cloud_cursor.execute(
+                            f"SELECT ModuleKey, ConfigJson, TargetValue, Value FROM {tbl} WHERE company_code = %s AND ModuleKey <> 'ALL_MODULES'",
+                            [company_code]
+                        )
+                        rows = cloud_cursor.fetchall() or []
+                        if not rows:
+                            cloud_cursor.execute(
+                                f"SELECT ModuleKey, ConfigJson, TargetValue, Value FROM {tbl} WHERE company_code = 'DEFAULT' AND ModuleKey <> 'ALL_MODULES'"
+                            )
+                            rows = cloud_cursor.fetchall() or []
+
+                        if rows:
+                            loaded_config = {}
+                            for r_key, r_json, r_tgt, r_val in rows:
+                                txt = r_json or r_tgt or r_val
+                                if r_key and txt:
+                                    try:
+                                        loaded_config[str(r_key)] = json.loads(txt)
+                                    except Exception:
+                                        loaded_config[str(r_key)] = txt
+                    except Exception:
+                        pass
+
+                return Response({"targetConfig": loaded_config or {}})
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"plant_performance_target_criteria error: {e}", exc_info=True)
+        return Response({"error": f"Database error: {str(e)}"}, status=500)

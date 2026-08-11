@@ -19,12 +19,12 @@ _IDLE_UNION_SQL = """
         D.Shift,
         D.MacNo,
         ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-        DATEDIFF(SECOND, '1900-01-01 00:00:00', D.tottime) AS IdleSeconds
+        DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
     FROM Machine_IdleEntryDet D
     INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-    WHERE M.proddate BETWEEN ? AND ?
-      AND M.deleted = 0
-      AND D.deleted = 0
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
 
     UNION ALL
 
@@ -33,10 +33,14 @@ _IDLE_UNION_SQL = """
         P.shift,
         P.macno,
         N'Production Idle Time' AS Reason,
-        ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
+        CASE
+            WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
+            THEN DATEDIFF(SECOND, '19000101', P.idlTime)
+            ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
+        END AS IdleSeconds
     FROM ProductionEntry P
-    WHERE P.proddate BETWEEN ? AND ?
-      AND P.deleted = 0
+    WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(P.deleted, 0) = 0
 
     UNION ALL
 
@@ -45,10 +49,10 @@ _IDLE_UNION_SQL = """
         C.shift,
         C.macno,
         N'Conv Production Idle Time' AS Reason,
-        DATEDIFF(SECOND, '1900-01-01 00:00:00', C.IdleTime)
+        DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
     FROM ConvProductionEntry C
-    WHERE C.entrydate BETWEEN ? AND ?
-      AND C.deleted = 0
+    WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
+      AND ISNULL(C.deleted, 0) = 0
 
     UNION ALL
 
@@ -57,10 +61,10 @@ _IDLE_UNION_SQL = """
         R.shift,
         R.macno,
         N'Conv Rod Idle Time' AS Reason,
-        DATEDIFF(SECOND, '1900-01-01 00:00:00', R.IdleTime)
+        DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
     FROM ConvProductionEntryRod R
-    WHERE R.entrydate BETWEEN ? AND ?
-      AND R.deleted = 0
+    WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
+      AND ISNULL(R.deleted, 0) = 0
 """
 
 _IDLE_REPORT_SQL = f"""

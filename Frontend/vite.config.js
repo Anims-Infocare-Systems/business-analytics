@@ -98,6 +98,7 @@ export default defineConfig(({ mode }) => {
       // ─── Workbox runtime caching ────────────────────────────────────────
       workbox: {
         navigateFallback: '/index.html',
+        maximumFileSizeToCacheInBytes: 5242880, // 5 MiB
 
         navigateFallbackDenylist: [
           /^\/api\//,

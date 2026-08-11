@@ -33,6 +33,7 @@ _MONTH_ABB = [
 
 QUALITY_VALUE_BASE_CTE = """
 WITH CTE_Rejection AS (
+    -- 1. In-Process Job Rejections
     SELECT
         CONVERT(DATE, IM.inspdate) AS RejDate,
         DATENAME(MONTH, IM.inspdate) + '-' + CAST(YEAR(IM.inspdate) AS VARCHAR) AS Mnth,
@@ -51,6 +52,7 @@ WITH CTE_Rejection AS (
 
     UNION ALL
 
+    -- 2. Final Inspection Rejections
     SELECT
         CONVERT(DATE, FM.finspdate) AS RejDate,
         DATENAME(MONTH, FM.finspdate) + '-' + CAST(YEAR(FM.finspdate) AS VARCHAR) AS Mnth,
@@ -64,10 +66,12 @@ WITH CTE_Rejection AS (
     WHERE
         ISNULL(F.deleted, 0) = 0
         AND ISNULL(FM.deleted, 0) = 0
+        AND ISNULL(F.qty, 0) > 0
         {final_filter}
 
     UNION ALL
 
+    -- 3. Intermediate Inspection Rejections
     SELECT
         CONVERT(DATE, IIM.inter_inspdate) AS RejDate,
         DATENAME(MONTH, IIM.inter_inspdate) + '-' + CAST(YEAR(IIM.inter_inspdate) AS VARCHAR) AS Mnth,
@@ -81,8 +85,12 @@ WITH CTE_Rejection AS (
     WHERE
         ISNULL(IR.deleted, 0) = 0
         AND ISNULL(IIM.deleted, 0) = 0
+        AND ISNULL(IR.qty, 0) > 0
         {inter_filter}
 ),
+-- FIX: OUTER APPLY + TOP 1 guarantees at most ONE classification row per rejection row,
+-- instead of the plain LEFT JOINs which fan out when WithMatMas / CustJobRawMat /
+-- ProductMast have more than one matching record for the same PartNo.
 CTE_PartType AS (
     SELECT
         R.*,
@@ -97,47 +105,89 @@ CTE_PartType AS (
         CAST(WM.WtQty AS FLOAT) AS WtQty,
         CAST(WM.TotMmLength AS FLOAT) AS TotMmLength
     FROM CTE_Rejection R
-    LEFT JOIN WithMatMas WM
-        ON R.PartNo = WM.PartNo
-        AND ISNULL(WM.deleted, 0) = 0
-    LEFT JOIN CustJobRawMat CJ
-        ON R.PartNo = CJ.PartNo
-        AND ISNULL(CJ.deleted, 0) = 0
-    LEFT JOIN ProductMast PM
-        ON R.PartNo = PM.PartNo
-        AND ISNULL(PM.deleted, 0) = 0
+    OUTER APPLY (
+        SELECT TOP 1 W.PartNo, W.RmName, W.Rmuom, W.WtQty, W.TotMmLength
+        FROM WithMatMas W
+        WHERE W.PartNo = R.PartNo AND ISNULL(W.deleted, 0) = 0
+        ORDER BY W.PartNo
+    ) WM
+    OUTER APPLY (
+        SELECT TOP 1 CJ2.PartNo
+        FROM CustJobRawMat CJ2
+        WHERE CJ2.PartNo = R.PartNo AND ISNULL(CJ2.deleted, 0) = 0
+        ORDER BY CJ2.PartNo
+    ) CJ
+    OUTER APPLY (
+        SELECT TOP 1 PM2.PartNo
+        FROM ProductMast PM2
+        WHERE PM2.PartNo = R.PartNo AND ISNULL(PM2.deleted, 0) = 0
+        ORDER BY PM2.PartNo
+    ) PM
 ),
+-- FIX: OUTER APPLY + TOP 1 for ProcessSeqDet too — a PartNo+Process should map to
+-- exactly one seq; if duplicates exist (e.g. revisions), this picks one deterministically
+-- instead of duplicating the rejection row for every match.
 CTE_RejSeq AS (
     SELECT
         P.*,
         PSD.seq AS RejSeq
     FROM CTE_PartType P
-    LEFT JOIN ProcessSeqDet PSD
-        ON P.PartNo = PSD.partno
-        AND P.Process = PSD.process
-        AND ISNULL(PSD.deleted, 0) = 0
+    OUTER APPLY (
+        SELECT TOP 1 PSD2.seq
+        FROM ProcessSeqDet PSD2
+        WHERE PSD2.partno = P.PartNo
+            AND PSD2.process = P.Process
+            AND ISNULL(PSD2.deleted, 0) = 0
+        ORDER BY PSD2.seq DESC
+    ) PSD
 ),
 CTE_ProcessCalc AS (
     SELECT
         R.*,
+        -- Cumulative Process Rates up to Rejection Sequence N
         (
-            SELECT
-                SUM(CAST(ISNULL(CPD.Rate, 0) AS FLOAT))
+            SELECT SUM(CAST(ISNULL(CPD.Rate, 0) AS FLOAT))
             FROM ProcessSeqDet PSD
-            LEFT JOIN Commer_ProcDet CPD
-                ON PSD.partno = CPD.PartNo
-                AND PSD.process = CPD.Process
-                AND ISNULL(CPD.deleted, 0) = 0
-            WHERE
-                PSD.partno = R.PartNo
+            OUTER APPLY (
+                SELECT TOP 1 CPD2.Rate
+                FROM Commer_ProcDet CPD2
+                WHERE CPD2.PartNo = PSD.partno
+                    AND CPD2.Process = PSD.process
+                    AND ISNULL(CPD2.deleted, 0) = 0
+                ORDER BY CPD2.PartNo
+            ) CPD
+            WHERE PSD.partno = R.PartNo
                 AND ISNULL(PSD.deleted, 0) = 0
                 AND PSD.seq <= R.RejSeq
         ) AS ProcessRate,
         (
+            SELECT COUNT(*)
+            FROM ProcessSeqDet PSD
+            WHERE PSD.partno = R.PartNo
+                AND ISNULL(PSD.deleted, 0) = 0
+                AND PSD.seq <= R.RejSeq
+        ) AS TotalProcCount,
+        (
+            SELECT COUNT(*)
+            FROM ProcessSeqDet PSD
+            CROSS APPLY (
+                SELECT TOP 1 CPD3.Rate
+                FROM Commer_ProcDet CPD3
+                WHERE CPD3.PartNo = PSD.partno
+                    AND CPD3.Process = PSD.process
+                    AND ISNULL(CPD3.deleted, 0) = 0
+                    AND ISNULL(CPD3.Rate, 0) > 0
+                ORDER BY CPD3.PartNo
+            ) CPD
+            WHERE PSD.partno = R.PartNo
+                AND ISNULL(PSD.deleted, 0) = 0
+                AND PSD.seq <= R.RejSeq
+        ) AS ValidProcRateCount,
+        -- Fully Completed Finished Product Base Rate Fallback (Qty * BaseRate)
+        (
             SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
             FROM Commer_BaseRateDet CBD
-            WHERE
-                CBD.PartNo = R.PartNo
+            WHERE CBD.PartNo = R.PartNo
                 AND ISNULL(CBD.deleted, 0) = 0
             ORDER BY CBD.BReffdt DESC
         ) AS FallbackBaseRate
@@ -146,13 +196,13 @@ CTE_ProcessCalc AS (
 CTE_RMRate AS (
     SELECT
         C.*,
+        -- Raw Material Consumption Rate (With Material items)
         (
             SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
             FROM Commer_BaseRateDet CBD
             INNER JOIN Commer_Mas CM
                 ON CBD.cmno = CM.cmno
-            WHERE
-                CBD.PartNo = C.RmName
+            WHERE CBD.PartNo = C.RmName
                 AND ISNULL(CBD.deleted, 0) = 0
                 AND ISNULL(CM.deleted, 0) = 0
                 AND CM.btype = 'Raw Material'
@@ -163,6 +213,7 @@ CTE_RMRate AS (
 CTE_QualityValue AS (
     SELECT
         RejDate,
+        -- Material Cost: applies only to 'With Material' items (Qty * RM consumption rate)
         (
             CASE
                 WHEN PartType = 'With Material' AND Rmuom = 'NOS' THEN ISNULL(RMRate, 0) * RejectionQty
@@ -171,9 +222,14 @@ CTE_QualityValue AS (
                 ELSE 0
             END
         ) + (
+            -- Process Value: applies to ALL types (With Material, Customer Product, Customer Job Raw Material)
+            -- Rule: if EVERY process rate from seq 1 up to the rejection seq exists -> SUM(those rates) * Qty
+            --       otherwise (any process rate missing along the way)          -> BaseRate * Qty
             CASE
-                WHEN ISNULL(ProcessRate, 0) > 0 THEN ProcessRate * RejectionQty
-                ELSE ISNULL(FallbackBaseRate, 0) * RejectionQty
+                WHEN TotalProcCount > 0 AND TotalProcCount = ValidProcRateCount AND ISNULL(ProcessRate, 0) > 0
+                    THEN ProcessRate * RejectionQty
+                ELSE
+                    ISNULL(FallbackBaseRate, 0) * RejectionQty
             END
         ) AS TotalQualityValue
     FROM CTE_RMRate
@@ -855,39 +911,55 @@ def quality_analysis_charts(request):
             rework_data.append(w_rework)
             reject_data.append(w_rejected)
 
-        # 4. Internal Mac Rejection — PPM DB Query
-        has_mac_rejection_tables = (
-            table_exists(cursor, "ProductionEntry") and
-            table_exists(cursor, "ConvProductionEntry") and
-            table_exists(cursor, "ConvProductionEntryRod") and
-            table_exists(cursor, "Insp_RejectionEntry") and
-            table_exists(cursor, "InterInspectionEntry") and
-            table_exists(cursor, "FinalInspRejectionEntryOrg") and
-            table_exists(cursor, "FinalInspectionEntry") and
-            table_exists(cursor, "Rejection")
-        )
+        # 4. Internal Mac Rejection — PPM DB Query (Formula: (Mac Rejection / Insp Qty) * 1,000,000)
+        try:
+            ppm_sql = """
+            SELECT
+                MONTH(InspDate) AS MonthNum,
+                SUM(InspQty)    AS TotalInspQty,
+                SUM(MacRejQty)  AS TotalMacRejQty
+            FROM (
+                SELECT
+                    m.inspdate AS InspDate,
+                    CAST(ISNULL(d.jobqty, 0) AS INT) AS InspQty,
+                    CAST(ISNULL(d.macrej, 0) AS INT) AS MacRejQty
+                FROM InJob_Mas m
+                INNER JOIN InJob_Det d ON m.inspno = d.inspno
+                WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
+                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
 
-        if has_mac_rejection_tables:
-            production_sql = """
-            SELECT MonthNum, SUM(totQty) AS OverallQty FROM (
-                SELECT MONTH(proddate) AS MonthNum, SUM(ISNULL(okqty,0)) AS totQty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(proddate)
-                UNION ALL SELECT MONTH(entrydate) AS MonthNum, SUM(ISNULL(qty,0)) AS totQty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(entrydate)
-                UNION ALL SELECT MONTH(entrydate) AS MonthNum, SUM(ISNULL(qty,0)) AS totQty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(entrydate)
-            ) AS Combined GROUP BY MonthNum"""
-            rejection_sql = """
-            SELECT MonthNum, SUM(RejQty) AS TotalMachiningRejectionQty FROM (
-                SELECT MONTH(i.inter_inspdate) AS MonthNum, ISNULL(r.qty,0) AS RejQty FROM Insp_RejectionEntry r INNER JOIN InterInspectionEntry i ON r.inter_inspno = i.inter_inspno INNER JOIN Rejection rej ON r.rejection = rej.rejection WHERE i.inter_inspdate BETWEEN ? AND ? AND r.deleted = 0 AND ISNULL(rej.matrej,0) = 0
-                UNION ALL SELECT MONTH(fi.finspdate) AS MonthNum, ISNULL(f.qty,0) AS RejQty FROM FinalInspRejectionEntryOrg f INNER JOIN FinalInspectionEntry fi ON f.finspno = fi.finspno INNER JOIN Rejection rej ON f.rejection = rej.rejection WHERE fi.finspdate BETWEEN ? AND ? AND f.deleted = 0 AND ISNULL(rej.matrej,0) = 0
-            ) AS MachiningRejection GROUP BY MonthNum"""
-            cursor.execute(production_sql, [start_date, end_date, start_date, end_date, start_date, end_date])
-            production_rows = cursor.fetchall()
-            cursor.execute(rejection_sql, [start_date, end_date, start_date, end_date])
-            rejection_rows = cursor.fetchall()
+                UNION ALL
 
-            prod_map = {(y, m): 0.0 for y, m in month_order}
-            rej_map = {(y, m): 0.0 for y, m in month_order}
+                SELECT
+                    inter_inspdate AS InspDate,
+                    CAST(ISNULL(inspqty, 0) AS INT) AS InspQty,
+                    CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
+                FROM InterInspectionEntry
+                WHERE ISNULL(deleted, 0) = 0
+                  AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
 
-            for month_num, qty in production_rows:
+                UNION ALL
+
+                SELECT
+                    finspdate AS InspDate,
+                    CAST(ISNULL(totqty, 0) AS INT) AS InspQty,
+                    CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
+                FROM FinalInspectionEntry
+                WHERE ISNULL(deleted, 0) = 0
+                  AND CAST(finspdate AS DATE) BETWEEN ? AND ?
+            ) AS CombinedPPM
+            GROUP BY MONTH(InspDate)
+            """
+            cursor.execute(ppm_sql, [start_date, end_date, start_date, end_date, start_date, end_date])
+            ppm_rows = cursor.fetchall()
+
+            insp_map = {(y, m): 0.0 for y, m in month_order}
+            mac_rej_map = {(y, m): 0.0 for y, m in month_order}
+
+            for row in ppm_rows:
+                month_num = row[0]
+                insp_q = float(row[1] or 0)
+                mac_rej_q = float(row[2] or 0)
                 try:
                     mn = int(month_num) if month_num is not None else None
                 except (TypeError, ValueError):
@@ -895,24 +967,20 @@ def quality_analysis_charts(request):
                 if mn:
                     for slot_y, slot_m in month_order:
                         if slot_m == mn:
-                            prod_map[(slot_y, slot_m)] += float(qty or 0)
+                            insp_map[(slot_y, slot_m)] += insp_q
+                            mac_rej_map[(slot_y, slot_m)] += mac_rej_q
 
-            for month_num, qty in rejection_rows:
-                try:
-                    mn = int(month_num) if month_num is not None else None
-                except (TypeError, ValueError):
-                    mn = None
-                if mn:
-                    for slot_y, slot_m in month_order:
-                        if slot_m == mn:
-                            rej_map[(slot_y, slot_m)] += float(qty or 0)
-
+            ppm_list = []
             for y, m in month_order:
-                ppm_val = round((rej_map[(y, m)] / prod_map[(y, m)]) * 1_000_000, 2) if prod_map[(y, m)] > 0 else 0.0
+                total_insp = insp_map[(y, m)]
+                mac_rej_total = mac_rej_map[(y, m)]
+                ppm_val = round((mac_rej_total / total_insp) * 1_000_000, 4) if total_insp > 0 else 0.0
                 ppm_list.append(ppm_val)
-            
+
             if sum(ppm_list) > 0:
                 db_ppm_success = True
+        except Exception as ex:
+            print("Error executing PPM database query:", ex)
 
             # 5. Top Defect Causes — Pareto Dynamic Aggregation
             try:
@@ -1336,7 +1404,7 @@ def quality_analysis_charts(request):
         pct_rework = 0.0
 
     defect_donut = {
-        "labels": ["Material Rejection", "Machine Rejection", "Rework"],
+        "labels": [f"Material Rejection ({pct_mat_rej}%)", f"Machine Rejection ({pct_mac_rej}%)", f"Rework ({pct_rework}%)"],
         "datasets": [{
             "data": [pct_mat_rej, pct_mac_rej, pct_rework],
             "backgroundColor": ["#ef4444", "#f97316", "#f59e0b"],
@@ -1542,7 +1610,7 @@ def quality_analysis_product_performance(request):
                     continue
 
                 if desc_val and part_no:
-                    name = f"{desc_val} ({part_no})"
+                    name = f"{part_no} ({desc_val})"
                 elif desc_val:
                     name = desc_val
                 else:
@@ -1867,11 +1935,24 @@ def quality_analysis_defect_causes(request):
                     reason_qty_map[rname] = qty_val
 
         sorted_reasons = sorted(reason_qty_map.items(), key=lambda x: x[1], reverse=True)
-        max_qty = sorted_reasons[0][1] if len(sorted_reasons) > 0 else 1
+        top_reasons = sorted_reasons[:7]
+        total_displayed_qty = sum(qty for _, qty in top_reasons)
+        max_qty = top_reasons[0][1] if len(top_reasons) > 0 else 1
         colors_palette = ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#94a3b8", "#06b6d4", "#10b981"]
 
-        for idx, (name, qty) in enumerate(sorted_reasons[:7]):
-            pct_val = round((qty / total_qty) * 100, 1) if total_qty > 0 else 0.0
+        calculated_pcts = []
+        if total_displayed_qty > 0:
+            raw_pcts = [(qty / total_displayed_qty) * 100 for _, qty in top_reasons]
+            rounded_pcts = [round(p, 1) for p in raw_pcts]
+            diff = round(100.0 - sum(rounded_pcts), 1)
+            if diff != 0 and len(rounded_pcts) > 0:
+                rounded_pcts[0] = round(rounded_pcts[0] + diff, 1)
+            calculated_pcts = rounded_pcts
+        else:
+            calculated_pcts = [0.0] * len(top_reasons)
+
+        for idx, (name, qty) in enumerate(top_reasons):
+            pct_val = calculated_pcts[idx]
             bar_w = int((qty / max_qty) * 100) if max_qty > 0 else 0
             color = colors_palette[idx % len(colors_palette)]
             processed_causes.append({
@@ -2001,6 +2082,9 @@ def quality_analysis_records(request):
         required_tables = ["InJob_Mas", "InJob_Det", "InterInspectionEntry", "FinalInspectionEntry", "ProcessDet"]
         if all(table_exists(cursor, t) for t in required_tables):
             has_rework_table = table_exists(cursor, "FinalInspReworkEntryOrg")
+            has_job_rc_table = table_exists(cursor, "JobIncomeDetInspRouteCard")
+            has_inter_rc_table = table_exists(cursor, "InterInspEntryRouteCard")
+
             rework_subquery = """
                 CAST(ISNULL((
                     SELECT SUM(ISNULL(fr.qty, 0))
@@ -2008,6 +2092,37 @@ def quality_analysis_records(request):
                     WHERE fr.finspno = f.finspno AND fr.partno = f.partno AND ISNULL(fr.deleted, 0) = 0
                 ), 0) AS INT)
             """ if has_rework_table else "0"
+
+            job_rc_join = """
+                LEFT JOIN (
+                    SELECT 
+                        InspNo, 
+                        JiNo, 
+                        PartNo, 
+                        MAX(RouCardNo) AS RouCardNo
+                    FROM JobIncomeDetInspRouteCard
+                    WHERE RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
+                    GROUP BY InspNo, JiNo, PartNo
+                ) jrc ON (
+                    LTRIM(RTRIM(m.inspno)) = LTRIM(RTRIM(jrc.InspNo)) 
+                    OR LTRIM(RTRIM(m.jino)) = LTRIM(RTRIM(jrc.JiNo))
+                    OR LTRIM(RTRIM(m.inspno)) = LTRIM(RTRIM(jrc.JiNo))
+                ) AND LTRIM(RTRIM(d.partno)) = LTRIM(RTRIM(jrc.PartNo))
+            """ if has_job_rc_table else ""
+            job_rc_select = "COALESCE(NULLIF(LTRIM(RTRIM(jrc.RouCardNo)), ''), m.jino)" if has_job_rc_table else "m.jino"
+
+            inter_rc_join = """
+                LEFT JOIN (
+                    SELECT 
+                        inter_inspno, 
+                        partno, 
+                        MAX(RouCardNo) AS RouCardNo
+                    FROM InterInspEntryRouteCard
+                    WHERE ISNULL(deleted, 0) = 0 AND RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
+                    GROUP BY inter_inspno, partno
+                ) irc ON LTRIM(RTRIM(i.inter_inspno)) = LTRIM(RTRIM(irc.inter_inspno)) AND LTRIM(RTRIM(i.partno)) = LTRIM(RTRIM(irc.partno))
+            """ if has_inter_rc_table else ""
+            inter_rc_select = "COALESCE(NULLIF(LTRIM(RTRIM(irc.RouCardNo)), ''), '')" if has_inter_rc_table else "NULL"
 
             injob_search = "AND (d.partno LIKE ? OR d.description LIKE ?)" if like_term else ""
             inter_search = "AND (partno LIKE ? OR description LIKE ?)" if like_term else ""
@@ -2052,11 +2167,12 @@ def quality_analysis_records(request):
                     NULL AS MachineNo,
                     NULL AS Shift,
                     NULL AS OperatorName,
-                    m.jino AS RouteCardDetails
+                    {job_rc_select} AS RouteCardDetails
                 FROM InJob_Mas m
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 LEFT JOIN CustMast c ON m.cid = c.Id
                 LEFT JOIN ProcessDet pd ON d.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
+                {job_rc_join}
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
                   {injob_search}
@@ -2066,24 +2182,25 @@ def quality_analysis_records(request):
                 SELECT
                     'Inter Insp' AS InspType,
                     NULL AS SubType,
-                    inter_inspno AS InspNo,
-                    inter_inspdate AS InspDate,
-                    partno AS PartNo,
-                    description AS Description,
+                    i.inter_inspno AS InspNo,
+                    i.inter_inspdate AS InspDate,
+                    i.partno AS PartNo,
+                    i.description AS Description,
                     ISNULL(pd.process, '') AS ProcessName,
-                    CAST(ISNULL(inspqty, 0) AS INT) AS InspQty,
-                    CAST(ISNULL(okqty, 0) AS INT) AS OKQty,
-                    CAST(ISNULL(matrejqty, 0) AS INT) AS MatRejQty,
-                    CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty,
-                    CAST(ISNULL(rwqty, 0) AS INT) AS ReworkQty,
-                    inspby AS InspBy,
+                    CAST(ISNULL(i.inspqty, 0) AS INT) AS InspQty,
+                    CAST(ISNULL(i.okqty, 0) AS INT) AS OKQty,
+                    CAST(ISNULL(i.matrejqty, 0) AS INT) AS MatRejQty,
+                    CAST(ISNULL(i.rejqty, 0) AS INT) AS MacRejQty,
+                    CAST(ISNULL(i.rwqty, 0) AS INT) AS ReworkQty,
+                    i.inspby AS InspBy,
                     NULL AS PartyName,
                     i.macno AS MachineNo,
                     i.shift AS Shift,
                     i.oprname AS OperatorName,
-                    NULL AS RouteCardDetails
+                    {inter_rc_select} AS RouteCardDetails
                 FROM InterInspectionEntry i
                 LEFT JOIN ProcessDet pd ON i.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
+                {inter_rc_join}
                 WHERE ISNULL(i.deleted, 0) = 0
                   AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
                   {inter_search}
@@ -2509,7 +2626,7 @@ def quality_analysis_records(request):
                         id_val = r.get("id")
                         date_val = r.get("date")
                         
-                        prod_name = f"{desc_val} ({part_no})" if (desc_val and part_no and part_no != "—") else (desc_val or part_no or "Unknown")
+                        prod_name = f"{part_no} ({desc_val})" if (desc_val and part_no and part_no != "—") else (desc_val or part_no or "Unknown")
 
                         raw_label = r.get("typeLabel") or "Job Order"
                         if "Job" in raw_label:

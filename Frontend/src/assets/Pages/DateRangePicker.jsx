@@ -77,7 +77,7 @@ const EXTRA_PRESETS = [
 ];
 
 /* ── Single month calendar ────────────────────────────────── */
-function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover, themeClass }) {
+function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover, themeClass, maxDate = null }) {
     const cells = calDays(year, month);
     return (
         <div className="drp-cal">
@@ -92,7 +92,7 @@ function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover, the
                     const effectiveTo = to || hovered;
                     const inRange   = from && effectiveTo && day > startOf(from) && day < startOf(effectiveTo);
                     const isToday   = sameDay(day, new Date());
-                    const isDisabled= day > new Date();
+                    const isDisabled= maxDate ? day > startOf(maxDate) : false;
                     const cls = [
                         "drp-day",
                         isFrom    ? "drp-day--from"    : "",
@@ -160,7 +160,7 @@ function PopupPortal({ anchorRef, theme, children }) {
 }
 
 /* ── Main component ───────────────────────────────────────── */
-export default function DateRangePicker({ from, to, onChange, theme = "indigo" }) {
+export default function DateRangePicker({ from, to, onChange, theme = "indigo", maxDate = null }) {
     const today        = new Date();
     const [open,       setOpen]     = useState(false);
     const [leftMonth,  setLeft]     = useState(from ? new Date(from.getFullYear(), from.getMonth(), 1) : addMonths(today, -1));
@@ -354,6 +354,7 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
                                     hovered={hovered}
                                     onDayClick={handleDayClick} onDayHover={setHovered}
                                     themeClass={tc}
+                                    maxDate={maxDate}
                                 />
                             </div>
 
@@ -376,6 +377,7 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo" }
                                     hovered={hovered}
                                     onDayClick={handleDayClick} onDayHover={setHovered}
                                     themeClass={tc}
+                                    maxDate={maxDate}
                                 />
                             </div>
                         </div>

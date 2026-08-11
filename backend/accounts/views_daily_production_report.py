@@ -107,6 +107,9 @@ def _resolve_daily_production_schema(cursor):
     schema["mac_name"] = find_first_column(
         cursor, tbl_mac, ["macname", "MacName", "MACNAME", "MachineName"]
     )
+    schema["mac_group"] = find_first_column(
+        cursor, tbl_mac, ["MacGroup", "macgroup", "MACGROUP", "MacGroupCode", "Group"]
+    )
     schema["mac_rate"] = find_first_column(
         cursor, tbl_mac, ["RatePerHr", "rateperhr", "RATEPERHR", "RatePerHour"]
     )

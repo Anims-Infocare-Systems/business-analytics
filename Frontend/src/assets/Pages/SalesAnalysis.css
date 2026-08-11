@@ -556,7 +556,8 @@
 ────────────────────────────────────────── */
 .sa-rank-list {
   padding: .5rem 1.4rem 1rem;
-  height: 440px;
+  flex-grow: 1;
+  height: 0;
   overflow-y: auto;
 }
 
@@ -683,11 +684,35 @@
 }
 
 /* Explicit widths and alignments for Month table columns */
-.sa-mini-table th:nth-child(1), .sa-mini-table td:nth-child(1) { width: 25%; text-align: left; }
-.sa-mini-table th:nth-child(2), .sa-mini-table td:nth-child(2) { width: 15%; text-align: right; }
-.sa-mini-table th:nth-child(3), .sa-mini-table td:nth-child(3) { width: 20%; text-align: right; }
-.sa-mini-table th:nth-child(4), .sa-mini-table td:nth-child(4) { width: 25%; text-align: right; }
-.sa-mini-table th:nth-child(5), .sa-mini-table td:nth-child(5) { width: 15%; text-align: right; }
+.sa-mini-table th:nth-child(1),
+.sa-mini-table td:nth-child(1) {
+  width: 25%;
+  text-align: left;
+}
+
+.sa-mini-table th:nth-child(2),
+.sa-mini-table td:nth-child(2) {
+  width: 15%;
+  text-align: right;
+}
+
+.sa-mini-table th:nth-child(3),
+.sa-mini-table td:nth-child(3) {
+  width: 20%;
+  text-align: right;
+}
+
+.sa-mini-table th:nth-child(4),
+.sa-mini-table td:nth-child(4) {
+  width: 25%;
+  text-align: right;
+}
+
+.sa-mini-table th:nth-child(5),
+.sa-mini-table td:nth-child(5) {
+  width: 15%;
+  text-align: right;
+}
 
 .sa-mini-table tr:hover td {
   background: #f8faff;
@@ -998,15 +1023,53 @@
 }
 
 /* Explicit column widths for Invoice table to prevent squishing */
-.sa-table th:nth-child(1), .sa-table td:nth-child(1) { width: 9%; }
-.sa-table th:nth-child(2), .sa-table td:nth-child(2) { width: 9%; }
-.sa-table th:nth-child(3), .sa-table td:nth-child(3) { width: 17%; }
-.sa-table th:nth-child(4), .sa-table td:nth-child(4) { width: 10%; }
-.sa-table th:nth-child(5), .sa-table td:nth-child(5) { width: 25%; }
-.sa-table th:nth-child(6), .sa-table td:nth-child(6) { width: 6%; text-align: right; }
-.sa-table th:nth-child(7), .sa-table td:nth-child(7) { width: 8%; text-align: right; }
-.sa-table th:nth-child(8), .sa-table td:nth-child(8) { width: 9%; text-align: right; }
-.sa-table th:nth-child(9), .sa-table td:nth-child(9) { width: 7%; }
+.sa-table th:nth-child(1),
+.sa-table td:nth-child(1) {
+  width: 9%;
+}
+
+.sa-table th:nth-child(2),
+.sa-table td:nth-child(2) {
+  width: 9%;
+}
+
+.sa-table th:nth-child(3),
+.sa-table td:nth-child(3) {
+  width: 17%;
+}
+
+.sa-table th:nth-child(4),
+.sa-table td:nth-child(4) {
+  width: 10%;
+}
+
+.sa-table th:nth-child(5),
+.sa-table td:nth-child(5) {
+  width: 25%;
+}
+
+.sa-table th:nth-child(6),
+.sa-table td:nth-child(6) {
+  width: 6%;
+  text-align: right;
+}
+
+.sa-table th:nth-child(7),
+.sa-table td:nth-child(7) {
+  width: 8%;
+  text-align: right;
+}
+
+.sa-table th:nth-child(8),
+.sa-table td:nth-child(8) {
+  width: 9%;
+  text-align: right;
+}
+
+.sa-table th:nth-child(9),
+.sa-table td:nth-child(9) {
+  width: 7%;
+}
 
 .sa-e-invoice {
   white-space: nowrap !important;
@@ -1475,6 +1538,7 @@
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
@@ -1501,6 +1565,7 @@
     opacity: 0;
     transform: translateY(-8px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -1665,18 +1730,21 @@
 
 .sa-proj-table {
   width: 100%;
-  min-width: 1200px; /* Force minimum width to enable horizontal scroll wrapper */
+  min-width: 1400px;
+  /* Increased minimum width to give more horizontal room for 11 columns */
   border-collapse: collapse;
-  table-layout: fixed; /* Force fixed table layout for exact column sizing */
+  table-layout: auto;
+  /* Size columns dynamically based on content to prevent truncation */
 }
 
 .sa-proj-table th,
 .sa-proj-table td {
   padding: 10px 12px;
   vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  /* Allow cell values and headers to wrap naturally */
+  word-break: keep-all;
+  /* Prevent wrapping in the middle of a single word */
 }
 
 .sa-proj-table th.sa-num,
@@ -1761,6 +1829,7 @@
     opacity: 0;
     transform: translateX(-16px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -1796,6 +1865,10 @@
   font-family: monospace;
   font-size: 0.75rem;
   font-weight: 600;
+  display: inline-block;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .sa-trace-po {
@@ -1806,6 +1879,10 @@
   font-family: monospace;
   font-size: 0.75rem;
   font-weight: 600;
+  display: inline-block;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .sa-trace-inv {
@@ -1816,17 +1893,15 @@
 
 .sa-trace-table {
   width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .sa-trace-table th,
 .sa-trace-table td {
-  padding: 10px 12px;
+  padding: 8px 10px;
   vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Specific Columns */
@@ -1838,38 +1913,44 @@
 
 .sa-trace-table th:nth-child(2),
 .sa-trace-table td:nth-child(2) {
-  width: 27%;
+  width: 22%;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(3),
 .sa-trace-table td:nth-child(3) {
-  width: 11%;
+  width: 10%;
 }
 
 .sa-trace-table th:nth-child(4),
 .sa-trace-table td:nth-child(4) {
-  width: 11%;
+  width: 10%;
 }
 
 .sa-trace-table th:nth-child(5),
 .sa-trace-table td:nth-child(5) {
-  width: 11%;
+  width: 10%;
 }
 
 .sa-trace-table th:nth-child(6),
 .sa-trace-table td:nth-child(6) {
-  width: 11%;
+  width: 10%;
 }
 
 .sa-trace-table th:nth-child(7),
 .sa-trace-table td:nth-child(7) {
-  width: 12%;
+  width: 14%;
+  max-width: 150px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .sa-trace-table th:nth-child(8),
 .sa-trace-table td:nth-child(8) {
-  width: 13%;
+  width: 20%;
+  max-width: 180px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* Monthly Performance & Bill Type Analytics Section */
@@ -2025,14 +2106,14 @@
   .sa-kpi-grid--4col {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .sa-summary-strip {
     justify-content: center;
     text-align: center;
     gap: 1.5rem;
     padding: 1rem;
   }
-  
+
   .sa-summary-item {
     flex: 1 1 40%;
   }
@@ -2054,7 +2135,7 @@
   .sa-custom-select {
     width: 100%;
   }
-  
+
   .sa-btn-reset {
     width: 100%;
     justify-content: center;
@@ -2132,18 +2213,23 @@
   0% {
     box-shadow: 0 0 0 0 rgba(45, 109, 232, 0.25);
   }
+
   70% {
     box-shadow: 0 0 0 16px rgba(45, 109, 232, 0);
   }
+
   100% {
     box-shadow: 0 0 0 0 rgba(45, 109, 232, 0);
   }
 }
 
 @keyframes sa-float-icon {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-6px);
   }
@@ -2173,15 +2259,15 @@
   box-shadow: 0 6px 20px rgba(45, 109, 232, 0.3);
 }
 
-/* ── Dual column layout for Customer and Product donuts ── */
+/* ── Dual column layout for Customer donut and Despatch table ── */
 .sa-donuts-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 44% 56%;
   gap: 1.1rem;
   margin-bottom: 1.4rem;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .sa-donuts-row {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -2288,8 +2374,8 @@
 .sa-donut-layout {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 1.2rem 1.6rem 1.6rem;
+  gap: 1.4rem;
+  padding: 1.2rem 1.4rem 1.4rem;
 }
 
 @media (max-width: 1200px) {
@@ -2347,9 +2433,8 @@
   letter-spacing: 0.5px;
   margin-top: 4px;
   max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -2381,7 +2466,8 @@
   overflow: hidden;
 }
 
-.sa-legend-item:hover, .sa-legend-item.active {
+.sa-legend-item:hover,
+.sa-legend-item.active {
   background: #ffffff;
   border-color: rgba(45, 109, 232, 0.2);
   transform: translateX(4px);
@@ -2400,11 +2486,12 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: transform 0.25s ease;
 }
 
-.sa-legend-item:hover .sa-legend-bullet, .sa-legend-item.active .sa-legend-bullet {
+.sa-legend-item:hover .sa-legend-bullet,
+.sa-legend-item.active .sa-legend-bullet {
   transform: scale(1.35);
 }
 
@@ -2412,15 +2499,14 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: #475569;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
   flex-grow: 1;
-  max-width: 160px;
   transition: color 0.2s ease;
 }
 
-.sa-legend-item:hover .sa-legend-name, .sa-legend-item.active .sa-legend-name {
+.sa-legend-item:hover .sa-legend-name,
+.sa-legend-item.active .sa-legend-name {
   color: #1a2a5e;
 }
 
@@ -2556,9 +2642,18 @@
 }
 
 /* Table sizing overrides for Po Ledger 18 columns */
-.sa-po-table th, .sa-po-table td {
+.sa-po-table th,
+.sa-po-table td {
   padding: 0.7rem 0.8rem;
   white-space: nowrap;
+}
+
+.sa-po-table th {
+  text-align: center !important;
+}
+
+.sa-po-table td {
+  text-align: left !important;
 }
 
 .sa-po-table th.sa-sortable {
@@ -2574,23 +2669,108 @@
 }
 
 /* Custom column widths to ensure good scrolling experience */
-.sa-po-table th:nth-child(2), .sa-po-table td:nth-child(2) { min-width: 120px; } /* Type */
-.sa-po-table th:nth-child(3), .sa-po-table td:nth-child(3) { min-width: 100px; } /* Apono */
-.sa-po-table th:nth-child(4), .sa-po-table td:nth-child(4) { min-width: 110px; } /* Po No */
-.sa-po-table th:nth-child(5), .sa-po-table td:nth-child(5) { min-width: 90px; }  /* Po date */
-.sa-po-table th:nth-child(6), .sa-po-table td:nth-child(6) { min-width: 200px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; } /* Cust Name */
-.sa-po-table th:nth-child(7), .sa-po-table td:nth-child(7) { min-width: 240px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; } /* PartNO- Description */
-.sa-po-table th:nth-child(8), .sa-po-table td:nth-child(8) { min-width: 70px; }  /* Qty */
-.sa-po-table th:nth-child(9), .sa-po-table td:nth-child(9) { min-width: 100px; } /* Shot close Qty */
-.sa-po-table th:nth-child(10), .sa-po-table td:nth-child(10) { min-width: 80px; } /* Rate */
-.sa-po-table th:nth-child(11), .sa-po-table td:nth-child(11) { min-width: 100px; } /* Value */
-.sa-po-table th:nth-child(12), .sa-po-table td:nth-child(12) { min-width: 90px; }  /* Dc.NO */
-.sa-po-table th:nth-child(13), .sa-po-table td:nth-child(13) { min-width: 90px; }  /* Dc Dt */
-.sa-po-table th:nth-child(14), .sa-po-table td:nth-child(14) { min-width: 75px; }  /* Dc Qty */
-.sa-po-table th:nth-child(15), .sa-po-table td:nth-child(15) { min-width: 90px; }  /* Pending Qty */
-.sa-po-table th:nth-child(16), .sa-po-table td:nth-child(16) { min-width: 100px; } /* Pending Value */
-.sa-po-table th:nth-child(17), .sa-po-table td:nth-child(17) { min-width: 85px; }  /* Age Days */
-.sa-po-table th:nth-child(18), .sa-po-table td:nth-child(18) { min-width: 180px; } /* Invoice No & Dt */
+.sa-po-table th:nth-child(2),
+.sa-po-table td:nth-child(2) {
+  min-width: 120px;
+}
+
+/* Type */
+.sa-po-table th:nth-child(3),
+.sa-po-table td:nth-child(3) {
+  min-width: 100px;
+}
+
+/* Apono */
+.sa-po-table th:nth-child(4),
+.sa-po-table td:nth-child(4) {
+  min-width: 110px;
+}
+
+/* Po No */
+.sa-po-table th:nth-child(5),
+.sa-po-table td:nth-child(5) {
+  min-width: 90px;
+}
+
+/* Po date */
+.sa-po-table th:nth-child(6),
+.sa-po-table td:nth-child(6) {
+  min-width: 200px;
+}
+
+/* Cust Name */
+.sa-po-table th:nth-child(7),
+.sa-po-table td:nth-child(7) {
+  min-width: 240px;
+}
+
+/* PartNO- Description */
+.sa-po-table th:nth-child(8),
+.sa-po-table td:nth-child(8) {
+  min-width: 70px;
+}
+
+/* Qty */
+.sa-po-table th:nth-child(9),
+.sa-po-table td:nth-child(9) {
+  min-width: 100px;
+}
+
+/* Shot close Qty */
+.sa-po-table th:nth-child(10),
+.sa-po-table td:nth-child(10) {
+  min-width: 80px;
+}
+
+/* Rate */
+.sa-po-table th:nth-child(11),
+.sa-po-table td:nth-child(11) {
+  min-width: 100px;
+}
+
+/* Value */
+.sa-po-table th:nth-child(12),
+.sa-po-table td:nth-child(12) {
+  min-width: 90px;
+}
+
+/* Dc.NO */
+.sa-po-table th:nth-child(13),
+.sa-po-table td:nth-child(13) {
+  min-width: 90px;
+}
+
+/* Dc Dt */
+.sa-po-table th:nth-child(14),
+.sa-po-table td:nth-child(14) {
+  min-width: 75px;
+}
+
+/* Dc Qty */
+.sa-po-table th:nth-child(15),
+.sa-po-table td:nth-child(15) {
+  min-width: 90px;
+}
+
+/* Pending Qty */
+.sa-po-table th:nth-child(16),
+.sa-po-table td:nth-child(16) {
+  min-width: 100px;
+}
+
+/* Pending Value */
+.sa-po-table th:nth-child(17),
+.sa-po-table td:nth-child(17) {
+  min-width: 85px;
+}
+
+/* Age Days */
+.sa-po-table th:nth-child(18),
+.sa-po-table td:nth-child(18) {
+  min-width: 180px;
+}
+
+/* Invoice No & Dt */
 
 .sa-po-apo-code {
   font-family: monospace;
@@ -2635,16 +2815,19 @@
   color: #1d4ed8;
   border: 1px solid rgba(59, 130, 246, 0.15);
 }
+
 .sa-badge--type-labourcharges {
   background: rgba(139, 92, 246, 0.08);
   color: #6d28d9;
   border: 1px solid rgba(139, 92, 246, 0.15);
 }
+
 .sa-badge--type-generalrework {
   background: rgba(245, 158, 11, 0.08);
   color: #b45309;
   border: 1px solid rgba(245, 158, 11, 0.15);
 }
+
 .sa-badge--type-exportonly {
   background: rgba(20, 184, 166, 0.08);
   color: #0f766e;
@@ -2923,9 +3106,11 @@
   background: linear-gradient(135deg, #f8faff, #eff6ff) !important;
   border-left: 4px solid #3b82f6 !important;
 }
+
 .sa-inv-status__box--with_material .sa-inv-status__box-lbl {
   color: #1e40af;
 }
+
 .sa-inv-status__box--with_material .sa-inv-status__box-val {
   color: #1d4ed8;
   border: 1px solid rgba(59, 130, 246, 0.2);
@@ -2935,9 +3120,11 @@
   background: linear-gradient(135deg, #fafafd, #f5f3ff) !important;
   border-left: 4px solid #8b5cf6 !important;
 }
+
 .sa-inv-status__box--labour_charges .sa-inv-status__box-lbl {
   color: #5b21b6;
 }
+
 .sa-inv-status__box--labour_charges .sa-inv-status__box-val {
   color: #6d28d9;
   border: 1px solid rgba(139, 92, 246, 0.2);
@@ -2947,9 +3134,11 @@
   background: linear-gradient(135deg, #f7fdfc, #f0fdfa) !important;
   border-left: 4px solid #14b8a6 !important;
 }
+
 .sa-inv-status__box--export_only .sa-inv-status__box-lbl {
   color: #0f766e;
 }
+
 .sa-inv-status__box--export_only .sa-inv-status__box-val {
   color: #0d9488;
   border: 1px solid rgba(20, 184, 166, 0.2);
@@ -3039,4 +3228,153 @@
 .sa-plan-table td:nth-child(8) {
   width: 10% !important;
   text-align: left !important;
+}
+
+/* Purchase Order (PO) Ledger Sticky Table Header & Compact Layout */
+.sa-po-card .sa-table-scroll {
+  max-height: 550px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.sa-po-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.76rem;
+}
+
+.sa-po-table th,
+.sa-po-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.sa-po-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.sa-po-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8fafc !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* PartNO - Description Column (7th child) */
+.sa-po-table th:nth-child(7),
+.sa-po-table td:nth-child(7) {
+  max-width: 220px;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.sa-po-part-desc {
+  display: inline-block;
+  max-width: 220px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Short Close Qty Column (10th child) */
+.sa-po-table th:nth-child(10),
+.sa-po-table td:nth-child(10) {
+  max-width: 80px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: right;
+  font-size: 0.74rem;
+}
+
+/* Age Days Column (18th child) */
+.sa-po-table th:nth-child(18),
+.sa-po-table td:nth-child(18) {
+  max-width: 75px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: right;
+  font-size: 0.74rem;
+}
+
+/* ──────────────────────────────────────────
+   DESPATCH PLAN PENDING RESULT TABLE CARD
+────────────────────────────────────────── */
+.sa-card--despatch-plan {
+  background: #ffffff;
+  border: 1px solid rgba(45, 109, 232, 0.12);
+  border-radius: 14px;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 4px 18px rgba(45, 109, 232, 0.05);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.sa-despatch-table-wrap {
+  flex: 1;
+  width: 100%;
+  min-height: 260px;
+  max-height: 320px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid rgba(45, 109, 232, 0.08);
+  border-radius: 8px;
+  background: #ffffff;
+  margin-top: 0.4rem;
+}
+
+.sa-despatch-table-wrap::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.sa-despatch-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(45, 109, 232, 0.18);
+  border-radius: 99px;
+}
+
+.sa-despatch-table {
+  width: 100%;
+  min-width: 860px;
+}
+
+/* Global Top Progress Bar (YouTube Style) */
+.sa-global-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2d6de8 0%, #06b6d4 50%, #10b981 100%);
+    z-index: 999999;
+    box-shadow: 0 1px 8px rgba(45, 109, 232, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, width 0.4s ease;
+    width: 0;
+}
+
+.sa-global-progress-bar--active {
+    opacity: 1;
+    animation: sa-progress-slide 2.2s infinite ease-in-out;
+}
+
+@keyframes sa-progress-slide {
+    0% {
+        width: 0%;
+        left: 0;
+    }
+    50% {
+        width: 70%;
+        left: 15%;
+    }
+    100% {
+        width: 100%;
+        left: 0;
+    }
 }

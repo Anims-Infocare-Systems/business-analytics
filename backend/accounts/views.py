@@ -56,6 +56,41 @@ def parse_date_range(request):
             pass
     return current_financial_year()
 
+def generate_month_buckets(start_date, end_date):
+    """
+    Given start_date and end_date (date objects),
+    returns:
+      buckets: list of (year, month) tuples
+      labels: list of formatted string labels e.g. ["Nov-25", "Dec-25", "Jan-26", ...]
+    """
+    month_abbrs = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    buckets = []
+    labels = []
+    
+    cur_y = start_date.year
+    cur_m = start_date.month
+    end_y = end_date.year
+    end_m = end_date.month
+    
+    while (cur_y < end_y) or (cur_y == end_y and cur_m <= end_m):
+        buckets.append((cur_y, cur_m))
+        labels.append(f"{month_abbrs[cur_m]}-{str(cur_y)[2:]}")
+        cur_m += 1
+        if cur_m > 12:
+            cur_m = 1
+            cur_y += 1
+            
+    return buckets, labels
+
+def get_fy_label(start_date, end_date):
+    s_fy = start_date.year if start_date.month >= 4 else start_date.year - 1
+    e_fy = end_date.year if end_date.month >= 4 else end_date.year - 1
+    if s_fy == e_fy:
+        return f"FY {s_fy}-{str(s_fy + 1)[2:]}"
+    else:
+        return f"FY {s_fy}-{str(e_fy + 1)[2:]}"
+
+
 def dashboard2_parse_date_range_default_month(request):
     """Same defaults as dashboard2_kpis: month start → today, or ?from=&to="""
     from_param = (request.GET.get("from") or "").strip()
@@ -228,12 +263,38 @@ def get_tenant_license(company_code):
         "plan_id": "free"
     }
 
-def update_tenant_license(tenant_id, company_code, plan_id):
+def apply_license_restrictions_to_rights(rights, license_info):
+    if not license_info or not isinstance(license_info, dict):
+        return rights
+        
+    MODULE_MAP = {
+        "dashboard": ["Dashboard", "Top Management Dashboard", "Plant Performance Dashboard"],
+        "approvals": ["Approvals", "E-Approval", "T-Approval", "M-Approval"],
+        "reports": ["Reports", "Sales Analysis", "Purchase Analysis", "Quality Analysis", "Production Analysis"],
+        "mis": ["MIS", "Idle Time Report", "Efficiency Report"],
+        "charts": ["Charts"],
+        "utility": ["Utility", "User Rights"],
+    }
+    
+    for mod_key, forms in MODULE_MAP.items():
+        if not license_info.get(mod_key, True):
+            for f in forms:
+                if f in rights:
+                    rights[f] = False
+    return rights
+
+def update_tenant_license(tenant_id, company_code, plan_id, modules_dict=None):
     from django.db import connection
     plan_id = plan_id.lower().strip()
     
-    # Define module flags based on plan
-    if plan_id == "pro":
+    if modules_dict and isinstance(modules_dict, dict):
+        dashboard = 1 if modules_dict.get("dashboard", True) else 0
+        approvals = 1 if modules_dict.get("approvals", True) else 0
+        reports   = 1 if modules_dict.get("reports", True) else 0
+        mis       = 1 if modules_dict.get("mis", True) else 0
+        charts    = 1 if modules_dict.get("charts", True) else 0
+        utility   = 1 if modules_dict.get("utility", True) else 0
+    elif plan_id == "pro":
         dashboard = 1
         approvals = 1
         reports = 0
@@ -435,6 +496,17 @@ def login_view(request):
     
     is_expired = is_plan_expired(company_code)
     license_info = get_tenant_license(company_code)
+    rights = apply_license_restrictions_to_rights(rights, license_info)
+
+    if rights.get("M-Approval"):
+        try:
+            from accounts.utils.mapproval_settings import check_mapproval_settings
+            if not check_mapproval_settings(tenant):
+                rights["M-Approval"] = False
+        except Exception as e:
+            print("[LOGIN] Warning checking M-Approval settings:", e)
+
+    has_access = is_super_admin or any(rights.values())
     
     return Response({
         "message": "Login successful",
@@ -601,169 +673,363 @@ def get_company(request, code):
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
 def po_vs_sales(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
+    
+    sql = """
+    WITH SHD_PO_DET AS
+    (
+        SELECT DISTINCT
+            S.Apono,
+            S.pono,
+            S.itcode,
+            S.poslno
+        FROM In_PoDet_ShdQty S
+        WHERE ISNULL(S.deleted, 0) = 0
+    ),
+    PO_DATA AS
+    (
+        /* 1. PO items WITH Schedule Date (from In_PoDet_ShdQty) */
+        SELECT
+            YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POYear,
+            MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POMonth,
+            CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE) AS PODate,
+            PM.Apono,
+            PD.ItCode,
+            SUM(ISNULL(S.shdQty, 0) * ISNULL(PD.Rate, 0)) AS POValue
+        FROM In_PoMas PM
+        INNER JOIN In_PoDet PD
+            ON PM.PONO = PD.PONO
+        INNER JOIN In_PoDet_ShdQty S
+            ON (S.Apono = PM.Apono OR S.pono = PM.PONO)
+           AND S.itcode = PD.ItCode
+           AND S.poslno = PD.poslno
+        WHERE PM.Deleted = 0
+          AND PD.Deleted = 0
+          AND ISNULL(S.deleted, 0) = 0
+        GROUP BY
+            YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
+            MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
+            CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE),
+            PM.Apono,
+            PD.ItCode
+
+        UNION ALL
+
+        /* 2. PO items WITHOUT Schedule (fallback to PO Date and Amt) */
+        SELECT
+            YEAR(PM.PODT) AS POYear,
+            MONTH(PM.PODT) AS POMonth,
+            CAST(PM.PODT AS DATE) AS PODate,
+            PM.Apono,
+            PD.ItCode,
+            SUM(ISNULL(PD.Amt, 0)) AS POValue
+        FROM In_PoMas PM
+        INNER JOIN In_PoDet PD
+            ON PM.PONO = PD.PONO
+        LEFT JOIN SHD_PO_DET SPD
+            ON (SPD.Apono = PM.Apono OR SPD.pono = PM.PONO)
+           AND SPD.itcode = PD.ItCode
+           AND SPD.poslno = PD.poslno
+        WHERE PM.Deleted = 0
+          AND PD.Deleted = 0
+          AND SPD.itcode IS NULL
+        GROUP BY
+            YEAR(PM.PODT),
+            MONTH(PM.PODT),
+            CAST(PM.PODT AS DATE),
+            PM.Apono,
+            PD.ItCode
+    ),
+    PO_RATE AS
+    (
+        SELECT
+            LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))) AS Apono,
+            LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512)))) AS ItCode,
+            MAX(ISNULL(PD.Rate, 0))                        AS Rate
+        FROM In_PoMas PM
+        INNER JOIN In_PoDet PD ON PD.PONO = PM.PONO AND PD.Deleted = 0
+        WHERE PM.Deleted = 0
+        GROUP BY
+            LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))),
+            LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512))))
+    ),
+    DC_SALES AS
+    (
+        SELECT
+            LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
+            LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
+            SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
+        FROM DcInSubDet D
+        LEFT JOIN PO_RATE R
+            ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
+            AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+        WHERE ISNULL(D.Deleted, 0) = 0
+        GROUP BY
+            LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
+            LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+
+        UNION ALL
+
+        SELECT
+            LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
+            LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
+            SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
+        FROM DcInSubDetAssmPoDet D
+        LEFT JOIN PO_RATE R
+            ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
+            AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+        WHERE ISNULL(D.Deleted, 0) = 0
+        GROUP BY
+            LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
+            LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
+    ),
+    SALES_DATA AS
+    (
+        SELECT Apono, PartNo, SUM(SalesValue) AS SalesValue
+        FROM DC_SALES
+        GROUP BY Apono, PartNo
+    )
+    SELECT
+        P.POYear,
+        P.POMonth,
+        SUM(P.POValue) AS POValue,
+        SUM(
+            CASE
+                WHEN ISNULL(S.SalesValue, 0) > P.POValue THEN P.POValue
+                ELSE ISNULL(S.SalesValue, 0)
+            END
+        ) AS SalesValue
+    FROM PO_DATA P
+    LEFT JOIN SALES_DATA S
+        ON  S.Apono  = LTRIM(RTRIM(CAST(P.Apono  AS NVARCHAR(512))))
+       AND  S.PartNo = LTRIM(RTRIM(CAST(P.ItCode AS NVARCHAR(512))))
+    WHERE P.PODate BETWEEN ? AND ?
+    GROUP BY
+        P.POYear,
+        P.POMonth;
+    """
+    
+    sales_map = {b: 0.0 for b in buckets}
+    po_map = {b: 0.0 for b in buckets}
+    
+    cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT MONTH(invdt) AS mth, SUM(tamt) AS total FROM Bill_Mas WHERE deleted = 0 AND ISNULL(btype, '') NOT IN ('Credit Note') AND CAST(invdt AS DATE) BETWEEN ? AND ? GROUP BY MONTH(invdt)", (start_date, end_date))
-        sales_rows = cursor.fetchall()
-        cursor.execute("SELECT MONTH(podt) AS mth, SUM(tamt) AS total FROM In_PoMas WHERE deleted = 0 AND CAST(podt AS DATE) BETWEEN ? AND ? GROUP BY MONTH(podt)", (start_date, end_date))
-        po_rows = cursor.fetchall()
-        cursor.close(); conn.close()
+        cursor.execute(sql, (start_date, end_date))
+        for row in cursor.fetchall() or []:
+            yr, mth = int(row[0] or 0), int(row[1] or 0)
+            po_val = float(row[2] or 0) / 100_000.0
+            sales_val = float(row[3] or 0) / 100_000.0
+            k = (yr, mth)
+            if k in po_map:
+                po_map[k] = round(po_val, 2)
+            if k in sales_map:
+                sales_map[k] = round(sales_val, 2)
+        cursor.close()
+        conn.close()
     except Exception as e:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        try: conn.close()
+        except Exception: pass
         return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    sales_map = {m: 0.0 for m in month_order}
-    po_map = {m: 0.0 for m in month_order}
-    for mth, total in sales_rows:
-        mk = month_key_from_db(mth)
-        if mk in sales_map: sales_map[mk] = round(float(total or 0) / 100_000, 2)
-    for mth, total in po_rows:
-        mk = month_key_from_db(mth)
-        if mk in po_map: po_map[mk] = round(float(total or 0) / 100_000, 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "sales": [sales_map[m] for m in month_order], "po": [po_map[m] for m in month_order]})
+        
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "fy": fy_label,
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "sales": [sales_map[b] for b in buckets],
+        "po": [po_map[b] for b in buckets]
+    })
 
 @api_view(['GET'])
 def customer_complaints(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT MONTH(CmpDate) AS month_num, COUNT(*) AS cnt FROM CustCompMas WHERE CmpDate IS NOT NULL AND CAST(CmpDate AS DATE) BETWEEN ? AND ? AND ISNULL(Deleted, 0) = 0 GROUP BY MONTH(CmpDate)", (start_date, end_date))
+        cursor.execute("SELECT YEAR(CmpDate) AS yr, MONTH(CmpDate) AS month_num, COUNT(*) AS cnt FROM CustCompMas WHERE CmpDate IS NOT NULL AND CAST(CmpDate AS DATE) BETWEEN ? AND ? AND ISNULL(Deleted, 0) = 0 GROUP BY YEAR(CmpDate), MONTH(CmpDate)", (start_date, end_date))
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    counts = {m: 0 for m in month_order}
-    for month_num, cnt in rows:
-        mk = month_key_from_db(month_num)
-        if mk in counts: counts[mk] = int(cnt or 0)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[m] for m in month_order]})
+    counts = {b: 0 for b in buckets}
+    for yr, month_num, cnt in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in counts: counts[k] = int(cnt or 0)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
 def rejection_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         sql = """
-        SELECT MonthNum, SUM(RejQty) as TotalRej FROM (
-            SELECT MONTH(finspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
-            UNION ALL SELECT MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
-            UNION ALL SELECT MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) as RejQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
-        ) as CombinedData GROUP BY MonthNum ORDER BY MonthNum"""
+        SELECT YrNum, MonthNum, SUM(RejQty) as TotalRej FROM (
+            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
+            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
+            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) as RejQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
+        ) as CombinedData GROUP BY YrNum, MonthNum ORDER BY YrNum, MonthNum"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    counts = {m: 0 for m in month_order}
-    for month_num, cnt in rows:
-        mk = month_key_from_db(month_num)
-        if mk in counts: counts[mk] = int(cnt or 0)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[m] for m in month_order]})
+    counts = {b: 0 for b in buckets}
+    for yr, month_num, cnt in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in counts: counts[k] = int(cnt or 0)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
 def rework_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         sql = """
-        SELECT MonthNum, SUM(ReworkQty) as TotalRework FROM (
-            SELECT MONTH(finspdate) as MonthNum, CAST(ISNULL(matrejqty, 0) AS FLOAT) as ReworkQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND matrejqty > 0
-            UNION ALL SELECT MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rwqty, 0) AS FLOAT) as ReworkQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rwqty > 0
-            UNION ALL SELECT MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.rwqty, 0) AS FLOAT) as ReworkQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND d.rwqty > 0
-        ) as CombinedData GROUP BY MonthNum ORDER BY MonthNum"""
+        SELECT YrNum, MonthNum, SUM(ReworkQty) as TotalRework FROM (
+            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(matrejqty, 0) AS FLOAT) as ReworkQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND matrejqty > 0
+            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rwqty, 0) AS FLOAT) as ReworkQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rwqty > 0
+            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.rwqty, 0) AS FLOAT) as ReworkQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND d.rwqty > 0
+        ) as CombinedData GROUP BY YrNum, MonthNum ORDER BY YrNum, MonthNum"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    counts = {m: 0 for m in month_order}
-    for month_num, cnt in rows:
-        mk = month_key_from_db(month_num)
-        if mk in counts: counts[mk] = int(cnt or 0)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[m] for m in month_order]})
+    counts = {b: 0 for b in buckets}
+    for yr, month_num, cnt in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in counts: counts[k] = int(cnt or 0)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
 def mac_rejection_ppm(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
+    
+    ppm_sql = """
+    SELECT
+        YEAR(InspDate) AS YrNum,
+        MONTH(InspDate) AS MonthNum,
+        SUM(InspQty)    AS TotalInspQty,
+        SUM(MacRejQty)  AS TotalMacRejQty
+    FROM (
+        SELECT
+            m.inspdate AS InspDate,
+            CAST(ISNULL(d.jobqty, 0) AS INT) AS InspQty,
+            CAST(ISNULL(d.macrej, 0) AS INT) AS MacRejQty
+        FROM InJob_Mas m
+        INNER JOIN InJob_Det d ON m.inspno = d.inspno
+        WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
+          AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+
+        UNION ALL
+
+        SELECT
+            inter_inspdate AS InspDate,
+            CAST(ISNULL(inspqty, 0) AS INT) AS InspQty,
+            CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
+        FROM InterInspectionEntry
+        WHERE ISNULL(deleted, 0) = 0
+          AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
+
+        UNION ALL
+
+        SELECT
+            finspdate AS InspDate,
+            CAST(ISNULL(totqty, 0) AS INT) AS InspQty,
+            CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
+        FROM FinalInspectionEntry
+        WHERE ISNULL(deleted, 0) = 0
+          AND CAST(finspdate AS DATE) BETWEEN ? AND ?
+    ) AS CombinedPPM
+    GROUP BY YEAR(InspDate), MONTH(InspDate)
+    """
+    
+    insp_map = {b: 0.0 for b in buckets}
+    rej_map = {b: 0.0 for b in buckets}
+    
+    cursor = None
     try:
         cursor = conn.cursor()
-        production_sql = """
-        SELECT MonthNum, SUM(totQty) AS OverallQty FROM (
-            SELECT MONTH(proddate) AS MonthNum, SUM(ISNULL(okqty,0)) AS totQty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(proddate)
-            UNION ALL SELECT MONTH(entrydate) AS MonthNum, SUM(ISNULL(qty,0)) AS totQty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(entrydate)
-            UNION ALL SELECT MONTH(entrydate) AS MonthNum, SUM(ISNULL(qty,0)) AS totQty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? GROUP BY MONTH(entrydate)
-        ) AS Combined GROUP BY MonthNum"""
-        rejection_sql = """
-        SELECT MonthNum, SUM(RejQty) AS TotalMachiningRejectionQty FROM (
-            SELECT MONTH(i.inter_inspdate) AS MonthNum, ISNULL(r.qty,0) AS RejQty FROM Insp_RejectionEntry r INNER JOIN InterInspectionEntry i ON r.inter_inspno = i.inter_inspno INNER JOIN Rejection rej ON r.rejection = rej.rejection WHERE i.inter_inspdate BETWEEN ? AND ? AND r.deleted = 0 AND ISNULL(rej.matrej,0) = 0
-            UNION ALL SELECT MONTH(fi.finspdate) AS MonthNum, ISNULL(f.qty,0) AS RejQty FROM FinalInspRejectionEntryOrg f INNER JOIN FinalInspectionEntry fi ON f.finspno = fi.finspno INNER JOIN Rejection rej ON f.rejection = rej.rejection WHERE fi.finspdate BETWEEN ? AND ? AND f.deleted = 0 AND ISNULL(rej.matrej,0) = 0
-        ) AS MachiningRejection GROUP BY MonthNum"""
-        cursor.execute(production_sql, [start_date, end_date, start_date, end_date, start_date, end_date]); production_rows = cursor.fetchall()
-        cursor.execute(rejection_sql, [start_date, end_date, start_date, end_date]); rejection_rows = cursor.fetchall()
-        cursor.close(); conn.close()
-    except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    prod_map = {m: 0.0 for m in month_order}
-    rej_map = {m: 0.0 for m in month_order}
-    for month_num, qty in production_rows:
-        mk = month_key_from_db(month_num)
-        if mk in prod_map: prod_map[mk] = float(qty or 0)
-    for month_num, qty in rejection_rows:
-        mk = month_key_from_db(month_num)
-        if mk in rej_map: rej_map[mk] = float(qty or 0)
-    ppm_map = {m: 0.0 for m in month_order}
-    for m in month_order:
-        ppm_map[m] = round((rej_map[m] / prod_map[m]) * 1_000_000, 2) if prod_map[m] > 0 else 0.0
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [ppm_map[m] for m in month_order]})
+        cursor.execute(ppm_sql, [start_date, end_date, start_date, end_date, start_date, end_date])
+        for row in cursor.fetchall() or []:
+            yr, month_num = int(row[0] or 0), int(row[1] or 0)
+            total_insp = float(row[2] or 0)
+            total_rej = float(row[3] or 0)
+            k = (yr, month_num)
+            if k in insp_map:
+                insp_map[k] += total_insp
+                rej_map[k] += total_rej
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+        
+    ppm_map = {b: 0.0 for b in buckets}
+    for b in buckets:
+        ppm_map[b] = round((rej_map[b] / insp_map[b]) * 1_000_000, 2) if insp_map[b] > 0 else 0.0
+        
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "fy": fy_label,
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "data": [ppm_map[b] for b in buckets]
+    })
 
 @api_view(['GET'])
 def otd_report(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         sql = """
-        WITH AllSchedules AS (SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shdQty, MONTH(p.podt) as PoMonth FROM In_PoDet_ShdQty s INNER JOIN In_PoMas p ON s.Apono = p.Apono WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?),
-        AllDeliveries AS (SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty FROM DcInSubDetAssmPoDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0 UNION ALL SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty FROM DcInSubDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0),
-        ScheduleWithDeliveries AS (SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shdQty, sch.PoMonth, del.dcdate, del.okqty FROM AllSchedules sch LEFT JOIN AllDeliveries del ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno),
-        CumulativeDeliveries AS (SELECT Apono, partno, poslno, reqdate, shdQty, PoMonth, dcdate, okqty, SUM(okqty) OVER (PARTITION BY Apono, partno, poslno, reqdate ORDER BY dcdate) as CumQty FROM ScheduleWithDeliveries WHERE dcdate IS NOT NULL),
-        Completion AS (SELECT Apono, partno, poslno, reqdate, shdQty, PoMonth, MIN(dcdate) as CompletionDate FROM CumulativeDeliveries WHERE CumQty >= shdQty GROUP BY Apono, partno, poslno, reqdate, shdQty, PoMonth),
-        OTDCalc AS (SELECT comp.PoMonth, CASE WHEN comp.CompletionDate <= comp.reqdate THEN 100.0 ELSE ISNULL(r.RatingFor, 0.0) END as OTDScore FROM Completion comp LEFT JOIN CustPoOTDRating r ON DATEDIFF(DAY, comp.reqdate, comp.CompletionDate) BETWEEN r.RatingFrom AND r.RatingTo)
-        SELECT PoMonth, AVG(OTDScore) as AvgOTD, COUNT(*) as CompletedSchedules FROM OTDCalc GROUP BY PoMonth ORDER BY PoMonth"""
+        WITH AllSchedules AS (SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shddate, COALESCE(TRY_CONVERT(DATE, s.shddate, 105), TRY_CONVERT(DATE, s.shddate, 103), TRY_CONVERT(DATE, s.shddate, 120), NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'), TRY_CONVERT(DATE, s.reqdate, 105), TRY_CONVERT(DATE, s.reqdate, 103), TRY_CONVERT(DATE, s.reqdate, 120), NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'), CAST(p.podt AS DATE)) AS targetdate, s.shdQty, YEAR(p.podt) as PoYear, MONTH(p.podt) as PoMonth FROM In_PoDet_ShdQty s INNER JOIN In_PoMas p ON s.Apono = p.Apono WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?),
+        AllDeliveries AS (SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty FROM DcInSubDetAssmPoDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0 UNION ALL SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty FROM DcInSubDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0),
+        ScheduleWithDeliveries AS (SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shddate, sch.targetdate, sch.shdQty, sch.PoYear, sch.PoMonth, del.dcdate, del.okqty FROM AllSchedules sch LEFT JOIN AllDeliveries del ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno),
+        CumulativeDeliveries AS (SELECT Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth, dcdate, okqty, SUM(okqty) OVER (PARTITION BY Apono, partno, poslno, targetdate ORDER BY dcdate) as CumQty FROM ScheduleWithDeliveries WHERE dcdate IS NOT NULL),
+        Completion AS (SELECT Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth, MIN(dcdate) as CompletionDate FROM CumulativeDeliveries WHERE CumQty >= shdQty GROUP BY Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth),
+        OTDCalc AS (SELECT comp.PoYear, comp.PoMonth, CASE WHEN comp.CompletionDate <= comp.targetdate THEN 100.0 ELSE ISNULL(r.RatingFor, 0.0) END as OTDScore FROM Completion comp LEFT JOIN CustPoOTDRating r ON DATEDIFF(DAY, comp.targetdate, comp.CompletionDate) BETWEEN r.RatingFrom AND r.RatingTo)
+        SELECT PoYear, PoMonth, AVG(OTDScore) as AvgOTD, COUNT(*) as CompletedSchedules FROM OTDCalc GROUP BY PoYear, PoMonth ORDER BY PoYear, PoMonth"""
         cursor.execute(sql, [start_date, end_date]); rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    otd_map = {m: 0.0 for m in month_order}
-    for month_num, avg_otd, completed in rows:
-        mk = month_key_from_db(month_num)
-        if mk in otd_map: otd_map[mk] = round(float(avg_otd or 0), 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [otd_map[m] for m in month_order]})
+    otd_map = {b: 0.0 for b in buckets}
+    for yr, month_num, avg_otd, completed in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in otd_map: otd_map[k] = round(float(avg_otd or 0), 2)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [otd_map[b] for b in buckets]})
 
 # ─────────────────────────────────────────────────────────────
 #  PURCHASE - MONTHWISE TYPE REPORT & SUPPLIER RATING
@@ -773,196 +1039,363 @@ def purchase_report_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         sql = """
-        SELECT MONTH(podate) AS month_num, LTRIM(RTRIM(ISNULL(dtype, ''))) AS dtype, SUM(ISNULL(totamt, 0)) AS total_amount
+        SELECT YEAR(podate) AS yr, MONTH(podate) AS month_num, LTRIM(RTRIM(ISNULL(dtype, ''))) AS dtype, SUM(ISNULL(totamt, 0)) AS total_amount
         FROM POMas
         WHERE deleted = 0 AND CAST(podate AS DATE) BETWEEN ? AND ? AND ISNULL(dtype, '') <> 'Job Order'
-        GROUP BY MONTH(podate), LTRIM(RTRIM(ISNULL(dtype, '')))
-        ORDER BY month_num
+        GROUP BY YEAR(podate), MONTH(podate), LTRIM(RTRIM(ISNULL(dtype, '')))
+        ORDER BY yr, month_num
         """
         cursor.execute(sql, (start_date, end_date))
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    raw_map = {m: 0.0 for m in month_order}
-    store_map = {m: 0.0 for m in month_order}
-    gen_map = {m: 0.0 for m in month_order}
-    for month_num, dtype, amount in rows:
-        mk = month_key_from_db(month_num)
-        if mk is None or mk not in month_order: continue
+    raw_map = {b: 0.0 for b in buckets}
+    store_map = {b: 0.0 for b in buckets}
+    gen_map = {b: 0.0 for b in buckets}
+    for yr, month_num, dtype, amount in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k not in raw_map: continue
         amt = float(amount or 0) / 100_000
         dtype_lower = dtype.lower().strip()
         if 'raw' in dtype_lower or dtype_lower == 'raw material':
-            raw_map[mk] += amt
+            raw_map[k] += amt
         elif 'store' in dtype_lower:
-            store_map[mk] += amt
+            store_map[k] += amt
         else:
-            gen_map[mk] += amt
+            gen_map[k] += amt
     return Response({
         "company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels,
-        "raw_material": [round(raw_map[m], 2) for m in month_order], "store_material": [round(store_map[m], 2) for m in month_order], "general_service": [round(gen_map[m], 2) for m in month_order]
+        "raw_material": [round(raw_map[b], 2) for b in buckets], "store_material": [round(store_map[b], 2) for b in buckets], "general_service": [round(gen_map[b], 2) for b in buckets]
     })
 
-# ✅ NEW: Supplier Rating API based on your exact SQL Logic
+# ✅ Supplier / Vendor Rating API for Charts screen (Monthwise & Vendor-Filtered)
 @api_view(['GET'])
 def supplier_rating_monthwise(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
+    """
+    Plant Performance / Charts — Vendor/Supplier Rating Report (Monthwise & Filtered).
+    Uses Job-based logic for Vendors, and PO/GRN/Inspection-based logic for Suppliers.
+    Returns dynamic monthwise trend for overall vendors/suppliers or filtered by name.
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
     start_date, end_date = parse_date_range(request)
+    name_filter = (request.GET.get("name") or request.GET.get("vendor") or "").strip()
+    entity_type = (request.GET.get("type") or "vendor").strip().lower()
+
+    if entity_type == "supplier":
+        sql = """
+DECLARE @FromDate DATE = ?;
+DECLARE @ToDate   DATE = ?;
+
+WITH POScope AS (
+    SELECT DISTINCT PM.pono, PM.cid, PM.dtype, PM.podate
+    FROM POMas PM
+    LEFT JOIN CustMast CM      ON CM.Id = PM.cid
+    LEFT JOIN CustAliasMast CA ON CA.Id = PM.cid
+    WHERE PM.deleted = 0
+      AND PM.cid LIKE 'S%'
+      AND CAST(PM.podate AS DATE) BETWEEN @FromDate AND @ToDate
+      AND (? = '' OR LTRIM(RTRIM(ISNULL(CA.CName, CM.CName))) = ?)
+),
+ScheduleTotals AS (
+    SELECT
+        S.pono,
+        SUM(S.shdQty)   AS TotalSchedQty,
+        MAX(S.shddate)  AS LastSchedDate
+    FROM iss_podet_ShdQty S
+    INNER JOIN POScope P ON P.pono = S.pono
+    WHERE S.deleted = 0
+    GROUP BY S.pono
+),
+GRNTotals AS (
+    SELECT
+        G.pono,
+        SUM(G.qty)      AS TotalGRNQty,
+        MAX(GM.grndate) AS LastGRNDate
+    FROM grninsubdet G
+    INNER JOIN POScope P ON P.pono = G.pono
+    INNER JOIN grn_mas GM ON GM.grnno = G.grnno
+    WHERE G.deleted = 0
+    GROUP BY G.pono
+),
+POStatus AS (
+    SELECT
+        P.pono,
+        P.cid,
+        P.podate,
+        ST.TotalSchedQty,
+        ST.LastSchedDate,
+        ISNULL(GT.TotalGRNQty, 0)  AS TotalGRNQty,
+        GT.LastGRNDate,
+        CASE
+            WHEN ST.TotalSchedQty IS NULL THEN 'OnTime'
+            WHEN ISNULL(GT.TotalGRNQty, 0) < ST.TotalSchedQty THEN 'Pending'
+            WHEN GT.LastGRNDate <= ST.LastSchedDate THEN 'OnTime'
+            ELSE 'Delayed'
+        END AS POStatus
+    FROM POScope P
+    LEFT JOIN ScheduleTotals ST ON ST.pono = P.pono
+    LEFT JOIN GRNTotals GT      ON GT.pono = P.pono
+),
+DeliveryBySupplier AS (
+    SELECT
+        YEAR(podate)                                        AS POYear,
+        MONTH(podate)                                       AS POMonth,
+        COUNT(*)                                            AS POsProduced,
+        SUM(CASE WHEN POStatus = 'OnTime'  THEN 1 ELSE 0 END) AS OnTimePOs,
+        SUM(CASE WHEN POStatus = 'Delayed' THEN 1 ELSE 0 END) AS DelayedPOs,
+        SUM(CASE WHEN POStatus = 'Pending' THEN 1 ELSE 0 END) AS PendingPOs
+    FROM POStatus
+    GROUP BY YEAR(podate), MONTH(podate)
+),
+DeliveryCalc AS (
+    SELECT
+        POYear,
+        POMonth,
+        POsProduced,
+        OnTimePOs,
+        DelayedPOs,
+        PendingPOs,
+        CASE WHEN POsProduced > 0
+             THEN ROUND(OnTimePOs * 100.0 / POsProduced, 2)
+             ELSE 0 END AS OnTimePct
+    FROM DeliveryBySupplier
+),
+InspectionBase AS (
+    SELECT
+        G.pono,
+        P.cid,
+        P.podate,
+        ID.grnqty,
+        ID.okqty,
+        ID.matrej,
+        ID.macrej
+    FROM inspdet ID
+    INNER JOIN inspmas IM ON IM.irno = ID.irno
+    INNER JOIN grninsubdet G ON G.grnno = IM.grnno
+    INNER JOIN POScope P ON P.pono = G.pono
+    WHERE ID.deleted = 0
+      AND G.deleted = 0
+),
+QualityCalc AS (
+    SELECT
+        YEAR(podate) AS POYear,
+        MONTH(podate) AS POMonth,
+        SUM(grnqty) AS ItemsPurchased,
+        SUM(okqty)  AS ItemsAccepted,
+        SUM(matrej) + SUM(macrej) AS ItemsRejected,
+        CASE WHEN SUM(grnqty) > 0
+             THEN ROUND(SUM(okqty) * 100.0 / SUM(grnqty), 2)
+             ELSE 0 END AS AcceptancePct
+    FROM InspectionBase
+    GROUP BY YEAR(podate), MONTH(podate)
+),
+SupplierMonths AS (
+    SELECT DISTINCT POYear AS JobYear, POMonth AS JobMonth FROM DeliveryCalc
+    UNION
+    SELECT DISTINCT POYear AS JobYear, POMonth AS JobMonth FROM QualityCalc
+),
+SupplierSummary AS (
+    SELECT
+        SM.JobYear,
+        SM.JobMonth,
+        ISNULL(QC.AcceptancePct, 0)                         AS PctOfAcceptance,
+        QR.RatingFor                                        AS QualityRating,
+        ISNULL(DC.OnTimePct, 0)                             AS PctOfOnTimeDeliveryPOs,
+        DR.RatingFor                                        AS DeliveryRating,
+        ISNULL(QR.RatingFor, 0) + ISNULL(DR.RatingFor, 0)   AS TotalSupplierRating
+    FROM SupplierMonths SM
+    LEFT JOIN DeliveryCalc DC ON DC.POYear = SM.JobYear AND DC.POMonth = SM.JobMonth
+    LEFT JOIN QualityCalc QC  ON QC.POYear = SM.JobYear AND QC.POMonth = SM.JobMonth
+    LEFT JOIN DeliveryRating DR
+        ON DR.dtype = 'Supplier'
+       AND ISNULL(DC.OnTimePct, 0) BETWEEN DR.RatingFrom AND DR.RatingTo
+    LEFT JOIN QualityRating QR
+        ON QR.dtype = 'Supplier'
+       AND ISNULL(QC.AcceptancePct, 0) BETWEEN QR.RatingFrom AND QR.RatingTo
+)
+SELECT
+    JobYear,
+    JobMonth,
+    ROUND(AVG(TotalSupplierRating), 2) AS [TOTAL RATING]
+FROM SupplierSummary
+GROUP BY JobYear, JobMonth
+ORDER BY JobYear, JobMonth;
+"""
+        params = [start_date, end_date, name_filter, name_filter]
+    else:
+        sql = """
+DECLARE @FromDate DATE = ?;
+DECLARE @ToDate   DATE = ?;
+
+;WITH JobQuality AS (
+    SELECT
+        jm.jbno,
+        jm.cid,
+        YEAR(jm.jbdate)                                               AS JobYear,
+        MONTH(jm.jbdate)                                              AS JobMonth,
+        jm.expdate,
+        SUM(ji.Qty)                                                    AS ReceivedQty,
+        SUM(ji.Qty - ISNULL(ji.RejQty,0) - ISNULL(ji.RwQty,0))       AS AcceptedQty,
+        SUM(ISNULL(ji.RejQty,0))                                       AS RejectedQty
+    FROM Job_mas jm
+    INNER JOIN JobIncomeDetInsp ji ON ji.JbNo = jm.jbno
+    INNER JOIN CustMast cm ON cm.Id = jm.cid
+    WHERE jm.deleted = 0
+      AND jm.cid LIKE 'V%'
+      AND CAST(jm.jbdate AS DATE) BETWEEN @FromDate AND @ToDate
+      AND (? = '' OR cm.CName = ?)
+    GROUP BY jm.jbno, jm.cid, YEAR(jm.jbdate), MONTH(jm.jbdate), jm.expdate
+),
+JobDelivery AS (
+    SELECT
+        jq.jbno,
+        jq.cid,
+        jq.JobYear,
+        jq.JobMonth,
+        jq.expdate,
+        jq.ReceivedQty,
+        jq.AcceptedQty,
+        jq.RejectedQty,
+        jd_dc.LastDcDate,
+        CASE
+            WHEN jd_dc.LastDcDate IS NOT NULL
+                 AND jd_dc.LastDcDate <= jq.expdate THEN 'ONTIME'
+            WHEN jq.expdate < CAST(GETDATE() AS DATE)  THEN 'DELAY'
+            ELSE 'PENDING'
+        END AS DeliveryBucket
+    FROM JobQuality jq
+    OUTER APPLY (
+        SELECT MAX(im.dcdate) AS LastDcDate
+        FROM JobIncomeDetInsp ji
+        INNER JOIN InJob_Mas im ON im.jino = ji.JiNo
+        WHERE ji.JbNo = jq.jbno
+    ) jd_dc
+),
+VendorAgg AS (
+    SELECT
+        jd.JobYear,
+        jd.JobMonth,
+        SUM(jd.ReceivedQty)                                                AS TotalReceived,
+        SUM(jd.AcceptedQty)                                                AS TotalAccepted,
+        SUM(jd.RejectedQty)                                                AS TotalRejected,
+        COUNT(*)                                                            AS JobOrdersProduced,
+        SUM(CASE WHEN jd.DeliveryBucket = 'ONTIME'  THEN 1 ELSE 0 END)    AS OnTimeJobs,
+        SUM(CASE WHEN jd.DeliveryBucket = 'DELAY'   THEN 1 ELSE 0 END)    AS DelayJobs,
+        SUM(CASE WHEN jd.DeliveryBucket = 'PENDING' THEN 1 ELSE 0 END)    AS PendingJobs
+    FROM JobDelivery jd
+    GROUP BY jd.JobYear, jd.JobMonth
+),
+VendorScored AS (
+    SELECT
+        va.*,
+        CASE WHEN va.TotalReceived = 0 THEN NULL
+             ELSE (va.TotalAccepted * 100.0) / va.TotalReceived
+        END AS AcceptancePct,
+        CASE WHEN (va.JobOrdersProduced - va.PendingJobs) = 0 THEN NULL
+             ELSE (va.OnTimeJobs * 100.0) / (va.JobOrdersProduced - va.PendingJobs)
+        END AS OnTimeDeliveryPct
+    FROM VendorAgg va
+),
+VendorGraded AS (
+    SELECT
+        vs.JobYear,
+        vs.JobMonth,
+        ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
+    FROM VendorScored vs
+    LEFT JOIN QualityRating qr
+           ON qr.dtype = 'Vendor'
+          AND vs.AcceptancePct IS NOT NULL
+          AND vs.AcceptancePct BETWEEN qr.RatingFrom AND qr.RatingTo
+    LEFT JOIN DeliveryRating dr
+           ON dr.dtype = 'Vendor'
+          AND vs.OnTimeDeliveryPct IS NOT NULL
+          AND vs.OnTimeDeliveryPct BETWEEN dr.RatingFrom AND dr.RatingTo
+)
+SELECT
+    vg.JobYear,
+    vg.JobMonth,
+    ROUND(AVG(vg.TotalRating), 2) AS [TOTAL RATING]
+FROM VendorGraded vg
+GROUP BY vg.JobYear, vg.JobMonth
+ORDER BY vg.JobYear, vg.JobMonth;
+"""
+        params = [start_date, end_date, name_filter, name_filter]
+
+    cursor = None
     try:
         cursor = conn.cursor()
-        # Using exact provided SQL logic, parameterized for dates, grouped by Supplier
-        sql = """
-        WITH POScope AS (
-            SELECT DISTINCT PM.pono, PM.cid
-            FROM POMas PM
-            WHERE PM.deleted = 0
-              AND PM.cid LIKE 'S%'
-              AND PM.podate BETWEEN ? AND ?
-        ),
-        ScheduleTotals AS (
-            SELECT
-                S.pono,
-                SUM(S.shdQty)   AS TotalSchedQty,
-                MAX(S.shddate)  AS LastSchedDate
-            FROM iss_podet_ShdQty S
-            INNER JOIN POScope P ON P.pono = S.pono
-            WHERE S.deleted = 0
-            GROUP BY S.pono
-        ),
-        GRNTotals AS (
-            SELECT
-                G.pono,
-                SUM(G.qty)      AS TotalGRNQty,
-                MAX(GM.grndate) AS LastGRNDate
-            FROM grninsubdet G
-            INNER JOIN POScope P ON P.pono = G.pono
-            INNER JOIN grn_mas GM ON GM.grnno = G.grnno
-            WHERE G.deleted = 0
-            GROUP BY G.pono
-        ),
-        POStatus AS (
-            SELECT
-                P.pono,
-                P.cid,
-                ST.TotalSchedQty,
-                ST.LastSchedDate,
-                ISNULL(GT.TotalGRNQty, 0)  AS TotalGRNQty,
-                GT.LastGRNDate,
-                CASE
-                    WHEN ST.TotalSchedQty IS NULL THEN 'OnTime'
-                    WHEN ISNULL(GT.TotalGRNQty, 0) < ST.TotalSchedQty THEN 'Pending'
-                    WHEN GT.LastGRNDate <= ST.LastSchedDate THEN 'OnTime'
-                    ELSE 'Delayed'
-                END AS POStatus
-            FROM POScope P
-            LEFT JOIN ScheduleTotals ST ON ST.pono = P.pono
-            LEFT JOIN GRNTotals GT      ON GT.pono = P.pono
-        ),
-        DeliveryBySupplier AS (
-            SELECT
-                cid,
-                COUNT(*)                                            AS POsProduced,
-                SUM(CASE WHEN POStatus = 'OnTime'  THEN 1 ELSE 0 END) AS OnTimePOs,
-                SUM(CASE WHEN POStatus = 'Delayed' THEN 1 ELSE 0 END) AS DelayedPOs,
-                SUM(CASE WHEN POStatus = 'Pending' THEN 1 ELSE 0 END) AS PendingPOs
-            FROM POStatus
-            GROUP BY cid
-        ),
-        DeliveryCalc AS (
-            SELECT
-                cid,
-                POsProduced,
-                OnTimePOs,
-                DelayedPOs,
-                PendingPOs,
-                CASE WHEN POsProduced > 0
-                     THEN ROUND(OnTimePOs * 100.0 / POsProduced, 2)
-                     ELSE 0 END AS OnTimePct
-            FROM DeliveryBySupplier
-        ),
-        InspectionBase AS (
-            SELECT
-                G.pono,
-                P.cid,
-                ID.grnqty,
-                ID.okqty,
-                ID.matrej,
-                ID.macrej
-            FROM inspdet ID
-            INNER JOIN inspmas IM ON IM.irno = ID.irno
-            INNER JOIN grninsubdet G ON G.grnno = IM.grnno
-            INNER JOIN POScope P ON P.pono = G.pono
-            WHERE ID.deleted = 0
-              AND G.deleted = 0
-        ),
-        QualityCalc AS (
-            SELECT
-                cid,
-                SUM(grnqty) AS ItemsPurchased,
-                SUM(okqty)  AS ItemsAccepted,
-                SUM(matrej) + SUM(macrej) AS ItemsRejected,
-                CASE WHEN SUM(grnqty) > 0
-                     THEN ROUND(SUM(okqty) * 100.0 / SUM(grnqty), 2)
-                     ELSE 0 END AS AcceptancePct
-            FROM InspectionBase
-            GROUP BY cid
-        ),
-        VendorLookup AS (
-            SELECT DISTINCT 
-                P.cid, 
-                LTRIM(RTRIM(ISNULL(CA.CName, CM.CName))) AS SupplierName
-            FROM POScope P
-            LEFT JOIN CustMast CM      ON CM.Id = P.cid
-            LEFT JOIN CustAliasMast CA ON CA.Id = P.cid
-        ),
-        SupplierSummary AS (
-            SELECT
-                VL.SupplierName,
-                ISNULL(QR.RatingFor, 0) + ISNULL(DR.RatingFor, 0)   AS TotalSupplierRating
-            FROM VendorLookup VL
-            LEFT JOIN DeliveryCalc DC ON DC.cid = VL.cid
-            LEFT JOIN QualityCalc QC  ON QC.cid = VL.cid
-            LEFT JOIN DeliveryRating DR
-                ON DR.dtype = 'Supplier'
-               AND ISNULL(DC.OnTimePct, 0) BETWEEN DR.RatingFrom AND DR.RatingTo
-            LEFT JOIN QualityRating QR
-                ON QR.dtype = 'Supplier'
-               AND ISNULL(QC.AcceptancePct, 0) BETWEEN QR.RatingFrom AND QR.RatingTo
-        )
-        SELECT 
-            SupplierName,
-            TotalSupplierRating AS AvgFinalRating
-        FROM 
-            SupplierSummary
-        ORDER BY 
-            AvgFinalRating DESC
-        """
-        cursor.execute(sql, [start_date, end_date])
-        rows = cursor.fetchall()
-        cursor.close(); conn.close()
-        
-        labels = [str(row[0]).strip() for row in rows if row[0] is not None]
-        data = [round(float(row[1] or 0), 2) for row in rows]
-        
-        fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-        fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
-        
+        cursor.execute(sql, params)
+        db_rows = cursor.fetchall() or []
+
+        buckets, labels = generate_month_buckets(start_date, end_date)
+        rating_map = {b: 0.0 for b in buckets}
+
+        for row in db_rows:
+            y_num = int(row[0] or 0)
+            m_num = int(row[1] or 0)
+            rating_val = round(float(row[2] or 0), 2)
+            k = (y_num, m_num)
+            if k in rating_map:
+                rating_map[k] = rating_val
+
+        chart_data = [rating_map[b] for b in buckets]
+
+        # Fetch distinct names for filter dropdown based on entity type
+        if entity_type == "supplier":
+            cursor.execute(
+                "SELECT DISTINCT LTRIM(RTRIM(ISNULL(ca.CName, cm.CName))) FROM CustMast cm "
+                "LEFT JOIN CustAliasMast ca ON ca.Id = cm.Id "
+                "WHERE cm.CName IS NOT NULL AND cm.CName <> '' AND cm.Id LIKE 'S%' "
+                "ORDER BY LTRIM(RTRIM(ISNULL(ca.CName, cm.CName)))"
+            )
+        else:
+            cursor.execute(
+                "SELECT DISTINCT LTRIM(RTRIM(cm.CName)) FROM CustMast cm "
+                "WHERE cm.CName IS NOT NULL AND cm.CName <> '' AND cm.Id LIKE 'V%' "
+                "ORDER BY LTRIM(RTRIM(cm.CName))"
+            )
+        all_names = [str(r[0]).strip() for r in cursor.fetchall() if r[0]]
+        if not all_names:
+            cursor.execute(
+                "SELECT DISTINCT LTRIM(RTRIM(ISNULL(ca.CName, cm.CName))) FROM CustMast cm "
+                "LEFT JOIN CustAliasMast ca ON ca.Id = cm.Id "
+                "WHERE cm.CName IS NOT NULL AND cm.CName <> '' AND (cm.Id LIKE 'V%' OR cm.Id LIKE 'S%') "
+                "ORDER BY LTRIM(RTRIM(ISNULL(ca.CName, cm.CName)))"
+            )
+            all_names = [str(r[0]).strip() for r in cursor.fetchall() if r[0]]
+
+        fy_label = get_fy_label(start_date, end_date)
+
         return Response({
             "company": tenant.get("company_name", ""),
-            "fy": fy_label,
-            "from": str(start_date),
-            "to": str(end_date),
-            "labels": labels,
-            "data": data
+            "fy":      fy_label,
+            "from":    str(start_date),
+            "to":      str(end_date),
+            "labels":  labels,
+            "data":    chart_data,
+            "vendors": all_names,
+            "selectedVendor": name_filter,
+            "filterOptions": {
+                "vendors": all_names,
+            },
         })
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        conn.close()
         
 # ─────────────────────────────────────────────────────────────
 #  VENDOR - REJECTION MONTHWISE
@@ -972,8 +1405,8 @@ def vendor_rejection_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     cursor = None
     try:
         cursor = conn.cursor()
@@ -1021,20 +1454,21 @@ def vendor_rejection_monthwise(request):
         date_where = f"""CAST(IM.[{im_irdate}] AS DATE) BETWEEN ? AND ? AND {gm_del_sql} AND {rej_filter}"""
         agg_sql = f"""
         SELECT
+            YEAR(IM.[{im_irdate}]) AS YrNum,
             MONTH(IM.[{im_irdate}]) AS MonthNum,
             {vendor_expr} AS VendorName,
             SUM(CAST({rej_sum} AS FLOAT)) AS TotalRej
             {base_from}
             WHERE {date_where}
-            GROUP BY MONTH(IM.[{im_irdate}]), {vendor_expr}
-            ORDER BY 2, 1
+            GROUP BY YEAR(IM.[{im_irdate}]), MONTH(IM.[{im_irdate}]), {vendor_expr}
+            ORDER BY 3, 1, 2
         """
         params = [start_date, end_date]
         cursor.execute(agg_sql, params)
         rows = cursor.fetchall()
         if not rows:
             injob_sql_both = """
-            SELECT MONTH(M.inspdate) AS MonthNum, LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) AS VendorName, SUM(CAST(ISNULL(D.macrej, 0) AS FLOAT) + CAST(ISNULL(D.matrej, 0) AS FLOAT)) AS TotalRej FROM InJob_Det D INNER JOIN InJob_Mas M ON D.inspno = M.inspno LEFT JOIN CustMast C ON M.cid = C.Id WHERE ISNULL(D.deleted, 0) = 0 AND CAST(M.inspdate AS DATE) BETWEEN ? AND ? AND (CAST(ISNULL(D.macrej, 0) AS FLOAT) > 0 OR CAST(ISNULL(D.matrej, 0) AS FLOAT) > 0) GROUP BY MONTH(M.inspdate), LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) ORDER BY 2, 1
+            SELECT YEAR(M.inspdate) AS YrNum, MONTH(M.inspdate) AS MonthNum, LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) AS VendorName, SUM(CAST(ISNULL(D.macrej, 0) AS FLOAT) + CAST(ISNULL(D.matrej, 0) AS FLOAT)) AS TotalRej FROM InJob_Det D INNER JOIN InJob_Mas M ON D.inspno = M.inspno LEFT JOIN CustMast C ON M.cid = C.Id WHERE ISNULL(D.deleted, 0) = 0 AND CAST(M.inspdate AS DATE) BETWEEN ? AND ? AND (CAST(ISNULL(D.macrej, 0) AS FLOAT) > 0 OR CAST(ISNULL(D.matrej, 0) AS FLOAT) > 0) GROUP BY YEAR(M.inspdate), MONTH(M.inspdate), LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) ORDER BY 3, 1, 2
             """
             try:
                 cursor.execute(injob_sql_both, [start_date, end_date])
@@ -1044,30 +1478,24 @@ def vendor_rejection_monthwise(request):
         cursor.close(); conn.close()
     except Exception as e:
         if cursor:
-            try:
-                cursor.close()
-            except Exception:
-                pass
+            try: cursor.close()
+            except Exception: pass
         if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            try: conn.close()
+            except Exception: pass
         return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
     vendor_data = {}
-    for month_num, vendor_name, total_rej in rows:
+    for yr, month_num, vendor_name, total_rej in rows:
         vkey = str(vendor_name).strip() if vendor_name is not None else "Unknown"
         if not vkey: vkey = "Unknown"
-        if vkey not in vendor_data: vendor_data[vkey] = {m: 0.0 for m in month_order}
-        mk = month_key_from_db(month_num)
-        if mk in vendor_data[vkey]: vendor_data[vkey][mk] += float(total_rej or 0)
+        if vkey not in vendor_data: vendor_data[vkey] = {b: 0.0 for b in buckets}
+        k = (int(yr or 0), int(month_num or 0))
+        if k in vendor_data[vkey]: vendor_data[vkey][k] += float(total_rej or 0)
     palette = [{"border": "#3b82f6", "bg": "rgba(59,130,246,0.06)"}, {"border": "#f97316", "bg": "rgba(249,115,22,0.06)"}, {"border": "#10b981", "bg": "rgba(16,185,129,0.06)"}, {"border": "#8b5cf6", "bg": "rgba(139,92,246,0.06)"}, {"border": "#ec4899", "bg": "rgba(236,72,153,0.06)"}, {"border": "#06b6d4", "bg": "rgba(6,182,212,0.06)"}, {"border": "#f43f5e", "bg": "rgba(244,63,94,0.06)"}]
     formatted_datasets = []
     for i, (vname, vdata) in enumerate(vendor_data.items()):
         c = palette[i % len(palette)]
-        formatted_datasets.append({"label": vname, "data": [round(vdata.get(m, 0), 2) for m in month_order], "borderColor": c["border"], "backgroundColor": c["bg"], "tension": 0.4, "fill": False, "pointRadius": 2, "pointHoverRadius": 4, "borderWidth": 1.5})
+        formatted_datasets.append({"label": vname, "data": [round(vdata.get(b, 0), 2) for b in buckets], "borderColor": c["border"], "backgroundColor": c["bg"], "tension": 0.4, "fill": False, "pointRadius": 2, "pointHoverRadius": 4, "borderWidth": 1.5})
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "datasets": formatted_datasets})
 
 # ─────────────────────────────────────────────────────────────
@@ -1078,21 +1506,19 @@ def overall_efficiency_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        sql = """SELECT MONTH(dt) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF FROM (SELECT proddate AS dt, OAEFF FROM ProductionEntry WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL) AS X GROUP BY MONTH(dt) ORDER BY MONTH(dt)"""
+        sql = """SELECT YEAR(dt) AS YrNum, MONTH(dt) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF FROM (SELECT proddate AS dt, OAEFF FROM ProductionEntry WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL) AS X GROUP BY YEAR(dt), MONTH(dt) ORDER BY YEAR(dt), MONTH(dt)"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    eff_map = {m: 0.0 for m in month_order}
-    for month_num, avg_eff in rows:
-        mk = month_key_from_db(month_num)
-        if mk in eff_map: eff_map[mk] = round(float(avg_eff or 0), 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [eff_map[m] for m in month_order]})
+    eff_map = {b: 0.0 for b in buckets}
+    for yr, month_num, avg_eff in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in eff_map: eff_map[k] = round(float(avg_eff or 0), 2)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [eff_map[b] for b in buckets]})
 
 # ─────────────────────────────────────────────────────────────
 #  PRODUCTION - OPERATOR EFFICIENCY & MACHINE IDLE TIME & MACHINE EFFICIENCY
@@ -1266,8 +1692,8 @@ def operator_efficiency(request):
     oprname = request.GET.get("oprname", "").strip()
     if not oprname: return Response({"error": "Operator name (oprname) is required."}, status=400)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         slices = _operator_table_slices(cursor)
@@ -1276,65 +1702,124 @@ def operator_efficiency(request):
             if not (s["eff"] and s["qty"]):
                 continue
             branches.append(
-                f"SELECT MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
+                f"SELECT YEAR([{s['d']}]) AS YrNum, MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
                 f"ISNULL(CAST([{s['qty']}] AS FLOAT), 0) AS Qty FROM {s['q']} WHERE {s['del']} "
                 f"AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ? "
-                f"AND LTRIM(RTRIM(CAST([{s['opr']}] AS NVARCHAR(512)))) = ?"
+                f"AND LTRIM(RTRIM(CAST([{s['opr']}] AS NVARCHAR(512)))) = LTRIM(RTRIM(?))"
             )
             params.extend([start_date, end_date, oprname])
         if branches:
             sql = (
                 "WITH AllEfficiency AS (" + " UNION ALL ".join(branches) + ") "
-                "SELECT MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE SUM(Eff * Qty) / NULLIF(SUM(Qty), 0) END AS OperatorEfficiency "
-                "FROM AllEfficiency GROUP BY MonthNo ORDER BY MonthNo"
+                "SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency "
+                "FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"
             )
             cursor.execute(sql, params)
         else:
-            sql = """WITH AllEfficiency AS (SELECT oprname, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND entrydate BETWEEN ? AND ? AND oprname = ? UNION ALL SELECT oprname, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND proddate BETWEEN ? AND ? AND oprname = ? UNION ALL SELECT oprname, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND entrydate BETWEEN ? AND ? AND oprname = ?) SELECT MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE SUM(Eff * Qty) / SUM(Qty) END AS OperatorEfficiency FROM AllEfficiency GROUP BY MonthNo ORDER BY MonthNo"""
+            sql = """WITH AllEfficiency AS (SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?)) UNION ALL SELECT oprname, YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?)) UNION ALL SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?))) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
             cursor.execute(sql, [start_date, end_date, oprname, start_date, end_date, oprname, start_date, end_date, oprname])
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    eff_map = {m: 0.0 for m in month_order}
-    for month_num, efficiency in rows:
-        mk = month_key_from_db(month_num)
-        if mk in eff_map: eff_map[mk] = round(float(efficiency or 0), 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "operator": oprname, "labels": labels, "data": [eff_map[m] for m in month_order]})
+    eff_map = {b: 0.0 for b in buckets}
+    for yr, month_num, efficiency in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in eff_map: eff_map[k] = round(float(efficiency or 0), 2)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "operator": oprname, "labels": labels, "data": [eff_map[b] for b in buckets]})
 
 @api_view(['GET'])
 def overall_operator_efficiency(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        sql = """WITH AllEfficiency AS (SELECT MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND entrydate BETWEEN ? AND ? UNION ALL SELECT MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND proddate BETWEEN ? AND ? UNION ALL SELECT MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND entrydate BETWEEN ? AND ?) SELECT MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE SUM(Eff * Qty) / SUM(Qty) END AS OverallEfficiency FROM AllEfficiency GROUP BY MonthNo ORDER BY MonthNo"""
-        cursor.execute(sql, [start_date, end_date, start_date, end_date, start_date, end_date]); rows = cursor.fetchall(); cursor.close(); conn.close()
+        slices = _operator_table_slices(cursor)
+        branches, params = [], []
+        for s in slices:
+            if not (s["eff"] and s["qty"]):
+                continue
+            branches.append(
+                f"SELECT YEAR([{s['d']}]) AS YrNum, MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
+                f"ISNULL(CAST([{s['qty']}] AS FLOAT), 0) AS Qty FROM {s['q']} WHERE {s['del']} "
+                f"AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ?"
+            )
+            params.extend([start_date, end_date])
+        if branches:
+            sql = (
+                "WITH AllEfficiency AS (" + " UNION ALL ".join(branches) + ") "
+                "SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OverallEfficiency "
+                "FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"
+            )
+            cursor.execute(sql, params)
+        else:
+            sql = """WITH AllEfficiency AS (SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? UNION ALL SELECT YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? UNION ALL SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OverallEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
+            cursor.execute(sql, [start_date, end_date, start_date, end_date, start_date, end_date])
+        rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"]
-    eff_map = {m: 0.0 for m in month_order}
-    for month_num, efficiency in rows:
-        mk = month_key_from_db(month_num)
-        if mk in eff_map: eff_map[mk] = round(float(efficiency or 0), 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [eff_map[m] for m in month_order]})
+    eff_map = {b: 0.0 for b in buckets}
+    for yr, month_num, efficiency in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in eff_map: eff_map[k] = round(float(efficiency or 0), 2)
+    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [eff_map[b] for b in buckets]})
 
 @api_view(['GET'])
 def machine_wise_idle_time(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
-    start_date, end_date = parse_date_range(request)
-    sql = """SELECT macno, SUM(IdleSeconds) / 60.0 AS TotalIdleMinutes FROM (SELECT d.MacNo AS macno, CAST(CASE WHEN SQL_VARIANT_PROPERTY(d.tottime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, d.tottime) ELSE d.tottime END AS BIGINT) AS IdleSeconds FROM Machine_IdleEntryDet d INNER JOIN Machine_IdleEntryMas m ON d.prodid = m.prodid WHERE m.proddate BETWEEN ? AND ? AND m.deleted = 0 AND d.deleted = 0 UNION ALL SELECT macno, CAST(DATEDIFF(SECOND, 0, IdleTime) AS BIGINT) FROM ConvProductionEntryRod WHERE entrydate BETWEEN ? AND ? AND deleted = 0 UNION ALL SELECT macno, CAST(DATEDIFF(SECOND, 0, IdleTime) AS BIGINT) FROM ConvProductionEntry WHERE entrydate BETWEEN ? AND ? AND deleted = 0 UNION ALL SELECT macno, CAST(CASE WHEN SQL_VARIANT_PROPERTY(idlTime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, idlTime) ELSE idlTime END AS BIGINT) FROM ProductionEntry WHERE proddate BETWEEN ? AND ? AND deleted = 0) AS X GROUP BY macno ORDER BY macno"""
-    params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
     try:
-        cursor = conn.cursor(); cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
-    except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
+    start_date, end_date = parse_date_range(request)
+    macno_raw = (request.GET.get("macno") or request.GET.get("mac") or request.GET.get("machine") or "").strip()
+    mac_list = [m.strip() for m in macno_raw.split(",") if m.strip()]
+    
+    if mac_list:
+        placeholders = ", ".join(["?"] * len(mac_list))
+        top_clause = ""
+        where_clause = f"WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND LTRIM(RTRIM(macno)) IN ({placeholders})"
+        order_clause = "ORDER BY macno"
+        params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date] + mac_list
+    else:
+        top_clause = "TOP 10"
+        where_clause = "WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> ''"
+        order_clause = "ORDER BY TotalIdleMinutes DESC"
+        params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
+        
+    sql = f"""
+    SELECT {top_clause} macno, SUM(IdleSeconds) / 60.0 AS TotalIdleMinutes FROM (
+        SELECT d.MacNo AS macno, CAST(CASE WHEN SQL_VARIANT_PROPERTY(d.tottime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, d.tottime) ELSE d.tottime END AS BIGINT) AS IdleSeconds FROM Machine_IdleEntryDet d INNER JOIN Machine_IdleEntryMas m ON d.prodid = m.prodid WHERE m.proddate BETWEEN ? AND ? AND m.deleted = 0 AND d.deleted = 0 
+        UNION ALL 
+        SELECT macno, CAST(DATEDIFF(SECOND, 0, IdleTime) AS BIGINT) FROM ConvProductionEntryRod WHERE entrydate BETWEEN ? AND ? AND deleted = 0 
+        UNION ALL 
+        SELECT macno, CAST(DATEDIFF(SECOND, 0, IdleTime) AS BIGINT) FROM ConvProductionEntry WHERE entrydate BETWEEN ? AND ? AND deleted = 0 
+        UNION ALL 
+        SELECT macno, CAST(CASE WHEN SQL_VARIANT_PROPERTY(idlTime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, idlTime) ELSE idlTime END AS BIGINT) FROM ProductionEntry WHERE proddate BETWEEN ? AND ? AND deleted = 0
+    ) AS X 
+    {where_clause}
+    GROUP BY macno 
+    {order_clause}
+    """
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+        
     labels = [str(row[0]).strip() for row in rows if row[0] is not None]
     data = [round(float(row[1] or 0) / 60.0, 2) for row in rows]
-    return Response({"company": tenant.get("company_name", ""), "from": str(start_date), "to": str(end_date), "labels": labels, "data": data})
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "data": data
+    })
 
 # ✅ NEW: Get Machines List
 @api_view(['GET'])
@@ -1381,15 +1866,15 @@ def machine_efficiency_monthwise(request):
     if not macno:
         return Response({"error": "Machine number (macno) is required."}, status=400)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
         slices = _machine_oaeff_slices(cursor)
         branches, params = [], []
         for s in slices:
             branches.append(
-                f"SELECT MONTH([{s['d']}]) AS [Month], CAST([{s['oaeff']}] AS FLOAT) AS Ov "
+                f"SELECT YEAR([{s['d']}]) AS [Year], MONTH([{s['d']}]) AS [Month], CAST([{s['oaeff']}] AS FLOAT) AS Ov "
                 f"FROM {s['q']} WHERE {s['del']} AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ? "
                 f"AND [{s['oaeff']}] IS NOT NULL "
                 f"AND LTRIM(RTRIM(CAST([{s['mac']}] AS NVARCHAR(512)))) = ?"
@@ -1397,14 +1882,14 @@ def machine_efficiency_monthwise(request):
             params.extend([start_date, end_date, macno])
         if branches:
             sql = (
-                "SELECT [Month], ROUND(AVG(Ov), 2) AS Avg_OA_EFF_Percentage FROM ("
+                "SELECT [Year], [Month], ROUND(AVG(Ov), 2) AS Avg_OA_EFF_Percentage FROM ("
                 + " UNION ALL ".join(branches)
-                + ") A GROUP BY [Month] ORDER BY [Month]"
+                + ") A GROUP BY [Year], [Month] ORDER BY [Year], [Month]"
             )
             cursor.execute(sql, params)
         else:
             sql = """
-                SELECT MONTH(A.EntryDate) AS [Month],
+                SELECT YEAR(A.EntryDate) AS [Year], MONTH(A.EntryDate) AS [Month],
                 ROUND(AVG(A.OAEFF), 2) AS Avg_OA_EFF_Percentage
                 FROM (
                     SELECT entrydate AS EntryDate, macno, OAEFF FROM ConvProductionEntryRod WHERE deleted = 0 AND OAEFF IS NOT NULL AND macno = ?
@@ -1424,13 +1909,11 @@ def machine_efficiency_monthwise(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]
-    eff_map = {m: 0.0 for m in month_order}
-    for month_num, efficiency in rows:
-        mk = month_key_from_db(month_num)
-        if mk in eff_map:
-            eff_map[mk] = round(float(efficiency or 0), 2)
+    eff_map = {b: 0.0 for b in buckets}
+    for yr, month_num, efficiency in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in eff_map:
+            eff_map[k] = round(float(efficiency or 0), 2)
 
     return Response({
         "company": tenant.get("company_name", ""),
@@ -1439,10 +1922,9 @@ def machine_efficiency_monthwise(request):
         "to": str(end_date),
         "machine": macno,
         "labels": labels,
-        "data": [eff_map[m] for m in month_order]
+        "data": [eff_map[b] for b in buckets]
     })
 
-#   02.05.2026_Changed of Over all Efficiency
 # ─────────────────────────────────────────────────────────────
 #  OPERATIONS - PRODUCTION VALUE MONTHWISE
 # ─────────────────────────────────────────────────────────────
@@ -1451,34 +1933,32 @@ def production_value_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
     start_date, end_date = parse_date_range(request)
-    fy_start_year = start_date.year if start_date.month >= 4 else start_date.year - 1
-    fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        sql = """WITH CombinedData AS (SELECT P.proddate AS EntryDate, ((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto) ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END - ISNULL(P.accidletimesecs, 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue FROM ProductionEntry P LEFT JOIN MacMaster M ON P.macno = M.macno WHERE P.deleted = 0 AND CAST(P.proddate AS DATE) BETWEEN ? AND ? UNION ALL SELECT C.entrydate AS EntryDate, ((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime) ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue FROM ConvProductionEntry C LEFT JOIN MacMaster M ON C.macno = M.macno WHERE C.deleted = 0 AND CAST(C.entrydate AS DATE) BETWEEN ? AND ? UNION ALL SELECT R.entrydate AS EntryDate, ((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime) ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue FROM ConvProductionEntryRod R LEFT JOIN MacMaster M ON R.macno = M.macno WHERE R.deleted = 0 AND CAST(R.entrydate AS DATE) BETWEEN ? AND ?), MachineStats AS (SELECT SUM(ISNULL(RatePerHr, 0)) AS TotalRatePerHr FROM MacMaster WHERE deleted = 0) SELECT MONTH(C.EntryDate)                                           AS MonthNum, SUM(C.ProductionValue)                                       AS TotalProductionValue, (24.0 * DAY(EOMONTH(C.EntryDate)) * MS.TotalRatePerHr)      AS TargetProductionValue FROM CombinedData C CROSS JOIN MachineStats MS GROUP BY MONTH(C.EntryDate), DAY(EOMONTH(C.EntryDate)), MS.TotalRatePerHr ORDER BY MONTH(C.EntryDate)"""
+        sql = """WITH CombinedData AS (SELECT P.proddate AS EntryDate, ((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto) ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END - ISNULL(P.accidletimesecs, 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ProductionEntry P LEFT JOIN MacMaster M ON P.macno = M.macno WHERE P.deleted = 0 AND CAST(P.proddate AS DATE) BETWEEN ? AND ? UNION ALL SELECT C.entrydate AS EntryDate, ((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime) ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntry C LEFT JOIN MacMaster M ON C.macno = M.macno WHERE C.deleted = 0 AND CAST(C.entrydate AS DATE) BETWEEN ? AND ? UNION ALL SELECT R.entrydate AS EntryDate, ((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime) ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntryRod R LEFT JOIN MacMaster M ON R.macno = M.macno WHERE R.deleted = 0 AND CAST(R.entrydate AS DATE) BETWEEN ? AND ?), MachineStats AS (SELECT SUM(ISNULL(RatePerHr, 0)) AS TotalRatePerHr FROM MacMaster WHERE deleted = 0) SELECT YEAR(C.EntryDate) AS YrNum, MONTH(C.EntryDate) AS MonthNum, SUM(C.ProductionValue) AS TotalProductionValue, (24.0 * DAY(EOMONTH(C.EntryDate)) * MS.TotalRatePerHr) AS TargetProductionValue FROM CombinedData C CROSS JOIN MachineStats MS GROUP BY YEAR(C.EntryDate), MONTH(C.EntryDate), DAY(EOMONTH(C.EntryDate)), MS.TotalRatePerHr ORDER BY YEAR(C.EntryDate), MONTH(C.EntryDate)"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         cursor.close(); conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]
-    actual_map = {m: 0.0 for m in month_order}
-    target_map = {m: 0.0 for m in month_order}
-    for month_num, actual_val, target_val in rows:
-        mk = month_key_from_db(month_num)
-        if mk in actual_map:
-            actual_map[mk] = round(float(actual_val or 0) / 100_000, 2)
-            target_map[mk] = round(float(target_val or 0) / 100_000, 2)
+    actual_map = {b: 0.0 for b in buckets}
+    target_map = {b: 0.0 for b in buckets}
+    for yr, month_num, actual_val, target_val in rows:
+        k = (int(yr or 0), int(month_num or 0))
+        if k in actual_map:
+            actual_map[k] = round(float(actual_val or 0) / 100_000, 2)
+            target_map[k] = round(float(target_val or 0) / 100_000, 2)
     return Response({
         "company": tenant.get("company_name", ""),
         "fy": fy_label,
         "from": str(start_date),
         "to": str(end_date),
         "labels": labels,
-        "actual": [actual_map[m] for m in month_order],
-        "target": [target_map[m] for m in month_order],
+        "actual": [actual_map[b] for b in buckets],
+        "target": [target_map[b] for b in buckets],
     })
 
 # ─────────────────────────────────────────────────────────────
@@ -1760,7 +2240,7 @@ def dashboard2_po_pipeline(request):
         if not po_pono or not po_date or not det_pono or not det_amt or not g_pono or not g_grnno: cursor.close(); conn.close(); return Response({"error": "Required columns not found.", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
         del_po_sql = f"ISNULL(M.[{po_del}], 0) = 0" if po_del else "1=1"
         del_det_sql = f"ISNULL(D.[{det_del}], 0) = 0" if det_del else "1=1"
-        dtype_filter = f" AND LOWER(ISNULL(M.[{po_dtype}], N'')) NOT IN (N'job order', N'general')" if po_dtype else ""
+        dtype_filter = f" AND LOWER(ISNULL(M.[{po_dtype}], N'')) <> N'job order'" if po_dtype else ""
         company_sql = ""; cte_params = [start_date, end_date]
         if po_cc and company_code: company_sql = f" AND M.[{po_cc}] = ?"; cte_params.append(company_code)
         appr_sel = f"M.[{po_appr}] AS appr_col" if po_appr else "CAST(0 AS INT) AS appr_col"
@@ -2020,69 +2500,162 @@ def dashboard2_otd(request):
     sh_itcode = find_first_column(cursor, tbl_shd, ["itcode", "ItCode", "ITCODE", "PartNo", "partno", "Part_No"])
     sh_req = find_first_column(cursor, tbl_shd, ["reqdate", "ReqDate", "REQDATE", "Req_Dt", "req_dt"])
     sh_deleted = find_first_column(cursor, tbl_shd, ["deleted", "Deleted", "is_deleted"])
-    dcno_m = find_first_column(cursor, tbl_dc_mas, ["dcno", "DcNo", "DCNO", "DC_No"])
-    dc_dt = find_first_column(cursor, tbl_dc_mas, ["dcdate", "DcDate", "DCDT", "DC_DT", "dcdt", "date", "Date"])
-    dc_m_deleted = find_first_column(cursor, tbl_dc_mas, ["deleted", "Deleted", "is_deleted"])
-    dc_m_company = find_first_column(cursor, tbl_dc_mas, ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"])
-    def dc_cols(tbl): return {"apono": find_first_column(cursor, tbl, ["apono", "APono", "APNO", "PONo", "pono"]), "partno": find_first_column(cursor, tbl, ["partno", "PartNo", "PARTNO", "itcode", "ItCode"]), "dcno": find_first_column(cursor, tbl, ["dcno", "DcNo", "DCNO"]), "ok": find_first_column(cursor, tbl, ["okqty", "OkQty", "OKQty"]), "matrej": find_first_column(cursor, tbl, ["matrej", "MatRej", "MATREJ"]), "macrej": find_first_column(cursor, tbl, ["macrej", "MacRej", "MACREJ"]), "uncomp": find_first_column(cursor, tbl, ["uncompqty", "UncompQty", "UNCOMPQTY", "uncomp_qty"]), "deleted": find_first_column(cursor, tbl, ["deleted", "Deleted", "is_deleted"])}
-    c1 = dc_cols(tbl_dc_det); c2 = dc_cols(tbl_dc_assm)
-    required = [(f"{tbl_po_mas}.apono", po_apono), (f"{tbl_shd}.apono", sh_apono), (f"{tbl_shd}.itcode", sh_itcode), (f"{tbl_shd}.reqdate", sh_req), (f"{tbl_dc_mas}.dcno", dcno_m), (f"{tbl_dc_mas}.dcdate", dc_dt), (f"{tbl_dc_det}.apono", c1["apono"]), (f"{tbl_dc_det}.partno", c1["partno"]), (f"{tbl_dc_det}.dcno", c1["dcno"]), (f"{tbl_dc_assm}.apono", c2["apono"]), (f"{tbl_dc_assm}.partno", c2["partno"]), (f"{tbl_dc_assm}.dcno", c2["dcno"])]
-    for label, col in required:
-        if not col: cursor.close(); conn.close(); return Response({"error": f"OTD: could not resolve column for {label}"}, status=422)
-    qty_expr_det = " + ".join([f"COALESCE(CAST(d.[{c}] AS FLOAT), 0)" for c in [c1["ok"], c1["matrej"], c1["macrej"], c1["uncomp"]] if c]) or "0"
-    qty_expr_assm = " + ".join([f"COALESCE(CAST(a.[{c}] AS FLOAT), 0)" for c in [c2["ok"], c2["matrej"], c2["macrej"], c2["uncomp"]] if c]) or "0"
-    def filt_po(alias):
-        parts = [f"[{alias}].[{po_deleted}] = 0"] if po_deleted else []
-        if po_company and company_code: parts.append(f"[{alias}].[{po_company}] = ?")
-        return " AND " + " AND ".join(parts) if parts else ""
-    def filt_dc_mas(alias):
-        parts = [f"CAST([{alias}].[{dc_dt}] AS DATE) BETWEEN ? AND ?"]
-        if dc_m_deleted: parts.append(f"[{alias}].[{dc_m_deleted}] = 0")
-        if dc_m_company and company_code: parts.append(f"[{alias}].[{dc_m_company}] = ?")
-        return " AND " + " AND ".join(parts)
-    sh_where = f"[{sh_deleted}] = 0" if sh_deleted else "1=1"
-    d_del = f"d.[{c1['deleted']}] = 0" if c1["deleted"] else "1=1"
-    a_del = f"a.[{c2['deleted']}] = 0" if c2["deleted"] else "1=1"
-    join_po = f"INNER JOIN [{tbl_po_mas}] p ON p.[{po_apono}] = d.[{c1['apono']}]{filt_po('p')}"
-    union_sql = f"""SELECT d.[{c1['dcno']}] AS dcno, LTRIM(RTRIM(CAST(d.[{c1['apono']}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST(d.[{c1['partno']}] AS NVARCHAR(128)))) AS partno, CAST(m.[{dc_dt}] AS DATE) AS dc_date, ({qty_expr_det}) AS del_qty FROM [{tbl_dc_det}] d INNER JOIN [{tbl_dc_mas}] m ON m.[{dcno_m}] = d.[{c1['dcno']}] {join_po} WHERE {d_del} AND {filt_dc_mas('m')} UNION ALL SELECT a.[{c2['dcno']}] AS dcno, LTRIM(RTRIM(CAST(a.[{c2['apono']}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST(a.[{c2['partno']}] AS NVARCHAR(128)))) AS partno, CAST(m2.[{dc_dt}] AS DATE) AS dc_date, ({qty_expr_assm}) AS del_qty FROM [{tbl_dc_assm}] a INNER JOIN [{tbl_dc_mas}] m2 ON m2.[{dcno_m}] = a.[{c2['dcno']}] INNER JOIN [{tbl_po_mas}] p2 ON p2.[{po_apono}] = a.[{c2['apono']}]{filt_po('p2')} WHERE {a_del} AND {filt_dc_mas('m2')}"""
-    rf = rt = rfor = None
-    if tbl_rating:
-        rf = find_first_column(cursor, tbl_rating, ["RatingFrom", "ratingfrom", "RATINGFROM"])
-        rt = find_first_column(cursor, tbl_rating, ["RatingTo", "ratingto", "RATINGTO"])
-        rfor = find_first_column(cursor, tbl_rating, ["RatingFor", "ratingfor", "RATINGFOR"])
-    rating_join = ""; rating_expr = "CAST(0 AS FLOAT)"
-    if tbl_rating and rf and rt and rfor:
-        rating_join = f"LEFT JOIN [{tbl_rating}] r ON j.days_late >= r.[{rf}] AND j.days_late <= r.[{rt}]"; rating_expr = f"COALESCE(CAST(r.[{rfor}] AS FLOAT), 0)"
-    def append_po_params():
-        pl = []
-        if po_company and company_code: pl.append(company_code)
-        return pl
-    def append_dc_params():
-        pl = [start_date, end_date]
-        if dc_m_company and company_code: pl.append(company_code)
-        return pl
-    union_params = append_po_params() + append_dc_params() + append_po_params() + append_dc_params()
-    main_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate, CASE WHEN del.dc_date <= sch.reqdate THEN 0 ELSE DATEDIFF(DAY, sch.reqdate, del.dc_date) END AS days_late FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty, COALESCE(SUM(CASE WHEN j.dc_date > j.reqdate THEN 1 ELSE 0 END), 0) AS delayed_lines, COALESCE(SUM(CAST(j.del_qty AS FLOAT) * ({rating_expr})), 0) AS rating_num FROM joined j {rating_join}"""
-    trend_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT YEAR(j.dc_date) AS y, MONTH(j.dc_date) AS m, COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty FROM joined j GROUP BY YEAR(j.dc_date), MONTH(j.dc_date) ORDER BY YEAR(j.dc_date), MONTH(j.dc_date)"""
+@api_view(['GET'])
+def otd_report(request):
     try:
-        cursor.execute(main_sql, union_params); row = cursor.fetchone()
-        if row:
-            on_time_qty = float(row[0] or 0); total_qty = float(row[1] or 0); delayed_lines = int(row[2] or 0); rating_num = float(row[3] or 0)
-        else:
-            on_time_qty = total_qty = delayed_lines = rating_num = 0.0
-        cursor.execute(trend_sql, union_params); trend_rows = cursor.fetchall()
-    except Exception as e: cursor.close(); conn.close(); return Response({"error": f"Database error: {str(e)}"}, status=500)
-    cursor.close(); conn.close()
-    otd_pct = round((on_time_qty / total_qty) * 100, 2) if total_qty > 0 else None
-    rating_weighted_pct = round((rating_num / total_qty), 2) if total_qty > 0 else None
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+        
+    start_date, end_date = parse_date_range(request)
+    fy_label = get_fy_label(start_date, end_date)
+    buckets, labels = generate_month_buckets(start_date, end_date)
+    
+    cte = """
+    WITH AllSchedules AS (
+        SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shddate, s.shdQty,
+               COALESCE(
+                   NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+                   NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+                   CAST(p.podt AS DATE)
+               ) AS targetdate,
+               YEAR(p.podt) AS PoYear, MONTH(p.podt) AS PoMonth
+        FROM In_PoDet_ShdQty s
+        INNER JOIN In_PoMas p ON s.Apono = p.Apono
+        LEFT JOIN CustMast cm ON p.cid = cm.Id
+        WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
+          AND ISNULL(s.deleted, 0) = 0
+          AND ISNULL(p.deleted, 0) = 0
+    ),
+    AllDeliveries AS (
+        SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
+        FROM DcInSubDetAssmPoDet d
+        INNER JOIN DC_Mas m ON d.dcno = m.dcno
+        WHERE d.deleted = 0
+        UNION ALL
+        SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
+        FROM DcInSubDet d
+        INNER JOIN DC_Mas m ON d.dcno = m.dcno
+        WHERE d.deleted = 0
+    ),
+    DeliverySummary AS (
+        SELECT sch.Apono, sch.partno, sch.poslno, sch.shdQty, sch.targetdate, sch.PoYear, sch.PoMonth,
+               ISNULL(SUM(CASE WHEN del.dcdate <= sch.targetdate THEN del.okqty ELSE 0 END), 0) AS OnTimeDelQty,
+               ISNULL(SUM(CASE WHEN del.dcdate > sch.targetdate THEN del.okqty ELSE 0 END), 0) AS DelayedDelQty,
+               ISNULL(SUM(del.okqty), 0) AS TotalDelQty,
+               MAX(CASE WHEN del.dcdate > sch.targetdate THEN del.dcdate ELSE NULL END) AS LastDelayedDcDate
+        FROM AllSchedules sch
+        LEFT JOIN AllDeliveries del
+            ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno
+        GROUP BY sch.Apono, sch.partno, sch.poslno, sch.shdQty, sch.targetdate, sch.PoYear, sch.PoMonth
+    ),
+    OTDCalc AS (
+        SELECT ds.PoYear, ds.PoMonth,
+               ds.shdQty,
+               ds.TotalDelQty,
+               ds.OnTimeDelQty AS on_time_qty,
+               CASE WHEN ds.DelayedDelQty > 0 THEN 1 ELSE 0 END AS delayed_flag,
+               CASE
+                   WHEN ds.TotalDelQty = 0 THEN 0.0
+                   WHEN ds.DelayedDelQty = 0 THEN 100.0
+                   ELSE ISNULL(
+                       (SELECT TOP 1 r2.RatingFor FROM CustPoOTDRating r2
+                        WHERE DATEDIFF(DAY, ds.targetdate, ds.LastDelayedDcDate)
+                              BETWEEN r2.RatingFrom AND r2.RatingTo),
+                       0.0
+                   )
+               END AS OTDScore
+        FROM DeliverySummary ds
+        WHERE ds.TotalDelQty > 0
+    )
+    """
+
+    monthly_tail = """
+    SELECT PoYear, PoMonth, AVG(OTDScore) as AvgOTD, COUNT(*) as CompletedSchedules
+    FROM OTDCalc GROUP BY PoYear, PoMonth ORDER BY PoYear, PoMonth
+    """
+
+    kpi_tail = """
+    SELECT AVG(OTDScore) AS overall_otd,
+           ISNULL(SUM(CAST(shdQty AS FLOAT)), 0) AS total_qty,
+           ISNULL(SUM(on_time_qty), 0) AS on_time_qty,
+           ISNULL(SUM(delayed_flag), 0) AS delayed_lines,
+           COUNT(*) AS completed_lines
+    FROM OTDCalc
+    """
+
+    data_map = {b: 0.0 for b in buckets}
+    overall_otd = 0.0
+    delayed_lines = 0
+    on_time_qty = 0.0
+    total_qty = 0.0
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(cte + kpi_tail, (start_date, end_date))
+        kpi_row = cursor.fetchone()
+        if kpi_row:
+            overall_otd = round(float(kpi_row[0] or 0), 2)
+            total_qty = round(float(kpi_row[1] or 0), 2)
+            on_time_qty = round(float(kpi_row[2] or 0), 2)
+            delayed_lines = int(kpi_row[3] or 0)
+
+        cursor.execute(cte + monthly_tail, (start_date, end_date))
+        for row in cursor.fetchall() or []:
+            yr, mth = int(row[0] or 0), int(row[1] or 0)
+            avg_otd = round(float(row[2] or 0), 2)
+            k = (yr, mth)
+            if k in data_map:
+                data_map[k] = avg_otd
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    data_list = [data_map[b] for b in buckets]
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     trend = []
-    for tr in trend_rows or []:
-        y, m, otq, tq = int(tr[0]), int(tr[1]), float(tr[2] or 0), float(tr[3] or 0)
-        pct = round((otq / tq) * 100, 2) if tq > 0 else None
-        trend.append({"year": y, "month": m, "label": f"{month_names[m - 1]} {y}", "on_time_delivery_pct": pct, "total_qty": round(tq, 2)})
-    schedule_adherence_pct = rating_weighted_pct if rating_weighted_pct is not None else otd_pct
-    return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"on_time_delivery_pct": otd_pct, "rating_weighted_pct": rating_weighted_pct, "schedule_adherence_pct": schedule_adherence_pct, "delayed_lines": delayed_lines, "on_time_qty": round(on_time_qty, 2), "total_del_qty": round(total_qty, 2)}, "trend": trend})
+    for b in buckets:
+        yr, mth = b
+        trend.append({
+            "year": yr,
+            "month": mth,
+            "label": f"{month_names[mth - 1]} {yr}",
+            "on_time_delivery_pct": data_map[b],
+            "total_qty": total_qty
+        })
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "company_code": tenant.get("company_code", ""),
+        "fy": fy_label,
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "data": data_list,
+        "kpis": {
+            "on_time_delivery_pct": overall_otd,
+            "rating_weighted_pct": overall_otd,
+            "schedule_adherence_pct": overall_otd,
+            "delayed_lines": delayed_lines,
+            "on_time_qty": on_time_qty,
+            "total_del_qty": total_qty
+        },
+        "trend": trend
+    })
 
 @api_view(['GET'])
 def dashboard2_final_inspection_kpi(request):

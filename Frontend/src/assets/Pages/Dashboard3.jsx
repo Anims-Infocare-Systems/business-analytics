@@ -2895,6 +2895,7 @@ export default function Dashboard3() {
           activePeriod={activePeriod}
           onPeriodChange={setActivePeriod}
           onRangeChange={handleRangeChange}
+          disabled={loading}
         />
         {loading && <span className="d3-fbar-status">Loading live data…</span>}
         {fetchError && <span className="d3-fbar-error">{fetchError}</span>}

@@ -681,7 +681,7 @@ function writeFilterSession(key, data) {
 
 export default function EfficiencyReport() {
     /* ── Filter state ── */
-    const _dflt = { from: new Date(2026, 1, 1), to: new Date(2026, 1, 27) };
+    const _dflt = { from: new Date(2026, 6, 1), to: new Date(2026, 6, 31) };
     const _saved = readFilterSession("ba_filter_efficiency", _dflt);
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [loading, setLoading] = useState(false);
@@ -705,6 +705,7 @@ export default function EfficiencyReport() {
     const [sortDir, setSortDir] = useState(1);
     const [page, setPage] = useState(1);
     const [tableData, setTableData] = useState([]);
+    const [avgIdleTime, setAvgIdleTime] = useState(null);
     const [isOprFilterOpen, setIsOprFilterOpen] = useState(false);
     const oprFilterRef = useRef(null);
 
@@ -729,6 +730,9 @@ export default function EfficiencyReport() {
             })
             .then(data => {
                 setTableData(Array.isArray(data?.rows) ? data.rows : []);
+                if (data?.avg_idle_time !== undefined && data?.avg_idle_time !== null) {
+                    setAvgIdleTime(data.avg_idle_time);
+                }
                 setPage(1);
                 setLoading(false);
             })

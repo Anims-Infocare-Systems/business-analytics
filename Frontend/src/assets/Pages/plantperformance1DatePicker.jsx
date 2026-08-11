@@ -97,7 +97,7 @@ function PopupPortal({ anchorRef, children }) {
     return createPortal(<div className="pp1dp-portal-wrap" style={style}>{children}</div>, document.body);
 }
 
-export default function PlantPerformance1DatePicker({ from, to, onChange }) {
+export default function PlantPerformance1DatePicker({ from, to, onChange, disabled = false }) {
     const today = new Date();
     const curYear = today.getFullYear();
 
@@ -147,6 +147,12 @@ export default function PlantPerformance1DatePicker({ from, to, onChange }) {
     }, []);
 
     useEffect(() => {
+        if (disabled && open) {
+            setOpen(false);
+        }
+    }, [disabled, open]);
+
+    useEffect(() => {
         setFromInput(toInputFmt(from));
         setToInput(toInputFmt(to));
         setInputErr("");
@@ -174,12 +180,18 @@ export default function PlantPerformance1DatePicker({ from, to, onChange }) {
 
     const handleDayClick = (day) => {
         if (!selecting) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            setSelecting(day); setHovered(null); onChange({ from: day, to: today }); setActivePreset(null);
+            setSelecting(day);
+            setHovered(null);
+            setActivePreset(null);
+            setFromInput(toInputFmt(day));
+            setToInput("");
+            setInputErr("");
         } else {
             const [f, t] = day < selecting ? [day, selecting] : [selecting, day];
-            onChange({ from: f, to: t }); setSelecting(null); setHovered(null); setOpen(false);
+            onChange({ from: f, to: t });
+            setSelecting(null);
+            setHovered(null);
+            setOpen(false);
         }
     };
 
@@ -196,14 +208,16 @@ export default function PlantPerformance1DatePicker({ from, to, onChange }) {
         if (fromInput && !f) { setInputErr("Invalid From date"); return; }
         if (toInput && !t) { setInputErr("Invalid To date"); return; }
         if (f && t && f > t) { setInputErr("From must be ≤ To"); return; }
+        if (f && !t) { setInputErr("Please select To date"); return; }
+        if (!f && t) { setInputErr("Please select From date"); return; }
         setInputErr("");
-        if (f || t) {
-            onChange({ from: f || from, to: t || to });
+        if (f && t) {
+            onChange({ from: f, to: t });
             if (f) setLeft(new Date(f.getFullYear(), f.getMonth(), 1));
             setActivePreset(null);
             setSelecting(null);
+            setOpen(false);
         }
-        setOpen(false);
     };
 
     const handleClear = () => {
@@ -225,7 +239,13 @@ export default function PlantPerformance1DatePicker({ from, to, onChange }) {
 
     return (
         <div className="pp1dp-wrap" ref={wrapRef}>
-            <button ref={triggerRef} className={`pp1dp-trigger ${open ? "pp1dp-trigger--open" : ""}`} onClick={() => setOpen(o => !o)} type="button">
+            <button
+                ref={triggerRef}
+                className={`pp1dp-trigger ${open ? "pp1dp-trigger--open" : ""} ${disabled ? "pp1dp-trigger--disabled" : ""}`}
+                onClick={() => !disabled && setOpen(o => !o)}
+                disabled={disabled}
+                type="button"
+            >
                 <svg className="pp1dp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />

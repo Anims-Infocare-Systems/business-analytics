@@ -197,6 +197,119 @@ def _supplier_filter_sql(request, cursor, table_alias="m", join_if_needed=False)
     return join_sql, where_sql, sups
 
 
+def _get_table_search_columns(cursor, table_name, candidates):
+    if not table_exists(cursor, table_name):
+        return []
+    valid_cols = []
+    for col in candidates:
+        cursor.execute(
+            """
+            SELECT TOP 1 COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = 'dbo' 
+              AND TABLE_NAME = ? 
+              AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
+            """,
+            (table_name, col)
+        )
+        row = cursor.fetchone()
+        if row and row[0] not in valid_cols:
+            valid_cols.append(row[0])
+    return valid_cols
+
+
+def _build_po_search_sql(request, cursor, po_alias="m"):
+    """
+    Parses request.GET.get("search") or request.GET.get("q") and returns (where_sql, params).
+    Matches RM Name / RM Desc / RM Code / Item Code / Item Description / Material Code / Desc / PO Number / Supplier Name.
+    """
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+    if not search_q:
+        return "", []
+
+    like_pat = f"%{search_q}%"
+    has_alias = table_exists(cursor, "CustAliasMast")
+
+    candidates = [
+        'rmname', 'rmdesc', 'rmcode', 'icode', 'itcode', 'itdesc', 'ItCode', 'ItDesc',
+        'description', 'Description', 'matcode', 'matdesc', 'mattype', 'partno', 'PartNo',
+        'PRINTPartNO', 'Part_No', 'rmtype', 'ShotClsReason', 'ShotClsUser'
+    ]
+
+    # Check PODet / In_PoDet
+    po_det_tbl = "PODet" if table_exists(cursor, "PODet") else ("In_PoDet" if table_exists(cursor, "In_PoDet") else None)
+    po_det_cols = _get_table_search_columns(cursor, po_det_tbl, candidates) if po_det_tbl else []
+
+    # Check grninsubdet
+    grn_det_tbl = "grninsubdet" if table_exists(cursor, "grninsubdet") else None
+    grn_det_cols = _get_table_search_columns(cursor, grn_det_tbl, candidates) if grn_det_tbl else []
+
+    # Check POAmndDet
+    amnd_det_tbl = "POAmndDet" if table_exists(cursor, "POAmndDet") else ("poamnddet" if table_exists(cursor, "poamnddet") else None)
+    amnd_det_cols = _get_table_search_columns(cursor, amnd_det_tbl, candidates) if amnd_det_tbl else []
+
+    or_conditions = []
+    params = []
+
+    # 1. PO Number
+    or_conditions.append(f"LOWER(CAST({po_alias}.pono AS NVARCHAR(200))) LIKE LOWER(?)")
+    params.append(like_pat)
+
+    # 2. Supplier Name
+    alias_sub = (
+        "UNION SELECT A_SRCH.Id FROM CustAliasMast A_SRCH WHERE ISNULL(A_SRCH.deleted, 0) = 0 "
+        "AND LOWER(CAST(A_SRCH.CName AS NVARCHAR(500))) LIKE LOWER(?)"
+        if has_alias else ""
+    )
+    or_conditions.append(f"""{po_alias}.cid IN (
+        SELECT C_SRCH.Id FROM CustMast C_SRCH 
+        WHERE ISNULL(C_SRCH.deleted, 0) = 0 
+          AND LOWER(CAST(C_SRCH.CName AS NVARCHAR(500))) LIKE LOWER(?)
+        {alias_sub}
+    )""")
+    params.append(like_pat)
+    if has_alias:
+        params.append(like_pat)
+
+    # 3. PODet / In_PoDet subquery
+    if po_det_cols:
+        clauses = [f"LOWER(CAST(pd_srch.[{c}] AS NVARCHAR(512))) LIKE LOWER(?)" for c in po_det_cols]
+        or_conditions.append(f"""{po_alias}.pono IN (
+            SELECT DISTINCT pd_srch.pono
+            FROM {po_det_tbl} pd_srch
+            WHERE ISNULL(pd_srch.deleted, 0) = 0
+              AND ({" OR ".join(clauses)})
+        )""")
+        params.extend([like_pat] * len(po_det_cols))
+
+    # 4. GRN subquery (grninsubdet)
+    if grn_det_cols:
+        clauses = [f"LOWER(CAST(gd_srch.[{c}] AS NVARCHAR(512))) LIKE LOWER(?)" for c in grn_det_cols]
+        or_conditions.append(f"""{po_alias}.pono IN (
+            SELECT DISTINCT gd_srch.pono
+            FROM {grn_det_tbl} gd_srch
+            WHERE ISNULL(gd_srch.deleted, 0) = 0
+              AND ({" OR ".join(clauses)})
+        )""")
+        params.extend([like_pat] * len(grn_det_cols))
+
+    # 5. POAmndDet subquery
+    if amnd_det_cols:
+        clauses = [f"LOWER(CAST(ad_srch.[{c}] AS NVARCHAR(512))) LIKE LOWER(?)" for c in amnd_det_cols]
+        or_conditions.append(f"""{po_alias}.pono IN (
+            SELECT DISTINCT PAM_SRCH.manualpono
+            FROM {amnd_det_tbl} ad_srch
+            INNER JOIN POAmndMas PAM_SRCH ON ad_srch.amdno = PAM_SRCH.amdno
+            WHERE ISNULL(ad_srch.deleted, 0) = 0
+              AND ISNULL(PAM_SRCH.deleted, 0) = 0
+              AND ({" OR ".join(clauses)})
+        )""")
+        params.extend([like_pat] * len(amnd_det_cols))
+
+    where_sql = f" AND (" + " OR ".join(or_conditions) + ")"
+    return where_sql, params
+
+
 # ─────────────────────────────────────────────────────────────
 #  ENDPOINT 1 — Summary Strip + KPI Cards
 # ─────────────────────────────────────────────────────────────
@@ -236,10 +349,11 @@ def purchase_analysis_summary(request):
             dtype_clause_po = " AND LTRIM(RTRIM(ISNULL(dtype, ''))) = ?"
             dtype_params_po.append(dtype_param)
         else:
-            dtype_clause_po = " AND UPPER(LTRIM(RTRIM(ISNULL(dtype, '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')"
+            dtype_clause_po = " AND UPPER(LTRIM(RTRIM(ISNULL(dtype, '')))) <> 'JOB ORDER'"
 
         # Supplier filters
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "POMas", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "POMas")
 
         # ── PO summary ──────────────────────────────────────────────
         cursor.execute(
@@ -253,9 +367,10 @@ def purchase_analysis_summary(request):
             WHERE ISNULL(POMas.deleted, 0) = 0
               {dtype_clause_po}
               {where_flt}
+              {srch_sql}
               AND CAST(podate AS DATE) BETWEEN ? AND ?
             """,
-            tuple(dtype_params_po + params_flt + [start_date, end_date]),
+            tuple(dtype_params_po + params_flt + srch_params + [start_date, end_date]),
         )
         row = cursor.fetchone()
         if row:
@@ -265,46 +380,82 @@ def purchase_analysis_summary(request):
 
         # ── GRN received value ───────────────────────────────────────
         join_flt_grn, where_flt_grn, params_flt_grn = _supplier_filter_sql(request, cursor, "m", join_if_needed=True)
+        srch_sql_m, srch_params_m = _build_po_search_sql(request, cursor, "m")
+        has_extra_filters = apply_dtype or where_flt_grn or srch_sql_m
         try:
-            cursor.execute(
-                f"""
-                SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
-                FROM Grn_RateDet rd
-                INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
-                INNER JOIN grninsubdet gs ON rd.grnno = gs.grnno
-                INNER JOIN POMas m ON gs.pono = m.pono
-                {join_flt_grn}
-                WHERE ISNULL(gm.deleted, 0) = 0
-                  AND ISNULL(rd.deleted, 0) = 0
-                  AND ISNULL(gs.deleted, 0) = 0
-                  AND ISNULL(m.deleted, 0) = 0
-                  {dtype_clause_po.replace("dtype", "m.dtype")}
-                  {where_flt_grn}
-                  AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                """,
-                tuple(dtype_params_po + params_flt_grn + [start_date, end_date]),
-            )
+            if has_extra_filters:
+                cursor.execute(
+                    f"""
+                    SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
+                    FROM Grn_RateDet rd
+                    WHERE ISNULL(rd.deleted, 0) = 0
+                      AND rd.grnno IN (
+                          SELECT DISTINCT gm.grnno
+                          FROM grn_mas gm
+                          INNER JOIN grninsubdet gs ON gm.grnno = gs.grnno
+                          INNER JOIN POMas m ON gs.pono = m.pono
+                          {join_flt_grn}
+                          WHERE ISNULL(gm.deleted, 0) = 0
+                            AND ISNULL(gs.deleted, 0) = 0
+                            AND ISNULL(m.deleted, 0) = 0
+                            {dtype_clause_po.replace("dtype", "m.dtype")}
+                            {where_flt_grn}
+                            {srch_sql_m}
+                            AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                      )
+                    """,
+                    tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
+                    FROM Grn_RateDet rd
+                    WHERE ISNULL(rd.deleted, 0) = 0
+                      AND rd.grnno IN (
+                          SELECT gm.grnno
+                          FROM grn_mas gm
+                          WHERE ISNULL(gm.deleted, 0) = 0
+                            AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                      )
+                    """,
+                    (start_date, end_date),
+                )
             grn_row = cursor.fetchone()
             grn_received = float(grn_row[0] or 0) if grn_row else 0.0
         except Exception:
             # Fall back to grninsubdet if Grn_RateDet not available
             try:
-                cursor.execute(
-                    f"""
-                    SELECT ISNULL(SUM(CAST(gs.amount AS FLOAT)), 0)
-                    FROM grninsubdet gs
-                    INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
-                    INNER JOIN POMas m ON gs.pono = m.pono
-                    {join_flt_grn}
-                    WHERE ISNULL(gm.deleted, 0) = 0
-                      AND ISNULL(gs.deleted, 0) = 0
-                      AND ISNULL(m.deleted, 0) = 0
-                      {dtype_clause_po.replace("dtype", "m.dtype")}
-                      {where_flt_grn}
-                      AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                    """,
-                    tuple(dtype_params_po + params_flt_grn + [start_date, end_date]),
-                )
+                if has_extra_filters:
+                    cursor.execute(
+                        f"""
+                        SELECT ISNULL(SUM(CAST(gs.amount AS FLOAT)), 0)
+                        FROM grninsubdet gs
+                        INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
+                        INNER JOIN POMas m ON gs.pono = m.pono
+                        {join_flt_grn}
+                        WHERE ISNULL(gm.deleted, 0) = 0
+                          AND ISNULL(gs.deleted, 0) = 0
+                          AND ISNULL(m.deleted, 0) = 0
+                          {dtype_clause_po.replace("dtype", "m.dtype")}
+                          {where_flt_grn}
+                          {srch_sql_m}
+                          AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                        """,
+                        tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT ISNULL(SUM(CAST(gs.amount AS FLOAT)), 0)
+                        FROM grninsubdet gs
+                        INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
+                        WHERE ISNULL(gm.deleted, 0) = 0
+                          AND ISNULL(gs.deleted, 0) = 0
+                          AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                        """,
+                        (start_date, end_date),
+                    )
                 grn_row = cursor.fetchone()
                 grn_received = float(grn_row[0] or 0) if grn_row else 0.0
             except Exception:
@@ -326,9 +477,10 @@ def purchase_analysis_summary(request):
                   AND ISNULL(m.deleted, 0) = 0
                   {dtype_clause_po.replace("dtype", "m.dtype")}
                   {where_flt_grn}
+                  {srch_sql_m}
                   AND CAST(m.podate AS DATE) BETWEEN ? AND ?
                 """,
-                tuple(dtype_params_po + params_flt_grn + [start_date, end_date]),
+                tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
             )
             lt_row = cursor.fetchone()
             avg_lead_time = round(float(lt_row[0] or 0), 1) if lt_row and lt_row[0] else 0.0
@@ -397,6 +549,7 @@ def purchase_analysis_weekly_trend(request):
 
         # Supplier filter
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "POMas", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "POMas")
 
         # ── PO weekly ────────────────────────────────────────────────
         dtype_clause = ""
@@ -415,17 +568,18 @@ def purchase_analysis_weekly_trend(request):
             FROM POMas
             {join_flt}
             WHERE ISNULL(POMas.deleted, 0) = 0
-              AND UPPER(LTRIM(RTRIM(ISNULL(POMas.dtype, '')))) NOT IN ('JOB ORDER', 'GENERAL')
+              AND UPPER(LTRIM(RTRIM(ISNULL(POMas.dtype, '')))) <> 'JOB ORDER'
               AND CAST(podate AS DATE) BETWEEN ? AND ?
               {dtype_clause}
               {where_flt}
+              {srch_sql}
             GROUP BY
                 YEAR(CAST(podate AS DATE)),
                 MONTH(CAST(podate AS DATE)),
                 {_WEEK_OF_MONTH_CASE}
             ORDER BY yr, mo, wk
             """,
-            [start_date, end_date] + dtype_params_list + params_flt,
+            [start_date, end_date] + dtype_params_list + params_flt + srch_params,
         )
         for yr, mo, wk, val in cursor.fetchall():
             k = (int(yr), int(mo), int(wk))
@@ -434,33 +588,62 @@ def purchase_analysis_weekly_trend(request):
 
         # ── GRN weekly ───────────────────────────────────────────────
         join_flt_grn, where_flt_grn, params_flt_grn = _supplier_filter_sql(request, cursor, "m", join_if_needed=True)
+        srch_sql_m, srch_params_m = _build_po_search_sql(request, cursor, "m")
+        has_extra_filters = apply_dtype or where_flt_grn or srch_sql_m
         try:
-            cursor.execute(
-                f"""
-                SELECT
-                    YEAR(CAST(gm.grndate AS DATE)) AS yr,
-                    MONTH(CAST(gm.grndate AS DATE)) AS mo,
-                    {_GRN_WEEK_CASE} AS wk,
-                    ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0) AS grn_val
-                FROM Grn_RateDet rd
-                INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
-                INNER JOIN grninsubdet gs ON gm.grnno = gs.grnno
-                INNER JOIN POMas m ON gs.pono = m.pono
-                {join_flt_grn}
-                WHERE ISNULL(gm.deleted, 0) = 0
-                  AND ISNULL(rd.deleted, 0) = 0
-                  AND ISNULL(gs.deleted, 0) = 0
-                  AND ISNULL(m.deleted, 0) = 0
-                  AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                  {where_flt_grn}
-                GROUP BY
-                    YEAR(CAST(gm.grndate AS DATE)),
-                    MONTH(CAST(gm.grndate AS DATE)),
-                    {_GRN_WEEK_CASE}
-                ORDER BY yr, mo, wk
-                """,
-                [start_date, end_date] + params_flt_grn,
-            )
+            if has_extra_filters:
+                cursor.execute(
+                    f"""
+                    SELECT
+                        YEAR(CAST(gm.grndate AS DATE)) AS yr,
+                        MONTH(CAST(gm.grndate AS DATE)) AS mo,
+                        {_GRN_WEEK_CASE} AS wk,
+                        ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0) AS grn_val
+                    FROM Grn_RateDet rd
+                    INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
+                    WHERE ISNULL(gm.deleted, 0) = 0
+                      AND ISNULL(rd.deleted, 0) = 0
+                      AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                      AND rd.grnno IN (
+                          SELECT DISTINCT gs.grnno
+                          FROM grninsubdet gs
+                          INNER JOIN POMas m ON gs.pono = m.pono
+                          {join_flt_grn}
+                          WHERE ISNULL(gs.deleted, 0) = 0
+                            AND ISNULL(m.deleted, 0) = 0
+                            {dtype_clause.replace("dtype", "m.dtype")}
+                            {where_flt_grn}
+                            {srch_sql_m}
+                      )
+                    GROUP BY
+                        YEAR(CAST(gm.grndate AS DATE)),
+                        MONTH(CAST(gm.grndate AS DATE)),
+                        {_GRN_WEEK_CASE}
+                    ORDER BY yr, mo, wk
+                    """,
+                    [start_date, end_date] + dtype_params_list + params_flt_grn + srch_params_m,
+                )
+            else:
+                cursor.execute(
+                    f"""
+                    SELECT
+                        YEAR(CAST(gm.grndate AS DATE)) AS yr,
+                        MONTH(CAST(gm.grndate AS DATE)) AS mo,
+                        {_GRN_WEEK_CASE} AS wk,
+                        ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0) AS grn_val
+                    FROM Grn_RateDet rd
+                    INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
+                    WHERE ISNULL(gm.deleted, 0) = 0
+                      AND ISNULL(rd.deleted, 0) = 0
+                      AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                    GROUP BY
+                        YEAR(CAST(gm.grndate AS DATE)),
+                        MONTH(CAST(gm.grndate AS DATE)),
+                        {_GRN_WEEK_CASE}
+                    ORDER BY yr, mo, wk
+                    """,
+                    [start_date, end_date],
+                )
             for yr, mo, wk, val in cursor.fetchall():
                 k = (int(yr), int(mo), int(wk))
                 if k in grn_map:
@@ -513,6 +696,7 @@ def purchase_analysis_charts(request):
 
         # Supplier filter (Spend by supplier query uses already joined CM)
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, join_if_needed=False)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "m")
 
         # ── Spend by supplier ────────────────────────────────────────
         dtype_clause = ""
@@ -521,7 +705,7 @@ def purchase_analysis_charts(request):
             dtype_clause = " AND LTRIM(RTRIM(ISNULL(m.dtype, ''))) = ?"
             dtype_params.append(dtype_param)
         else:
-            dtype_clause = " AND UPPER(LTRIM(RTRIM(ISNULL(m.dtype, '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')"
+            dtype_clause = " AND UPPER(LTRIM(RTRIM(ISNULL(m.dtype, '')))) <> 'JOB ORDER'"
 
         cursor.execute(
             f"""
@@ -533,11 +717,12 @@ def purchase_analysis_charts(request):
             WHERE ISNULL(m.deleted, 0) = 0
               {dtype_clause}
               {where_flt}
+              {srch_sql}
               AND CAST(m.podate AS DATE) BETWEEN ? AND ?
             GROUP BY m.cid, {name_expr}
             ORDER BY spend DESC
             """,
-            tuple(dtype_params + params_flt + [start_date, end_date]),
+            tuple(dtype_params + params_flt + srch_params + [start_date, end_date]),
         )
         sup_rows = cursor.fetchall()
         total_spend = sum(float(r[1] or 0) for r in sup_rows)
@@ -564,6 +749,7 @@ def purchase_analysis_charts(request):
 
         # ── Spend by category (dtype) ────────────────────────────────
         join_flt_cat, where_flt_cat, params_flt_cat = _supplier_filter_sql(request, cursor, "POMas", join_if_needed=True)
+        srch_sql_cat, srch_params_cat = _build_po_search_sql(request, cursor, "POMas")
 
         dtype_clause_cat = ""
         dtype_params_cat = []
@@ -571,7 +757,7 @@ def purchase_analysis_charts(request):
             dtype_clause_cat = " AND LTRIM(RTRIM(ISNULL(POMas.dtype, ''))) = ?"
             dtype_params_cat.append(dtype_param)
         else:
-            dtype_clause_cat = " AND UPPER(LTRIM(RTRIM(ISNULL(POMas.dtype, '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')"
+            dtype_clause_cat = " AND UPPER(LTRIM(RTRIM(ISNULL(POMas.dtype, '')))) <> 'JOB ORDER'"
 
         cursor.execute(
             f"""
@@ -583,11 +769,12 @@ def purchase_analysis_charts(request):
             WHERE ISNULL(POMas.deleted, 0) = 0
               {dtype_clause_cat}
               {where_flt_cat}
+              {srch_sql_cat}
               AND CAST(podate AS DATE) BETWEEN ? AND ?
             GROUP BY LTRIM(RTRIM(ISNULL(POMas.dtype, 'General')))
             ORDER BY spend DESC
             """,
-            tuple(dtype_params_cat + params_flt_cat + [start_date, end_date]),
+            tuple(dtype_params_cat + params_flt_cat + srch_params_cat + [start_date, end_date]),
         )
         cat_rows = cursor.fetchall()
         total_cat = sum(float(r[1] or 0) for r in cat_rows)
@@ -655,19 +842,21 @@ def purchase_analysis_pipeline(request):
 
     try:
         cursor = conn.cursor()
+        srch_sql_po, srch_params_po = _build_po_search_sql(request, cursor, "POMas")
 
         # ── Total POs raised ─────────────────────────────────────────
         cursor.execute(
-            """
+            f"""
             SELECT
                 COUNT(DISTINCT pono) AS po_count,
                 ISNULL(SUM(CAST(totamt AS FLOAT)), 0) AS po_value
             FROM POMas
             WHERE ISNULL(deleted, 0) = 0
               AND ISNULL(dtype, '') <> 'Job Order'
+              {srch_sql_po}
               AND CAST(podate AS DATE) BETWEEN ? AND ?
             """,
-            (start_date, end_date),
+            tuple(srch_params_po + [start_date, end_date]),
         )
         row = cursor.fetchone()
         if row:
@@ -676,8 +865,9 @@ def purchase_analysis_pipeline(request):
 
         # ── PO status via GRN linkage ────────────────────────────────
         try:
+            srch_sql_m, srch_params_m = _build_po_search_sql(request, cursor, "m")
             cursor.execute(
-                """
+                f"""
                 SELECT
                     m.pono,
                     ISNULL(m.totamt, 0)                                AS po_value,
@@ -694,10 +884,11 @@ def purchase_analysis_pipeline(request):
                     ON pd.pono = m.pono AND ISNULL(pd.deleted, 0) = 0
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') <> 'Job Order'
+                  {srch_sql_m}
                   AND CAST(m.podate AS DATE) BETWEEN ? AND ?
                 GROUP BY m.pono, m.totamt
                 """,
-                (start_date, end_date),
+                tuple(srch_params_m + [start_date, end_date]),
             )
             rows = cursor.fetchall()
             today = date.today()
@@ -772,6 +963,7 @@ def purchase_analysis_po_details(request):
     page_size = min(200, max(10, int(request.GET.get("page_size", 50) or 50)))
     supplier_filter = (request.GET.get("supplier") or "").strip()
     status_filter   = (request.GET.get("status") or "").strip().lower()
+    search_q        = (request.GET.get("search") or request.GET.get("q") or "").strip()
 
     rows_out = []
     total_rows = 0
@@ -786,6 +978,33 @@ def purchase_analysis_po_details(request):
         if supplier_filter:
             supplier_where = f"AND {name_expr} LIKE ?"
             params_extra.append(f"%{supplier_filter}%")
+
+        search_where = ""
+        if search_q:
+            like_pat = f"%{search_q}%"
+            candidates = [
+                'rmname', 'rmdesc', 'rmcode', 'icode', 'itcode', 'itdesc', 'ItCode', 'ItDesc',
+                'description', 'Description', 'matcode', 'matdesc', 'mattype', 'partno', 'PartNo',
+                'PRINTPartNO', 'Part_No', 'rmtype'
+            ]
+            det_cols = _get_table_search_columns(cursor, "PODet", candidates) or _get_table_search_columns(cursor, "In_PoDet", candidates)
+            or_list = [
+                f"LOWER(CAST(m.pono AS NVARCHAR(200))) LIKE LOWER(?)",
+                f"LOWER(CAST({name_expr} AS NVARCHAR(500))) LIKE LOWER(?)"
+            ]
+            params_extra.extend([like_pat, like_pat])
+            if det_cols:
+                for c in det_cols:
+                    or_list.append(f"LOWER(CAST(pd.[{c}] AS NVARCHAR(512))) LIKE LOWER(?)")
+                    params_extra.append(like_pat)
+            else:
+                or_list.extend([
+                    "LOWER(CAST(pd.icode AS NVARCHAR(256))) LIKE LOWER(?)",
+                    "LOWER(CAST(pd.itdesc AS NVARCHAR(512))) LIKE LOWER(?)",
+                    "LOWER(CAST(pd.rmname AS NVARCHAR(512))) LIKE LOWER(?)"
+                ])
+                params_extra.extend([like_pat, like_pat, like_pat])
+            search_where = f" AND (" + " OR ".join(or_list) + ")"
 
         # Build status CASE for closed / partial / overdue / open
         status_case = """
@@ -826,6 +1045,7 @@ def purchase_analysis_po_details(request):
               AND ISNULL(m.dtype, '') <> 'Job Order'
               AND CAST(m.podate AS DATE) BETWEEN ? AND ?
               {supplier_where}
+              {search_where}
         """
 
         count_sql  = f"SELECT COUNT(*) FROM ({base_sql}) AS T"
@@ -1131,7 +1351,7 @@ def purchase_analysis_po_types(request):
                 LTRIM(RTRIM(ISNULL(dtype, ''))) AS po_type
             FROM POMas
             WHERE ISNULL(deleted, 0) = 0
-              AND UPPER(LTRIM(RTRIM(ISNULL(dtype, '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')
+              AND UPPER(LTRIM(RTRIM(ISNULL(dtype, '')))) <> 'JOB ORDER'
             ORDER BY po_type ASC
             """
         )
@@ -1207,6 +1427,7 @@ def purchase_analysis_po_table(request):
         det_mt   = find_column_ci(cursor, sch_det, nm_det, ["mattype", "MatType", "MATTYPE", "Mat_Type"])
         det_uom  = find_column_ci(cursor, sch_det, nm_det, ["uom", "UOM", "Uom", "Unit"])
         det_qty  = find_column_ci(cursor, sch_det, nm_det, ["qty", "Qty", "QTY", "Quantity"])
+        det_qtykgs = find_column_ci(cursor, sch_det, nm_det, ["QtyKgs", "qtykgs", "QTYKGS", "Qty_Kgs", "qty_kgs", "QtyMtrsKgs"])
         det_amt  = find_column_ci(cursor, sch_det, nm_det, ["amount", "Amount", "AMOUNT", "Amt", "Value"])
         det_icode = find_column_ci(cursor, sch_det, nm_det, ["icode", "ICode", "ICODE", "itmcode", "ItemCode"])
         det_rate = find_column_ci(cursor, sch_det, nm_det, ["rate", "Rate", "RATE"])
@@ -1241,7 +1462,7 @@ def purchase_analysis_po_table(request):
         # Exclude always-excluded types
         exclude_filter = ""
         if po_dtype:
-            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) NOT IN (N'', N'JOB ORDER', N'GENERAL')"
+            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) <> N'JOB ORDER'"
 
         # Apply user-selected dtype filter
         dtype_filter_sql = ""
@@ -1265,8 +1486,16 @@ def purchase_analysis_po_table(request):
 
         # Qty with UOM
         if det_qty and det_uom:
+            if det_qtykgs:
+                effective_qty_sql = (
+                    f"CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')))) NOT IN (N'NOS', N'NOS.') "
+                    f"THEN ISNULL(D.[{det_qtykgs}], 0) ELSE ISNULL(D.[{det_qty}], 0) END"
+                )
+            else:
+                effective_qty_sql = f"ISNULL(D.[{det_qty}], 0)"
+
             po_qty_sql = (
-                f"CAST(ROUND(ISNULL(D.[{det_qty}], 0), 2) AS NVARCHAR(50))"
+                f"CAST(ROUND({effective_qty_sql}, 2) AS NVARCHAR(50))"
                 f" + N' ' + ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')"
             )
         elif det_qty:
@@ -1327,9 +1556,10 @@ def purchase_analysis_po_table(request):
 
         # Supplier filters
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
 
         # Build params
-        params = [start_date, end_date] + dtype_params + params_flt
+        params = [start_date, end_date] + dtype_params + params_flt + srch_params
         if po_cc and company_code:
             params.append(company_code)
 
@@ -1340,6 +1570,7 @@ def purchase_analysis_po_table(request):
             f"{dtype_filter_sql}"
             f"{company_sql}"
             f"{where_flt}"
+            f"{srch_sql}"
         )
 
         detail_sql = f"""
@@ -1531,6 +1762,7 @@ def purchase_analysis_amended_po_table(request):
 
         # Supplier filters
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
 
         # ── SQL fragments ─────────────────────────────────────────────
         del_po_sql  = f"ISNULL(M.[{po_del}], 0) = 0" if po_del else "1=1"
@@ -1540,7 +1772,7 @@ def purchase_analysis_amended_po_table(request):
 
         exclude_filter = ""
         if po_dtype:
-            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) NOT IN (N'', N'JOB ORDER', N'GENERAL')"
+            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) <> N'JOB ORDER'"
 
         dtype_filter_sql = ""
         dtype_params = []
@@ -1735,6 +1967,7 @@ def purchase_analysis_short_close_table(request):
 
         # Supplier filters
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
 
         # ── SQL fragments ─────────────────────────────────────────────
         del_po_sql  = f"ISNULL(M.[{po_del}], 0) = 0" if po_del else "1=1"
@@ -1742,7 +1975,7 @@ def purchase_analysis_short_close_table(request):
 
         exclude_filter = ""
         if po_dtype:
-            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) NOT IN (N'', N'JOB ORDER', N'GENERAL')"
+            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) <> N'JOB ORDER'"
 
         dtype_filter_sql = ""
         dtype_params = []
@@ -1808,10 +2041,11 @@ def purchase_analysis_short_close_table(request):
               {exclude_filter}
               {dtype_filter_sql}
               {where_flt}
+              {srch_sql}
             ORDER BY M.[{po_date}], M.[{po_pono}]
         """
 
-        params = [start_date, end_date] + dtype_params + params_flt
+        params = [start_date, end_date] + dtype_params + params_flt + srch_params
         cursor.execute(detail_sql, params)
 
         rows_out = []
@@ -1886,6 +2120,7 @@ def purchase_analysis_price_trend_table(request):
 
         # Supplier filters
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
 
         # ── SQL fragments ─────────────────────────────────────────────
         del_po_sql  = f"ISNULL(M.[{po_del}], 0) = 0" if po_del else "1=1"
@@ -1893,7 +2128,7 @@ def purchase_analysis_price_trend_table(request):
 
         exclude_filter = ""
         if po_dtype:
-            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) NOT IN (N'', N'JOB ORDER', N'GENERAL')"
+            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) <> N'JOB ORDER'"
 
         dtype_filter_sql = ""
         dtype_params = []
@@ -1934,6 +2169,7 @@ def purchase_analysis_price_trend_table(request):
                   {exclude_filter}
                   {dtype_filter_sql}
                   {where_flt}
+                  {srch_sql}
                   AND CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ?
                 GROUP BY {rm_col}, YEAR(M.[{po_date}]), MONTH(M.[{po_date}])
             ),
@@ -1957,7 +2193,7 @@ def purchase_analysis_price_trend_table(request):
         """
 
         # Parameters for query execution
-        exec_params = dtype_params + params_flt + [start_date, end_date]
+        exec_params = dtype_params + params_flt + srch_params + [start_date, end_date]
         cursor.execute(sql, exec_params)
 
         rows_out = []
@@ -1983,7 +2219,6 @@ def purchase_analysis_price_trend_table(request):
             elif pct < 0:
                 trend_type = "down"
 
-            # Month label e.g., 'Feb 2026'
             month_label = f"{_MONTH_ABB[mo - 1]} {yr}" if 1 <= mo <= 12 else f"{mo} {yr}"
 
             rows_out.append({
@@ -2034,7 +2269,6 @@ def purchase_analysis_management_alerts(request):
         sch_det, nm_det, q_det = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet"])
 
         if q_po and q_det:
-            # Resolve columns
             po_pono   = find_column_ci(cursor, sch_po, nm_po, ["pono", "PONo", "PONO", "PoNo"])
             po_date   = find_column_ci(cursor, sch_po, nm_po, ["podate", "PODate", "PO_Date", "po_date"])
             po_del    = find_column_ci(cursor, sch_po, nm_po, ["deleted", "Deleted", "IsDeleted"])
@@ -2051,6 +2285,7 @@ def purchase_analysis_management_alerts(request):
 
             # Supplier filters
             join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "m", join_if_needed=True)
+            srch_sql, srch_params = _build_po_search_sql(request, cursor, "m")
 
             del_po_sql  = f"ISNULL(m.[{po_del}], 0) = 0" if po_del else "1=1"
             del_det_sql = f"ISNULL(pd.[{det_del}], 0) = 0" if det_del else "1=1"
@@ -2061,11 +2296,10 @@ def purchase_analysis_management_alerts(request):
                 dtype_clause = f" AND LTRIM(RTRIM(ISNULL(m.[{po_dtype}], ''))) = ?"
                 dtype_params.append(dtype_param)
             elif po_dtype:
-                dtype_clause = f" AND UPPER(LTRIM(RTRIM(ISNULL(m.[{po_dtype}], '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')"
+                dtype_clause = f" AND UPPER(LTRIM(RTRIM(ISNULL(m.[{po_dtype}], '')))) <> 'JOB ORDER'"
 
             today = date.today()
 
-            # Query PO lines with GRN receipts
             sql = f"""
                 SELECT
                     m.[{po_pono}] AS pono,
@@ -2091,14 +2325,14 @@ def purchase_analysis_management_alerts(request):
                 WHERE {del_po_sql}
                   {dtype_clause}
                   {where_flt}
+                  {srch_sql}
                   AND CAST(m.[{po_date}] AS DATE) BETWEEN ? AND ?
             """
 
-            exec_params = dtype_params + params_flt + [start_date, end_date]
+            exec_params = dtype_params + params_flt + srch_params + [start_date, end_date]
             cursor.execute(sql, exec_params)
             rows = cursor.fetchall()
 
-            # Group items for rate variance analysis
             item_rates = {}
             high_alerts = []
             medium_alerts = []
@@ -2114,7 +2348,6 @@ def purchase_analysis_management_alerts(request):
                 pending_qty = max(0.0, ord_qty - rcv_qty)
                 pending_val = pending_qty * rate_val
 
-                # Store rates for item grouping
                 item_rates.setdefault(item_str, []).append((rate_val, sup_str))
 
                 if pending_qty > 0:
@@ -2154,7 +2387,6 @@ def purchase_analysis_management_alerts(request):
                             "urgency": "medium"
                         })
 
-            # Check for Rate Variance alerts
             info_alerts = []
             for item, rates_info in item_rates.items():
                 if len(rates_info) > 1:
@@ -2172,14 +2404,12 @@ def purchase_analysis_management_alerts(request):
                             "urgency": "info"
                         })
 
-            # Compile top 4 alerts
             alerts_list = []
             alerts_list.extend(high_alerts[:2])
             alerts_list.extend(medium_alerts[:2])
             alerts_list.extend(info_alerts[:2])
             alerts_list = alerts_list[:4]
 
-            # Generate Key Action description from most critical high alert
             if high_alerts:
                 most_critical = max(high_alerts, key=lambda a: a["pending_val"])
                 key_action = f"Follow up with {most_critical['supplier']} for {most_critical['item']} pending lot ({int(most_critical['pending_qty']):,} {most_critical['uom']}). Production scheduling depends on receipt. Also review rate change to ₹{most_critical['rate']:,.2f} for formal approval."
@@ -2192,7 +2422,6 @@ def purchase_analysis_management_alerts(request):
         try: conn.close()
         except: pass
 
-    # Fallback to keep dashboard looking alive
     if not alerts_list:
         alerts_list = [
             { "icon": "🔴", "title": "Round Rod DIA 65MM — 325 Nos undelivered", "sub": "P251570 · Musk Metals · Production impact risk", "time": "7d overdue", "urgency": "high" },
@@ -2321,7 +2550,8 @@ def purchase_analysis_traceability_table(request):
         
         # Supplier filtering
         join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
-        
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
+
         # Dtype logic
         dtype_clause = ""
         dtype_params = []
@@ -2329,7 +2559,7 @@ def purchase_analysis_traceability_table(request):
             dtype_clause = f"AND LTRIM(RTRIM(ISNULL(M.[{po_dtype}], ''))) = ?"
             dtype_params.append(dtype_param)
         else:
-            dtype_clause = f"AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], '')))) NOT IN ('', 'JOB ORDER', 'GENERAL')"
+            dtype_clause = f"AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], '')))) <> 'JOB ORDER'"
 
         # Build SQL Query dynamically with resolved tables and columns
         query = f"""
@@ -2419,11 +2649,12 @@ def purchase_analysis_traceability_table(request):
             WHERE {del_po_sql}
               {dtype_clause}
               {where_flt}
+              {srch_sql}
               AND CAST(M.[{po_podate}] AS DATE) BETWEEN ? AND ?
             ORDER BY M.[{po_podate}], M.[{po_pono}]
         """
 
-        cursor.execute(query, tuple(dtype_params + params_flt + [start_date, end_date]))
+        cursor.execute(query, tuple(dtype_params + params_flt + srch_params + [start_date, end_date]))
         
         rows_out = []
         for idx, row in enumerate(cursor.fetchall()):

@@ -37,7 +37,7 @@ def _map_rework_group_ui(insp_source, is_vendor_job=False):
     if insp_source == "Final Insp":
         return "Final Insp"
     if insp_source == "Job Order":
-        return "Vendor" if is_vendor_job else "In-House"
+        return "Vendor"
     if insp_source == "Intermediate":
         return "In-House"
     if insp_source == "Customer":
@@ -45,13 +45,43 @@ def _map_rework_group_ui(insp_source, is_vendor_job=False):
     return "In-House"
 
 
-def _part_rate_expr(part_col):
+def _part_rate_expr(part_col, process_col):
     return f"""(
-        SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
-        FROM Commer_BaseRateDet CBD
-        WHERE CBD.PartNo = {part_col}
-          AND ISNULL(CBD.deleted, 0) = 0
-        ORDER BY CBD.BReffdt DESC
+        ISNULL((
+            SELECT TOP 1
+                CASE
+                    WHEN WM.Rmuom = 'NOS' THEN ISNULL(RMR.BaseRate, 0)
+                    WHEN WM.Rmuom = 'KGS' THEN CAST(ISNULL(WM.WtQty, 0) AS FLOAT) * ISNULL(RMR.BaseRate, 0)
+                    WHEN WM.Rmuom = 'MTRS' THEN (CAST(ISNULL(WM.TotMmLength, 0) AS FLOAT) / 1000.0) * ISNULL(RMR.BaseRate, 0)
+                    ELSE 0
+                END
+            FROM WithMatMas WM
+            OUTER APPLY (
+                SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT) AS BaseRate
+                FROM Commer_BaseRateDet CBD
+                INNER JOIN Commer_Mas CM ON CBD.cmno = CM.cmno
+                WHERE CBD.PartNo = WM.RmName AND ISNULL(CBD.deleted, 0) = 0 AND ISNULL(CM.deleted, 0) = 0 AND CM.btype = 'Raw Material'
+                ORDER BY CBD.BReffdt DESC
+            ) RMR
+            WHERE WM.PartNo = {part_col} AND ISNULL(WM.deleted, 0) = 0
+            ORDER BY WM.PartNo
+        ), 0)
+        +
+        ISNULL((
+            SELECT TOP 1
+                CASE
+                    WHEN ISNULL(TotalProcCount, 0) > 0 AND TotalProcCount = ValidProcRateCount AND ISNULL(ProcessRate, 0) > 0 THEN ProcessRate
+                    ELSE ISNULL((SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT) FROM Commer_BaseRateDet CBD WHERE CBD.PartNo = {part_col} AND ISNULL(CBD.deleted, 0) = 0 ORDER BY CBD.BReffdt DESC), 0)
+                END
+            FROM (
+                SELECT
+                    (SELECT COUNT(*) FROM ProcessSeqDet PSD WHERE PSD.partno = {part_col} AND ISNULL(PSD.deleted, 0) = 0 AND PSD.seq <= ISNULL(CurrSeq.seq, 999999)) AS TotalProcCount,
+                    (SELECT COUNT(*) FROM ProcessSeqDet PSD CROSS APPLY (SELECT TOP 1 Rate FROM Commer_ProcDet WHERE PartNo = PSD.partno AND Process = PSD.process AND ISNULL(deleted, 0) = 0 AND ISNULL(Rate, 0) > 0) C WHERE PSD.partno = {part_col} AND ISNULL(PSD.deleted, 0) = 0 AND PSD.seq <= ISNULL(CurrSeq.seq, 999999)) AS ValidProcRateCount,
+                    (SELECT SUM(CAST(ISNULL(C.Rate, 0) AS FLOAT)) FROM ProcessSeqDet PSD OUTER APPLY (SELECT TOP 1 Rate FROM Commer_ProcDet WHERE PartNo = PSD.partno AND Process = PSD.process AND ISNULL(deleted, 0) = 0 ORDER BY PartNo) C WHERE PSD.partno = {part_col} AND ISNULL(PSD.deleted, 0) = 0 AND PSD.seq <= ISNULL(CurrSeq.seq, 999999)) AS ProcessRate
+                FROM (SELECT 1 AS D) DUMMY
+                OUTER APPLY (SELECT TOP 1 seq FROM ProcessSeqDet WHERE partno = {part_col} AND process = {process_col} AND ISNULL(deleted, 0) = 0 ORDER BY seq DESC) CurrSeq
+            ) T
+        ), 0)
     )"""
 
 
@@ -129,9 +159,9 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         else ""
     )
 
-    rate_inj = _part_rate_expr("d.partno")
-    rate_int = _part_rate_expr("i.partno")
-    rate_fin = _part_rate_expr("f.partno")
+    rate_inj = _part_rate_expr("d.partno", process_inj)
+    rate_int = _part_rate_expr("i.partno", process_int)
+    rate_fin = _part_rate_expr("f.partno", process_fin)
 
     reason_inj = """ISNULL((
         SELECT STUFF((
@@ -163,6 +193,33 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     ), N'')"""
 
+    rework_reason_inj = """ISNULL((
+        SELECT STUFF((
+            SELECT ', ' + rw.rework
+            FROM JobInspRWDetail rw
+            WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    ), N'')"""
+
+    rework_reason_int = """ISNULL((
+        SELECT STUFF((
+            SELECT ', ' + rw.rework
+            FROM Insp_ReworkEntry rw
+            WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted, 0) = 0
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    ), N'')"""
+
+    rework_reason_fin = """ISNULL((
+        SELECT STUFF((
+            SELECT ', ' + rw.rework
+            FROM FinalInspReworkEntryOrg rw
+            WHERE rw.finspno = f.finspno AND rw.partno = f.partno AND ISNULL(rw.deleted, 0) = 0
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    ), N'')"""
+
     vendor_flag = """
         CASE
             WHEN LOWER(LTRIM(RTRIM(ISNULL(m.dtype, N'')))) LIKE N'%vendor%'
@@ -188,9 +245,10 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             LTRIM(RTRIM(CAST(ISNULL(m.inspno, N'') AS NVARCHAR(64)))) AS InspNo,
             {reason_inj} AS Reason,
             CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) AS RejQty,
-            CAST(ISNULL(d.rwqty, 0) AS FLOAT) AS ReworkQty,
+            CAST(ISNULL((SELECT SUM(ISNULL(rw.Qty, 0)) FROM JobInspRWDetail rw WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno), 0) AS FLOAT) AS ReworkQty,
             CAST(ISNULL(d.jobqty, 0) AS FLOAT) AS InspQty,
-            CAST(ISNULL({rate_inj}, 0) AS FLOAT) AS UnitRate
+            CAST(ISNULL({rate_inj}, 0) AS FLOAT) AS UnitRate,
+            {rework_reason_inj} AS ReworkReason
         FROM InJob_Mas m
         INNER JOIN InJob_Det d ON m.inspno = d.inspno
         {pd_join}
@@ -199,7 +257,7 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
           AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
           AND (
               CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) > 0
-              OR CAST(ISNULL(d.rwqty, 0) AS FLOAT) > 0
+              OR ISNULL((SELECT SUM(ISNULL(rw.Qty, 0)) FROM JobInspRWDetail rw WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno), 0) > 0
           )
     """, f"""
         SELECT
@@ -217,9 +275,10 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             LTRIM(RTRIM(CAST(ISNULL(i.inter_inspno, N'') AS NVARCHAR(64)))) AS InspNo,
             {reason_int} AS Reason,
             CAST(ISNULL(i.rejqty, 0) AS FLOAT) AS RejQty,
-            CAST(ISNULL(i.rwqty, 0) AS FLOAT) AS ReworkQty,
+            CAST(ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM Insp_ReworkEntry rw WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted, 0) = 0), 0) AS FLOAT) AS ReworkQty,
             CAST(ISNULL(i.inspqty, 0) AS FLOAT) AS InspQty,
-            CAST(ISNULL({rate_int}, 0) AS FLOAT) AS UnitRate
+            CAST(ISNULL({rate_int}, 0) AS FLOAT) AS UnitRate,
+            {rework_reason_int} AS ReworkReason
         FROM InterInspectionEntry i
         {pd_join_i}
         {com_join_i}
@@ -228,7 +287,7 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
           AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
           AND (
               CAST(ISNULL(i.rejqty, 0) AS FLOAT) > 0
-              OR CAST(ISNULL(i.rwqty, 0) AS FLOAT) > 0
+              OR ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM Insp_ReworkEntry rw WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted, 0) = 0), 0) > 0
           )
     """, f"""
         SELECT
@@ -246,9 +305,10 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             LTRIM(RTRIM(CAST(ISNULL(f.finspno, N'') AS NVARCHAR(64)))) AS InspNo,
             {reason_fin} AS Reason,
             CAST(ISNULL(f.rejqty, 0) AS FLOAT) AS RejQty,
-            CAST(ISNULL(f.matrejqty, 0) AS FLOAT) AS ReworkQty,
+            CAST(ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM FinalInspReworkEntryOrg rw WHERE rw.finspno = f.finspno AND rw.partno = f.partno AND ISNULL(rw.deleted, 0) = 0), 0) AS FLOAT) AS ReworkQty,
             CAST(ISNULL(f.totqty, 0) AS FLOAT) AS InspQty,
-            CAST(ISNULL({rate_fin}, 0) AS FLOAT) AS UnitRate
+            CAST(ISNULL({rate_fin}, 0) AS FLOAT) AS UnitRate,
+            {rework_reason_fin} AS ReworkReason
         FROM FinalInspectionEntry f
         {pd_join_f}
         {com_join_f}
@@ -257,7 +317,7 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
           AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
           AND (
               CAST(ISNULL(f.rejqty, 0) AS FLOAT) > 0
-              OR CAST(ISNULL(f.matrejqty, 0) AS FLOAT) > 0
+              OR ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM FinalInspReworkEntryOrg rw WHERE rw.finspno = f.finspno AND rw.partno = f.partno AND ISNULL(rw.deleted, 0) = 0), 0) > 0
           )
     """]
 
@@ -304,7 +364,8 @@ def _fetch_supplier_iqc_rows(cursor, start_date, end_date):
                 FROM Commer_BaseRateDet CBD
                 WHERE CBD.PartNo = D.partno AND ISNULL(CBD.deleted, 0) = 0
                 ORDER BY CBD.BReffdt DESC
-            ), 0) AS FLOAT) AS UnitRate
+            ), 0) AS FLOAT) AS UnitRate,
+            CAST(N'' AS NVARCHAR(512)) AS ReworkReason
         FROM grn_mas GM
         INNER JOIN inspmas IM ON GM.grnno = IM.grnno AND ISNULL(IM.deleted, 0) = 0
         INNER JOIN inspdet D ON IM.irno = D.irno AND ISNULL(D.deleted, 0) = 0
@@ -319,7 +380,20 @@ def _fetch_supplier_iqc_rows(cursor, start_date, end_date):
         return []
 
 
-def _row_to_dict(raw_row):
+def _fetch_rejection_matrej_map(cursor):
+    matrej_map = {}
+    if cursor and table_exists(cursor, "Rejection"):
+        try:
+            cursor.execute("SELECT LTRIM(RTRIM(rejection)), ISNULL(matrej, 0) FROM Rejection WHERE ISNULL(deleted, 0) = 0")
+            for r in cursor.fetchall() or []:
+                if r[0]:
+                    matrej_map[r[0].strip().upper()] = bool(r[1])
+        except Exception:
+            pass
+    return matrej_map
+
+
+def _row_to_dict(raw_row, matrej_map=None):
     (
         entry_date,
         insp_source,
@@ -338,7 +412,8 @@ def _row_to_dict(raw_row):
         rework_qty,
         insp_qty,
         unit_rate,
-    ) = raw_row[:17]
+        rework_reason,
+    ) = raw_row[:18]
 
     is_vendor = bool(is_vendor_job)
     insp_src = str(insp_source or "").strip()
@@ -376,6 +451,15 @@ def _row_to_dict(raw_row):
     oper = str(operator_name or "—").strip() or "—"
     insp = str(inspector_name or "—").strip() or "—"
     reason_s = str(reason or "").strip()
+    rework_reason_s = str(rework_reason or "").strip()
+
+    is_mat_rej = False
+    if matrej_map and reason_s:
+        reasons_list = [r.strip().upper() for r in reason_s.split(",") if r.strip()]
+        for r_name in reasons_list:
+            if matrej_map.get(r_name) is True:
+                is_mat_rej = True
+                break
 
     insp_label = {
         "Job Order": "Job order",
@@ -390,6 +474,8 @@ def _row_to_dict(raw_row):
         "inspSource": insp_src,
         "inspLabel": insp_label,
         "rejType": rej_type,
+        "rejCategory": "Mat Rej" if is_mat_rej else "Mac Rej",
+        "isMatRej": is_mat_rej,
         "reworkGroup": rework_group,
         "customer": cust,
         "vendor": vendor or cust,
@@ -401,6 +487,7 @@ def _row_to_dict(raw_row):
         "inspector": insp,
         "inspNo": str(insp_no or "").strip(),
         "reason": reason_s,
+        "reworkReason": rework_reason_s,
         "rejQty": round(rej_q, 2),
         "reworkQty": round(rwk_q, 2),
         "inspQty": round(insp_q, 2),
@@ -479,10 +566,20 @@ def _monthwise_rework(rows, month_labels):
     return {"labels": month_labels, "rates": rates, "qtys": qtys}
 
 
-def _filter_options_from_rows(rows):
+def _filter_options_from_rows(rows, reason_key="reason"):
     customers = sorted({r.get("customer") for r in rows if r.get("customer") and r["customer"] != "—"})
     part_nos = sorted({r.get("partNo") for r in rows if r.get("partNo")})
-    reasons = sorted({r.get("reason") for r in rows if r.get("reason")})
+    
+    reasons_set = set()
+    for r in rows:
+        val = r.get(reason_key)
+        if val:
+            for part in val.split(","):
+                part = part.strip()
+                if part:
+                    reasons_set.add(part)
+    reasons = sorted(reasons_set)
+    
     return {"customers": customers, "partNos": part_nos, "reasons": reasons}
 
 
@@ -503,7 +600,8 @@ def build_rejection_compare_payload(cursor, start_date, end_date, load_full_fy=T
         if raw_rows:
             query_start, query_end = prev_start, prev_end
 
-    rows = [_row_to_dict(r) for r in raw_rows]
+    matrej_map = _fetch_rejection_matrej_map(cursor)
+    rows = [_row_to_dict(r, matrej_map) for r in raw_rows]
     month_labels = _month_labels_for_payload(rows, start_date, end_date, query_start, query_end)
 
     return {
@@ -515,7 +613,7 @@ def build_rejection_compare_payload(cursor, start_date, end_date, load_full_fy=T
         "monthLabels": month_labels,
         "monthwise": _monthwise_rejection(rows, month_labels),
         "kpis": _compute_rejection_kpis(rows, start_date, end_date),
-        "filterOptions": _filter_options_from_rows(rows),
+        "filterOptions": _filter_options_from_rows(rows, reason_key="reason"),
     }
 
 
@@ -536,7 +634,8 @@ def build_rework_compare_payload(cursor, start_date, end_date, load_full_fy=True
         if raw_rows:
             query_start, query_end = prev_start, prev_end
 
-    rows = [_row_to_dict(r) for r in raw_rows]
+    matrej_map = _fetch_rejection_matrej_map(cursor)
+    rows = [_row_to_dict(r, matrej_map) for r in raw_rows]
     month_labels = _month_labels_for_payload(rows, start_date, end_date, query_start, query_end)
 
     return {
@@ -548,5 +647,5 @@ def build_rework_compare_payload(cursor, start_date, end_date, load_full_fy=True
         "monthLabels": month_labels,
         "monthwise": _monthwise_rework(rows, month_labels),
         "kpis": _compute_rework_kpis(rows, start_date, end_date),
-        "filterOptions": _filter_options_from_rows(rows),
+        "filterOptions": _filter_options_from_rows(rows, reason_key="reworkReason"),
     }

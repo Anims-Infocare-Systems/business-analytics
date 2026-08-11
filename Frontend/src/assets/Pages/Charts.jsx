@@ -3,7 +3,7 @@
 * Prefix: ch-
 * Categories: Sales · Quality · Production · Operations · Purchase · Vendor
 */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
@@ -57,7 +57,17 @@ function api(path) {
   return `${API_BASE}${p}`;
 }
 
-/** Machine Wise Idle Time — all bars in card width; hover tooltip shows mac + hours. */
+function formatHoursMinutes(val) {
+  const n = typeof val === "number" && Number.isFinite(val) ? val : Number(val) || 0;
+  const h = Math.floor(n);
+  const m = Math.round((n - h) * 60);
+  if (h === 0 && m === 0) return "0h 0m";
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/** Machine Wise Idle Time — top 10 machines or filtered machine; hover tooltip & datalabels show hours and minutes. */
 function machineIdleBarChartOptions() {
   return {
     responsive: true,
@@ -72,11 +82,15 @@ function machineIdleBarChartOptions() {
           title(items) { const it = items[0]; return it?.label != null ? String(it.label) : ""; },
           label(ctx) {
             const y = ctx.parsed?.y;
-            const n = typeof y === "number" && Number.isFinite(y) ? y : Number(y) || 0;
-            return `Idle time: ${n.toFixed(2)} h`;
+            return `Idle time: ${formatHoursMinutes(y)}`;
           },
         },
       },
+      datalabels: {
+        formatter(value) {
+          return formatHoursMinutes(value);
+        }
+      }
     },
     datasets: { bar: { categoryPercentage: 0.9, barPercentage: 0.86 } },
     scales: {
@@ -215,7 +229,11 @@ const CHART_DEFS = [
   {
     id: "vendor-1", title: "Vendor Rating", badge: "Monthly", category: "vendor", type: "bar", status: "active",
     tags: ["Vendor", "Bar Chart"], filename: "vendor-rating.png",
-    config: { type: "bar", data: { labels: ["Vendor-1","Vendor-2","Vendor-3","Vendor-4","Vendor-5","Vendor-6"], datasets: [{ label: "Quality Score", data: [88,76,91,65,82,94], backgroundColor: "#3b82f6", borderRadius: 4 }, { label: "Delivery Score", data: [82,80,85,70,78,90], backgroundColor: "#10b981", borderRadius: 4 }, { label: "Price Score", data: [75,85,78,80,72,88], backgroundColor: "#f97316", borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 8 } } }, y: { min: 0, max: 100, ticks: { font: { size: 9 } } } } } },
+    config: {
+      type: "bar",
+      data: { labels: [], datasets: [] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 9 } } } }, scales: { x: { ticks: { font: { size: 8 } } }, y: { min: 0, max: 100, ticks: { font: { size: 9 } } } } }
+    },
   },
   {
     id: "vendor-2", title: "Vendor Rejections", badge: "Monthly", category: "vendor", type: "line", status: "active",
@@ -242,7 +260,9 @@ const TYPE_META = { all: { label: "All Types", icon: BarChart3 }, line: { label:
 
 // ─── Helper: format date ──────────────────────────────────────
 function formatLocalDate(d) {
-  const date = new Date(d);
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return "";
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
@@ -920,9 +940,184 @@ function OperatorDropdown({ value, onChange, operators, loading }) {
   );
 }
 
-// ─── ✅ NEW: Compact Machine Dropdown ───────
+// ─── ✅ NEW: Multi-Select Machine Dropdown with Batch Apply ───────
 function MachineDropdown({ value, onChange, machines, loading }) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [menuStyle, setMenuStyle] = useState({});
+  const [draft, setDraft] = useState([]);
+  const ref = useRef(null);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  const selectedList = useMemo(() => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    return String(value).split(",").map(s => s.trim()).filter(Boolean);
+  }, [value]);
+
+  useEffect(() => {
+    if (open) {
+      setDraft(selectedList);
+      setSearchQuery("");
+    }
+  }, [open]);
+
+  const handleClose = () => {
+    setOpen(false);
+    const draftStr = draft.join(",");
+    const selStr = selectedList.join(",");
+    if (draftStr !== selStr) {
+      onChange(draft.length > 0 ? draft.join(",") : "");
+    }
+  };
+
+  useEffect(() => {
+    const h = e => {
+      const inTrigger = ref.current && ref.current.contains(e.target);
+      const inMenu = menuRef.current && menuRef.current.contains(e.target);
+      if (!inTrigger && !inMenu && open) {
+        handleClose();
+      }
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open, draft, selectedList]);
+
+  const filteredMachines = (machines || []).filter(m =>
+    m.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const calc = () => {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const listLen = filteredMachines.length + 2;
+      const estimatedMenuH = Math.min(listLen * 34 + 8 + 72, 280);
+      const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+    };
+    calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
+    return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
+  }, [open, filteredMachines.length]);
+
+  const toggleMachine = (mac) => {
+    if (!mac) {
+      setDraft([]);
+    } else {
+      setDraft(prev => prev.includes(mac) ? prev.filter(m => m !== mac) : [...prev, mac]);
+    }
+  };
+
+  const isAll = draft.length === 0;
+
+  const triggerLabel = useMemo(() => {
+    if (selectedList.length === 0) return "All Machines";
+    if (selectedList.length === 1) return selectedList[0];
+    return `${selectedList.length} Machines`;
+  }, [selectedList]);
+
+  return (
+    <div className="ch-dd ch-dd--compact" ref={ref}>
+      <button
+        ref={triggerRef}
+        className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`}
+        onClick={() => {
+          if (loading) return;
+          if (open) handleClose();
+          else setOpen(true);
+        }}
+        type="button"
+        disabled={loading}
+        title={loading ? "Loading machines..." : triggerLabel}
+      >
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Settings size={12} /></span>
+        <span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : triggerLabel}</span>
+        <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
+      </button>
+      {open && createPortal(
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "280px", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+            <input 
+              type="text" 
+              placeholder="Search macno..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ 
+                width: "100%", 
+                padding: "5px 8px", 
+                fontSize: "12px", 
+                border: "1px solid #cbd5e1", 
+                borderRadius: "4px",
+                outline: "none",
+                backgroundColor: "#ffffff",
+                color: "#1e293b"
+              }} 
+              onClick={e => e.stopPropagation()} 
+            />
+          </div>
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            <button
+              className={`ch-dd__item ${isAll ? "ch-dd__item--active" : ""}`}
+              onClick={() => toggleMachine("")}
+              type="button"
+              style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", width: "100%" }}
+            >
+              <input type="checkbox" checked={isAll} readOnly style={{ accentColor: "#3b82f6", cursor: "pointer", width: 13, height: 13, pointerEvents: "none" }} />
+              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span>
+              <span style={{ fontWeight: isAll ? 600 : 400 }}>All Machines (Top 10)</span>
+            </button>
+            {filteredMachines.map(mac => {
+              const checked = draft.includes(mac);
+              return (
+                <button
+                  key={mac}
+                  className={`ch-dd__item ${checked ? "ch-dd__item--active" : ""}`}
+                  onClick={() => toggleMachine(mac)}
+                  type="button"
+                  style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", width: "100%" }}
+                >
+                  <input type="checkbox" checked={checked} readOnly style={{ accentColor: "#3b82f6", cursor: "pointer", width: 13, height: 13, pointerEvents: "none" }} />
+                  <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span>
+                  <span style={{ fontWeight: checked ? 600 : 400 }}>{mac}</span>
+                </button>
+              );
+            })}
+            {filteredMachines.length === 0 && (
+              <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No machines found</div>
+            )}
+          </div>
+          <div style={{ padding: "6px 8px", borderTop: "1px solid #e2e8f0", position: "sticky", bottom: 0, background: "#ffffff", zIndex: 10, display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={handleClose}
+              style={{
+                padding: "4px 12px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#ffffff",
+                backgroundColor: "#3b82f6",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
+              }}
+            >
+              Apply ({draft.length === 0 ? "Top 10" : `${draft.length} Selected`})
+            </button>
+          </div>
+        </div>, document.body
+      )}
+    </div>
+  );
+}
+
+// ─── ✅ NEW: Compact Vendor Dropdown ───────
+function VendorDropdown({ value, onChange, vendors, loading }) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [menuStyle, setMenuStyle] = useState({});
   const ref = useRef(null);
   const menuRef = useRef(null);
@@ -937,32 +1132,154 @@ function MachineDropdown({ value, onChange, machines, loading }) {
     return () => document.removeEventListener("mousedown", h);
   }, []);
   useEffect(() => {
+    if (!open) setSearchQuery("");
+  }, [open]);
+  const filteredVendors = (vendors || []).filter(v =>
+    v.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  useEffect(() => {
     if (!open || !triggerRef.current) return;
     const calc = () => {
       const rect = triggerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
-      const estimatedMenuH = Math.min(machines.length * 34 + 8, 250);
+      const listLen = filteredVendors.length + 1;
+      const estimatedMenuH = Math.min(listLen * 34 + 8 + 36, 250);
       const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
       setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
     };
     calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
-  }, [open, machines.length]);
+  }, [open, filteredVendors.length]);
   return (
     <div className="ch-dd ch-dd--compact" ref={ref}>
-      <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading machines..." : value || "Select Machine"}>
-        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Settings size={12} /></span><span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "Machine")}</span>
+      <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading vendors..." : value || "All Vendors"}>
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Users size={12} /></span>
+        <span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "All Vendors")}</span>
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
         <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
-          {machines.length === 0 ? (<div style={{ padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>No machines found</div>) : machines.map(mac => (
-            <button key={mac} className={`ch-dd__item ${value === mac ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(mac); setOpen(false); }} type="button">
-              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span><span>{mac}</span>
-              {value === mac && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+            <input 
+              type="text" 
+              placeholder="Search vendor..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ 
+                width: "100%", 
+                padding: "5px 8px", 
+                fontSize: "12px", 
+                border: "1px solid #cbd5e1", 
+                borderRadius: "4px",
+                outline: "none",
+                backgroundColor: "#ffffff",
+                color: "#1e293b"
+              }} 
+              onClick={e => e.stopPropagation()} 
+            />
+          </div>
+          <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
+            <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+            <span>All Vendors</span>
+            {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+          </button>
+          {filteredVendors.map(v => (
+            <button key={v} className={`ch-dd__item ${value === v ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(v); setOpen(false); }} type="button">
+              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+              <span>{v}</span>
+              {value === v && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
             </button>
           ))}
+          {filteredVendors.length === 0 && (
+            <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No vendors found</div>
+          )}
+        </div>, document.body
+      )}
+    </div>
+  );
+}
+
+// ─── ✅ NEW: Compact Supplier Dropdown ───────
+function SupplierDropdown({ value, onChange, suppliers, loading }) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [menuStyle, setMenuStyle] = useState({});
+  const ref = useRef(null);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    const h = e => {
+      const inTrigger = ref.current && ref.current.contains(e.target);
+      const inMenu = menuRef.current && menuRef.current.contains(e.target);
+      if (!inTrigger && !inMenu) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  useEffect(() => {
+    if (!open) setSearchQuery("");
+  }, [open]);
+  const filteredSuppliers = (suppliers || []).filter(s =>
+    s.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const calc = () => {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const listLen = filteredSuppliers.length + 1;
+      const estimatedMenuH = Math.min(listLen * 34 + 8 + 36, 250);
+      const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+    };
+    calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
+    return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
+  }, [open, filteredSuppliers.length]);
+  return (
+    <div className="ch-dd ch-dd--compact" ref={ref}>
+      <button ref={triggerRef} className={`ch-dd__trigger ch-dd__trigger--compact ${open ? "ch-dd__trigger--open" : ""}`} onClick={() => !loading && setOpen(o => !o)} type="button" disabled={loading} title={loading ? "Loading suppliers..." : value || "All Suppliers"}>
+        <span className="ch-dd__icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Users size={12} /></span>
+        <span className="ch-dd__value ch-dd__value--compact">{loading ? "..." : (value || "All Suppliers")}</span>
+        <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
+      </button>
+      {open && createPortal(
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
+          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+            <input 
+              type="text" 
+              placeholder="Search supplier..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ 
+                width: "100%", 
+                padding: "5px 8px", 
+                fontSize: "12px", 
+                border: "1px solid #cbd5e1", 
+                borderRadius: "4px",
+                outline: "none",
+                backgroundColor: "#ffffff",
+                color: "#1e293b"
+              }} 
+              onClick={e => e.stopPropagation()} 
+            />
+          </div>
+          <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
+            <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+            <span>All Suppliers</span>
+            {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+          </button>
+          {filteredSuppliers.map(s => (
+            <button key={s} className={`ch-dd__item ${value === s ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(s); setOpen(false); }} type="button">
+              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+              <span>{s}</span>
+              {value === s && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+            </button>
+          ))}
+          {filteredSuppliers.length === 0 && (
+            <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No suppliers found</div>
+          )}
         </div>, document.body
       )}
     </div>
@@ -982,10 +1299,20 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
   const [selectedOpr, setSelectedOpr] = useState(null);
   const [oprLoading, setOprLoading] = useState(() => def.id === "production-1");
   
-  // ✅ Machine states for production-4
+  // ✅ Machine states for production-3 & production-4
   const [machines, setMachines] = useState([]);
-  const [selectedMac, setSelectedMac] = useState(null);
-  const [macLoading, setMacLoading] = useState(() => def.id === "production-4");
+  const [selectedMac, setSelectedMac] = useState("");
+  const [macLoading, setMacLoading] = useState(() => def.id === "production-3" || def.id === "production-4");
+
+  // ✅ Vendor states for vendor-1
+  const [vendors, setVendors] = useState([]);
+  const [selectedVendor, setSelectedVendor] = useState("");
+  const [vendorLoading, setVendorLoading] = useState(() => def.id === "vendor-1");
+
+  // ✅ Supplier states for purchase-2
+  const [suppliers, setSuppliers] = useState([]);
+  const [selectedSupplier, setSelectedSupplier] = useState("");
+  const [supplierLoading, setSupplierLoading] = useState(() => def.id === "purchase-2");
 
   useEffect(() => {
     if (def.id === "production-1") {
@@ -995,13 +1322,37 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); setSelectedOpr(data.default || data.operators[0]); } })
         .catch(err => { setOprLoading(false); console.error(err); });
     }
-    // ✅ Fetch machines for production-4
-    if (def.id === "production-4") {
+    // ✅ Fetch machines for production-3 & production-4
+    if (def.id === "production-3" || def.id === "production-4") {
       setMacLoading(true);
       fetch(api("/production/machines/"), { credentials: "include" })
         .then(res => res.json())
-        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); setSelectedMac(data.default || data.machines[0]); } })
+        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); } })
         .catch(err => { setMacLoading(false); console.error(err); });
+    }
+    // ✅ Fetch vendors for vendor-1
+    if (def.id === "vendor-1") {
+      setVendorLoading(true);
+      fetch(api("/purchase/supplier-rating/?type=vendor"), { credentials: "include" })
+        .then(res => res.json())
+        .then(data => {
+          setVendorLoading(false);
+          const list = data.vendors || data.filterOptions?.vendors || [];
+          if (list.length > 0) setVendors(list);
+        })
+        .catch(err => { setVendorLoading(false); console.error(err); });
+    }
+    // ✅ Fetch suppliers for purchase-2
+    if (def.id === "purchase-2") {
+      setSupplierLoading(true);
+      fetch(api("/purchase/supplier-rating/?type=supplier"), { credentials: "include" })
+        .then(res => res.json())
+        .then(data => {
+          setSupplierLoading(false);
+          const list = data.vendors || data.filterOptions?.vendors || [];
+          if (list.length > 0) setSuppliers(list);
+        })
+        .catch(err => { setSupplierLoading(false); console.error(err); });
     }
   }, [def.id]);
 
@@ -1011,7 +1362,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
     
     // ── API charts ─────────
     // ✅ Added def.id === "production-4" and def.id === "purchase-2"
-    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") {
+    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") {
       setLoading(true); setError(null);
       if (def.id === "production-1" && !selectedOpr) { if (oprLoading) return () => {}; setLoading(false); setError(operators.length === 0 ? "No operators found." : null); return () => {}; }
       // ✅ Machine check
@@ -1031,13 +1382,20 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
       if (def.id === "operations-1") endpoint = api("/operations/overall-efficiency/");
       if (def.id === "operations-2") endpoint = api("/operations/production-value/");
       if (def.id === "purchase-1") endpoint = api("/purchase/report-monthwise/");
-      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/");
+      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/?type=supplier");
+      if (def.id === "vendor-1") endpoint = api("/purchase/supplier-rating/?type=vendor");
       if (def.id === "vendor-2") endpoint = api("/vendor/rejection-monthwise/");
 
       let url = endpoint;
-      if (dateRange?.from && dateRange?.to) { const from = formatLocalDate(dateRange.from); const to = formatLocalDate(dateRange.to); url += `?from=${from}&to=${to}`; }
+      if (dateRange?.from) {
+        const from = formatLocalDate(dateRange.from);
+        const to = formatLocalDate(dateRange.to || new Date());
+        url += (url.includes("?") ? "&" : "?") + `from=${from}&to=${to}`;
+      }
       if (def.id === "production-1" && selectedOpr) url += (url.includes("?") ? "&" : "?") + `oprname=${encodeURIComponent(selectedOpr)}`;
-      if (def.id === "production-4" && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`; // ✅
+      if ((def.id === "production-3" || def.id === "production-4") && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`;
+      if (def.id === "vendor-1" && selectedVendor) url += (url.includes("?") ? "&" : "?") + `name=${encodeURIComponent(selectedVendor)}`;
+      if (def.id === "purchase-2" && selectedSupplier) url += (url.includes("?") ? "&" : "?") + `name=${encodeURIComponent(selectedSupplier)}`;
 
       fetch(url, { credentials: "include", signal: ac.signal })
         .then(async (res) => {
@@ -1058,6 +1416,8 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           if (ac.signal.aborted || !canvasRef.current) return;
           if (data.error) { setError(data.error); return; }
           if (data.fy) setFyLabel(data.fy);
+          if (data.vendors && data.vendors.length > 0) { setVendors(data.vendors); setVendorLoading(false); }
+          else if (data.filterOptions?.vendors && data.filterOptions.vendors.length > 0) { setVendors(data.filterOptions.vendors); setVendorLoading(false); }
           if (data.labels) {
             data.labels = mapLabelsWithYear(data.labels, data.fy);
           }
@@ -1066,8 +1426,8 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           
           if (def.id === "sales-1") {
             const ds = [
-              { label: "PO Value (₹L)", data: data.po || [] },
-              { label: "Sales Value (₹L)", data: data.sales || [] }
+              { label: `PO Value (₹L) — ${data.fy || ""}`, data: data.po || [] },
+              { label: `Sales Value (₹L) — ${data.fy || ""}`, data: data.sales || [] }
             ];
             chartRef.current = new Chart(canvasRef.current, {
               type: def.config.type,
@@ -1077,7 +1437,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           }
           else if (def.id === "sales-2") {
             const ds = [
-              { label: "OTD % Actual", data: data.data || [], fill: true },
+              { label: `OTD % Actual — ${data.fy || ""}`, data: data.data || [], fill: true },
               { label: "Target 90%", data: Array(data.labels?.length || 12).fill(90) }
             ];
             chartRef.current = new Chart(canvasRef.current, {
@@ -1111,7 +1471,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
             });
           }
           else if (def.id === "quality-4") {
-            const ds = [{ label: "Actual PPM", data: data.data || [], fill: true }];
+            const ds = [{ label: `Actual PPM — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "line",
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
@@ -1182,9 +1542,15 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
               })
             });
           }
-          else if (def.id === "purchase-2") {
+          else if (def.id === "purchase-2" || def.id === "vendor-1") {
             const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
-            const ds = [{ label: "Final Supplier Rating", data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
+            const labelText = def.id === "vendor-1"
+              ? (selectedVendor ? `${selectedVendor} Rating` : "Overall Vendor Rating")
+              : (selectedSupplier ? `${selectedSupplier} Rating` : "Overall Supplier Rating");
+            const titleText = def.id === "vendor-1"
+              ? (selectedVendor ? `Vendor Rating: ${selectedVendor}` : `Vendor Rating (${data.from} → ${data.to})`)
+              : (selectedSupplier ? `Supplier Rating: ${selectedSupplier}` : `Supplier Rating (${data.from} → ${data.to})`);
+            const ds = [{ label: labelText, data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "bar",
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
@@ -1192,7 +1558,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
                 ...def.config.options,
                 plugins: {
                   ...def.config.options.plugins,
-                  title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                  title: { display: true, text: titleText, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
                 }
               })
             });
@@ -1285,7 +1651,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         options: getPremiumChartOptions(def.config.type, def.category, def.config.options)
       });
     }
-  }, [def, dateRange, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length]); // ✅ Updated deps
+  }, [def, dateRange, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length, selectedVendor, vendorLoading, vendors.length, selectedSupplier, supplierLoading, suppliers.length]);
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
@@ -1297,17 +1663,24 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
     <div className="ch-card" style={{ "--cat-color": catColor, "--cat-glow": catGlow, animationDelay: `${0.04 + idx * 0.045}s` }}>
       <div className="ch-card__accent" />
       <div className="ch-card__hd">
-        <div className="ch-card__hd-left"><span className="ch-card__title">{def.title}</span>{def.id === "production-1" && selectedOpr && (<span className="ch-card__subtitle">· {selectedOpr}</span>)}</div>
+        <div className="ch-card__hd-left">
+          <span className="ch-card__title">{def.title}</span>
+          {def.id === "production-1" && selectedOpr && (<span className="ch-card__subtitle">· {selectedOpr}</span>)}
+        </div>
         <div className="ch-card__hd-right">
           {def.id === "production-1" && (<OperatorDropdown value={selectedOpr} onChange={setSelectedOpr} operators={operators} loading={oprLoading} />)}
-          {/* ✅ Machine Dropdown */}
-          {def.id === "production-4" && (<MachineDropdown value={selectedMac} onChange={setSelectedMac} machines={machines} loading={macLoading} />)}
+          {/* ✅ Machine Dropdown for production-3 & production-4 */}
+          {(def.id === "production-3" || def.id === "production-4") && (<MachineDropdown value={selectedMac} onChange={setSelectedMac} machines={machines} loading={macLoading} />)}
+          {/* ✅ Vendor Dropdown */}
+          {def.id === "vendor-1" && (<VendorDropdown value={selectedVendor} onChange={setSelectedVendor} vendors={vendors} loading={vendorLoading} />)}
+          {/* ✅ Supplier Dropdown */}
+          {def.id === "purchase-2" && (<SupplierDropdown value={selectedSupplier} onChange={setSelectedSupplier} suppliers={suppliers} loading={supplierLoading} />)}
         </div>
       </div>
       <div className="ch-card__tags">
         {def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}
         <span className={`ch-tag ch-tag--${def.category}`} style={{ opacity: 0.75, fontStyle: "italic" }}>
-          {(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") ? fyLabel : def.badge}
+          {(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") ? fyLabel : def.badge}
         </span>
         {def.status === "archived" && <span className="ch-tag ch-tag--archived">Archived</span>}
       </div>
@@ -1320,7 +1693,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
       {error && !loading && (<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.9)", borderRadius: 12, zIndex: 5, padding: 16 }}><div style={{ display: "flex", alignItems: "center" }}><AlertTriangle size={24} style={{ color: "#ef4444" }} /></div><div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, textAlign: "center" }}>{error}</div></div>)}
       <div className={`ch-canvas-wrap ch-canvas-wrap--${def.type}`} data-category={def.category}><canvas ref={canvasRef} /></div>
       <div className="ch-card__actions">
-        <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
+        <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr, def.id === "purchase-2" ? selectedSupplier : selectedVendor, selectedMac, setSelectedMac)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
         <button className="ch-action-btn ch-action-btn--download" onClick={handleDownload}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7,10 12,15 17,10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>Download</button>
       </div>
     </div>
@@ -1555,7 +1928,7 @@ function ModalTypeDropdown({ value, onChange, allowedTypes = ALL_MODAL_TYPES }) 
 }
 
 // ─── Preview Modal ────────────────────────────────────────────
-function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
+function PreviewModal({ def, onClose, initialDateRange, initialOperator, initialVendor, initialMachine, onMachineChange }) {
   const [modalDateRange, setModalDateRange] = useState(initialDateRange?.from ? initialDateRange : { from: null, to: null });
   const [modalOperator, setModalOperator] = useState(initialOperator || null);
   const [operators, setOperators] = useState([]);
@@ -1571,8 +1944,18 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
 
   // ✅ Machine states for modal
   const [machines, setMachines] = useState([]);
-  const [selectedMac, setSelectedMac] = useState(null);
-  const [macLoading, setMacLoading] = useState(() => def?.id === "production-4");
+  const [selectedMac, setSelectedMac] = useState(initialMachine || "");
+  const [macLoading, setMacLoading] = useState(() => def?.id === "production-3" || def?.id === "production-4");
+
+  const handleMacChange = (newMac) => {
+    setSelectedMac(newMac);
+    if (onMachineChange) onMachineChange(newMac);
+  };
+
+  // ✅ Vendor/Supplier states for modal
+  const [vendors, setVendors] = useState([]);
+  const [modalVendor, setModalVendor] = useState(initialVendor || "");
+  const [vendorLoading, setVendorLoading] = useState(() => def?.id === "vendor-1" || def?.id === "purchase-2");
 
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -1585,12 +1968,24 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
         .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); if (!modalOperator) setModalOperator(data.default || data.operators[0]); } })
         .catch(err => { setOprLoading(false); console.error(err); });
     }
-    if (def.id === "production-4") {
+    if (def.id === "production-3" || def.id === "production-4") {
       setMacLoading(true);
       fetch(api("/production/machines/"), { credentials: "include" })
         .then(res => res.json())
-        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); if (!selectedMac) setSelectedMac(data.default || data.machines[0]); } })
+        .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); } })
         .catch(err => { setMacLoading(false); console.error(err); });
+    }
+    if (def.id === "vendor-1" || def.id === "purchase-2") {
+      setVendorLoading(true);
+      const fetchType = def.id === "purchase-2" ? "supplier" : "vendor";
+      fetch(api(`/purchase/supplier-rating/?type=${fetchType}`), { credentials: "include" })
+        .then(res => res.json())
+        .then(data => {
+          setVendorLoading(false);
+          const list = data.vendors || data.filterOptions?.vendors || [];
+          if (list.length > 0) setVendors(list);
+        })
+        .catch(err => { setVendorLoading(false); console.error(err); });
     }
   }, [def.id]);
 
@@ -1599,7 +1994,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
   useEffect(() => {
     if (!def || !canvasRef.current) return;
     // ✅ Added purchase-2 to modal API fetch list
-    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") {
+    if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") {
       if (chartRef.current) chartRef.current.destroy();
       if (def.id === "production-1" && !modalOperator) { if (oprLoading) return () => {}; return () => {}; }
       if (def.id === "production-4" && !selectedMac) { if (macLoading) return () => {}; return () => {}; }
@@ -1641,13 +2036,19 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
       if (def.id === "operations-1") endpoint = api("/operations/overall-efficiency/");
       if (def.id === "operations-2") endpoint = api("/operations/production-value/");
       if (def.id === "purchase-1") endpoint = api("/purchase/report-monthwise/");
-      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/");
+      if (def.id === "purchase-2") endpoint = api("/purchase/supplier-rating/?type=supplier");
+      if (def.id === "vendor-1") endpoint = api("/purchase/supplier-rating/?type=vendor");
       if (def.id === "vendor-2") endpoint = api("/vendor/rejection-monthwise/");
 
       let url = endpoint;
-      if (modalDateRange.from && modalDateRange.to) { const from = formatLocalDate(modalDateRange.from); const to = formatLocalDate(modalDateRange.to); url += `?from=${from}&to=${to}`; }
+      if (modalDateRange?.from) {
+        const from = formatLocalDate(modalDateRange.from);
+        const to = formatLocalDate(modalDateRange.to || new Date());
+        url += (url.includes("?") ? "&" : "?") + `from=${from}&to=${to}`;
+      }
       if (def.id === "production-1" && modalOperator) url += (url.includes("?") ? "&" : "?") + `oprname=${encodeURIComponent(modalOperator)}`;
-      if (def.id === "production-4" && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`; // ✅
+      if ((def.id === "production-3" || def.id === "production-4") && selectedMac) url += (url.includes("?") ? "&" : "?") + `macno=${encodeURIComponent(selectedMac)}`;
+      if ((def.id === "vendor-1" || def.id === "purchase-2") && modalVendor) url += (url.includes("?") ? "&" : "?") + `name=${encodeURIComponent(modalVendor)}`;
 
       fetch(url, { credentials: "include", signal: ac.signal })
         .then(async (res) => {
@@ -1666,6 +2067,8 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
         .then(data => {
           if (ac.signal.aborted || !canvasRef.current) return;
           if (data.error) { console.error(data.error); return; }
+          if (data.vendors && data.vendors.length > 0) { setVendors(data.vendors); setVendorLoading(false); }
+          else if (data.filterOptions?.vendors && data.filterOptions.vendors.length > 0) { setVendors(data.filterOptions.vendors); setVendorLoading(false); }
           if (data.labels) {
             data.labels = mapLabelsWithYear(data.labels, data.fy);
           }
@@ -1761,13 +2164,19 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
               options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
-          else if (def.id === "purchase-2") {
+          else if (def.id === "purchase-2" || def.id === "vendor-1") {
             const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#3b82f6" : val >= 60 ? "#f59e0b" : "#ef4444";
-            const ds = [{ label: "Final Supplier Rating", data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
+            const labelText = def.id === "vendor-1"
+              ? (modalVendor ? `${modalVendor} Rating` : "Overall Vendor Rating")
+              : (modalVendor ? `${modalVendor} Rating` : "Overall Supplier Rating");
+            const titleText = def.id === "vendor-1"
+              ? (modalVendor ? `Vendor Rating: ${modalVendor}` : `Vendor Rating (${data.from} → ${data.to})`)
+              : (modalVendor ? `Supplier Rating: ${modalVendor}` : `Supplier Rating (${data.from} → ${data.to})`);
+            const ds = [{ label: labelText, data: data.data || [], backgroundColor: (data.data || []).map(v => getRatingColor(v)) }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
-              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Supplier Rating (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: titleText, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "operations-1") {
@@ -1836,7 +2245,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
         options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions(def.config.options, modalChartType))
       });
     }
-  }, [def, modalDateRange, modalOperator, oprLoading, operators.length, selectedMac, macLoading, machines.length, modalChartType]);
+  }, [def, modalDateRange, modalOperator, oprLoading, operators.length, selectedMac, macLoading, machines.length, modalVendor, vendorLoading, vendors.length, modalChartType]);
 
   const handleDownload = () => {
     if (!canvasRef.current || !chartRef.current) return;
@@ -1920,7 +2329,9 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator }) {
           <div className="ch-modal__hd-left">{def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}</div>
           <div className="ch-modal__hd-right" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: "10px", flexShrink: 0 }}>
             {def.id === "production-1" && (<OperatorDropdown value={modalOperator} onChange={setModalOperator} operators={operators} loading={oprLoading} />)}
-            {def.id === "production-4" && (<MachineDropdown value={selectedMac} onChange={setSelectedMac} machines={machines} loading={macLoading} />)}
+            {(def.id === "production-3" || def.id === "production-4") && (<MachineDropdown value={selectedMac} onChange={handleMacChange} machines={machines} loading={macLoading} />)}
+            {def.id === "vendor-1" && (<VendorDropdown value={modalVendor} onChange={setModalVendor} vendors={vendors} loading={vendorLoading} />)}
+            {def.id === "purchase-2" && (<SupplierDropdown value={modalVendor} onChange={setModalVendor} suppliers={vendors} loading={vendorLoading} />)}
             <button className="ch-modal__close" onClick={animatedClose} aria-label="Close modal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
           </div>
         </div>
@@ -1982,11 +2393,19 @@ export default function Charts() {
   const _savedCh = readChartSession("ba_filter_charts", { from: null, to: null });
   const [dateRange, setDateRange] = useState({ from: _savedCh.from, to: _savedCh.to });
   const [preview, setPreview] = useState(null);
+
+  const effectiveDateRange = useMemo(() => {
+    if (dateRange.from && !dateRange.to) {
+      return { from: dateRange.from, to: new Date() };
+    }
+    return dateRange;
+  }, [dateRange.from, dateRange.to]);
+
   const visible = CHART_DEFS.filter(d => (filters.category === "all" || d.category === filters.category) && (filters.type === "all" || d.type === filters.type));
   const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val }));
   const reset = () => { setFilters({ category: "all", type: "all" }); setDateRange({ from: null, to: null }); };
   const isFiltered = filters.category !== "all" || filters.type !== "all" || !!dateRange.from;
-  const handlePreview = (def, operator = null) => setPreview({ def, dateRange, operator });
+  const handlePreview = (def, operator = null, vendor = null, machine = null, onMachineChange = null) => setPreview({ def, dateRange: effectiveDateRange, operator, vendor, machine, onMachineChange });
 
   // ✅ Persist date range to sessionStorage on every change
   useEffect(() => {
@@ -2002,7 +2421,7 @@ export default function Charts() {
           <FilterDropdown label="Category" icon={FolderOpen} options={CAT_META} value={filters.category} onChange={v => setFilter("category", v)} />
           <FilterDropdown label="Chart Type" icon={BarChart3} options={TYPE_META} value={filters.type} onChange={v => setFilter("type", v)} />
           <div className="ch-filter-bar__sep ch-filter-bar__sep--v" />
-          <ChartDatePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+          <ChartDatePicker from={effectiveDateRange.from} to={effectiveDateRange.to} onChange={setDateRange} />
         </div>
         <div className="ch-filter-bar__right">
           <span className="ch-filter-bar__count"><span className="ch-filter-bar__count-num">{visible.length}</span><span className="ch-filter-bar__count-of">/ {CHART_DEFS.length} charts</span></span>
@@ -2012,7 +2431,7 @@ export default function Charts() {
       {visible.length > 0 ? (
         <div className="ch-grid">
           {visible.map((def, idx) => (
-            <ChartCard key={def.id} def={def} idx={idx} onPreview={handlePreview} dateRange={(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-2") ? dateRange : undefined} />
+            <ChartCard key={def.id} def={def} idx={idx} onPreview={handlePreview} dateRange={(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") ? effectiveDateRange : undefined} />
           ))}
         </div>
       ) : (
@@ -2023,7 +2442,7 @@ export default function Charts() {
           <button className="ch-filter-bar__reset ch-filter-bar__reset--lg" onClick={reset}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="1,4 1,10 7,10" /><path d="M3.51 15a9 9 0 1 0 .49-3.5" /></svg>Reset Filters</button>
         </div>
       )}
-      {preview && (<PreviewModal def={preview.def} initialDateRange={preview.dateRange} initialOperator={preview.operator} onClose={() => setPreview(null)} />)}
+      {preview && (<PreviewModal def={preview.def} initialDateRange={preview.dateRange} initialOperator={preview.operator} initialVendor={preview.vendor} initialMachine={preview.machine} onMachineChange={preview.onMachineChange} onClose={() => setPreview(null)} />)}
     </div>
   );
 }

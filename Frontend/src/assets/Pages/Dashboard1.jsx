@@ -553,8 +553,9 @@ function YearMonthPicker({ value, onChange, disabled }) {
 // ════════════════════════════════════════════
 //  KPI Card (UNCHANGED)
 // ════════════════════════════════════════════
-function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, value, footer, sparkData, sparkColor, collapsed }) {
+function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, value, carouselValues, splitValues, footer, sparkData, sparkColor, collapsed }) {
     const canvasRef = useRef(null);
+    const [activeIdx, setActiveIdx] = useState(0);
 
     useEffect(() => {
         if (collapsed || !canvasRef.current) return;
@@ -580,6 +581,21 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
         };
     }, [sparkData, sparkColor, collapsed, label]);
 
+    const isCarousel = carouselValues && carouselValues.length > 0;
+    const currentItem = isCarousel ? carouselValues[activeIdx % carouselValues.length] : null;
+    const activeDelta = (isCarousel && currentItem?.delta != null) ? currentItem.delta : delta;
+    const activeDeltaType = (isCarousel && currentItem?.deltaType != null) ? currentItem.deltaType : deltaType;
+
+    const handleNext = (e) => {
+        e.stopPropagation();
+        setActiveIdx(prev => (prev + 1) % carouselValues.length);
+    };
+
+    const handlePrev = (e) => {
+        e.stopPropagation();
+        setActiveIdx(prev => (prev - 1 + carouselValues.length) % carouselValues.length);
+    };
+
     return (
         <div
             className={`d1-kc${collapsed ? " d1-kc--collapsed" : ""}`}
@@ -587,13 +603,62 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
         >
             <div className="d1-kc__top">
                 <div className="d1-kc__ico">{icon}</div>
-                <span className={`d1-kc__delta ${deltaType === "up" ? "d1-kc__delta--up" : deltaType === "dn" ? "d1-kc__delta--dn" : "d1-kc__delta--na"}`}>
-                    {delta}
+                <span className={`d1-kc__delta ${activeDeltaType === "up" ? "d1-kc__delta--up" : activeDeltaType === "dn" ? "d1-kc__delta--dn" : "d1-kc__delta--na"}`}>
+                    {activeDelta}
                 </span>
             </div>
             <div className="d1-kc__body">
-                <div className="d1-kc__label">{label}</div>
-                <div className="d1-kc__val"><span className="d1-kc__curr">₹</span>{value}</div>
+                <div className="d1-kc__label-row">
+                    <div className="d1-kc__label">{label}</div>
+                    {isCarousel && (
+                        <div className="d1-kc__carousel-nav">
+                            <button
+                                type="button"
+                                className="d1-kc__carousel-btn"
+                                onClick={handlePrev}
+                                title="Previous value"
+                            >
+                                ‹
+                            </button>
+                            <span className="d1-kc__carousel-dots">
+                                {carouselValues.map((_, i) => (
+                                    <span
+                                        key={i}
+                                        className={`d1-kc__carousel-dot ${i === activeIdx ? "d1-kc__carousel-dot--active" : ""}`}
+                                        onClick={(e) => { e.stopPropagation(); setActiveIdx(i); }}
+                                    />
+                                ))}
+                            </span>
+                            <button
+                                type="button"
+                                className="d1-kc__carousel-btn"
+                                onClick={handleNext}
+                                title="Next value"
+                            >
+                                ›
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {isCarousel ? (
+                    <div key={activeIdx} className="d1-kc__carousel-content">
+                        <div className="d1-kc__sublabel">{currentItem.label}</div>
+                        <div className="d1-kc__val"><span className="d1-kc__curr">₹</span>{currentItem.value}</div>
+                    </div>
+                ) : splitValues && splitValues.length > 0 ? (
+                    <div className="d1-kc__split-container">
+                        {splitValues.map((sv, idx) => (
+                            <div key={idx} className="d1-kc__split-row">
+                                <span className="d1-kc__split-lbl">{sv.label}</span>
+                                <span className="d1-kc__split-val"><span className="d1-kc__curr">₹</span>{sv.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="d1-kc__val"><span className="d1-kc__curr">₹</span>{value}</div>
+                )}
+
                 <div className="d1-kc__footer">{footer}</div>
                 <canvas ref={canvasRef} className="d1-kc__spark" height="30" />
             </div>
@@ -1094,6 +1159,20 @@ export default function Dashboard1() {
             deltaType: purchaseData ? purchaseData.delta_type : "na",
             label: "Purchase Value",
             value: purchaseData ? formatRupees(purchaseData.current_value) : "—",
+            carouselValues: purchaseData ? [
+                {
+                    label: "Purchase Value as GRN",
+                    value: formatRupees(purchaseData.grn_value ?? purchaseData.current_value),
+                    delta: purchaseData.grn_delta != null ? `${purchaseData.grn_delta_type === "up" ? "↑" : "↓"} ${purchaseData.grn_delta}%` : `${purchaseData.delta_type === "up" ? "↑" : "↓"} ${purchaseData.delta}%`,
+                    deltaType: purchaseData.grn_delta_type ?? purchaseData.delta_type ?? "na",
+                },
+                {
+                    label: "Purchase Value as GRN Invoice",
+                    value: formatRupees(purchaseData.grn_invoice_value),
+                    delta: purchaseData.grn_invoice_delta != null ? `${purchaseData.grn_invoice_delta_type === "up" ? "↑" : "↓"} ${purchaseData.grn_invoice_delta}%` : "—",
+                    deltaType: purchaseData.grn_invoice_delta_type ?? "na",
+                },
+            ] : null,
             footer: purchaseData ? `${MONTHS_FULL[period.month]} ${period.year} · ${purchaseData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
             sparkData: getSparkData(purchaseData, [10, 14, 18, 11, 15, 9, 13]),
             sparkColor: "#f59e0b",
@@ -1177,7 +1256,7 @@ export default function Dashboard1() {
         },
         {
             title: "OEE % — Weekly",
-            legend: [{ label: "OA %", color: "#10b981", round: true }],
+            legend: [{ label: "OEE %", color: "#10b981", round: true }],
             drawFn: (c) => {
                 const oaWeeklyLabels = oaEfficiencyWeeklyData?.labels?.length
                     ? oaEfficiencyWeeklyData.labels
@@ -1187,7 +1266,7 @@ export default function Dashboard1() {
                     : [];
                 return drawLineChart(
                     c,
-                    [{ data: oaWeeklySeries, color: "#10b981", label: "OA %" }],
+                    [{ data: oaWeeklySeries, color: "#10b981", label: "OEE %" }],
                     getOaWeeklyRange(oaWeeklySeries),
                     oaWeeklyLabels,
                     86,
@@ -1198,6 +1277,16 @@ export default function Dashboard1() {
             formatValue: (v) => `${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}%`,
             footer: (
                 <>
+                    {/* ── Overall Average OEE under chart ── */}
+                    {(() => {
+                        const vals = oaEfficiencyWeeklyData?.data?.filter(v => v != null && v > 0) || [];
+                        const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+                        return avg != null ? (
+                            <span className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "10px", fontWeight: "700", background: "rgba(16,185,129,0.10)", borderRadius: "6px", padding: "2px 8px", color: "#059669", display: "inline-block", marginBottom: "2px" }}>
+                                Avg OEE: {avg.toFixed(2)}%
+                            </span>
+                        ) : null;
+                    })()}
                     {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : []).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "9px" }}>
                             {label}: {oaEfficiencyWeeklyData?.data?.[index] != null ? `${formatMetric(oaEfficiencyWeeklyData.data[index])}%` : "—"}
@@ -1237,6 +1326,21 @@ export default function Dashboard1() {
             formatValue: (v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }),
             footer: (
                 <>
+                    {/* ── Overall total rejection qty under chart ── */}
+                    {(() => {
+                        const totalMac = (qualityRejectionsWeeklyData?.machine || []).reduce((a, b) => a + (b || 0), 0);
+                        const totalMat = (qualityRejectionsWeeklyData?.material || []).reduce((a, b) => a + (b || 0), 0);
+                        const totalRej = totalMac + totalMat;
+                        return totalRej > 0 ? (
+                            <span className="d1-cc__foot-val" style={{ fontSize: "10px", fontWeight: "700", background: "rgba(239,68,68,0.08)", borderRadius: "6px", padding: "2px 8px", display: "inline-block", marginBottom: "2px" }}>
+                                <span style={{ color: "#ef4444" }}>Mac: {formatMetric(totalMac)}</span>
+                                {" + "}
+                                <span style={{ color: "#1a56db" }}>Mat: {formatMetric(totalMat)}</span>
+                                {" = "}
+                                <span style={{ color: "#374151", fontWeight: "800" }}>Total: {formatMetric(totalRej)}</span>
+                            </span>
+                        ) : null;
+                    })()}
                     {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : []).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val" style={{ fontSize: "8.5px" }}>
                             {label}:{" "}
@@ -1257,8 +1361,14 @@ export default function Dashboard1() {
 
     // ── Trend helpers ──────────────────────────────────────────────────────
     // Compute % change: (cur - prev) / |prev| * 100
+    // ── Trend helpers ──────────────────────────────────────────────────────
+    // Compute % change: (cur - prev) / |prev| * 100
     const calcTrend = (cur, prev) => {
-        if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return NaN;
+        if (!Number.isFinite(cur) || !Number.isFinite(prev)) return NaN;
+        if (prev === 0) {
+            if (cur === 0) return NaN;
+            return 100;
+        }
         return ((cur - prev) / Math.abs(prev)) * 100;
     };
 
@@ -1285,7 +1395,7 @@ export default function Dashboard1() {
             : "";
         return {
             val: (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "4px" }}>
                     <span style={{ whiteSpace: "nowrap" }}>{cell.val}</span>
                     {hasTrend ? (
                         <span className={`d1-itrd ${isUp ? "d1-itrd--up" : "d1-itrd--dn"}`} style={{ whiteSpace: "nowrap" }}>
@@ -1307,9 +1417,9 @@ export default function Dashboard1() {
             headers: ["Desc", "Sales", "LAB", "Exp", "Total"],
             rows: [
                 { cells: [{ val: "Today" }, getSalesAnalysisCell("today", "sales"), getSalesAnalysisCell("today", "lab"), getSalesAnalysisCell("today", "exp"), withTrend(getSalesAnalysisCell("today", "total"), getSalesTrend("today", "yesterday", "total"))] },
-                { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), withTrend(getSalesAnalysisCell("yesterday", "total"), getSalesTrend("yesterday", "month", "total"))] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), withTrend(getSalesAnalysisCell("month", "total"), getSalesTrend("month", "quarter", "total"))] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), withTrend(getSalesAnalysisCell("quarter", "total"), getSalesTrend("quarter", "financial_year", "total"))] },
+                { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), withTrend(getSalesAnalysisCell("yesterday", "total"), getSalesTrend("yesterday", "day_before_yesterday", "total"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), withTrend(getSalesAnalysisCell("month", "total"), getSalesTrend("month", "prev_month", "total"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), withTrend(getSalesAnalysisCell("quarter", "total"), getSalesTrend("quarter", "prev_quarter", "total"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getSalesAnalysisCell("financial_year", "sales"), getSalesAnalysisCell("financial_year", "lab"), getSalesAnalysisCell("financial_year", "exp"), getSalesAnalysisCell("financial_year", "total")] },
             ],
         },
@@ -1319,9 +1429,9 @@ export default function Dashboard1() {
             headers: ["Description", "PO", "GRN"],
             rows: [
                 { cells: [{ val: "Today" }, withTrend(getPurchaseAnalysisCell("today", "po"), getPurchaseTrend("today", "yesterday", "po")), withTrend(getPurchaseAnalysisCell("today", "grn"), getPurchaseTrend("today", "yesterday", "grn"))] },
-                { cells: [{ val: "YDA" }, withTrend(getPurchaseAnalysisCell("yesterday", "po"), getPurchaseTrend("yesterday", "month", "po")), withTrend(getPurchaseAnalysisCell("yesterday", "grn"), getPurchaseTrend("yesterday", "month", "grn"))] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getPurchaseAnalysisCell("month", "po"), getPurchaseTrend("month", "quarter", "po")), withTrend(getPurchaseAnalysisCell("month", "grn"), getPurchaseTrend("month", "quarter", "grn"))] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getPurchaseAnalysisCell("quarter", "po"), getPurchaseTrend("quarter", "financial_year", "po")), withTrend(getPurchaseAnalysisCell("quarter", "grn"), getPurchaseTrend("quarter", "financial_year", "grn"))] },
+                { cells: [{ val: "YDA" }, withTrend(getPurchaseAnalysisCell("yesterday", "po"), getPurchaseTrend("yesterday", "day_before_yesterday", "po")), withTrend(getPurchaseAnalysisCell("yesterday", "grn"), getPurchaseTrend("yesterday", "day_before_yesterday", "grn"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getPurchaseAnalysisCell("month", "po"), getPurchaseTrend("month", "prev_month", "po")), withTrend(getPurchaseAnalysisCell("month", "grn"), getPurchaseTrend("month", "prev_month", "grn"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getPurchaseAnalysisCell("quarter", "po"), getPurchaseTrend("quarter", "prev_quarter", "po")), withTrend(getPurchaseAnalysisCell("quarter", "grn"), getPurchaseTrend("quarter", "prev_quarter", "grn"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getPurchaseAnalysisCell("financial_year", "po"), getPurchaseAnalysisCell("financial_year", "grn")] },
             ],
         },
@@ -1331,9 +1441,9 @@ export default function Dashboard1() {
             headers: ["Description", "%"],
             rows: [
                 { cells: [{ val: "Todays OA Eff %" }, withTrend(getProductionAnalysisCell("today"), getProductionTrend("today", "yesterday"))] },
-                { cells: [{ val: "Yesterdays OA Eff %" }, withTrend(getProductionAnalysisCell("yesterday"), getProductionTrend("yesterday", "month"))] },
-                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, withTrend(getProductionAnalysisCell("month"), getProductionTrend("month", "quarter"))] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, withTrend(getProductionAnalysisCell("quarter"), getProductionTrend("quarter", "financial_year"))] },
+                { cells: [{ val: "Yesterdays OA Eff %" }, withTrend(getProductionAnalysisCell("yesterday"), getProductionTrend("yesterday", "day_before_yesterday"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, withTrend(getProductionAnalysisCell("month"), getProductionTrend("month", "prev_month"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, withTrend(getProductionAnalysisCell("quarter"), getProductionTrend("quarter", "prev_quarter"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin OA Eff %" }, getProductionAnalysisCell("financial_year")] },
             ],
         },
@@ -1346,9 +1456,9 @@ export default function Dashboard1() {
             headers: ["Description", "Mat Rej", "Mac Rej"],
             rows: [
                 { cells: [{ val: "Today" }, withTrend(getQualityRejectionAnalysisCell("today", "material"), getQualityTrend("today", "yesterday", "material")), withTrend(getQualityRejectionAnalysisCell("today", "machine"), getQualityTrend("today", "yesterday", "machine"))] },
-                { cells: [{ val: "YDA" }, withTrend(getQualityRejectionAnalysisCell("yesterday", "material"), getQualityTrend("yesterday", "month", "material")), withTrend(getQualityRejectionAnalysisCell("yesterday", "machine"), getQualityTrend("yesterday", "month", "machine"))] },
-                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getQualityRejectionAnalysisCell("month", "material"), getQualityTrend("month", "quarter", "material")), withTrend(getQualityRejectionAnalysisCell("month", "machine"), getQualityTrend("month", "quarter", "machine"))] },
-                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getQualityRejectionAnalysisCell("quarter", "material"), getQualityTrend("quarter", "financial_year", "material")), withTrend(getQualityRejectionAnalysisCell("quarter", "machine"), getQualityTrend("quarter", "financial_year", "machine"))] },
+                { cells: [{ val: "YDA" }, withTrend(getQualityRejectionAnalysisCell("yesterday", "material"), getQualityTrend("yesterday", "day_before_yesterday", "material")), withTrend(getQualityRejectionAnalysisCell("yesterday", "machine"), getQualityTrend("yesterday", "day_before_yesterday", "machine"))] },
+                { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getQualityRejectionAnalysisCell("month", "material"), getQualityTrend("month", "prev_month", "material")), withTrend(getQualityRejectionAnalysisCell("month", "machine"), getQualityTrend("month", "prev_month", "machine"))] },
+                { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getQualityRejectionAnalysisCell("quarter", "material"), getQualityTrend("quarter", "prev_quarter", "material")), withTrend(getQualityRejectionAnalysisCell("quarter", "machine"), getQualityTrend("quarter", "prev_quarter", "machine"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getQualityRejectionAnalysisCell("financial_year", "material"), getQualityRejectionAnalysisCell("financial_year", "machine")] },
             ],
         },

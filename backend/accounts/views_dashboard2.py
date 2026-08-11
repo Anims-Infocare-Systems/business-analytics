@@ -333,7 +333,7 @@ def dashboard2_po_pipeline(request):
         if not po_pono or not po_date or not det_pono or not det_amt or not g_pono or not g_grnno: cursor.close(); conn.close(); return Response({"error": "Required columns not found.", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
         del_po_sql = f"ISNULL(M.[{po_del}], 0) = 0" if po_del else "1=1"
         del_det_sql = f"ISNULL(D.[{det_del}], 0) = 0" if det_del else "1=1"
-        dtype_filter = f" AND LOWER(ISNULL(M.[{po_dtype}], N'')) NOT IN (N'job order', N'general')" if po_dtype else ""
+        dtype_filter = f" AND LOWER(ISNULL(M.[{po_dtype}], N'')) <> N'job order'" if po_dtype else ""
         company_sql = ""; cte_params = [start_date, end_date]
         if po_cc and company_code: company_sql = f" AND M.[{po_cc}] = ?"; cte_params.append(company_code)
         appr_sel = f"M.[{po_appr}] AS appr_col" if po_appr else "CAST(0 AS INT) AS appr_col"

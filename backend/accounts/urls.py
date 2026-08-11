@@ -22,7 +22,7 @@ from .views_dashboard1 import (
 from .views_plantperformance import (
     plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories, plant_performance_customer_po_vs_sales, plant_performance_grn_value, plant_performance_fg_value, plant_performance_sales_analysis, plant_performance_purchase_value, plant_performance_efficiency, plant_performance_oee, plant_performance_rejection, plant_performance_rework, plant_performance_customer_complaint, plant_performance_capa, plant_performance_operator_efficiency, plant_performance_daily_production, plant_performance_production_value, plant_performance_machine_efficiency, plant_performance_supplier_rating, plant_performance_vendor_rating, plant_performance_target_vs_actual,
     supplier_rating_kpi_view, supplier_rating_chart_view, supplier_rating_registry_view, supplier_rating_actions_view,
-    plant_performance_store_stock_value
+    plant_performance_store_stock_value, plant_performance_target_criteria
 )
 from .views_eapproval import (
     eapproval_list, eapproval_stats, eapproval_detail, eapproval_approve, eapproval_modify,
@@ -30,12 +30,15 @@ from .views_eapproval import (
 from .views_tapproval import (
     tapproval_list, tapproval_stats, tapproval_detail, tapproval_approve, tapproval_modify,
 )
+from .views_mapproval import (
+    mapproval_list, mapproval_stats, mapproval_detail, mapproval_approve, mapproval_modify,
+)
 from .views_userrights import (
     user_rights_list, user_rights_me, user_rights_update, user_rights_bulk_save,
     user_rights_add_user, user_rights_delete,
 )
 from .views_sales_analysis import (
-    sales_analysis_summary_strip, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
+    sales_analysis_summary_strip, sales_analysis_grand_total, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
     sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
     sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
@@ -45,7 +48,7 @@ from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
 from .views_production_analysis import (
     production_analysis_report, production_value_report, production_idle_breakdown, daily_production_details,
-    machine_card_data, production_analysis_filters
+    machine_card_data, production_analysis_filters, production_mhr_inputs
 )
 from .views_purchaseanalysis import (
     purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table,
@@ -160,6 +163,7 @@ urlpatterns = [
     path('plant-performance/vendor-rating/', plant_performance_vendor_rating, name='plant_performance_vendor_rating'),
     path('plant-performance/target-vs-actual/', plant_performance_target_vs_actual, name='plant_performance_target_vs_actual'),
     path('plant-performance/store-stock/', plant_performance_store_stock_value, name='plant_performance_store_stock_value'),
+    path('plant-performance/target-criteria/', plant_performance_target_criteria, name='plant_performance_target_criteria'),
     path('plant-performance/supplier-rating/kpi/', supplier_rating_kpi_view, name='supplier_rating_kpi_view'),
     path('plant-performance/supplier-rating/chart/', supplier_rating_chart_view, name='supplier_rating_chart_view'),
     path('plant-performance/supplier-rating/registry/', supplier_rating_registry_view, name='supplier_rating_registry_view'),
@@ -177,6 +181,7 @@ urlpatterns = [
 
     # ── Sales Analysis ────────────────────────────────────────────────
     path('sales-analysis/summary-strip/', sales_analysis_summary_strip, name='sales_analysis_summary_strip'),
+    path('sales-analysis/grand-total/', sales_analysis_grand_total, name='sales_analysis_grand_total'),
     path('sales-analysis/weekly-trend/', sales_analysis_weekly_trend, name='sales_analysis_weekly_trend'),
     path('sales-analysis/revenue-charts/', sales_analysis_revenue_charts, name='sales_analysis_revenue_charts'),
     path('sales-analysis/month-summary/', sales_analysis_month_summary, name='sales_analysis_month_summary'),
@@ -203,6 +208,7 @@ urlpatterns = [
     path('production-idle-breakdown/', production_idle_breakdown, name='production_idle_breakdown'),
     path('production-analysis/daily-details/', daily_production_details, name='daily_production_details'),
     path('production-analysis/filters/', production_analysis_filters, name='production_analysis_filters'),
+    path('production-analysis/mhr-inputs/', production_mhr_inputs, name='production_mhr_inputs'),
     path('machines/<path:macno>/card/', machine_card_data, name='machine_card_data'),
 
     # ── Purchase Analysis ─────────────────────────────────────────────
@@ -244,6 +250,13 @@ urlpatterns = [
     path('tapproval/detail/', tapproval_detail, name='tapproval_detail'),
     path('tapproval/approve/', tapproval_approve, name='tapproval_approve'),
     path('tapproval/modify/', tapproval_modify, name='tapproval_modify'),
+
+    # ── M-Approval Module ─────────────────────────────────────────────
+    path('mapproval/list/', mapproval_list, name='mapproval_list'),
+    path('mapproval/stats/', mapproval_stats, name='mapproval_stats'),
+    path('mapproval/detail/', mapproval_detail, name='mapproval_detail'),
+    path('mapproval/approve/', mapproval_approve, name='mapproval_approve'),
+    path('mapproval/modify/', mapproval_modify, name='mapproval_modify'),
 
     # ── User Rights ───────────────────────────────────────────────────
     path('user-rights/list/', user_rights_list, name='user_rights_list'),

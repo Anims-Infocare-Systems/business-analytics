@@ -100,10 +100,30 @@ const MANPOWER_DATA = [
   { operator: "Biswanath Dhungia", dept: "VMC", shifts: 7, totalTarget: 2485, totalOk: 2415, eff: 97.2, attendance: 100 },
 ];
 
+export function formatHoursMins(val) {
+  if (val === null || val === undefined || val === "") return "00 hour 00 mins";
+  if (typeof val === "string") {
+    if (val.includes("hour") || val.includes("mins")) return val;
+    val = Number(val);
+  }
+  const decimalHours = Number(val);
+  if (isNaN(decimalHours) || decimalHours <= 0) return "00 hour 00 mins";
+  const totalSeconds = Math.round(decimalHours * 3600);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const hStr = String(h).padStart(2, "0");
+  const mStr = String(m).padStart(2, "0");
+  const hLabel = h === 1 ? "hour" : "hours";
+  return `${hStr} ${hLabel} ${mStr} mins`;
+}
+
 /* ═══════════════════════════════════════════════
 ANIMATED NUMBER COUNTER
 ═══════════════════════════════════════════════ */
 function AnimatedValue({ target, duration = 900, prefix = "", suffix = "" }) {
+  if (typeof target === "string" && (target.includes("hour") || target.includes("mins"))) {
+    return <>{prefix}{target}{suffix}</>;
+  }
   const [val, setVal] = useState(0);
   const frame = useRef(null);
   const startTime = useRef(null);
@@ -166,8 +186,7 @@ function DonutChart({ data, total, cx = 80, cy = 80, r = 60, stroke = 18 }) {
         <path key={i} d={s.d} fill={s.color} opacity={0.88} className="pa2-donut-seg" />
       ))}
       <circle cx={cx} cy={cy} r={r - stroke} fill="white" className="pa2-donut-hole" />
-      <text x={cx} y={cy - 7} textAnchor="middle" className="pa2-donut-label-big">{total.toFixed(1)}</text>
-      <text x={cx} y={cy + 12} textAnchor="middle" className="pa2-donut-label-sm">hrs</text>
+      <text x={cx} y={cy + 4} textAnchor="middle" className="pa2-donut-label-big" style={{ fontSize: "11px" }}>{formatHoursMins(total)}</text>
     </svg>
   );
 }
@@ -245,6 +264,11 @@ function readFilterSession(key, defaults) {
     const p = JSON.parse(raw);
     if (p.from) p.from = new Date(p.from);
     if (p.to) p.to = new Date(p.to);
+    const now = new Date();
+    if (p.from && (p.from.getMonth() !== now.getMonth() || p.from.getFullYear() !== now.getFullYear())) {
+      sessionStorage.removeItem(key);
+      return defaults;
+    }
     return { ...defaults, ...p };
   } catch { return defaults; }
 }
@@ -583,199 +607,44 @@ function writeFilterSession(key, data) {
   try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
-const MHR_PRESETS = {
-  "Custom (Manual)": {
-    machineCost: 1000000,
-    machineLife: 10,
-    annualHours: 2000,
-    insurance: 8000,
-    allocatedRent: 15000,
-    supervisorSalary: 12000,
-    interestRate: 10,
-    operatorSalary: 144000,
-    electricity: 100000,
-    maintenance: 25000,
-    consumables: 18000,
-    toolWear: 20000,
-  },
-  "HTC 1": {
-    machineCost: 1200000,
-    machineLife: 10,
-    annualHours: 2400,
-    insurance: 10000,
-    allocatedRent: 18000,
-    supervisorSalary: 14000,
-    interestRate: 9,
-    operatorSalary: 160000,
-    electricity: 120000,
-    maintenance: 30000,
-    consumables: 20000,
-    toolWear: 25000,
-  },
-  "HTC 2": {
-    machineCost: 1250000,
-    machineLife: 10,
-    annualHours: 2400,
-    insurance: 10000,
-    allocatedRent: 18000,
-    supervisorSalary: 14000,
-    interestRate: 9.5,
-    operatorSalary: 160000,
-    electricity: 125000,
-    maintenance: 32000,
-    consumables: 22000,
-    toolWear: 26000,
-  },
-  "HTC 3": {
-    machineCost: 1100000,
-    machineLife: 10,
-    annualHours: 2000,
-    insurance: 8000,
-    allocatedRent: 15000,
-    supervisorSalary: 12000,
-    interestRate: 10,
-    operatorSalary: 144000,
-    electricity: 100000,
-    maintenance: 25000,
-    consumables: 18000,
-    toolWear: 20000,
-  },
-  "VMC 1": {
-    machineCost: 1800000,
-    machineLife: 12,
-    annualHours: 2200,
-    insurance: 15000,
-    allocatedRent: 22000,
-    supervisorSalary: 18000,
-    interestRate: 10,
-    operatorSalary: 180000,
-    electricity: 150000,
-    maintenance: 40000,
-    consumables: 30000,
-    toolWear: 35000,
-  },
-  "VMC 2": {
-    machineCost: 1850000,
-    machineLife: 12,
-    annualHours: 2200,
-    insurance: 16000,
-    allocatedRent: 24000,
-    supervisorSalary: 19000,
-    interestRate: 10,
-    operatorSalary: 180000,
-    electricity: 155000,
-    maintenance: 42000,
-    consumables: 32000,
-    toolWear: 36000,
-  },
-  "VTL 1": {
-    machineCost: 2000000,
-    machineLife: 15,
-    annualHours: 2500,
-    insurance: 20000,
-    allocatedRent: 30000,
-    supervisorSalary: 20000,
-    interestRate: 10,
-    operatorSalary: 200000,
-    electricity: 180000,
-    maintenance: 50000,
-    consumables: 40000,
-    toolWear: 45000,
-  },
-  "VTL 2": {
-    machineCost: 2100000,
-    machineLife: 15,
-    annualHours: 2500,
-    insurance: 22000,
-    allocatedRent: 32000,
-    supervisorSalary: 22000,
-    interestRate: 10,
-    operatorSalary: 200000,
-    electricity: 190000,
-    maintenance: 52000,
-    consumables: 42000,
-    toolWear: 48000,
-  },
-  "VTL 3": {
-    machineCost: 2200000,
-    machineLife: 15,
-    annualHours: 2500,
-    insurance: 24000,
-    allocatedRent: 34000,
-    supervisorSalary: 24000,
-    interestRate: 10,
-    operatorSalary: 200000,
-    electricity: 200000,
-    maintenance: 55000,
-    consumables: 44000,
-    toolWear: 50000,
-  },
-  "VTL 4": {
-    machineCost: 2300000,
-    machineLife: 15,
-    annualHours: 2500,
-    insurance: 26000,
-    allocatedRent: 36000,
-    supervisorSalary: 26000,
-    interestRate: 10,
-    operatorSalary: 200000,
-    electricity: 210000,
-    maintenance: 58000,
-    consumables: 46000,
-    toolWear: 52000,
-  },
-  "VMC-3": {
-    machineCost: 1950000,
-    machineLife: 12,
-    annualHours: 2200,
-    insurance: 17000,
-    allocatedRent: 26000,
-    supervisorSalary: 20000,
-    interestRate: 10,
-    operatorSalary: 180000,
-    electricity: 160000,
-    maintenance: 45000,
-    consumables: 34000,
-    toolWear: 38000,
-  },
-  "MANUAL 1": {
-    machineCost: 500000,
-    machineLife: 8,
-    annualHours: 1800,
-    insurance: 4000,
-    allocatedRent: 10000,
-    supervisorSalary: 8000,
-    interestRate: 8,
-    operatorSalary: 120000,
-    electricity: 40000,
-    maintenance: 15000,
-    consumables: 10000,
-    toolWear: 10000,
-  },
+const getMhrDefaultTemplate = () => ({
+  machineCost: 1000000,
+  machineLife: 10,
+  annualHours: 2000,
+  insurance: 8000,
+  allocatedRent: 15000,
+  supervisorSalary: 12000,
+  interestRate: 10,
+  operatorSalary: 144000,
+  electricity: 100000,
+  maintenance: 25000,
+  consumables: 18000,
+  toolWear: 20000,
+});
+
+const formatDateToYYYYMMDD = (d) => {
+  if (!d) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export default function ProductionAnalysis() {
-  const _dflt = { from: new Date(2026, 1, 1), to: new Date(2026, 1, 28) };
+  const _now = new Date();
+  const _dflt = { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) };
   const _saved = readFilterSession("ba_filter_production", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
 
   // ── MHR Calculator State ──
   const [mhrModalOpen, setMhrModalOpen] = useState(false);
-  const [mhrSelectedMachine, setMhrSelectedMachine] = useState("HTC 1");
-  const [mhrMachinesInputs, setMhrMachinesInputs] = useState({
-    "HTC 1": { ...MHR_PRESETS["HTC 1"] },
-    "HTC 2": { ...MHR_PRESETS["HTC 2"] },
-    "HTC 3": { ...MHR_PRESETS["HTC 3"] },
-    "VMC 1": { ...MHR_PRESETS["VMC 1"] },
-    "VMC 2": { ...MHR_PRESETS["VMC 2"] },
-    "VTL 1": { ...MHR_PRESETS["VTL 1"] },
-    "VTL 2": { ...MHR_PRESETS["VTL 2"] },
-    "VTL 3": { ...MHR_PRESETS["VTL 3"] },
-    "VTL 4": { ...MHR_PRESETS["VTL 4"] },
-    "VMC-3": { ...MHR_PRESETS["VMC-3"] },
-    "MANUAL 1": { ...MHR_PRESETS["MANUAL 1"] },
-    "Custom (Manual)": { ...MHR_PRESETS["Custom (Manual)"] }
-  });
+  const [mhrSelectedMachine, setMhrSelectedMachine] = useState("");
+  const [mhrMachinesInputs, setMhrMachinesInputs] = useState({});
+  const [mhrSelectedMachines, setMhrSelectedMachines] = useState([]);
+  const [mhrFilterOpen, setMhrFilterOpen] = useState(false);
+  const [mhrSearchQuery, setMhrSearchQuery] = useState("");
+  const mhrInitializedRef = useRef(false);
+  const mhrFilterDropdownRef = useRef(null);
 
   const mhrChartRef = useRef(null);
   const mhrTrendChartInst = useRef(null);
@@ -840,7 +709,7 @@ export default function ProductionAnalysis() {
   });
   const [idleBreakdown, setIdleBreakdown] = useState(_IDLE_BREAKDOWN_EMPTY);
   const [kpiValues, setKpiValues] = useState({
-    totalProductionQty: 0, okAcceptedQty: 0, rejectionQty: 0, overallOee: 0.0, productionHours: 0.0, totalMachineHours: 0.0, idleHours: 0.0, settingHours: 0.0, manEfficiency: 0.0, totalShifts: 0, avgProdPerShift: 0.0, peakShiftOutput: 0, lowestShiftOutput: 0, activeMachines: 0, idleMachines: 0, machineUtilization: 0.0, machineEfficiency: 0.0, operatorEfficiency: 0.0, qualityRate: 0.0, materialRejection: 0.0, machineRejection: 0.0, totCncMac: 0, totConvMac: 0
+    totalProductionQty: 0, okAcceptedQty: 0, rejectionQty: 0, totMatRejQty: 0, totMacRejQty: 0, totReworkQty: 0, overallOee: 0.0, productionHours: 0.0, totalMachineHours: 0.0, idleHours: 0.0, settingHours: 0.0, manEfficiency: 0.0, totalShifts: 0, avgProdPerShift: 0.0, peakShiftOutput: 0, lowestShiftOutput: 0, activeMachines: 0, idleMachines: 0, machineUtilization: 0.0, machineEfficiency: 0.0, operatorEfficiency: 0.0, qualityRate: 0.0, materialRejection: 0.0, machineRejection: 0.0, totCncMac: 0, totConvMac: 0
   });
   const [machines, setMachines] = useState([]);
   const [cardData, setCardData] = useState(null);
@@ -880,6 +749,10 @@ export default function ProductionAnalysis() {
     { value: "Biswanath Dhungia", label: "Biswanath Dhungia" },
   ]);
 
+  const [macGroupOptions, setMacGroupOptions] = useState([
+    { value: "", label: "All Groups" },
+  ]);
+
   useEffect(() => {
     fetch(`${API_BASE}/production-analysis/filters/`, { credentials: "include" })
       .then(res => res.json().catch(() => ({})))
@@ -904,9 +777,69 @@ export default function ProductionAnalysis() {
               ...d.operators
             ]);
           }
+          if (d.mac_groups && Array.isArray(d.mac_groups) && d.mac_groups.length > 0) {
+            setMacGroupOptions([
+              { value: "", label: "All Groups" },
+              ...d.mac_groups
+            ]);
+          } else {
+            setMacGroupOptions([
+              { value: "", label: "All Groups" }
+            ]);
+          }
         }
       })
       .catch(err => console.error("Error fetching production analysis filters:", err));
+
+    // Fetch MHR Inputs from backend (MacMaster + MhrInputs table in SASSMMS)
+    fetch(`${API_BASE}/production-analysis/mhr-inputs/`, { credentials: "include" })
+      .then(res => res.json().catch(() => ({})))
+      .then(data => {
+        if (data && data.status === "success" && data.data && data.data.mhr_inputs) {
+          setMhrMachinesInputs(data.data.mhr_inputs);
+          const firstMac = Object.keys(data.data.mhr_inputs)[0];
+          if (firstMac) {
+            setMhrSelectedMachine(firstMac);
+          }
+        }
+      })
+      .catch(err => console.error("Error fetching MHR inputs:", err));
+  }, []);
+
+  useEffect(() => {
+    if (Object.keys(mhrMachinesInputs).length > 0 && !mhrInitializedRef.current) {
+      const keys = Object.keys(mhrMachinesInputs);
+      const sorted = keys.map(mac => {
+        const inputs = mhrMachinesInputs[mac] || {};
+        const hrs = inputs.annualHours || 1;
+        const depreciation = (inputs.machineCost || 0) / (inputs.machineLife || 1);
+        const interest = (inputs.machineCost || 0) * ((inputs.interestRate || 0) / 100);
+        const totalFixed = depreciation + (inputs.insurance || 0) + (inputs.allocatedRent || 0) + (inputs.supervisorSalary || 0) + interest;
+        const totalVariable = (inputs.operatorSalary || 0) + (inputs.electricity || 0) + (inputs.maintenance || 0) + (inputs.consumables || 0) + (inputs.toolWear || 0);
+        const rate = (totalFixed + totalVariable) / hrs;
+        return { name: mac, rate };
+      }).sort((a, b) => b.rate - a.rate);
+      
+      setMhrSelectedMachines(sorted.slice(0, 10).map(x => x.name));
+      mhrInitializedRef.current = true;
+    }
+  }, [mhrMachinesInputs]);
+
+  const saveMhrInputToBackend = useCallback((macName, inputs) => {
+    fetch(`${API_BASE}/production-analysis/mhr-inputs/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        macno: macName,
+        ...inputs
+      })
+    })
+      .then(res => res.json().catch(() => ({})))
+      .then(data => {
+        // saved successfully to SASSMMS
+      })
+      .catch(err => console.error("Error saving MHR input to backend:", err));
   }, []);
 
   const allMachinesList = useMemo(() => {
@@ -1151,8 +1084,8 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Machine Running Hrs",
-      value: kpiValues.productionHours,
-      unit: "hrs",
+      value: formatHoursMins(kpiValues.productionHours),
+      unit: "",
       meta: "Active Production",
       pos: false
     },
@@ -1194,8 +1127,8 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Production Hrs",
-      value: kpiValues.totalMachineHours,
-      unit: "hrs",
+      value: formatHoursMins(kpiValues.totalMachineHours),
+      unit: "",
       meta: "Scheduled Time",
       pos: false
     },
@@ -1215,8 +1148,8 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Setting Hrs",
-      value: kpiValues.settingHours,
-      unit: "hrs",
+      value: formatHoursMins(kpiValues.settingHours),
+      unit: "",
       meta: `${settingHoursPct}% Setup Time`,
       pos: false
     },
@@ -1230,7 +1163,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Mac Rej Qty",
-      value: Math.round(kpiValues.rejectionQty * 0.35),
+      value: kpiValues.totMacRejQty ?? Math.round(kpiValues.rejectionQty * 0.35),
       unit: "Units",
       meta: "Machine Issues",
       pos: false
@@ -1246,7 +1179,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Mat Rej Qty",
-      value: Math.round(kpiValues.rejectionQty * 0.65),
+      value: kpiValues.totMatRejQty ?? Math.round(kpiValues.rejectionQty * 0.65),
       unit: "Units",
       meta: "Material Quality",
       pos: false
@@ -1259,7 +1192,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Rework Qty",
-      value: Math.round(kpiValues.totalProductionQty * 0.008),
+      value: kpiValues.totReworkQty ?? Math.round(kpiValues.totalProductionQty * 0.008),
       unit: "Units",
       meta: "Rework Required",
       pos: false
@@ -1304,22 +1237,8 @@ export default function ProductionAnalysis() {
     if (filterOperator && filterOperator.length > 0 && !filterOperator.includes(row.Operator)) {
       return false;
     }
-    // 5. Machine Type
-    if (filterMacType) {
-      const type = (row.Machine || "").toUpperCase();
-      if (filterMacType === "CNC" && !type.includes("TC")) return false; // TC is CNC Turning
-      if (filterMacType === "VMC" && !type.includes("VMC")) return false;
-      if (filterMacType === "SPM" && !type.includes("SPM")) return false;
-      if (filterMacType === "BROACHING" && !type.includes("BROACHING")) return false;
-    }
-    // 6. Machine Group
-    if (filterMacGroup) {
-      const mac = (row.Machine || "").toUpperCase();
-      if (filterMacGroup === "Turning" && !mac.includes("TC")) return false;
-      if (filterMacGroup === "Milling" && !mac.includes("VMC")) return false;
-      if (filterMacGroup === "Drilling" && !mac.includes("SPM")) return false;
-      if (filterMacGroup === "Other" && (mac.includes("TC") || mac.includes("VMC") || mac.includes("SPM"))) return false;
-    }
+    // 5. Machine Type (handled server-side)
+    // 6. Machine Group (handled server-side)
     return true;
   });
 
@@ -1370,23 +1289,21 @@ export default function ProductionAnalysis() {
     }
   };
 
-  /* ── Setup Time & effectiveness details derived from live data or fallbacks ── */
+  /* ── Setup Time & effectiveness details derived from live data ── */
   const settingTableData = useMemo(() => {
     let list = [];
     if (filteredTableData.length > 0) {
       list = filteredTableData.map((row, idx) => {
-        // Deterministic mock setting times based on operator/machine to look realistic
-        const hash = (row.Machine || "").charCodeAt((row.Machine || "").length - 1) || 0;
-        const rawSettingTime = 0.5 + ((hash % 4) * 0.4) + ((idx % 3) * 0.2); // e.g. 0.5, 0.9, 1.3...
-        const settingTime = row.SettingTime !== undefined && row.SettingTime !== null ? parseFloat(row.SettingTime) : parseFloat(rawSettingTime.toFixed(1));
-        const defSettingTime = row.DefaultSettingTime !== undefined && row.DefaultSettingTime !== null ? parseFloat(row.DefaultSettingTime) : parseFloat((0.8 + ((hash % 3) * 0.3)).toFixed(1));
+        // Use actual setting time from data; fall back to null (no artificial mock)
+        const settingTime = row.SettingTime !== undefined && row.SettingTime !== null ? parseFloat(row.SettingTime) : null;
+        const defSettingTime = row.DefaultSettingTime !== undefined && row.DefaultSettingTime !== null ? parseFloat(row.DefaultSettingTime) : null;
 
         // effectiveness = (Standard / Actual) * 100
-        const effectiveness = settingTime > 0 ? Math.round((defSettingTime / settingTime) * 100) : 0;
+        const effectiveness = settingTime && settingTime > 0 && defSettingTime ? Math.round((defSettingTime / settingTime) * 100) : null;
 
         return {
           sno: idx + 1,
-          date: row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—",
+          date: row.Date ? (() => { const p = row.Date.split("T")[0].split("-"); return `${p[2]}-${p[1]}-${p[0]}`; })() : "—",
           macNo: row.Machine || "—",
           shift: row.Shift || "—",
           partNo: row.Part || "—",
@@ -1397,30 +1314,8 @@ export default function ProductionAnalysis() {
           effectiveness: effectiveness
         };
       });
-    } else {
-      // Fallback Mock Data if no tableData is loaded yet
-      const fallbackMachines = [
-        { date: "09-Jul-2026", macNo: "TC-60", shift: "Shift A", partNo: "THRUST PLATE", process: "KEYWAY", operatorName: "Santhana Lakshmi", settingTime: 1.2, defaultSettingTime: 1.0 },
-        { date: "09-Jul-2026", macNo: "TC-59", shift: "Shift B", partNo: "SEGMENT CARRIER", process: "CNC TURNING I", operatorName: "Ramchandra Soran", settingTime: 0.8, defaultSettingTime: 1.0 },
-        { date: "08-Jul-2026", macNo: "VMC-07", shift: "Shift A", partNo: "TOP BEARING BODY", process: "DRILLING-1", operatorName: "Biswanath Dhungia", settingTime: 1.5, defaultSettingTime: 1.2 },
-        { date: "08-Jul-2026", macNo: "TC 50", shift: "Shift B", partNo: "BOTTOM BEARING", process: "DRILLING TAPPING", operatorName: "Akash.A", settingTime: 0.9, defaultSettingTime: 1.0 },
-        { date: "07-Jul-2026", macNo: "TC 43 L", shift: "Shift A", partNo: "THRUST PLATE", process: "PRE DRILLING", operatorName: "Mohan Kewat", settingTime: 1.1, defaultSettingTime: 1.0 },
-        { date: "07-Jul-2026", macNo: "VMC 18", shift: "Shift C", partNo: "SEGMENT CARRIER", process: "CNC TURNING I", operatorName: "Chandan Kumar", settingTime: 2.0, defaultSettingTime: 1.5 }
-      ];
-
-      list = fallbackMachines.map((m, idx) => ({
-        sno: idx + 1,
-        date: m.date,
-        macNo: m.macNo,
-        shift: m.shift,
-        partNo: m.partNo,
-        process: m.process,
-        operatorName: m.operatorName,
-        settingTime: m.settingTime,
-        defaultSettingTime: m.defaultSettingTime,
-        effectiveness: Math.round((m.defaultSettingTime / m.settingTime) * 100)
-      }));
     }
+    // No mock fallback — empty list when no real data is available
 
     if (setupFilterMode === "part") {
       list = list.filter(row => setupSelectedParts.includes(row.partNo));
@@ -1643,7 +1538,7 @@ export default function ProductionAnalysis() {
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
     setPageLoading(true);
-    const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
     if (filterMachine && filterMachine.length > 0) {
       params.append("machine", filterMachine.join(","));
     }
@@ -1667,7 +1562,7 @@ export default function ProductionAnalysis() {
       .then(data => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
-          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
+          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
           if (d.machines && Array.isArray(d.machines)) {
             setMachines(d.machines);
           }
@@ -1698,8 +1593,8 @@ export default function ProductionAnalysis() {
     setSelectedMachine(m);
     setCardLoading(true);
     setCardData(null);
-    const fromStr = dateRange.from ? dateRange.from.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
-    const toStr = dateRange.to ? dateRange.to.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const fromStr = dateRange.from ? formatDateToYYYYMMDD(dateRange.from) : formatDateToYYYYMMDD(new Date());
+    const toStr = dateRange.to ? formatDateToYYYYMMDD(dateRange.to) : formatDateToYYYYMMDD(new Date());
     const params = new URLSearchParams({
       from: fromStr,
       to: toStr,
@@ -1724,7 +1619,7 @@ export default function ProductionAnalysis() {
   /* ── Production Value chart fetch ───────────────── */
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
-    const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
     if (filterMachine && filterMachine.length > 0) {
       params.append("machine", filterMachine.join(","));
     }
@@ -1753,8 +1648,8 @@ export default function ProductionAnalysis() {
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
     const params = new URLSearchParams({
-      from: dateRange.from.toISOString().slice(0, 10),
-      to: dateRange.to.toISOString().slice(0, 10)
+      from: formatDateToYYYYMMDD(dateRange.from),
+      to: formatDateToYYYYMMDD(dateRange.to)
     });
     if (filterMachine && filterMachine.length > 0) {
       params.append("machine", filterMachine.join(","));
@@ -1783,7 +1678,7 @@ export default function ProductionAnalysis() {
   /* ── Daily Production Details fetch ─────────── */
   useEffect(() => {
     if (!dateRange.from || !dateRange.to) return;
-    const params = new URLSearchParams({ from: dateRange.from.toISOString().slice(0, 10), to: dateRange.to.toISOString().slice(0, 10) });
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
     if (filterMachine && filterMachine.length > 0) {
       params.append("machine", filterMachine.join(","));
     }
@@ -2306,7 +2201,7 @@ export default function ProductionAnalysis() {
     return () => qualityChartInst.current?.destroy();
   }, [machineQualityData, pageLoading]);
   const calculateMachineMhr = useCallback((macName) => {
-    const inputs = mhrMachinesInputs[macName] || MHR_PRESETS["Custom (Manual)"];
+    const inputs = mhrMachinesInputs[macName] || getMhrDefaultTemplate();
     const hrs = inputs.annualHours || 1;
     const depreciation = inputs.machineCost / (inputs.machineLife || 1);
     const interest = inputs.machineCost * (inputs.interestRate / 100);
@@ -2317,16 +2212,28 @@ export default function ProductionAnalysis() {
 
   const handleMhrPresetChange = (presetName) => {
     setMhrSelectedMachine(presetName);
-    if (MHR_PRESETS[presetName]) {
-      setMhrMachinesInputs(prev => ({
-        ...prev,
-        [presetName]: { ...MHR_PRESETS[presetName] }
-      }));
+    const existing = mhrMachinesInputs[presetName];
+    if (existing) {
+      saveMhrInputToBackend(presetName, existing);
     }
   };
 
+  const sortedMacs = useMemo(() => {
+    const keys = Object.keys(mhrMachinesInputs);
+    return keys.map(mac => {
+      const rate = calculateMachineMhr(mac);
+      return { name: mac, rate };
+    }).sort((a, b) => b.rate - a.rate);
+  }, [mhrMachinesInputs, calculateMachineMhr]);
+
+  const top10Macs = useMemo(() => {
+    return sortedMacs.slice(0, 10).map(x => x.name);
+  }, [sortedMacs]);
+
   const mhrTrendChartData = useMemo(() => {
-    const machineNames = ["HTC 1", "HTC 2", "HTC 3", "VMC 1", "VMC 2", "VTL 1", "VTL 2", "VTL 3", "VTL 4", "VMC-3", "MANUAL 1"];
+    const machineNames = Object.keys(mhrMachinesInputs).filter(macName =>
+      mhrSelectedMachines.includes(macName)
+    );
 
     const palette = [
       "rgba(37, 99, 235, 0.78)",
@@ -2354,14 +2261,14 @@ export default function ProductionAnalysis() {
       datasets: [{
         label: "Machine Hour Rate (₹/hr)",
         data: data,
-        backgroundColor: palette,
-        borderColor: borders,
+        backgroundColor: machineNames.map((_, i) => palette[i % palette.length]),
+        borderColor: machineNames.map((_, i) => borders[i % borders.length]),
         borderWidth: 1.5,
         borderRadius: 6,
         barThickness: 32
       }]
     };
-  }, [calculateMachineMhr]);
+  }, [mhrMachinesInputs, mhrSelectedMachines, calculateMachineMhr]);
 
   // ── MHR Trend Chart.js Effect ──
   useEffect(() => {
@@ -2583,6 +2490,9 @@ export default function ProductionAnalysis() {
       if (utilThresholdDropdownRef.current && !utilThresholdDropdownRef.current.contains(e.target)) {
         setUtilThresholdOpen(false);
       }
+      if (mhrFilterDropdownRef.current && !mhrFilterDropdownRef.current.contains(e.target)) {
+        setMhrFilterOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
@@ -2650,9 +2560,7 @@ export default function ProductionAnalysis() {
             options={[
               { value: "", label: "All Types" },
               { value: "CNC", label: "CNC" },
-              { value: "VMC", label: "VMC" },
-              { value: "SPM", label: "SPM" },
-              { value: "BROACHING", label: "BROACHING" },
+              { value: "CON", label: "CON" },
             ]}
           />
           <PremiumSelect
@@ -2660,13 +2568,7 @@ export default function ProductionAnalysis() {
             value={filterMacGroup}
             onChange={setFilterMacGroup}
             placeholder="All Groups"
-            options={[
-              { value: "", label: "All Groups" },
-              { value: "Turning", label: "Turning" },
-              { value: "Milling", label: "Milling" },
-              { value: "Drilling", label: "Drilling" },
-              { value: "Other", label: "Other" },
-            ]}
+            options={macGroupOptions}
           />
           <div className="pa2-fg-reset">
             <button
@@ -2917,8 +2819,8 @@ export default function ProductionAnalysis() {
                     {[
                       { label: "OEE %", value: `${card.oee_pct}%`, icon: <FiActivity />, color: "#ef4444" },
                       { label: "OPR EFF %", value: `${card.oper_eff_pct}%`, icon: <FiUser />, color: "#f97316" },
-                      { label: "RUN HRS", value: `${card.run_hrs.toFixed(1)} hrs`, icon: <FiClock />, color: "#2563eb" },
-                      { label: "IDLE HRS", value: `${Math.round(card.idle_hrs)} hrs`, icon: <FiAlertTriangle />, color: "#94a3b8" },
+                      { label: "RUN HRS", value: formatHoursMins(card.run_hrs), icon: <FiClock />, color: "#2563eb" },
+                      { label: "IDLE HRS", value: formatHoursMins(card.idle_hrs), icon: <FiAlertTriangle />, color: "#94a3b8" },
                     ].map((k, i) => (
                       <div key={i} className="pa2-modal-kpi-card" style={{ "--di": i }}>
                         <div className="pa2-modal-kpi-icon" style={{ color: k.color }}>{k.icon}</div>
@@ -2950,7 +2852,7 @@ export default function ProductionAnalysis() {
                             </td>
                             <td><span className="pa2-modal-badge-part">{r.part_no}</span></td>
                             <td><span className="pa2-modal-text-process">{r.process}</span></td>
-                            <td style={{ textAlign: "right", fontWeight: 600, color: "#475569" }}>{r.hrs}h</td>
+                            <td style={{ textAlign: "right", fontWeight: 600, color: "#475569" }}>{formatHoursMins(r.hrs)}</td>
                             <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>{r.ok_qty}</td>
                           </tr>
                         ))}
@@ -3097,25 +2999,178 @@ export default function ProductionAnalysis() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem", paddingBottom: "12px", borderBottom: "1.5px solid #eef2ff" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Machine Hour Rate (MHR) Cost Analysis" sub="Machine-wise comparative analysis of hourly operating rates (₹/hr)" />
 
-          <button
-            className="pa2-pv-tab pa2-pv-tab--active"
-            onClick={() => setMhrModalOpen(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "#2563eb",
-              color: "#ffffff",
-              padding: "6px 14px",
-              borderRadius: "8px",
-              fontSize: "12px",
-              fontWeight: "700",
-              border: "none",
-              cursor: "pointer"
-            }}
-          >
-            <FiSettings size={13} style={{ verticalAlign: "middle" }} /> MHR Rates & Inputs
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {/* Searchable Multi-Select Macno Filter */}
+            <div ref={mhrFilterDropdownRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="pa2-ps-trigger"
+                style={{
+                  minWidth: "160px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.95)",
+                  border: "1.5px solid rgba(37, 99, 235, 0.15)",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+                  fontWeight: "750",
+                  fontSize: "12px",
+                  color: "#1e3a8a",
+                  cursor: "pointer"
+                }}
+                onClick={() => setMhrFilterOpen(o => !o)}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <FiCpu size={13} style={{ color: "#2563eb" }} />
+                  {mhrSelectedMachines.length === 0 ? "Select Macno" : `Machines (${mhrSelectedMachines.length})`}
+                </span>
+                <svg
+                  style={{
+                    transform: mhrFilterOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                    marginLeft: "8px",
+                    color: "#2563eb"
+                  }}
+                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {mhrFilterOpen && (
+                <div
+                  className="pa2-ps-menu"
+                  style={{
+                    position: "absolute",
+                    top: "105%",
+                    right: 0,
+                    minWidth: "220px",
+                    zIndex: 1000,
+                    background: "#ffffff",
+                    border: "1px solid rgba(37, 99, 235, 0.15)",
+                    boxShadow: "0 10px 30px -5px rgba(37, 99, 235, 0.15)",
+                    padding: "6px",
+                    borderRadius: "10px"
+                  }}
+                >
+                  <div style={{ padding: "4px", marginBottom: "6px", borderBottom: "1px solid #f1f5f9" }}>
+                    <input
+                      type="text"
+                      placeholder="Search Macno..."
+                      value={mhrSearchQuery}
+                      onChange={(e) => setMhrSearchQuery(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "5px 8px",
+                        fontSize: "11.5px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "6px",
+                        outline: "none",
+                        backgroundColor: "#ffffff",
+                        color: "#1e293b"
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div style={{ maxHeight: "200px", overflowY: "auto", padding: "2px" }}>
+                    {(() => {
+                      const query = mhrSearchQuery.trim().toLowerCase();
+                      const allMacs = macOptions.length > 1
+                        ? macOptions.filter(opt => opt.value !== "").map(opt => opt.value)
+                        : Object.keys(mhrMachinesInputs);
+                      
+                      const displayedMacs = query
+                        ? allMacs.filter(mac => mac.toLowerCase().includes(query))
+                        : allMacs;
+
+                      if (displayedMacs.length === 0) {
+                        return (
+                          <div style={{ padding: "8px", fontSize: "11px", color: "#64748b", textAlign: "center" }}>
+                            No machines found
+                          </div>
+                        );
+                      }
+
+                      return displayedMacs.map(mac => {
+                        const isChecked = mhrSelectedMachines.includes(mac);
+                        return (
+                          <label
+                            key={mac}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              padding: "6px 8px",
+                              borderRadius: "6px",
+                              fontSize: "11.5px",
+                              fontWeight: "600",
+                              color: isChecked ? "#2563eb" : "#334155",
+                              cursor: "pointer",
+                              userSelect: "none",
+                              backgroundColor: isChecked ? "rgba(37, 99, 235, 0.04)" : "transparent",
+                              transition: "all 0.15s ease"
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setMhrSelectedMachines(mhrSelectedMachines.filter(x => x !== mac));
+                                } else {
+                                  setMhrSelectedMachines([...mhrSelectedMachines, mac]);
+                                }
+                              }}
+                              style={{ cursor: "pointer" }}
+                            />
+                            <span>{mac}</span>
+                          </label>
+                        );
+                      });
+                    })()}
+                  </div>
+                  
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f1f5f9", marginTop: "6px", paddingTop: "6px", paddingLeft: "4px", paddingRight: "4px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setMhrSelectedMachines([])}
+                      style={{ border: "none", background: "none", color: "#64748b", fontSize: "10.5px", fontWeight: "700", cursor: "pointer", padding: 0 }}
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMhrSelectedMachines(top10Macs)}
+                      style={{ border: "none", background: "none", color: "#2563eb", fontSize: "10.5px", fontWeight: "700", cursor: "pointer", padding: 0 }}
+                    >
+                      Reset Top 10
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              className="pa2-pv-tab pa2-pv-tab--active"
+              onClick={() => setMhrModalOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "#2563eb",
+                color: "#ffffff",
+                padding: "6px 14px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                fontWeight: "700",
+                border: "none",
+                cursor: "pointer"
+              }}
+            >
+              <FiSettings size={13} style={{ verticalAlign: "middle" }} /> MHR Rates & Inputs
+            </button>
+          </div>
         </div>
 
         {/* Outer View: Dynamic MHR cost graph per date */}
@@ -3135,7 +3190,7 @@ export default function ProductionAnalysis() {
 
         {/* Dynamic rate list tags */}
         <div className="pa2-mhr-bottom-rates" style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "18px", paddingTop: "14px", borderTop: "1.5px solid #f1f5f9" }}>
-          {["HTC 1", "HTC 2", "HTC 3", "VMC 1", "VMC 2", "VTL 1", "VTL 2", "VTL 3", "VTL 4", "VMC-3", "MANUAL 1"].map(mac => {
+          {mhrSelectedMachines.map(mac => {
             const rate = calculateMachineMhr(mac);
             return (
               <div
@@ -3163,7 +3218,7 @@ export default function ProductionAnalysis() {
 
       {/* ── MHR CONFIGURATION MODAL ── */}
       {mhrModalOpen && (() => {
-        const inputs = mhrMachinesInputs[mhrSelectedMachine] || MHR_PRESETS["Custom (Manual)"];
+        const inputs = mhrMachinesInputs[mhrSelectedMachine] || getMhrDefaultTemplate();
         const hrs = inputs.annualHours || 1;
 
         // Fixed Calculations
@@ -3196,14 +3251,14 @@ export default function ProductionAnalysis() {
           const val = inputs[fieldName] ?? 0;
           const updateVal = (newVal) => {
             const updatedInputs = {
-              ...(mhrMachinesInputs[mhrSelectedMachine] || MHR_PRESETS["Custom (Manual)"]),
+              ...(mhrMachinesInputs[mhrSelectedMachine] || getMhrDefaultTemplate()),
               [fieldName]: Math.max(0, newVal)
             };
-            setMhrSelectedMachine("Custom (Manual)");
             setMhrMachinesInputs(prev => ({
               ...prev,
-              "Custom (Manual)": updatedInputs
+              [mhrSelectedMachine]: updatedInputs
             }));
+            saveMhrInputToBackend(mhrSelectedMachine, updatedInputs);
           };
 
           return (
@@ -3641,6 +3696,27 @@ export default function ProductionAnalysis() {
                     Please use the search filter above to select the part numbers you want to analyze.
                   </div>
                 </div>
+              ) : setupChartData.labels.length === 0 ? (
+                <div style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(248, 250, 252, 0.5)",
+                  border: "1.5px dashed rgba(45, 109, 232, 0.12)",
+                  borderRadius: "12px",
+                  color: "#94a3b8",
+                  gap: "8px",
+                  padding: "20px",
+                  textAlign: "center"
+                }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "rgba(100,116,139,0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>
+                    <FiClock size={20} />
+                  </div>
+                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#475569", fontFamily: "'Poppins', sans-serif" }}>No Setup Data Available</div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Poppins', sans-serif" }}>No setting time records found for this period.</div>
+                </div>
               ) : (
                 <canvas key={setupFilterMode + setupChartType} ref={setChartRef} />
               )}
@@ -3695,6 +3771,18 @@ export default function ProductionAnalysis() {
                       <td colSpan={10} style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
                         <div style={{ fontWeight: 600, fontSize: "13px", color: "#64748b", fontFamily: "'Poppins', sans-serif" }}>No parts selected</div>
                         <div style={{ fontSize: "11px", marginTop: "4px", fontFamily: "'Poppins', sans-serif" }}>Select part numbers from the header dropdown to view details.</div>
+                      </td>
+                    </tr>
+                  ) : sortedSettingTableData.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: "48px 20px", color: "#94a3b8" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "rgba(100,116,139,0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>
+                            <FiClock size={18} />
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: "13px", color: "#475569", fontFamily: "'Poppins', sans-serif" }}>No Setup Records Found</div>
+                          <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Poppins', sans-serif" }}>No setting time data for the selected date range and filters.</div>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -4171,8 +4259,8 @@ export default function ProductionAnalysis() {
                           </div>
                         </div>
                       </td>
-                      <td style={{ fontWeight: "600", color: "#475569" }}>{row.runningHrs} hrs</td>
-                      <td style={{ color: "#ef4444", fontWeight: "600" }}>{row.idleHrs} hrs</td>
+                      <td style={{ fontWeight: "600", color: "#475569" }}>{formatHoursMins(row.runningHrs)}</td>
+                      <td style={{ color: "#ef4444", fontWeight: "600" }}>{formatHoursMins(row.idleHrs)}</td>
                       <td>
                         <span className="pa2-badge" style={{ background: statusBg, color: statusColor, border: `1px solid ${statusColor}22`, fontWeight: "700", fontSize: "10px", padding: "3px 8px", borderRadius: "6px" }}>
                           {statusLabel}
@@ -4323,7 +4411,7 @@ export default function ProductionAnalysis() {
 
       <div className="pa2-row-2">
         <div className="pa2-card pa2-card--success pa2-anim" style={{ "--d": "80ms" }}>
-          <SectionHeader icon={<FiCheckCircle size={16} />} title="Idle Hours — Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${totalAcceptedHrs.toFixed(1)} hrs  (${idleBreakdown.summary.accepted_pct}%)`} />
+          <SectionHeader icon={<FiCheckCircle size={16} />} title="Idle Hours — Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${formatHoursMins(totalAcceptedHrs)}  (${idleBreakdown.summary.accepted_pct}%)`} />
           <div className="pa2-idle-layout">
             {pageLoading ? (
               <>
@@ -4336,14 +4424,14 @@ export default function ProductionAnalysis() {
               </>
             ) : (
               <>
-                <DonutChart data={idleBreakdown.accepted.reasons.length >= 2 ? idleBreakdown.accepted.reasons : idleBreakdown.accepted.reasons.length === 1 ? [...idleBreakdown.accepted.reasons, { hours: 0.001, color: "#e2e8f0" }] : [{ hours: 0.6, color: "#2563eb" }, { hours: 0.4, color: "#e2e8f0" }]} total={totalAcceptedHrs > 0 ? totalAcceptedHrs : 1} />
+                <DonutChart data={idleBreakdown.accepted.reasons.length >= 2 ? idleBreakdown.accepted.reasons : idleBreakdown.accepted.reasons.length === 1 ? [...idleBreakdown.accepted.reasons, { hours: 0.001, color: "#e2e8f0" }] : [{ hours: 0.6, color: "#2563eb" }, { hours: 0.4, color: "#e2e8f0" }]} total={totalAcceptedHrs > 0 ? totalAcceptedHrs : 0} />
                 <div className="pa2-idle-list">
                   {idleBreakdown.accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No accepted idle data for this period</div>}
                   {idleBreakdown.accepted.reasons.map((r, i) => (
                     <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
                       <span className="pa2-idle-dot" style={{ background: r.color }} />
                       <span className="pa2-idle-reason">{r.reason}</span>
-                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
+                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{formatHoursMins(r.hours)}</span>
                       <span className="pa2-idle-pct">({r.pct}%)</span>
                     </div>
                   ))}
@@ -4353,7 +4441,7 @@ export default function ProductionAnalysis() {
           </div>
         </div>
         <div className="pa2-card pa2-card--danger pa2-anim" style={{ "--d": "110ms" }}>
-          <SectionHeader icon={<FiAlertCircle size={16} />} title="Idle Hours — Non-Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${totalNonAccepted.toFixed(1)} hrs  |  ⚠ Needs Action (${idleBreakdown.summary.non_accepted_pct}%)`} />
+          <SectionHeader icon={<FiAlertCircle size={16} />} title="Idle Hours — Non-Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${formatHoursMins(totalNonAccepted)}  |  ⚠ Needs Action (${idleBreakdown.summary.non_accepted_pct}%)`} />
           <div className="pa2-idle-layout">
             {pageLoading ? (
               <>
@@ -4366,14 +4454,14 @@ export default function ProductionAnalysis() {
               </>
             ) : (
               <>
-                <DonutChart data={idleBreakdown.non_accepted.reasons.length >= 2 ? idleBreakdown.non_accepted.reasons : idleBreakdown.non_accepted.reasons.length === 1 ? [...idleBreakdown.non_accepted.reasons, { hours: 0.001, color: "#fee2e2" }] : [{ hours: 0.6, color: "#ef4444" }, { hours: 0.4, color: "#fee2e2" }]} total={totalNonAccepted > 0 ? totalNonAccepted : 1} />
+                <DonutChart data={idleBreakdown.non_accepted.reasons.length >= 2 ? idleBreakdown.non_accepted.reasons : idleBreakdown.non_accepted.reasons.length === 1 ? [...idleBreakdown.non_accepted.reasons, { hours: 0.001, color: "#fee2e2" }] : [{ hours: 0.6, color: "#ef4444" }, { hours: 0.4, color: "#fee2e2" }]} total={totalNonAccepted > 0 ? totalNonAccepted : 0} />
                 <div className="pa2-idle-list">
                   {idleBreakdown.non_accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No non-accepted idle data for this period</div>}
                   {idleBreakdown.non_accepted.reasons.map((r, i) => (
                     <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
                       <span className="pa2-idle-dot" style={{ background: r.color }} />
                       <span className="pa2-idle-reason">{r.reason}</span>
-                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{r.hours} hrs</span>
+                      <span className="pa2-idle-hrs" style={{ color: r.color }}>{formatHoursMins(r.hours)}</span>
                       <span className="pa2-idle-pct">({r.pct}%)</span>
                     </div>
                   ))}
@@ -4399,8 +4487,8 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
           ) : (
             <>
               <div className="pa2-loss-kpi pa2-loss-kpi--red"><div className="pa2-loss-kpi-lbl">Total Loss Value</div><div className="pa2-loss-kpi-val">₹{totalLoss.toLocaleString("en-IN")}</div></div>
-              <div className="pa2-loss-kpi pa2-loss-kpi--orange"><div className="pa2-loss-kpi-lbl">Total Unplanned Hours</div><div className="pa2-loss-kpi-val">{totalNonAccepted.toFixed(1)} hrs</div></div>
-              <div className="pa2-loss-kpi pa2-loss-kpi--amber"><div className="pa2-loss-kpi-lbl">Avg Loss per Hour</div><div className="pa2-loss-kpi-val">₹{(totalLoss / totalNonAccepted).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
+              <div className="pa2-loss-kpi pa2-loss-kpi--orange"><div className="pa2-loss-kpi-lbl">Total Unplanned Hours</div><div className="pa2-loss-kpi-val">{formatHoursMins(totalNonAccepted)}</div></div>
+              <div className="pa2-loss-kpi pa2-loss-kpi--amber"><div className="pa2-loss-kpi-lbl">Avg Loss per Hour</div><div className="pa2-loss-kpi-val">₹{(totalLoss / (totalNonAccepted || 1)).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
               <div className="pa2-loss-kpi pa2-loss-kpi--purple"><div className="pa2-loss-kpi-lbl">Recoverable Potential</div><div className="pa2-loss-kpi-val">₹{(totalLoss * 0.62).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div></div>
             </>
           )}
@@ -4439,7 +4527,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     return (
                       <tr key={i} className="pa2-anim" style={{ "--d": `${i * 50}ms` }}>
                         <td><span className="pa2-idle-dot" style={{ background: r.color }} />{r.reason}</td>
-                        <td className="pa2-td-num">{r.hours}</td>
+                        <td className="pa2-td-num">{formatHoursMins(r.hours)}</td>
                         <td className="pa2-td-num">₹{(r.rate_per_hr || 0).toLocaleString("en-IN")}</td>
                         <td className="pa2-td-num pa2-td-loss">₹{loss.toLocaleString("en-IN")}</td>
                         <td style={{ paddingLeft: "24px" }}>
@@ -4454,7 +4542,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                   })}
                   <tr className="pa2-total-row">
                     <td><strong>Total</strong></td>
-                    <td className="pa2-td-num"><strong>{totalNonAccepted.toFixed(1)}</strong></td>
+                    <td className="pa2-td-num"><strong>{formatHoursMins(totalNonAccepted)}</strong></td>
                     <td className="pa2-td-num">—</td>
                     <td className="pa2-td-num pa2-td-loss"><strong>₹{totalLoss.toLocaleString("en-IN")}</strong></td>
                     <td style={{ paddingLeft: "24px" }}><strong>100%</strong></td>
@@ -4571,7 +4659,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                   {!tableLoading && sortedTableData.map((row, i) => {
                     const isRejected = row.Status === "Rejected";
                     const badge = isRejected ? "pa2-badge--bad" : "pa2-badge--ok";
-                    const formattedDate = row.Date ? new Date(row.Date).toLocaleDateString("en-IN") : "—";
+                    const formattedDate = row.Date ? (() => { const p = row.Date.split("T")[0].split("-"); return `${p[2]}-${p[1]}-${p[0]}`; })() : "—";
 
                     const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
                     const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
@@ -4592,7 +4680,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                         <td className="pa2-td-num" style={{ color: matRej > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{matRej}</td>
                         <td className="pa2-td-num" style={{ color: macRej > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{macRej}</td>
                         <td className="pa2-td-num" style={{ color: rwQty > 0 ? "#f59e0b" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{rwQty}</td>
-                        <td className="pa2-td-num" style={{ color: idleHrs > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{idleHrs} h</td>
+                        <td className="pa2-td-num" style={{ color: idleHrs > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{formatHoursMins(idleHrs)}</td>
                         <td className="pa2-td-num" style={{ fontVariantNumeric: "tabular-nums" }}>{(row.EffPct || 0).toFixed(2)}%</td>
                         <td><span className={`pa2-badge ${badge}`}>{row.Status || "OK"}</span></td>
                       </tr>

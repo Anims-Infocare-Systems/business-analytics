@@ -520,109 +520,129 @@
 }
 
 .tap-type-dd__panel {
-    min-width: 230px;
-    background: #ffffff;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 14px;
-    box-shadow: 0 20px 50px rgba(15, 23, 42, .16), 0 4px 12px rgba(15, 23, 42, .08);
-    padding: .4rem;
+    min-width: 240px;
+    background: #ffffff !important;
+    border: 1.5px solid #99f6e4 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .18), 0 4px 18px rgba(20, 184, 166, .15) !important;
+    padding: .5rem !important;
     animation: tap-dd-pop .2s cubic-bezier(.23, 1, .32, 1) both;
     overflow: hidden;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .tap-type-dd__header {
-    padding: .5rem .75rem .35rem;
-    font-size: .68rem;
-    font-weight: 700;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: .07em;
+    padding: .45rem .75rem .35rem !important;
+    font-size: .7rem !important;
+    font-weight: 800 !important;
+    color: #0d9488 !important;
+    text-transform: uppercase !important;
+    letter-spacing: .08em !important;
+    background: transparent !important;
+    font-family: 'DM Sans', 'Inter', 'Outfit', sans-serif !important;
 }
 
 .tap-type-dd__divider {
-    height: 1px;
-    background: #f1f5f9;
-    margin: .25rem .5rem;
+    height: 1px !important;
+    background: #ccfbf1 !important;
+    margin: .35rem .5rem !important;
 }
 
 .tap-type-dd__item {
-    display: flex;
-    align-items: center;
-    gap: .55rem;
-    width: 100%;
-    padding: .52rem .75rem;
-    border: none;
-    background: transparent;
-    border-radius: 9px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: .82rem;
-    font-weight: 500;
-    color: #374151;
-    transition: all .17s cubic-bezier(.23, 1, .32, 1);
-    text-align: left;
+    display: flex !important;
+    align-items: center !important;
+    gap: .65rem !important;
+    width: 100% !important;
+    padding: .6rem .85rem !important;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 10px !important;
+    cursor: pointer !important;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: .84rem !important;
+    font-weight: 600 !important;
+    color: #1e293b !important;
+    transition: all .18s cubic-bezier(.23, 1, .32, 1) !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
 }
 
-.tap-type-dd__item:hover {
-    background: #f0fdfa;
-    color: #0d9488;
+.tap-type-dd__item:hover:not(.tap-type-dd__item--active) {
+    background: #ccfbf1 !important;
+    color: #0d9488 !important;
+    transform: translateX(3px) !important;
 }
 
 .tap-type-dd__item-icon {
-    display: flex;
-    align-items: center;
-    color: #94a3b8;
-    flex-shrink: 0;
-    transition: color .17s;
+    display: inline-flex !important;
+    align-items: center !important;
+    color: #64748b !important;
+    flex-shrink: 0 !important;
+    transition: all .18s !important;
 }
 
-.tap-type-dd__item:hover .tap-type-dd__item-icon {
-    color: #0d9488;
+.tap-type-dd__item:hover:not(.tap-type-dd__item--active) .tap-type-dd__item-icon {
+    color: #0d9488 !important;
+    transform: scale(1.1) !important;
 }
 
 .tap-type-dd__item-label {
-    flex: 1;
-    font-weight: 600;
+    flex: 1 !important;
+    font-weight: 600 !important;
+    color: inherit !important;
+    font-family: 'DM Sans', 'Inter', 'Outfit', sans-serif !important;
+    letter-spacing: -.01em !important;
 }
 
 .tap-type-dd__item-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 19px;
-    padding: 0 6px;
-    border-radius: 9px;
-    background: #f1f5f9;
-    color: #64748b;
-    font-size: .67rem;
-    font-weight: 700;
-    margin-left: auto;
-    transition: background .17s, color .17s;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 22px !important;
+    height: 19px !important;
+    padding: 0 6px !important;
+    border-radius: 9px !important;
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    font-size: .68rem !important;
+    font-weight: 700 !important;
+    margin-left: auto !important;
+    transition: all .18s !important;
+}
+
+.tap-type-dd__item:hover:not(.tap-type-dd__item--active) .tap-type-dd__item-badge {
+    background: #0d9488 !important;
+    color: #ffffff !important;
 }
 
 .tap-type-dd__item-check {
-    color: #0d9488;
-    flex-shrink: 0;
+    color: #ffffff !important;
+    flex-shrink: 0 !important;
 }
 
 .tap-type-dd__item--active {
-    background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
-    color: #0d9488;
-    font-weight: 700;
+    background: linear-gradient(135deg, #14b8a6, #059669) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(20, 184, 166, .35) !important;
+    transform: none !important;
 }
 
 .tap-type-dd__item--active .tap-type-dd__item-icon {
-    color: #0d9488;
+    color: #ffffff !important;
+}
+
+.tap-type-dd__item--active .tap-type-dd__item-label {
+    color: #ffffff !important;
 }
 
 .tap-type-dd__item--active .tap-type-dd__item-badge {
-    background: #0d9488;
-    color: #ffffff;
+    background: rgba(255, 255, 255, .25) !important;
+    color: #ffffff !important;
 }
 
-.tap-type-dd__item--active:hover {
-    background: linear-gradient(135deg, #ccfbf1, #a7f3d0);
+.tap-type-dd__item--active .tap-type-dd__item-check {
+    color: #ffffff !important;
 }
 
 /* ── Grid ────────────────────────────────────────────────────── */
@@ -1035,6 +1055,7 @@
     padding: 1.5rem;
     background: rgba(7, 30, 27, 0.72);
     animation: tap-fade-in .22s ease both;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .tap-modal__box {

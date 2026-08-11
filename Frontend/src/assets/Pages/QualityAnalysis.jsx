@@ -161,19 +161,22 @@ const getRejColStyle = (h) => {
 
 const getTraceColStyle = (h) => {
     switch (h) {
-        case "#": return { width: "50px", textAlign: "center" };
-        case "Inspno": return { width: "110px" };
-        case "Insp Date": return { width: "110px" };
-        case "Machine No": return { width: "100px" };
-        case "Shift": return { width: "80px" };
-        case "Partno-Description": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
-        case "Process": return { width: "110px" };
-        case "Operator Name": return { width: "130px" };
+        case "#": return { width: "45px", textAlign: "center" };
+        case "Inspno": return { width: "100px" };
+        case "Insp Date": return { width: "95px" };
+        case "Machine No": return { width: "95px" };
+        case "Shift": return { width: "70px" };
+        case "Partno-Description": return { minWidth: "180px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "Process": return { width: "100px" };
+        case "Operator Name / Vendor Name":
+        case "Operator Name": return { width: "150px" };
         case "Prod Qty":
-        case "Rej Qty":
-        case "Rw Qty": return { width: "80px", textAlign: "right" };
-        case "Inspected By": return { width: "120px" };
-        case "Routecard Details": return { width: "140px" };
+        case "Ok Qty":
+        case "Mat Rej":
+        case "Mac Rej":
+        case "Rw Qty": return { width: "75px", textAlign: "right" };
+        case "Inspected By": return { width: "110px" };
+        case "Routecard Details": return { width: "130px" };
         default: return {};
     }
 };
@@ -296,6 +299,237 @@ function QualityPremiumSelect({ value, onChange, options }) {
     );
 }
 
+function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, accentColor = "#8b5cf6" }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        function handleClickOutside(e) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setOpen(false);
+            }
+        }
+        if (open) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [open]);
+
+    const currentSelected = selectedValues === null ? options : selectedValues;
+    const isFiltered = selectedValues !== null && selectedValues.length < options.length;
+
+    const filteredOptions = useMemo(() => {
+        if (!search.trim()) return options;
+        const q = search.toLowerCase().trim();
+        return options.filter(opt => String(opt).toLowerCase().includes(q));
+    }, [options, search]);
+
+    const handleToggleOption = (opt) => {
+        let updated;
+        if (currentSelected.includes(opt)) {
+            updated = currentSelected.filter(item => item !== opt);
+        } else {
+            updated = [...currentSelected, opt];
+        }
+        if (updated.length === options.length) {
+            onChange(null);
+        } else {
+            onChange(updated);
+        }
+    };
+
+    const handleSelectAll = () => {
+        onChange(null);
+    };
+
+    const handleClearAll = () => {
+        onChange([]);
+    };
+
+    const isRed = accentColor === "#ef4444";
+    const activeBg = isRed ? "rgba(239, 68, 68, 0.1)" : "rgba(139, 92, 246, 0.1)";
+    const activeColor = isRed ? "#dc2626" : "#7c3aed";
+    const checkedItemBg = isRed ? "rgba(239, 68, 68, 0.06)" : "rgba(139, 92, 246, 0.05)";
+
+    return (
+        <div ref={dropdownRef} style={{ position: "relative", display: "inline-block" }}>
+            <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px 10px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    borderRadius: "6px",
+                    border: isFiltered ? `1px solid ${accentColor}` : "1px solid #cbd5e1",
+                    background: isFiltered ? activeBg : "#ffffff",
+                    color: isFiltered ? activeColor : "#475569",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
+                }}
+            >
+                <span>{title}</span>
+                {isFiltered && (
+                    <span style={{
+                        background: accentColor,
+                        color: "#ffffff",
+                        borderRadius: "10px",
+                        padding: "1px 5px",
+                        fontSize: "0.62rem",
+                        fontWeight: 700,
+                        lineHeight: 1
+                    }}>
+                        {currentSelected.length}
+                    </span>
+                )}
+                <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease", color: "currentColor" }} />
+            </button>
+
+            {open && (
+                <div
+                    style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        right: 0,
+                        zIndex: 300,
+                        width: "240px",
+                        background: "#ffffff",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "10px",
+                        boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08)",
+                        padding: "8px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px"
+                    }}
+                >
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                        <Search size={12} style={{ position: "absolute", left: "8px", color: "#94a3b8" }} />
+                        <input
+                            type="text"
+                            placeholder={`Search ${title}...`}
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            style={{
+                                width: "100%",
+                                padding: "5px 22px 5px 26px",
+                                fontSize: "0.74rem",
+                                borderRadius: "6px",
+                                border: "1px solid #cbd5e1",
+                                outline: "none",
+                                background: "#ffffff",
+                                color: "#0f172a",
+                                colorScheme: "light"
+                            }}
+                        />
+                        {search && (
+                            <button
+                                type="button"
+                                onClick={() => setSearch("")}
+                                style={{
+                                    position: "absolute",
+                                    right: "6px",
+                                    background: "none",
+                                    border: "none",
+                                    color: "#94a3b8",
+                                    cursor: "pointer",
+                                    padding: 0,
+                                    display: "flex",
+                                    alignItems: "center"
+                                }}
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "2px 4px", fontSize: "0.68rem" }}>
+                        <span style={{ color: "#64748b", fontWeight: 500 }}>
+                            {currentSelected.length} of {options.length} selected
+                        </span>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                type="button"
+                                onClick={handleSelectAll}
+                                style={{ background: "none", border: "none", color: accentColor, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                            >
+                                Select All
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleClearAll}
+                                style={{ background: "none", border: "none", color: "#ef4444", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ height: "1px", background: "#f1f5f9", margin: "2px 0" }} />
+
+                    <div style={{ maxHeight: "170px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px" }}>
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map((opt) => {
+                                const checked = currentSelected.includes(opt);
+                                return (
+                                    <label
+                                        key={opt}
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "8px",
+                                            padding: "4px 6px",
+                                            borderRadius: "4px",
+                                            cursor: "pointer",
+                                            fontSize: "0.72rem",
+                                            color: "#334155",
+                                            userSelect: "none",
+                                            transition: "background 0.1s ease",
+                                            background: checked ? checkedItemBg : "transparent"
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => handleToggleOption(opt)}
+                                            style={{
+                                                accentColor: accentColor,
+                                                cursor: "pointer",
+                                                width: "13px",
+                                                height: "13px"
+                                            }}
+                                        />
+                                        <span style={{
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap",
+                                            fontWeight: checked ? 600 : 400,
+                                            color: "#0f172a"
+                                        }} title={opt}>
+                                            {opt}
+                                        </span>
+                                    </label>
+                                );
+                            })
+                        ) : (
+                            <div style={{ padding: "8px", fontSize: "0.7rem", color: "#94a3b8", textAlign: "center" }}>
+                                No matching values
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+
 const formatYmd = (d) => {
     if (!d) return "";
     const y = d.getFullYear();
@@ -368,6 +602,8 @@ export default function QualityAnalysis() {
     });
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState("ALL");
+    const [tableInspNoSearch, setTableInspNoSearch] = useState("");
+    const [tablePartNoDescSearch, setTablePartNoDescSearch] = useState("");
     const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
     const [selectedInspTypeFilter, setSelectedInspTypeFilter] = useState("ALL");
     const [inspTypeDropdownOpen, setInspTypeDropdownOpen] = useState(false);
@@ -378,6 +614,15 @@ export default function QualityAnalysis() {
     const [animated, setAnimated] = useState(false);
     const [weeklyChartType, setWeeklyChartType] = useState("stack");
     const [paretoChartType, setParetoChartType] = useState("pareto"); // "pareto" | "count" | "distribution"
+    const [selectedSuppliers, setSelectedSuppliers] = useState(null);
+    const [selectedGrnNos, setSelectedGrnNos] = useState(null);
+    const [selectedItems, setSelectedItems] = useState(null);
+    const [selectedComplaintIds, setSelectedComplaintIds] = useState(null);
+    const [selectedComplaintCustomers, setSelectedComplaintCustomers] = useState(null);
+    const [selectedComplaintProducts, setSelectedComplaintProducts] = useState(null);
+    const [selectedTraceInspNos, setSelectedTraceInspNos] = useState(null);
+    const [selectedTraceMachineNos, setSelectedTraceMachineNos] = useState(null);
+    const [selectedTracePartNos, setSelectedTracePartNos] = useState(null);
 
     // API state data
     const [summaryData, setSummaryData] = useState(null);
@@ -411,6 +656,90 @@ export default function QualityAnalysis() {
     const rejectionRef = useRef(null); const rejectionChart = useRef(null);
     const reworkRef = useRef(null); const reworkChart = useRef(null);
     const supplierRef = useRef(null); const supplierChart = useRef(null);
+
+    const rawSupplierRejections = useMemo(() => {
+        if (Array.isArray(supplierData?.results)) return supplierData.results;
+        if (Array.isArray(supplierData)) return supplierData;
+        return SUPPLIER_REJECTIONS;
+    }, [supplierData]);
+
+    const allSupplierOptions = useMemo(() => {
+        const set = new Set();
+        rawSupplierRejections.forEach(r => { if (r && r.supplier) set.add(r.supplier); });
+        return Array.from(set).sort();
+    }, [rawSupplierRejections]);
+
+    const allGrnOptions = useMemo(() => {
+        const set = new Set();
+        rawSupplierRejections.forEach(r => { if (r && r.grnNo) set.add(r.grnNo); });
+        return Array.from(set).sort();
+    }, [rawSupplierRejections]);
+
+    const allItemOptions = useMemo(() => {
+        const set = new Set();
+        rawSupplierRejections.forEach(r => { if (r && r.item) set.add(r.item); });
+        return Array.from(set).sort();
+    }, [rawSupplierRejections]);
+
+    const activeSupplierRejections = useMemo(() => {
+        return rawSupplierRejections.filter(r => {
+            if (!r) return false;
+            const matchSupplier = selectedSuppliers === null || selectedSuppliers.includes(r.supplier);
+            const matchGrn = selectedGrnNos === null || selectedGrnNos.includes(r.grnNo);
+            const matchItem = selectedItems === null || selectedItems.includes(r.item);
+            return matchSupplier && matchGrn && matchItem;
+        });
+    }, [rawSupplierRejections, selectedSuppliers, selectedGrnNos, selectedItems]);
+
+    const rawCustomerComplaints = useMemo(() => {
+        if (Array.isArray(customerComplaintsData?.complaints)) return customerComplaintsData.complaints;
+        if (Array.isArray(customerComplaintsData)) return customerComplaintsData;
+        return [];
+    }, [customerComplaintsData]);
+
+    const allComplaintIdOptions = useMemo(() => {
+        const set = new Set();
+        rawCustomerComplaints.forEach(c => { if (c && c.complaint_id) set.add(c.complaint_id); });
+        return Array.from(set).sort();
+    }, [rawCustomerComplaints]);
+
+    const allComplaintCustomerOptions = useMemo(() => {
+        const set = new Set();
+        rawCustomerComplaints.forEach(c => { if (c && c.customer_name) set.add(c.customer_name); });
+        return Array.from(set).sort();
+    }, [rawCustomerComplaints]);
+
+    const allComplaintProductOptions = useMemo(() => {
+        const set = new Set();
+        rawCustomerComplaints.forEach(c => { if (c && c.product) set.add(c.product); });
+        return Array.from(set).sort();
+    }, [rawCustomerComplaints]);
+
+    const activeCustomerComplaints = useMemo(() => {
+        let list = rawCustomerComplaints;
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase().trim();
+            list = list.filter(c =>
+                (c.complaint_id && c.complaint_id.toLowerCase().includes(q)) ||
+                (c.customer_name && c.customer_name.toLowerCase().includes(q)) ||
+                (c.product && c.product.toLowerCase().includes(q)) ||
+                (c.complaint_description && c.complaint_description.toLowerCase().includes(q)) ||
+                (c.action_taken && c.action_taken.toLowerCase().includes(q)) ||
+                (c.corrective_action && c.corrective_action.toLowerCase().includes(q)) ||
+                (c.permanent_action && c.permanent_action.toLowerCase().includes(q)) ||
+                (c.status && c.status.toLowerCase().includes(q))
+            );
+        }
+
+        return list.filter(c => {
+            if (!c) return false;
+            const matchId = selectedComplaintIds === null || selectedComplaintIds.includes(c.complaint_id);
+            const matchCust = selectedComplaintCustomers === null || selectedComplaintCustomers.includes(c.customer_name);
+            const matchProd = selectedComplaintProducts === null || selectedComplaintProducts.includes(c.product);
+            return matchId && matchCust && matchProd;
+        });
+    }, [rawCustomerComplaints, searchQuery, selectedComplaintIds, selectedComplaintCustomers, selectedComplaintProducts]);
 
     const debounceRef = useRef(null);
 
@@ -717,6 +1046,13 @@ export default function QualityAnalysis() {
                 mode: "index",
                 intersect: false
             },
+            layout: {
+                padding: {
+                    left: 15,
+                    right: 15,
+                    top: 12
+                }
+            },
             plugins: {
                 legend: {
                     position: "top",
@@ -742,8 +1078,8 @@ export default function QualityAnalysis() {
                 datalabels: {
                     display: true,
                     anchor: "end",
-                    align: "top",
-                    offset: 2,
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 2),
                     formatter: (value, context) => {
                         if (weeklyChartType !== "stack") {
                             return value > 0 ? value.toLocaleString() : "";
@@ -786,14 +1122,31 @@ export default function QualityAnalysis() {
             responsive: true, maintainAspectRatio: false,
             plugins: {
                 legend: { position: "bottom", labels: { font: { ...fontBase, size: 10 }, padding: 10, boxWidth: 10 } },
+                tooltip: {
+                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: { size: 11, weight: "700", family: "Poppins" },
+                    bodyFont: { size: 11, family: "Poppins" },
+                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderWidth: 1,
+                    callbacks: {
+                        label: (ctx) => {
+                            const val = Number(ctx.parsed) || 0;
+                            const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
+                            return ` ${ctx.label}: ${pct}%`;
+                        }
+                    }
+                },
                 datalabels: {
                     display: true,
                     color: "#fff",
                     font: { size: 10.5, weight: "700", family: "Poppins" },
                     formatter: (value, context) => {
                         const sum = context.dataset.data.reduce((a, b) => a + b, 0);
-                        const pct = sum > 0 ? ((value / sum) * 100).toFixed(0) : 0;
-                        return pct > 8 ? `${pct}%` : "";
+                        const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
+                        return pct > 3 ? `${pct}%` : "";
                     }
                 }
             },
@@ -804,6 +1157,9 @@ export default function QualityAnalysis() {
 
         mk(ppmRef, ppmChart, "line", ppmData, {
             responsive: true, maintainAspectRatio: false,
+            layout: {
+                padding: { left: 15, right: 15, top: 16 }
+            },
             plugins: {
                 legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
                 title: {
@@ -813,12 +1169,33 @@ export default function QualityAnalysis() {
                     color: "#5a6a9a",
                     padding: { bottom: 8 }
                 },
+                tooltip: {
+                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: { size: 11, weight: "700", family: "Poppins" },
+                    bodyFont: { size: 11, family: "Poppins" },
+                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderWidth: 1,
+                    callbacks: {
+                        label: (ctx) => {
+                            const val = Number(ctx.parsed.y) || 0;
+                            const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                            return ` ${ctx.dataset.label || "Actual PPM"}: ${val2} PPM`;
+                        }
+                    }
+                },
                 datalabels: {
                     display: true,
                     anchor: "end",
-                    align: "top",
-                    offset: 6,
-                    formatter: (v) => (v > 0 ? `${Math.round(v).toLocaleString()}` : ""),
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                    formatter: (v) => {
+                        const val = Number(v) || 0;
+                        if (val <= 0) return "";
+                        const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                        return `${val2} PPM`;
+                    },
                     font: { size: 9, weight: "700", family: "Poppins" },
                     color: "#f97316",
                     backgroundColor: "#ffffff",
@@ -832,6 +1209,7 @@ export default function QualityAnalysis() {
                 x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
                 y: {
                     beginAtZero: true,
+                    grace: "15%",
                     grid: { color: "rgba(26,84,212,0.07)" },
                     ticks: {
                         font: { ...fontBase, size: 9 },
@@ -880,13 +1258,33 @@ export default function QualityAnalysis() {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => {
+                                if (ctx.dataset.type === "line") {
+                                    return ` ${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(1)}%`;
+                                }
+                                const val = Number(ctx.parsed.y) || 0;
+                                const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
+                                return ` ${ctx.dataset.label}: ${val.toLocaleString()} (${pct}%)`;
+                            }
+                        }
+                    },
                     datalabels: {
                         display: true,
                         formatter: (value, context) => {
                             if (context.datasetIndex === 0) {
                                 return value > 0 ? value.toString() : "";
                             } else {
-                                return value > 0 ? `${value.toFixed(0)}%` : "";
+                                return value > 0 ? `${value.toFixed(1)}%` : "";
                             }
                         },
                         font: { size: 9.5, weight: "700", family: "Poppins" },
@@ -956,14 +1354,31 @@ export default function QualityAnalysis() {
                 cutout: "60%",
                 plugins: {
                     legend: { position: "right", labels: { font: { ...fontBase, size: 10, weight: 600 }, boxWidth: 10, padding: 8 } },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => {
+                                const val = Number(ctx.parsed) || 0;
+                                const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
+                                return ` ${ctx.label}: ${val.toLocaleString()} (${pct}%)`;
+                            }
+                        }
+                    },
                     datalabels: {
                         display: true,
                         color: "#fff",
                         font: { size: 9.5, weight: "750", family: "Poppins" },
                         formatter: (value, context) => {
                             const sum = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const pct = sum > 0 ? ((value / sum) * 100).toFixed(0) : 0;
-                            return pct > 5 ? `${pct}%` : "";
+                            const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
+                            return pct > 3 ? `${pct}%` : "";
                         }
                     }
                 }
@@ -988,13 +1403,16 @@ export default function QualityAnalysis() {
             }]
         }, {
             responsive: true, maintainAspectRatio: false,
+            layout: {
+                padding: { left: 15, right: 15, top: 16 }
+            },
             plugins: {
                 legend: { display: false },
                 datalabels: {
                     display: true,
                     anchor: "end",
-                    align: "top",
-                    offset: 6,
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
                     formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
                     font: { size: 9, weight: "700", family: "Poppins" },
                     color: "#ef4444",
@@ -1007,7 +1425,7 @@ export default function QualityAnalysis() {
             },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
-                y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
             },
         });
 
@@ -1027,13 +1445,16 @@ export default function QualityAnalysis() {
             }]
         }, {
             responsive: true, maintainAspectRatio: false,
+            layout: {
+                padding: { left: 15, right: 15, top: 16 }
+            },
             plugins: {
                 legend: { display: false },
                 datalabels: {
                     display: true,
                     anchor: "end",
-                    align: "top",
-                    offset: 6,
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
                     formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
                     font: { size: 9, weight: "700", family: "Poppins" },
                     color: "#f97316",
@@ -1046,13 +1467,22 @@ export default function QualityAnalysis() {
             },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
-                y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
             },
         });
 
-        const supplierLabels = supplierData?.chart?.labels || ["Super Forge", "A-One Steel", "Dynamic Precision", "Micro Tools", "Apex Industries", "Ultra Tech"];
-        const supplierMatRej = supplierData?.chart?.matRej || [12, 10, 8, 5, 4, 3];
-        const supplierMacRej = supplierData?.chart?.macRej || [3, 5, 2, 1, 0, 2];
+        const suppMap = {};
+        activeSupplierRejections.forEach(r => {
+            const sName = r.supplier ? (r.supplier.length > 18 ? r.supplier.substring(0, 16) + "..." : r.supplier) : "Unknown";
+            if (!suppMap[sName]) {
+                suppMap[sName] = { matRej: 0, macRej: 0 };
+            }
+            suppMap[sName].matRej += (parseFloat(r.matRej) || 0);
+            suppMap[sName].macRej += (parseFloat(r.macRej) || 0);
+        });
+        const supplierLabels = Object.keys(suppMap);
+        const supplierMatRej = supplierLabels.map(l => suppMap[l].matRej);
+        const supplierMacRej = supplierLabels.map(l => suppMap[l].macRej);
 
         mk(supplierRef, supplierChart, "bar", {
             labels: supplierLabels,
@@ -1111,7 +1541,7 @@ export default function QualityAnalysis() {
         return () => {
             [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart, supplierChart].forEach(c => c.current?.destroy());
         };
-    }, [chartsData, weeklyChartType, paretoChartType, supplierData]);
+    }, [chartsData, weeklyChartType, paretoChartType, supplierData, activeSupplierRejections]);
 
     const resetFilters = () => {
         const today = new Date();
@@ -1148,7 +1578,9 @@ export default function QualityAnalysis() {
         const records = recordsData?.inspection_records || [];
         const raw = records.map(r => ({
             ...r,
-            partyName: r.partyName || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")
+            cname: r.cname || r.partyName || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
+            partyName: r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
+            routecardDetails: r.roucard || r.routecardDetails || r.routecard || "—"
         }));
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
@@ -1162,6 +1594,47 @@ export default function QualityAnalysis() {
             (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
         );
     }, [recordsData, hasNoData, searchQuery]);
+
+    const allTraceInspNoOptions = useMemo(() => {
+        const set = new Set();
+        searchFilteredInspectionRows.forEach(r => { if (r && r.id) set.add(r.id); });
+        return Array.from(set).sort();
+    }, [searchFilteredInspectionRows]);
+
+    const allTraceMachineNoOptions = useMemo(() => {
+        const set = new Set();
+        searchFilteredInspectionRows.forEach(r => { if (r && r.machineNo && r.machineNo !== "—") set.add(r.machineNo); });
+        return Array.from(set).sort();
+    }, [searchFilteredInspectionRows]);
+
+    const allTracePartNoOptions = useMemo(() => {
+        const set = new Set();
+        searchFilteredInspectionRows.forEach(r => { if (r && r.partNoDesc && r.partNoDesc !== "—") set.add(r.partNoDesc); });
+        return Array.from(set).sort();
+    }, [searchFilteredInspectionRows]);
+
+    const activeTraceabilityRows = useMemo(() => {
+        let rows = searchFilteredInspectionRows;
+
+        if (selectedTraceTypeFilter !== "ALL") {
+            rows = rows.filter(r => {
+                const label = (r.typeLabel || "").toLowerCase();
+                const id = (r.id || "").toLowerCase();
+                if (selectedTraceTypeFilter === "FINAL") return label.includes("final") || id.startsWith("fi");
+                if (selectedTraceTypeFilter === "INTER") return label.includes("inter") || id.startsWith("ii");
+                if (selectedTraceTypeFilter === "JOB") return label.includes("job") || (!label.includes("final") && !label.includes("inter") && !id.startsWith("fi") && !id.startsWith("ii"));
+                return true;
+            });
+        }
+
+        return rows.filter(r => {
+            if (!r) return false;
+            const matchInspNo = selectedTraceInspNos === null || selectedTraceInspNos.includes(r.id);
+            const matchMachineNo = selectedTraceMachineNos === null || selectedTraceMachineNos.includes(r.machineNo);
+            const matchPartNo = selectedTracePartNos === null || selectedTracePartNos.includes(r.partNoDesc);
+            return matchInspNo && matchMachineNo && matchPartNo;
+        });
+    }, [searchFilteredInspectionRows, selectedTraceTypeFilter, selectedTraceInspNos, selectedTraceMachineNos, selectedTracePartNos]);
 
     const activeProductQuality = useMemo(() => {
         if (hasNoData && !hasSearchWithData) return [];
@@ -1188,16 +1661,34 @@ export default function QualityAnalysis() {
     }, [defectCausesData, hasNoData]);
 
     const activeInspectionRows = useMemo(() => {
-        if (selectedType === "ALL") return searchFilteredInspectionRows;
-        return searchFilteredInspectionRows.filter(r => {
-            const l = (r.typeLabel || "").toLowerCase();
-            const id = (r.id || "").toLowerCase();
-            if (selectedType === "INTER") return l.includes("inter") || id.startsWith("ii");
-            if (selectedType === "FINAL") return l.includes("final") || id.startsWith("fi");
-            if (selectedType === "JOB") return l.includes("job") || id.startsWith("ji");
-            return true;
-        });
-    }, [searchFilteredInspectionRows, selectedType]);
+        let rows = searchFilteredInspectionRows;
+
+        if (selectedType !== "ALL") {
+            rows = rows.filter(r => {
+                const l = (r.typeLabel || "").toLowerCase();
+                const id = (r.id || "").toLowerCase();
+                if (selectedType === "INTER") return l.includes("inter") || id.startsWith("ii");
+                if (selectedType === "FINAL") return l.includes("final") || id.startsWith("fi");
+                if (selectedType === "JOB") return l.includes("job") || id.startsWith("ji");
+                return true;
+            });
+        }
+
+        if (tableInspNoSearch.trim()) {
+            const q = tableInspNoSearch.toLowerCase().trim();
+            rows = rows.filter(r => (r.id || "").toLowerCase().includes(q));
+        }
+
+        if (tablePartNoDescSearch.trim()) {
+            const q = tablePartNoDescSearch.toLowerCase().trim();
+            rows = rows.filter(r => {
+                const pnd = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || ""));
+                return pnd.toLowerCase().includes(q);
+            });
+        }
+
+        return rows;
+    }, [searchFilteredInspectionRows, selectedType, tableInspNoSearch, tablePartNoDescSearch]);
 
     const activeInspectionRowsTotals = useMemo(() => {
         let totalInsp = 0;
@@ -1447,46 +1938,7 @@ export default function QualityAnalysis() {
         }).sort((a, b) => b.rejected - a.rejected);
     }, [searchFilteredInspectionRows, hasNoData]);
 
-    const activeCustomerComplaints = useMemo(() => {
-        if (hasNoData) return [];
-        const raw = customerComplaintsData?.complaints || [];
-
-        if (!searchQuery) return raw;
-        const q = searchQuery.toLowerCase().trim();
-        return raw.filter(c =>
-            (c.complaint_id && c.complaint_id.toLowerCase().includes(q)) ||
-            (c.customer_name && c.customer_name.toLowerCase().includes(q)) ||
-            (c.product && c.product.toLowerCase().includes(q)) ||
-            (c.complaint_description && c.complaint_description.toLowerCase().includes(q)) ||
-            (c.action_taken && c.action_taken.toLowerCase().includes(q)) ||
-            (c.corrective_action && c.corrective_action.toLowerCase().includes(q)) ||
-            (c.permanent_action && c.permanent_action.toLowerCase().includes(q)) ||
-            (c.status && c.status.toLowerCase().includes(q))
-        );
-    }, [customerComplaintsData, hasNoData, searchQuery]);
-
     // Traceability — mapped to searchFilteredInspectionRows and filtered by selectedTraceTypeFilter
-    const activeTraceabilityRows = useMemo(() => {
-        if (selectedTraceTypeFilter === "ALL") return searchFilteredInspectionRows;
-        return searchFilteredInspectionRows.filter(r => {
-            const label = (r.typeLabel || "").toLowerCase();
-            const id = (r.id || "").toLowerCase();
-            if (selectedTraceTypeFilter === "FINAL") {
-                return label.includes("final") || id.startsWith("fi");
-            }
-            if (selectedTraceTypeFilter === "INTER") {
-                return label.includes("inter") || id.startsWith("ii");
-            }
-            if (selectedTraceTypeFilter === "JOB") {
-                return label.includes("job") || (!label.includes("final") && !label.includes("inter") && !id.startsWith("fi") && !id.startsWith("ii"));
-            }
-            return true;
-        });
-    }, [searchFilteredInspectionRows, selectedTraceTypeFilter]);
-
-    const activeSupplierRejections = useMemo(() => {
-        return supplierData?.results || SUPPLIER_REJECTIONS;
-    }, [supplierData]);
 
     const interInspCount = useMemo(() =>
         searchFilteredInspectionRows.filter(r => r.typeLabel?.toLowerCase().includes("inter") || r.id?.toLowerCase().startsWith("ii")).length,
@@ -1682,7 +2134,7 @@ export default function QualityAnalysis() {
                         { lbl: "Pass Rate", val: summaryData?.pass_rate ?? "—", cls: "qa2-green" },
                         { lbl: "Total Rejected", val: summaryData?.total_rejected ?? "—", cls: "qa2-red" },
                         { lbl: "Rework", val: summaryData?.rework ?? "—", cls: "qa2-orange" },
-                        { lbl: "Pending Insp.", val: summaryData?.pending_inspection ?? "—", cls: "qa2-yellow" },
+                        { lbl: "Final Insp. Pending", val: summaryData?.pending_inspection ?? "—", cls: "qa2-yellow" },
                     ].map((s, i) => (
                         <div className="qa2-strip-item" key={i}>
                             <div className="qa2-strip-lbl">{s.lbl}</div>
@@ -1940,7 +2392,7 @@ export default function QualityAnalysis() {
                                         const isWarning = p.hasWarning || (p.rateVal && p.rateVal.includes("⚠")) || p.rateVal === "Rework" || p.rateVal === "0%";
                                         return (
                                             <div className="qa2-pq-row" key={i}>
-                                                <div className="qa2-pq-name">{p.name}</div>
+                                                <div className="qa2-pq-name" title={p.name}>{p.name}</div>
                                                 <div className="qa2-pq-num qa2-muted">{p.insp}</div>
                                                 <div className="qa2-pq-num qa2-green">{p.pass}</div>
                                                 <div className="qa2-pq-num qa2-red">{p.rej}</div>
@@ -2256,6 +2708,67 @@ export default function QualityAnalysis() {
                         </div>
                     }
                 />
+                {/* Table Head Filter Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.65rem 1.25rem', borderBottom: '1px solid rgba(26,84,212,0.08)', background: '#f8fafc', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '0 0 auto', width: '220px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Insp No:</span>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <input
+                                type="text"
+                                className="qa2-fi"
+                                style={{ width: '100%', padding: '0.35rem 1.75rem 0.35rem 1.75rem', fontSize: '0.73rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                placeholder="Filter Insp No..."
+                                value={tableInspNoSearch}
+                                onChange={(e) => setTableInspNoSearch(e.target.value)}
+                            />
+                            <Search size={12} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            {tableInspNoSearch && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTableInspNoSearch("")}
+                                    style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '1', minWidth: '260px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Part No – Description:</span>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <input
+                                type="text"
+                                className="qa2-fi"
+                                style={{ width: '100%', padding: '0.35rem 1.75rem 0.35rem 1.75rem', fontSize: '0.73rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                placeholder="Filter Part No or Description..."
+                                value={tablePartNoDescSearch}
+                                onChange={(e) => setTablePartNoDescSearch(e.target.value)}
+                            />
+                            <Search size={12} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            {tablePartNoDescSearch && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTablePartNoDescSearch("")}
+                                    style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {(tableInspNoSearch || tablePartNoDescSearch) && (
+                        <button
+                            type="button"
+                            onClick={() => { setTableInspNoSearch(""); setTablePartNoDescSearch(""); }}
+                            style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.3rem 0.65rem', borderRadius: '5px', marginLeft: 'auto' }}
+                        >
+                            <X size={12} /> Clear Head Filters
+                        </button>
+                    )}
+                </div>
+
                 {recordsLoading ? (
                     <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1.5rem" }}>
                         {[1, 2, 3, 4, 5].map(i => (
@@ -2600,8 +3113,59 @@ export default function QualityAnalysis() {
 
             {/* ── Supplier Wise Rejection (Full Width, Chart Left, Table Right) ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <SectionHead icon={PieChart} iconColor="#8b5cf6" title="Supplier Wise Rejection"
-                    badge={`${activeSupplierRejections.length} Record${activeSupplierRejections.length !== 1 ? "s" : ""}`} badgeCls="qa2-badge-purple" />
+                <SectionHead
+                    icon={PieChart}
+                    iconColor="#8b5cf6"
+                    title="Supplier Wise Rejection"
+                    badge={`${activeSupplierRejections.length} Record${activeSupplierRejections.length !== 1 ? "s" : ""}`}
+                    badgeCls="qa2-badge-purple"
+                    extra={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <MultiSelectFilterDropdown
+                                title="Supplier Name"
+                                options={allSupplierOptions}
+                                selectedValues={selectedSuppliers}
+                                onChange={setSelectedSuppliers}
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Grn no"
+                                options={allGrnOptions}
+                                selectedValues={selectedGrnNos}
+                                onChange={setSelectedGrnNos}
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Item Details"
+                                options={allItemOptions}
+                                selectedValues={selectedItems}
+                                onChange={setSelectedItems}
+                            />
+                            {(selectedSuppliers !== null || selectedGrnNos !== null || selectedItems !== null) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedSuppliers(null);
+                                        setSelectedGrnNos(null);
+                                        setSelectedItems(null);
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#8b5cf6',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        padding: '4px 6px'
+                                    }}
+                                >
+                                    <X size={12} style={{ strokeWidth: 3 }} /> Clear Filters
+                                </button>
+                            )}
+                        </div>
+                    }
+                />
                 <div className="qa2-supplier-grid">
                     
                     {/* Left side: Chart/Graph */}
@@ -2633,20 +3197,28 @@ export default function QualityAnalysis() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {activeSupplierRejections.map((r, i) => (
-                                    <tr key={i} className="qa2-tr">
-                                        <td style={{ ...getSuppColStyle("#"), fontWeight: 600, color: "#64748b" }}>{i + 1}</td>
-                                        <td style={{ ...getSuppColStyle("Supplier Name"), fontWeight: 600 }}>{r.supplier}</td>
-                                        <td style={getSuppColStyle("Grn no")}><span className="qa2-rej-id" style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6" }}>{r.grnNo}</span></td>
-                                        <td style={getSuppColStyle("Grn Date")} className="qa2-muted qa2-nowrap">{r.date}</td>
-                                        <td style={getSuppColStyle("Item Details")} className="qa2-mono qa2-muted">{r.item}</td>
-                                        <td style={{ ...getSuppColStyle("GRN Qty"), fontWeight: 600 }} className="qa2-td-r">{r.qty.toLocaleString()}</td>
-                                        <td style={{ ...getSuppColStyle("UOM"), color: "#64748b" }} className="qa2-nowrap qa2-center">{r.uom}</td>
-                                        <td style={{ ...getSuppColStyle("Ok Qty"), fontWeight: 600 }} className="qa2-td-r qa2-green">{r.okQty.toLocaleString()}</td>
-                                        <td style={{ ...getSuppColStyle("Mat Rej"), fontWeight: r.matRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.matRej > 0 ? "qa2-red" : ""}`}>{r.matRej.toLocaleString()}</td>
-                                        <td style={{ ...getSuppColStyle("Mac Rej"), fontWeight: r.macRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.macRej > 0 ? "qa2-red" : ""}`}>{r.macRej.toLocaleString()}</td>
+                                {activeSupplierRejections.length > 0 ? (
+                                    activeSupplierRejections.map((r, i) => (
+                                        <tr key={i} className="qa2-tr">
+                                            <td style={{ ...getSuppColStyle("#"), fontWeight: 600, color: "#64748b" }}>{i + 1}</td>
+                                            <td style={{ ...getSuppColStyle("Supplier Name"), fontWeight: 600 }}>{r.supplier}</td>
+                                            <td style={getSuppColStyle("Grn no")}><span className="qa2-rej-id" style={{ background: "rgba(139, 92, 246, 0.1)", color: "#8b5cf6" }}>{r.grnNo}</span></td>
+                                            <td style={getSuppColStyle("Grn Date")} className="qa2-muted qa2-nowrap">{r.date}</td>
+                                            <td style={getSuppColStyle("Item Details")} className="qa2-mono qa2-muted">{r.item}</td>
+                                            <td style={{ ...getSuppColStyle("GRN Qty"), fontWeight: 600 }} className="qa2-td-r">{r.qty.toLocaleString()}</td>
+                                            <td style={{ ...getSuppColStyle("UOM"), color: "#64748b" }} className="qa2-nowrap qa2-center">{r.uom}</td>
+                                            <td style={{ ...getSuppColStyle("Ok Qty"), fontWeight: 600 }} className="qa2-td-r qa2-green">{r.okQty.toLocaleString()}</td>
+                                            <td style={{ ...getSuppColStyle("Mat Rej"), fontWeight: r.matRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.matRej > 0 ? "qa2-red" : ""}`}>{r.matRej.toLocaleString()}</td>
+                                            <td style={{ ...getSuppColStyle("Mac Rej"), fontWeight: r.macRej > 0 ? 600 : 400 }} className={`qa2-td-r ${r.macRej > 0 ? "qa2-red" : ""}`}>{r.macRej.toLocaleString()}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="10" style={{ padding: 0 }}>
+                                            <QualityEmptyState message="No Supplier Rejections match the selected filters" height="220px" />
+                                        </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -2655,8 +3227,62 @@ export default function QualityAnalysis() {
 
             {/* ── Customer Complaints (Full Width) ── */}
             <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
-                <SectionHead icon={AlertCircle} iconColor="#ef4444" title="Customer Complaints Log"
-                    badge={`${activeCustomerComplaints.length} Complaint${activeCustomerComplaints.length !== 1 ? "s" : ""}`} badgeCls="qa2-badge-red" />
+                <SectionHead
+                    icon={AlertCircle}
+                    iconColor="#ef4444"
+                    title="Customer Complaints Log"
+                    badge={`${activeCustomerComplaints.length} Complaint${activeCustomerComplaints.length !== 1 ? "s" : ""}`}
+                    badgeCls="qa2-badge-red"
+                    extra={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <MultiSelectFilterDropdown
+                                title="Complaint ID"
+                                options={allComplaintIdOptions}
+                                selectedValues={selectedComplaintIds}
+                                onChange={setSelectedComplaintIds}
+                                accentColor="#ef4444"
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Customer"
+                                options={allComplaintCustomerOptions}
+                                selectedValues={selectedComplaintCustomers}
+                                onChange={setSelectedComplaintCustomers}
+                                accentColor="#ef4444"
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Product"
+                                options={allComplaintProductOptions}
+                                selectedValues={selectedComplaintProducts}
+                                onChange={setSelectedComplaintProducts}
+                                accentColor="#ef4444"
+                            />
+                            {(selectedComplaintIds !== null || selectedComplaintCustomers !== null || selectedComplaintProducts !== null) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedComplaintIds(null);
+                                        setSelectedComplaintCustomers(null);
+                                        setSelectedComplaintProducts(null);
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#ef4444',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        padding: '4px 6px'
+                                    }}
+                                >
+                                    <X size={12} style={{ strokeWidth: 3 }} /> Clear Filters
+                                </button>
+                            )}
+                        </div>
+                    }
+                />
                 {customerComplaintsLoading ? (
                     <div className="qa2-table-scroll qa2-pulse-loader" style={{ padding: "1.5rem" }}>
                         {[1, 2, 3].map(i => (
@@ -2725,7 +3351,49 @@ export default function QualityAnalysis() {
                     badge={`${activeTraceabilityRows.length} Record${activeTraceabilityRows.length !== 1 ? "s" : ""}`}
                     badgeCls="qa2-badge-purple"
                     extra={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <MultiSelectFilterDropdown
+                                title="Insp No"
+                                options={allTraceInspNoOptions}
+                                selectedValues={selectedTraceInspNos}
+                                onChange={setSelectedTraceInspNos}
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Machine No"
+                                options={allTraceMachineNoOptions}
+                                selectedValues={selectedTraceMachineNos}
+                                onChange={setSelectedTraceMachineNos}
+                            />
+                            <MultiSelectFilterDropdown
+                                title="Part No"
+                                options={allTracePartNoOptions}
+                                selectedValues={selectedTracePartNos}
+                                onChange={setSelectedTracePartNos}
+                            />
+                            {(selectedTraceInspNos !== null || selectedTraceMachineNos !== null || selectedTracePartNos !== null) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedTraceInspNos(null);
+                                        setSelectedTraceMachineNos(null);
+                                        setSelectedTracePartNos(null);
+                                    }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#8b5cf6',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        padding: '4px 6px'
+                                    }}
+                                >
+                                    <X size={12} style={{ strokeWidth: 3 }} /> Clear Filters
+                                </button>
+                            )}
                             <div style={{ position: 'relative' }} ref={traceTypeDropdownRef}>
                                 <button
                                     className="qa2-filter-btn"
@@ -2863,15 +3531,24 @@ export default function QualityAnalysis() {
                     <table className="qa2-table">
                         <thead>
                             <tr>
-                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Partno-Description", "Process", "Operator Name", "Prod Qty", "Rej Qty", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
-                                    <th key={h} style={getTraceColStyle(h)} className={["Prod Qty", "Rej Qty", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
+                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Partno-Description", "Process", "Operator Name / Vendor Name", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
+                                    <th key={h} style={getTraceColStyle(h)} className={["Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {activeTraceabilityRows.length > 0 ? (
                                 activeTraceabilityRows.map((r, i) => {
-                                    const totalRej = (parseFloat(r.matRejQty || 0) + parseFloat(r.macRejQty || 0));
+                                    const isJobOrder = (r.typeLabel?.toLowerCase().includes("job") || r.id?.toLowerCase().startsWith("ji") || r.id?.toLowerCase().startsWith("jir") || r.inspType?.toLowerCase().includes("job"));
+                                    const displayName = isJobOrder
+                                        ? (r.cname || r.partyName || r.vendor || getPartyName(r.id, r.product || r.partNoDesc) || "—")
+                                        : (r.operatorName || "—");
+                                    const okQty = parseFloat(r.okQty || (r.result === "PASS" ? r.qty : 0)) || 0;
+                                    const matRej = parseFloat(r.matRejQty || 0) || 0;
+                                    const macRej = parseFloat(r.macRejQty || 0) || 0;
+                                    const reworkQty = parseFloat(r.reworkQty || 0) || 0;
+                                    const routecardVal = r.roucard || r.routecardDetails || r.routecard || "—";
+
                                     return (
                                         <tr key={i} className="qa2-tr">
                                             <td style={{ ...getTraceColStyle("#"), fontWeight: 600, color: "#64748b" }}>{i + 1}</td>
@@ -2893,18 +3570,20 @@ export default function QualityAnalysis() {
                                                     <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{r.process}</span>
                                                 ) : "—"}
                                             </td>
-                                            <td style={getTraceColStyle("Operator Name")}>{r.operatorName}</td>
+                                            <td style={getTraceColStyle("Operator Name / Vendor Name")}>{displayName}</td>
                                             <td style={{ ...getTraceColStyle("Prod Qty"), fontWeight: 600 }} className="qa2-td-r">{r.qty}</td>
-                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Rej Qty"), fontWeight: totalRej > 0 ? 600 : 400, color: totalRej > 0 ? "#ef4444" : "inherit" }}>{totalRej}</td>
-                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Rw Qty"), fontWeight: parseFloat(r.reworkQty || 0) > 0 ? 600 : 400, color: parseFloat(r.reworkQty || 0) > 0 ? "#f97316" : "inherit" }}>{r.reworkQty || 0}</td>
+                                            <td style={{ ...getTraceColStyle("Ok Qty"), fontWeight: 600 }} className="qa2-td-r qa2-green">{okQty}</td>
+                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Mat Rej"), fontWeight: matRej > 0 ? 600 : 400, color: matRej > 0 ? "#ef4444" : "inherit" }}>{matRej}</td>
+                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Mac Rej"), fontWeight: macRej > 0 ? 600 : 400, color: macRej > 0 ? "#ef4444" : "inherit" }}>{macRej}</td>
+                                            <td className="qa2-td-r" style={{ ...getTraceColStyle("Rw Qty"), fontWeight: reworkQty > 0 ? 600 : 400, color: reworkQty > 0 ? "#f97316" : "inherit" }}>{reworkQty}</td>
                                             <td style={getTraceColStyle("Inspected By")}>{r.inspBy}</td>
-                                            <td style={getTraceColStyle("Routecard Details")} className="qa2-mono qa2-muted">{r.routecardDetails}</td>
+                                            <td style={getTraceColStyle("Routecard Details")} className="qa2-mono qa2-muted">{routecardVal}</td>
                                         </tr>
                                     );
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan="13" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                    <td colSpan="15" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
                                         No traceability records found for the selected period
                                     </td>
                                 </tr>

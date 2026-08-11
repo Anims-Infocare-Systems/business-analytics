@@ -754,7 +754,8 @@ function writeFilterSession(key, data) {
 
 export default function IdleTimeReport() {
 
-  const _dflt = { from: new Date(2026, 2, 1), to: new Date(2026, 2, 27) };
+  const _now = new Date();
+  const _dflt = { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth(), _now.getDate()) };
   const _saved = readFilterSession("ba_filter_idletime", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
   const [filters, setFilters] = useState({

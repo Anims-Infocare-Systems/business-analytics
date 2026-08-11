@@ -650,7 +650,7 @@
     font-size: .72rem; font-weight: 700;
 }
 .au-drawer__module--on  { background: rgba(16,185,129,.12); color: #059669; }
-.au-drawer__module--off { background: rgba(100,116,139,.08); color: #94a3b8; }
+.au-drawer__module--off { background: rgba(239,68,68,.12); color: #ef4444; }
 
 .au-drawer__actions {
     display: flex; flex-wrap: wrap; gap: .5rem;

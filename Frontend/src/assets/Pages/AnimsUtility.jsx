@@ -187,14 +187,17 @@ function ClientDrawer({ client, onClose }) {
                 <div className="au-drawer__section">
                     <h4 className="au-drawer__sec-title">Licensed Modules</h4>
                     <div className="au-drawer__modules">
-                        {["Dashboard", "Approvals", "Charts", "Reports", "MIS", "Utility"].map(m => (
-                            <span
-                                key={m}
-                                className={`au-drawer__module ${client.modules.includes(m) ? "au-drawer__module--on" : "au-drawer__module--off"}`}
-                            >
-                                {client.modules.includes(m) ? "✓" : "✕"} {m}
-                            </span>
-                        ))}
+                        {["Dashboard", "Approvals", "Charts", "Reports", "MIS", "Utility"].map(m => {
+                            const isEnabled = client.modules && client.modules.includes(m);
+                            return (
+                                <span
+                                    key={m}
+                                    className={`au-drawer__module ${isEnabled ? "au-drawer__module--on" : "au-drawer__module--off"}`}
+                                >
+                                    {isEnabled ? `✓ ${m}` : `✕ ${m}`}
+                                </span>
+                            );
+                        })}
                     </div>
                 </div>
 

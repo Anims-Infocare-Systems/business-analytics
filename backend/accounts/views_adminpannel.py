@@ -11,7 +11,7 @@ from django.db import connection, transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .views import encrypt_password, decrypt_password, update_tenant_license
+from .views import encrypt_password, decrypt_password, update_tenant_license, get_tenant_license
 from .models import Tenant
 
 ADMIN_USER = getattr(settings, "ADMIN_PANEL_USER", "admin")
@@ -155,11 +155,13 @@ def admin_list_tenants(request):
             for r in rows:
                 signup_date = r[13].strftime("%Y-%m-%d") if isinstance(r[13], (datetime, date)) else str(r[13] or "")
                 end_date = r[14].strftime("%Y-%m-%d") if isinstance(r[14], (datetime, date)) else str(r[14] or "")
+                comp_code = r[2]
+                lic_flags = get_tenant_license(comp_code)
                 
                 tenants.append({
                     "id": r[0],
                     "tenant_id": r[1],
-                    "company_code": r[2],
+                    "company_code": comp_code,
                     "company_name": r[3],
                     "business_name": r[4],
                     "business_person_name": r[5],
@@ -180,7 +182,15 @@ def admin_list_tenants(request):
                     "erp_port": r[20] or 1433,
                     "tenant_status": bool(r[21]),
                     "city": r[22] or "",
-                    "state": r[23] or ""
+                    "state": r[23] or "",
+                    "modules": {
+                        "dashboard": bool(lic_flags.get("dashboard")),
+                        "approvals": bool(lic_flags.get("approvals")),
+                        "charts": bool(lic_flags.get("charts")),
+                        "reports": bool(lic_flags.get("reports")),
+                        "mis": bool(lic_flags.get("mis")),
+                        "utility": bool(lic_flags.get("utility")),
+                    }
                 })
             return Response({"success": True, "tenants": tenants})
     except Exception as e:
@@ -209,6 +219,7 @@ def admin_create_tenant(request):
     end_date = str(request.data.get("end_date") or "").strip()
     city = str(request.data.get("city") or "").strip()
     state = str(request.data.get("state") or "").strip()
+    modules_dict = request.data.get("modules")
 
     erp_server = str(request.data.get("erp_server") or "").strip()
     erp_database = str(request.data.get("erp_database") or "").strip()
@@ -260,11 +271,7 @@ def admin_create_tenant(request):
                         %s, %s, %s, %s, 
                         %s, %s, %s, %s, 
                         %s, %s, %s, %s, 
-                        GETDATE(),
-                        CASE WHEN %s IS NOT NULL THEN %s 
-                             WHEN %s = 'free' THEN DATEADD(month, 6, GETDATE()) 
-                             ELSE DATEADD(year, 1, GETDATE()) END,
-                        1, GETDATE(),
+                        GETDATE(), %s, 1, GETDATE(),
                         %s, %s
                     )
                     """,
@@ -272,20 +279,19 @@ def admin_create_tenant(request):
                         tenant_id, company_code, company_name, business_name,
                         person_name, email, phone, gst or None,
                         employees, users_count, plan_id, plan_name,
-                        end_date_val, end_date_val, plan_id,
-                        city, state
+                        end_date_val, city, state
                     ]
                 )
 
-                # 3. Create default Superadmin user
-                encrypted_pw = encrypt_password(admin_password)
+                # 3. Create initial admin user
+                admin_pass_enc = hashlib.sha256(admin_password.encode()).hexdigest()
                 cursor.execute(
                     """
                     INSERT INTO tenants_users (
-                        tenant_id, company_code, username, designation, password, created_at, issuperadmin, deleted
-                    ) VALUES (%s, %s, %s, 'Admin', %s, GETDATE(), 1, 0)
+                        tenant_id, company_code, username, password, designation, issuperadmin, deleted, created_at
+                    ) VALUES (%s, %s, %s, %s, 'Superadmin', 1, 0, GETDATE())
                     """,
-                    [tenant_id, company_code, admin_username, encrypted_pw]
+                    [tenant_id, company_code, admin_username, admin_pass_enc]
                 )
 
                 # 4. Insert default user rights (all True) for the admin user
@@ -301,7 +307,7 @@ def admin_create_tenant(request):
                     )
 
                 # 5. Update/insert license mapping in tenants_lisencemodule
-                update_tenant_license(tenant_id, company_code, plan_id)
+                update_tenant_license(tenant_id, company_code, plan_id, modules_dict)
 
         return Response({"success": True, "message": "Tenant created successfully."})
     except Exception as e:
@@ -332,6 +338,7 @@ def admin_update_tenant(request):
     city = str(request.data.get("city") or "").strip()
     state = str(request.data.get("state") or "").strip()
     active_status = 1 if bool(request.data.get("active_status", True)) else 0
+    modules_dict = request.data.get("modules")
 
     erp_server = str(request.data.get("erp_server") or "").strip()
     erp_database = str(request.data.get("erp_database") or "").strip()
@@ -395,7 +402,7 @@ def admin_update_tenant(request):
                 )
 
                 # 3. Update/insert license mapping in tenants_lisencemodule
-                update_tenant_license(tenant_id, company_code, plan_id)
+                update_tenant_license(tenant_id, company_code, plan_id, modules_dict)
 
         return Response({"success": True, "message": "Tenant details updated successfully."})
     except Exception as e:

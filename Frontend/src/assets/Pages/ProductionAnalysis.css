@@ -2149,10 +2149,12 @@
     color: #94a3b8;
 }
 
-.pa2-td-part {
+.pa2-table td.pa2-td-part {
     font-weight: 600;
     color: #1a2a5e;
     max-width: 140px;
+    word-break: break-all;
+    white-space: normal;
 }
 
 .pa2-loss-bar-inline {

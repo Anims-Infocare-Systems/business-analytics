@@ -25,7 +25,9 @@ import {
   Filter,
   Check,
   Download,
-  X
+  X,
+  Play,
+  Printer
 } from "lucide-react";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
@@ -35,7 +37,7 @@ Chart.register(...registerables, ChartDataLabels);
 const API_BASE = resolveApiBase();
 
 function toIsoDate(d) {
-  if (!d) return "";
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "";
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -54,27 +56,33 @@ function formatQty(qty) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
-function initChartWhenReady(canvasRef, initCallback, delay = 50) {
-  let timer;
-  let attempts = 0;
-  const checkAndInit = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if ((canvas.clientWidth > 0 && canvas.clientHeight > 0) || attempts >= 10) {
-      initCallback(canvas);
-    } else {
-      attempts++;
-      timer = setTimeout(checkAndInit, delay);
-    }
-  };
-  checkAndInit();
-  return () => clearTimeout(timer);
+function formatExact(val) {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
-function formatLakhs(rupees) {
+function safeToFixed(v, digits = 1) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toFixed(digits);
+}
+
+
+
+
+function formatLakhs(rupees, decimals = 3) {
   const n = Number(rupees);
   if (!Number.isFinite(n)) return "—";
-  return `${(n / 100_000).toFixed(2)}L`;
+  return `${(n / 100_000).toFixed(decimals)}L`;
+}
+
+function formatLakhsFloor(rupees, decimals = 3) {
+  const n = Number(rupees);
+  if (!Number.isFinite(n)) return "—";
+  const factor = Math.pow(10, decimals);
+  const truncated = Math.floor((n / 100_000) * factor) / factor;
+  return `${truncated.toFixed(decimals)}L`;
 }
 
 /** Y-axis tick label: rupees → ₹X.XXL */
@@ -181,14 +189,14 @@ function buildKpiCards(summary) {
     },
     {
       ...KPI_CARD_META[2],
-      value: `₹${formatLakhs(summary.top_product_revenue)}`,
+      value: `₹${formatLakhsFloor(summary.top_product_revenue)}`,
       sub: summary.top_product_name || "—",
       trend: `${summary.top_product_pct ?? 0}% of total`,
       type: "up",
     },
     {
       ...KPI_CARD_META[3],
-      value: `₹${formatLakhs(summary.top_customer_revenue)}`,
+      value: `₹${formatLakhsFloor(summary.top_customer_revenue)}`,
       sub: summary.top_customer_name || "—",
       trend: `${summary.top_customer_pct ?? 0}% share`,
       type: "up",
@@ -232,17 +240,226 @@ function buildTopProducts(rows) {
     barW: `${Math.max(8, Math.round((p.revenue / maxRev) * 100))}%`,
     color: RANK_BAR_COLORS[i % RANK_BAR_COLORS.length],
     qty: p.uom ? `${formatQty(p.qty)} ${p.uom}` : formatQty(p.qty),
-    amount: `₹${Number(p.revenue_lakhs).toFixed(2)}L`,
+    amount: `₹${(Math.floor(Number(p.revenue_lakhs) * 1000) / 1000).toFixed(3)}L`,
   }));
 }
 
-const INSIGHTS = [
-  { icon: Info, iconColor: "#15803d", title: "Vasanthi Foundry drives majority revenue", sub: "52.6% of total sales (₹4.93L) — single-customer dependency. Explore deeper engagement.", val: "₹4.93L", valColor: "#15803d" },
-  { icon: TrendingDown, iconColor: "#92400e", title: "February sales down vs January", sub: "Feb ₹3.23L vs Jan ₹6.15L (↓47.5%). Investigate order pipeline drop.", val: "↓47.5%", valColor: "#92400e" },
-  { icon: Package, iconColor: "#1d4ed8", title: "Segment Carrier is top revenue product", sub: "₹3.82L (40.7%) — capacity planning and raw material stocking should prioritize this.", val: "40.7%", valColor: "#1d4ed8" },
-  { icon: TrendingUp, iconColor: "#c2410c", title: "VR Foundries showing growth potential", sub: "7 line items, diverse mix. Target to grow from 20.6% to 30% share by Q2.", val: "20.6%", valColor: "#c2410c" },
-  { icon: AlertTriangle, iconColor: "#b91c1c", title: "SS Round Bar — low realisation rate", sub: "₹2.50/unit on 19,555 units = ₹49K only. Review pricing strategy for this product.", val: "₹2.50", valColor: "#b91c1c" },
-];
+function buildDynamicInsights({ summary, monthSummary, revenueCharts, topProductsRaw, filteredInvoices }) {
+  const insights = [];
+  if (!summary && !filteredInvoices?.length && !monthSummary?.rows?.length) {
+    return {
+      insights: [
+        { icon: Info, iconColor: "#2d6de8", title: "Sales Data Loading", sub: "Calculating real-time management insights...", val: "—", valColor: "#64748b" },
+      ],
+      priorityActionText: "Loading real-time sales data and insights...",
+    };
+  }
+
+  // 1. Top Customer & Concentration
+  const custRank = revenueCharts?.customer_ranking || [];
+  const topCust = custRank.length > 0 ? custRank[0] : null;
+  if (topCust) {
+    const isDominant = topCust.pct >= 40;
+    insights.push({
+      icon: isDominant ? Info : Building2,
+      iconColor: isDominant ? "#15803d" : "#2d6de8",
+      title: `${topCust.name} ${isDominant ? "drives majority revenue" : "is top revenue customer"}`,
+      sub: `${topCust.pct}% of total sales (₹${topCust.revenue_lakhs}L)${isDominant ? " — single-customer concentration. Recommend exploring deeper engagement." : " — primary contributor to overall sales revenue."}`,
+      val: `₹${topCust.revenue_lakhs}L`,
+      valColor: isDominant ? "#15803d" : "#2d6de8",
+    });
+  } else {
+    insights.push({
+      icon: Building2,
+      iconColor: "#2d6de8",
+      title: "Customer Revenue Distribution",
+      sub: "No single customer dominance detected for this selected period.",
+      val: "—",
+      valColor: "#64748b",
+    });
+  }
+
+  // 2. Revenue Trend & MoM Growth
+  const mRows = monthSummary?.rows || [];
+  if (mRows.length >= 2) {
+    const latest = mRows[mRows.length - 1];
+    const prev = mRows[mRows.length - 2];
+    const growth = latest.growth_pct;
+    const latestAmtLakhs = (latest.amount / 100_000).toFixed(2);
+    const prevAmtLakhs = (prev.amount / 100_000).toFixed(2);
+
+    if (growth != null && growth < 0) {
+      const absGrowth = Math.abs(growth);
+      insights.push({
+        icon: TrendingDown,
+        iconColor: "#92400e",
+        title: `${latest.month} sales down vs ${prev.month}`,
+        sub: `${latest.month} ₹${latestAmtLakhs}L vs ${prev.month} ₹${prevAmtLakhs}L (↓${absGrowth}%). Investigate order pipeline and delivery drop.`,
+        val: `↓${absGrowth}%`,
+        valColor: "#92400e",
+      });
+    } else if (growth != null && growth > 0) {
+      insights.push({
+        icon: TrendingUp,
+        iconColor: "#15803d",
+        title: `${latest.month} sales up vs ${prev.month}`,
+        sub: `${latest.month} ₹${latestAmtLakhs}L vs ${prev.month} ₹${prevAmtLakhs}L (↑${growth}%). Strong revenue expansion across primary categories.`,
+        val: `↑${growth}%`,
+        valColor: "#15803d",
+      });
+    } else {
+      insights.push({
+        icon: TrendingUp,
+        iconColor: "#2d6de8",
+        title: `${latest.month} sales momentum steady`,
+        sub: `${latest.month} turnover reached ₹${latestAmtLakhs}L across ${latest.invoices} invoices.`,
+        val: `₹${latestAmtLakhs}L`,
+        valColor: "#2d6de8",
+      });
+    }
+  } else if (summary) {
+    insights.push({
+      icon: IndianRupee,
+      iconColor: "#2d6de8",
+      title: `Average Invoice Realization: ₹${formatRupees(summary.avg_invoice)}`,
+      sub: `Generated ₹${Number(summary.turn_over_lakhs).toFixed(3)}L turnover across ${summary.total_invoices} total invoices in this period.`,
+      val: `₹${formatRupees(summary.avg_invoice)}`,
+      valColor: "#2d6de8",
+    });
+  }
+
+  // 3. Top Revenue Product
+  let prodRows = topProductsRaw?.products || topProductsRaw?.rows || [];
+  if (filteredInvoices && filteredInvoices.length > 0) {
+    const prodMap = {};
+    filteredInvoices.forEach((r) => {
+      const key = r.part_no || r.description || "Unknown";
+      if (!prodMap[key]) {
+        prodMap[key] = {
+          description: r.description || r.part_no || "—",
+          part_no: r.part_no || "—",
+          qty: 0,
+          revenue: 0,
+          uom: r.uom || "NOS",
+        };
+      }
+      prodMap[key].qty += Number(r.qty || 0);
+      prodMap[key].revenue += Number(r.amount || 0);
+    });
+
+    prodRows = Object.values(prodMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .map((p) => ({
+        ...p,
+        revenue_lakhs: (p.revenue / 100_000).toFixed(2),
+      }));
+  }
+
+  const topProd = prodRows.length > 0 ? prodRows[0] : null;
+  if (topProd) {
+    const totalProdRev = prodRows.reduce((sum, p) => sum + (p.revenue || 0), 0);
+    const prodShare = totalProdRev > 0 ? ((topProd.revenue / totalProdRev) * 100).toFixed(1) : "0";
+    const prodName = topProd.description || topProd.part_no || "Top Product";
+    const prodLakhs = topProd.revenue_lakhs || (topProd.revenue ? (topProd.revenue / 100_000).toFixed(2) : "0");
+    insights.push({
+      icon: Package,
+      iconColor: "#1d4ed8",
+      title: `${prodName} is top revenue product`,
+      sub: `₹${prodLakhs}L (${prodShare}%) — capacity planning and raw material stocking should prioritize this line.`,
+      val: `${prodShare}%`,
+      valColor: "#1d4ed8",
+    });
+  } else {
+    insights.push({
+      icon: Package,
+      iconColor: "#1d4ed8",
+      title: "Product Portfolio Mix",
+      sub: "Revenue distributed across active product catalog lines.",
+      val: "—",
+      valColor: "#64748b",
+    });
+  }
+
+  // 4. Growth Potential / Secondary Customer
+  const secondCust = custRank.length > 1 ? custRank[1] : null;
+  if (secondCust) {
+    insights.push({
+      icon: TrendingUp,
+      iconColor: "#c2410c",
+      title: `${secondCust.name} showing growth contribution`,
+      sub: `Contributed ₹${secondCust.revenue_lakhs}L (${secondCust.pct}% share of total revenue). Scale engagement to grow share.`,
+      val: `${secondCust.pct}%`,
+      valColor: "#c2410c",
+    });
+  } else if (summary) {
+    insights.push({
+      icon: Building2,
+      iconColor: "#c2410c",
+      title: "Active Customer Accounts",
+      sub: `${summary.customers} active client account(s) contributing to total sales turnover of ₹${Number(summary.turn_over_lakhs).toFixed(3)}L.`,
+      val: `${summary.customers} Clients`,
+      valColor: "#c2410c",
+    });
+  }
+
+  // 5. Unit Realization / Low Price Item Alert
+  let lowItem = null;
+  if (filteredInvoices?.length) {
+    const validItems = filteredInvoices.filter(i => i.qty > 0 && i.rate > 0);
+    if (validItems.length) {
+      const sortedByRate = [...validItems].sort((a, b) => a.rate - b.rate);
+      lowItem = sortedByRate[0];
+    }
+  }
+
+  if (lowItem) {
+    const itemName = lowItem.description || lowItem.part_no || "Product";
+    const itemRate = Number(lowItem.rate).toFixed(2);
+    const itemQty = formatQty(lowItem.qty);
+    const itemTotal = formatRupees(lowItem.amount);
+    insights.push({
+      icon: AlertTriangle,
+      iconColor: "#b91c1c",
+      title: `${itemName} — unit rate observation`,
+      sub: `₹${itemRate}/unit on ${itemQty} units = ₹${itemTotal} total. Review pricing strategy and contribution margin for this product line.`,
+      val: `₹${itemRate}`,
+      valColor: "#b91c1c",
+    });
+  } else {
+    insights.push({
+      icon: Scale,
+      iconColor: "#b91c1c",
+      title: "Unit Price Realization",
+      sub: "Healthy realization rate maintained across active sales transactions.",
+      val: "Optimal",
+      valColor: "#15803d",
+    });
+  }
+
+  // Priority Action for Management Text
+  let priorityActionText = "";
+  const mRowsPriority = monthSummary?.rows || [];
+  const lastM = mRowsPriority.length >= 2 ? mRowsPriority[mRowsPriority.length - 1] : null;
+  const topC = custRank.length > 0 ? custRank[0] : null;
+  const secondC = custRank.length > 1 ? custRank[1] : null;
+  const topP = prodRows.length > 0 ? prodRows[0] : null;
+
+  if (lastM && lastM.growth_pct != null && lastM.growth_pct < 0) {
+    priorityActionText = `${lastM.month} sales drop (↓${Math.abs(lastM.growth_pct)}%) needs immediate attention. Confirm pending delivery schedules from ${topC ? topC.name : "top clients"}${secondC ? ` and ${secondC.name}` : ""}.`;
+    if (lowItem) {
+      priorityActionText += ` Also review ${lowItem.description || lowItem.part_no} pricing (₹${Number(lowItem.rate).toFixed(2)}/unit) — ensure it meets target contribution margin thresholds.`;
+    }
+  } else if (lastM && lastM.growth_pct != null && lastM.growth_pct > 0) {
+    priorityActionText = `Sales trend is positive (+${lastM.growth_pct}% in ${lastM.month}). Prioritize production planning for top product ${topP ? (topP.description || topP.part_no) : "key products"} and secure delivery commitments from ${topC ? topC.name : "primary accounts"}.`;
+    if (lowItem) {
+      priorityActionText += ` Review unit pricing margins for ${lowItem.description || lowItem.part_no} to ensure sustainable profitability.`;
+    }
+  } else {
+    priorityActionText = `Focus on driving top-line revenue growth and reducing single-account concentration. Strengthen fulfillment for ${topC ? topC.name : "key accounts"} while expanding capacity for ${topP ? (topP.description || topP.part_no) : "top products"}.`;
+  }
+
+  return { insights, priorityActionText };
+}
 
 const TREND_CHART_OPTS = (font, maxValue = 0) => {
   const yMax = maxValue > 0 ? Math.ceil(maxValue * 1.35) : undefined;
@@ -390,20 +607,7 @@ const DONUT_CHART_OPTS = (font, onHoverCallback) => ({
       display: false,
     },
     tooltip: {
-      backgroundColor: "rgba(15, 23, 42, 0.95)",
-      titleFont: { family: font, size: 12, weight: "700" },
-      bodyFont: { family: font, size: 11 },
-      padding: 10,
-      cornerRadius: 8,
-      displayColors: true,
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      borderWidth: 1,
-      callbacks: {
-        label(ctx) {
-          const pct = ctx.parsed ?? 0;
-          return ` ${ctx.label}: ${pct}%`;
-        },
-      },
+      enabled: false,
     },
     datalabels: {
       display: false
@@ -422,14 +626,31 @@ function readFilterSession(key, defaults) {
     const raw = sessionStorage.getItem(key);
     if (!raw) return defaults;
     const p = JSON.parse(raw);
-    if (p.from) p.from = new Date(p.from);
-    if (p.to) p.to = new Date(p.to);
-    return { ...defaults, ...p };
+    const fromDate = p.from ? new Date(p.from) : null;
+    const toDate = p.to ? new Date(p.to) : null;
+    const isValidFrom = fromDate && !isNaN(fromDate.getTime());
+    const isValidTo = toDate && !isNaN(toDate.getTime());
+    return {
+      ...defaults,
+      ...p,
+      from: isValidFrom ? fromDate : defaults.from,
+      to: isValidTo ? toDate : defaults.to,
+    };
   } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
   try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
+
+const MOCK_DESPATCH_PLAN_PENDING = [
+  { customer: "CANALTA INDIA PRIVATE LIMITED", partNo: "TD90060377", description: "FLANGE ADAPTER HOUSING 2 INCH", pendingPlannedQty: 120, plannedQty: 500, availableQty: 150, despatchQty: 380, cancel: 0, invNo: "INV-260192" },
+  { customer: "SHANTHI GEARS LIMITED", partNo: "CC021A51-WCB/LCC", description: "GEAR BOX HOUSING BODY CASTING", pendingPlannedQty: 45, plannedQty: 250, availableQty: 60, despatchQty: 205, cancel: 0, invNo: "INV-260193" },
+  { customer: "CIRCOR FLOW TECHNOLOGIES INDIA PVT LTD", partNo: "NP0550091368", description: "HIGH PRESSURE FLOW VALVE SHAFT", pendingPlannedQty: 80, plannedQty: 400, availableQty: 100, despatchQty: 320, cancel: 0, invNo: "INV-260194" },
+  { customer: "Megha Engineering & Infrastructures Ltd", partNo: "NP0550095551", description: "HYDRAULIC PUMP MOUNTING BRACKET", pendingPlannedQty: 25, plannedQty: 150, availableQty: 30, despatchQty: 125, cancel: 0, invNo: "INV-260195" },
+  { customer: "CANALTA INDIA PRIVATE LIMITED", partNo: "NP0550021964", description: "STAINLESS STEEL BUSHING RING", pendingPlannedQty: 60, plannedQty: 300, availableQty: 90, despatchQty: 240, cancel: 0, invNo: "INV-260196" },
+  { customer: "Coromandel International Limited", partNo: "TD09020721", description: "STANDARD SHAFT CONNECTING PIN", pendingPlannedQty: 110, plannedQty: 600, availableQty: 140, despatchQty: 490, cancel: 0, invNo: "INV-260197" },
+  { customer: "Vasanthi Foundry", partNo: "CC004AS5", description: "HEAVY CASTING BEARING BLOCK", pendingPlannedQty: 75, plannedQty: 350, availableQty: 85, despatchQty: 275, cancel: 0, invNo: "INV-260198" },
+];
 
 const MOCK_PROJECTIONS = [
   { customer: "Coromandel International Limited", month: "July 2026", pos: 12, totQty: 4500, totAmt: 8500000, schdMonth: "July 2026", schdQty: 4500, dispQty: 3200, pendQty: 1300, pendVal: 2450000 },
@@ -697,15 +918,14 @@ const MOCK_PLAN_VS_ACTUAL = [
 
 function getTodayMonthRange() {
   const today = new Date();
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  return { from: startOfMonth, to: endOfMonth };
+  const startOfPeriod = new Date(today.getFullYear(), today.getMonth(), 1);
+  const endOfPeriod = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  return { from: startOfPeriod, to: endOfPeriod };
 }
 
 export default function SalesAnalysis() {
   const _dflt = getTodayMonthRange();
-  const _saved = readFilterSession("ba_filter_sales", _dflt);
-  const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
+  const [dateRange, setDateRange] = useState({ from: _dflt.from, to: _dflt.to });
   const [filters, setFilters] = useState({
     customer: "All Customers",
     product: "All Products",
@@ -715,6 +935,7 @@ export default function SalesAnalysis() {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(true);
   const [summary, setSummary] = useState(null);
+  const [grandTotalVal, setGrandTotalVal] = useState(null);
   const [avgRateData, setAvgRateData] = useState(null);
   const [weeklyTrend, setWeeklyTrend] = useState(null);
   const [revenueCharts, setRevenueCharts] = useState(null);
@@ -763,6 +984,17 @@ export default function SalesAnalysis() {
     });
     return Array.from(customers).sort();
   }, [invoiceRows]);
+
+
+  const [invSortConfig, setInvSortConfig] = useState({ key: "date", direction: "desc" });
+
+  const handleInvSort = (key) => {
+    let direction = "desc";
+    if (invSortConfig && invSortConfig.key === key && invSortConfig.direction === "desc") {
+      direction = "asc";
+    }
+    setInvSortConfig({ key, direction });
+  };
 
   const filteredCustomerOptions = useMemo(() => {
     if (!customerSearch) return customerOptions;
@@ -816,7 +1048,7 @@ export default function SalesAnalysis() {
       let ageDays = 0;
       if (row.poDate) {
         const poDate = new Date(row.poDate);
-        const refDate = new Date("2026-07-06");
+        const refDate = new Date();
         const diffTime = refDate - poDate;
         ageDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
       }
@@ -867,7 +1099,7 @@ export default function SalesAnalysis() {
     return sorted;
   }, [filteredPoLedger, poSortField, poSortAsc]);
 
-  const poPageSize = 12;
+  const poPageSize = 50;
   const totalPoPages = Math.ceil(sortedPoLedger.length / poPageSize) || 1;
   const paginatedPoLedger = useMemo(() => {
     const start = (poPage - 1) * poPageSize;
@@ -982,6 +1214,33 @@ export default function SalesAnalysis() {
       return true;
     });
   }, [dateRange, planSearchQuery, planVsActual, selectedCustomers]);
+
+  const filteredDespatchPlan = useMemo(() => {
+    return (filteredPlanVsActual || []).map((row) => {
+      const parts = (row.partNoDesc || "").split(" - ");
+      const partNo = row.partNo || (parts.length > 1 ? parts[0] : row.partNoDesc || "—");
+      const description = row.description || (parts.length > 1 ? parts.slice(1).join(" - ") : row.partNoDesc || "—");
+      const plannedQty = Number(row.planQty || row.plannedQty || 0);
+      const despatchQty = Number(row.dispatchQty || row.despatchQty || 0);
+      const availableQty = Number(row.availableQty || 0);
+      const pendingPlannedQty = Math.max(0, plannedQty - despatchQty);
+      const cancel = Number(row.cancel || row.shortCloseQty || 0);
+      const invNo = row.invNo || row.invNoDt || "—";
+
+      return {
+        ...row,
+        customer: row.customer || "—",
+        partNo,
+        description,
+        pendingPlannedQty,
+        plannedQty,
+        availableQty,
+        despatchQty,
+        cancel,
+        invNo
+      };
+    });
+  }, [filteredPlanVsActual]);
 
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
@@ -1121,7 +1380,7 @@ export default function SalesAnalysis() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   const filteredInvoices = useMemo(() => {
-    return invoiceRows.filter((r) => {
+    let list = invoiceRows.filter((r) => {
       if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) return false;
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
@@ -1132,33 +1391,122 @@ export default function SalesAnalysis() {
         (r.description && r.description.toLowerCase().includes(q))
       );
     });
-  }, [invoiceRows, searchQuery, selectedCustomers]);
+
+    if (invSortConfig) {
+      list.sort((a, b) => {
+        let valA = a[invSortConfig.key];
+        let valB = b[invSortConfig.key];
+        if (["qty", "rate", "amount"].includes(invSortConfig.key)) {
+          valA = Number(valA || 0);
+          valB = Number(valB || 0);
+        } else if (invSortConfig.key === "date") {
+          valA = new Date(valA || 0).getTime();
+          valB = new Date(valB || 0).getTime();
+        } else {
+          valA = String(valA || "").toLowerCase();
+          valB = String(valB || "").toLowerCase();
+        }
+        if (valA < valB) return invSortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return invSortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return list;
+  }, [invoiceRows, searchQuery, selectedCustomers, invSortConfig]);
 
   const derivedSummary = useMemo(() => {
     if (!summary) return null;
     if (selectedCustomers.length === 0) return summary;
 
     const totalInvoicesSet = new Set();
+    const custInvoicesMap = {};
+    const prodAmountMap = {};
+    const custAmountMap = {};
+
     let grandTotal = 0;
     let totalQty = 0;
 
     filteredInvoices.forEach((r) => {
-      grandTotal += r.amount || 0;
-      totalQty += r.qty || 0;
-      if (r.invoice_no) totalInvoicesSet.add(r.invoice_no);
+      const amt = Number(r.amount || 0);
+      const qty = Number(r.qty || 0);
+      const cust = r.customer || "Unknown";
+      const prodKey = r.part_no || r.description || "Unknown";
+      const prodName = r.description || r.part_no || "Unknown";
+
+      grandTotal += amt;
+      totalQty += qty;
+
+      if (r.invoice_no) {
+        totalInvoicesSet.add(r.invoice_no);
+        if (!custInvoicesMap[cust]) {
+          custInvoicesMap[cust] = new Set();
+        }
+        custInvoicesMap[cust].add(r.invoice_no);
+      }
+
+      // Aggregate Product Sales for Filtered Customer(s)
+      if (!prodAmountMap[prodKey]) {
+        prodAmountMap[prodKey] = { name: prodName, amount: 0 };
+      }
+      prodAmountMap[prodKey].amount += amt;
+
+      // Aggregate Customer Sales for Filtered Customer(s)
+      if (!custAmountMap[cust]) {
+        custAmountMap[cust] = { name: cust, amount: 0 };
+      }
+      custAmountMap[cust].amount += amt;
     });
 
     const totalInvoices = totalInvoicesSet.size;
     const avgInvoice = totalInvoices > 0 ? grandTotal / totalInvoices : 0;
+    const activeCustomers = Object.keys(custAmountMap).length || selectedCustomers.length;
+
+    let repeatBuyers = 0;
+    Object.values(custInvoicesMap).forEach((invSet) => {
+      if (invSet.size > 1) repeatBuyers++;
+    });
+
+    // Dynamic Top Product calculation for filtered customer(s)
+    let topProdName = "—";
+    let topProdRev = 0;
+    let topProdPct = 0;
+    const sortedProds = Object.values(prodAmountMap).sort((a, b) => b.amount - a.amount);
+    if (sortedProds.length > 0 && sortedProds[0].amount > 0) {
+      topProdName = sortedProds[0].name;
+      topProdRev = sortedProds[0].amount;
+      topProdPct = grandTotal > 0 ? Number(((topProdRev / grandTotal) * 100).toFixed(1)) : 0;
+    }
+
+    // Dynamic Top Customer calculation for filtered customer(s)
+    let topCustName = "—";
+    let topCustRev = 0;
+    let topCustPct = 0;
+    const sortedCusts = Object.values(custAmountMap).sort((a, b) => b.amount - a.amount);
+    if (sortedCusts.length > 0 && sortedCusts[0].amount > 0) {
+      topCustName = sortedCusts[0].name;
+      topCustRev = sortedCusts[0].amount;
+      topCustPct = grandTotal > 0 ? Number(((topCustRev / grandTotal) * 100).toFixed(1)) : 0;
+    }
+
+    const avgSellingRate = totalQty > 0 ? grandTotal / totalQty : 0;
 
     return {
       ...summary,
       grand_total: grandTotal,
       total_invoices: totalInvoices,
-      customers: selectedCustomers.length,
+      customers: activeCustomers,
+      active_customers: activeCustomers,
+      repeat_buyers: repeatBuyers,
       total_qty_sold: totalQty,
       avg_invoice: avgInvoice,
       turn_over_lakhs: grandTotal / 100_000,
+      top_product_revenue: topProdRev,
+      top_product_name: topProdName,
+      top_product_pct: topProdPct,
+      top_customer_revenue: topCustRev,
+      top_customer_name: topCustName,
+      top_customer_pct: topCustPct,
+      avg_selling_rate: avgSellingRate,
     };
   }, [summary, selectedCustomers, filteredInvoices]);
 
@@ -1181,10 +1529,10 @@ export default function SalesAnalysis() {
     // otherwise fall back to the backend grand_total (same value when no filter)
     const grandTotal = derivedSummary ? (derivedSummary.grand_total ?? 0) : (avgRateData.grand_total ?? 0);
 
-    const per_day   = grandTotal / Math.max(1, calendar_days);
-    const per_week  = per_day * 7;
+    const per_day = Math.round(grandTotal / Math.max(1, calendar_days));
+    const per_week = per_day * 7;
     const per_month = per_day * 30;
-    const per_year  = per_day * 365;
+    const per_year = per_day * 365;
 
     return [
       {
@@ -1218,7 +1566,7 @@ export default function SalesAnalysis() {
         label: "AVG SELLING RATE (Per Year)",
         value: `₹${formatRupees(per_year)}`,
         sub: "Annualized rate (365d)",
-        trend: `${years} years total`,
+        //trend: `${years} years total`,
         icon: Scale,
         iconColor: "#8b5cf6",
         type: "neutral"
@@ -1303,7 +1651,7 @@ export default function SalesAnalysis() {
       const top4 = sortedCusts.slice(0, 4);
       custLabels = top4.map(c => c.name);
       custPercentages = top4.map(c => c.pct);
-      
+
       if (sortedCusts.length > 4) {
         const others = sortedCusts.slice(4);
         const othersRevenue = others.reduce((sum, c) => sum + c.revenue, 0);
@@ -1414,7 +1762,7 @@ export default function SalesAnalysis() {
       const key = `${slot.year}-${slot.month}`;
       const data = monthMap[key] || { invNos: new Set(), qty: 0, amount: 0 };
       const amount = data.amount;
-      
+
       let growth_pct = null;
       if (prevAmount !== null && prevAmount !== 0) {
         growth_pct = jsRound(((amount - prevAmount) / prevAmount) * 100, 1);
@@ -1573,7 +1921,7 @@ export default function SalesAnalysis() {
         const key = `${s.year}-${s.month}`;
         return jsRound(btypeMonthMap[bt][key] || 0, 2);
       });
-      const data_lakhs = data.map(v => jsRound(v / 100_000, 2));
+      const data_lakhs = data.map(v => jsRound(v / 100_000, 5));
       return {
         bill_type: bt,
         data,
@@ -1609,7 +1957,7 @@ export default function SalesAnalysis() {
 
     const monthUniqueInvoices = {};
     const invoiceTaxMap = {};
-    
+
     filteredInvoices.forEach(r => {
       if (!r.date || !r.invoice_no) return;
       const d = new Date(r.date);
@@ -1649,10 +1997,36 @@ export default function SalesAnalysis() {
     () => buildCustomerRanking(derivedRevenueCharts ? derivedRevenueCharts.customer_ranking : []),
     [derivedRevenueCharts],
   );
-  const topProducts = useMemo(
-    () => buildTopProducts(topProductsRaw?.products),
-    [topProductsRaw],
-  );
+  const topProducts = useMemo(() => {
+    if (filteredInvoices && filteredInvoices.length > 0) {
+      const prodMap = {};
+      filteredInvoices.forEach((r) => {
+        const key = r.part_no || r.description || "Unknown";
+        if (!prodMap[key]) {
+          prodMap[key] = {
+            description: r.description || r.part_no || "—",
+            part_no: r.part_no || "—",
+            qty: 0,
+            revenue: 0,
+            uom: r.uom || "NOS",
+          };
+        }
+        prodMap[key].qty += Number(r.qty || 0);
+        prodMap[key].revenue += Number(r.amount || 0);
+      });
+
+      const aggregatedRows = Object.values(prodMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10)
+        .map((p) => ({
+          ...p,
+          revenue_lakhs: p.revenue / 100_000,
+        }));
+
+      return buildTopProducts(aggregatedRows);
+    }
+    return buildTopProducts(topProductsRaw?.products);
+  }, [filteredInvoices, topProductsRaw]);
 
   const invoiceStats = useMemo(() => {
     const invSet = new Set();
@@ -1661,6 +2035,17 @@ export default function SalesAnalysis() {
     });
     return { lines: filteredInvoices.length, invoices: invSet.size };
   }, [filteredInvoices]);
+
+  const dynamicManagementInsights = useMemo(
+    () => buildDynamicInsights({
+      summary: derivedSummary,
+      monthSummary: derivedMonthSummary,
+      revenueCharts: derivedRevenueCharts || revenueCharts,
+      topProductsRaw,
+      filteredInvoices,
+    }),
+    [derivedSummary, derivedMonthSummary, derivedRevenueCharts, revenueCharts, topProductsRaw, filteredInvoices]
+  );
 
   const trendRef = useRef(null);
   const custRef = useRef(null);
@@ -1689,16 +2074,26 @@ export default function SalesAnalysis() {
   // ✅ Force window resize triggers after loading finishes to guarantee proper chart rendering dimensions
   useEffect(() => {
     if (!loading) {
+      // Fire resize events at multiple points to catch charts that initialized before their container was sized
+      let raf1, raf2;
+      raf1 = requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+        raf2 = requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'));
+        });
+      });
       const t1 = setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
-      }, 360);
+      }, 200);
       const t2 = setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
-      }, 600);
+      }, 500);
       const t3 = setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 1000);
       return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
@@ -1712,10 +2107,26 @@ export default function SalesAnalysis() {
   const prodLabels = useMemo(() => derivedRevenueCharts?.product?.labels ?? [], [derivedRevenueCharts]);
   const prodPercentages = useMemo(() => derivedRevenueCharts?.product?.percentages ?? [], [derivedRevenueCharts]);
 
-  const getCustValue = (pct) => {
-    const total = derivedSummary?.grand_total || 0;
-    const val = (pct / 100) * total;
-    return `₹${(val / 100_000).toFixed(2)}L`;
+  const getCustValue = (pct, idx) => {
+    const ranking = derivedRevenueCharts?.customer_ranking;
+    let lakhs = 0;
+    if (idx !== undefined && ranking && ranking.length > 0) {
+      if (idx < 4 && ranking[idx]) {
+        const rev = ranking[idx].revenue ?? ((ranking[idx].revenue_lakhs ?? 0) * 100_000);
+        lakhs = rev / 100_000;
+      } else if (idx === 4 && ranking.length > 4) {
+        const othersSum = ranking.slice(4).reduce((acc, c) => acc + (c.revenue ?? ((c.revenue_lakhs ?? 0) * 100_000)), 0);
+        lakhs = othersSum / 100_000;
+      } else {
+        const total = derivedSummary?.grand_total || 0;
+        lakhs = (((pct || 0) / 100) * total) / 100_000;
+      }
+    } else {
+      const total = derivedSummary?.grand_total || 0;
+      lakhs = (((pct || 0) / 100) * total) / 100_000;
+    }
+    const truncated = (Math.floor(lakhs * 1000) / 1000).toFixed(3);
+    return `₹${truncated}L`;
   };
 
   const getProdQty = (pct) => {
@@ -1729,15 +2140,6 @@ export default function SalesAnalysis() {
     const chart = custChart.current;
     if (chart) {
       chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-      const meta = chart.getDatasetMeta(0);
-      const element = meta.data[idx];
-      if (element) {
-        const center = element.getCenterPoint();
-        chart.tooltip.setActiveElements(
-          [{ datasetIndex: 0, index: idx }],
-          { x: center.x, y: center.y }
-        );
-      }
       chart.update();
     }
   };
@@ -1747,7 +2149,6 @@ export default function SalesAnalysis() {
     const chart = custChart.current;
     if (chart) {
       chart.setActiveElements([]);
-      chart.tooltip.setActiveElements([], { x: 0, y: 0 });
       chart.update();
     }
   };
@@ -1757,15 +2158,6 @@ export default function SalesAnalysis() {
     const chart = prodChart.current;
     if (chart) {
       chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-      const meta = chart.getDatasetMeta(0);
-      const element = meta.data[idx];
-      if (element) {
-        const center = element.getCenterPoint();
-        chart.tooltip.setActiveElements(
-          [{ datasetIndex: 0, index: idx }],
-          { x: center.x, y: center.y }
-        );
-      }
       chart.update();
     }
   };
@@ -1775,16 +2167,17 @@ export default function SalesAnalysis() {
     const chart = prodChart.current;
     if (chart) {
       chart.setActiveElements([]);
-      chart.tooltip.setActiveElements([], { x: 0, y: 0 });
       chart.update();
     }
   };
 
   useEffect(() => {
-    if (!custRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(custRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!custRef.current) return;
+      custChart.current?.destroy();
+
+      const ctx = custRef.current.getContext("2d");
       const labels = derivedRevenueCharts?.customer?.labels ?? [];
       const gradientColors = GRADIENTS_CUSTOMER.slice(0, labels.length).map((g) => {
         const gr = ctx.createLinearGradient(0, 0, 0, 200);
@@ -1793,41 +2186,44 @@ export default function SalesAnalysis() {
         return gr;
       });
 
-      custChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: "doughnut",
-        data: {
-          labels,
-          datasets: [{
-            data: derivedRevenueCharts?.customer?.percentages ?? [],
-            backgroundColor: gradientColors,
-            borderColor: "#fff",
-            borderWidth: 2,
-            hoverOffset: 12,
-            hoverBorderColor: "#fff",
-            hoverBorderWidth: 3,
-          }],
-        },
-        options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
-          const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
-          setHoveredCustIndex(prev => (prev === newIndex ? prev : newIndex));
-        }),
-      });
-      custChart.current = chartInstance;
-    });
+      try {
+        custChart.current = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels,
+            datasets: [{
+              data: derivedRevenueCharts?.customer?.percentages ?? [],
+              backgroundColor: gradientColors,
+              borderColor: "#fff",
+              borderWidth: 2,
+              hoverOffset: 12,
+              hoverBorderColor: "#fff",
+              hoverBorderWidth: 3,
+            }],
+          },
+          options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
+            const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
+            setHoveredCustIndex(prev => (prev === newIndex ? prev : newIndex));
+          }),
+        });
+      } catch (err) {
+        console.error("Cust chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       custChart.current?.destroy();
     };
   }, [derivedRevenueCharts, loading]);
 
   useEffect(() => {
-    if (!prodRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(prodRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!prodRef.current) return;
+      prodChart.current?.destroy();
+
+      const ctx = prodRef.current.getContext("2d");
       const labels = derivedRevenueCharts?.product?.labels ?? [];
       const gradientColors = GRADIENTS_PRODUCT.slice(0, labels.length).map((g) => {
         const gr = ctx.createLinearGradient(0, 0, 0, 200);
@@ -1836,42 +2232,44 @@ export default function SalesAnalysis() {
         return gr;
       });
 
-      prodChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: "doughnut",
-        data: {
-          labels,
-          datasets: [{
-            data: derivedRevenueCharts?.product?.percentages ?? [],
-            backgroundColor: gradientColors,
-            borderColor: "#fff",
-            borderWidth: 2,
-            hoverOffset: 12,
-            hoverBorderColor: "#fff",
-            hoverBorderWidth: 3,
-          }],
-        },
-        options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
-          const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
-          setHoveredProdIndex(prev => (prev === newIndex ? prev : newIndex));
-        }),
-      });
-      prodChart.current = chartInstance;
-    });
+      try {
+        prodChart.current = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels,
+            datasets: [{
+              data: derivedRevenueCharts?.product?.percentages ?? [],
+              backgroundColor: gradientColors,
+              borderColor: "#fff",
+              borderWidth: 2,
+              hoverOffset: 12,
+              hoverBorderColor: "#fff",
+              hoverBorderWidth: 3,
+            }],
+          },
+          options: DONUT_CHART_OPTS(CHART_FONT, (event, activeElements) => {
+            const newIndex = activeElements && activeElements.length > 0 ? activeElements[0].index : -1;
+            setHoveredProdIndex(prev => (prev === newIndex ? prev : newIndex));
+          }),
+        });
+      } catch (err) {
+        console.error("Prod chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       prodChart.current?.destroy();
     };
   }, [derivedRevenueCharts, loading]);
 
   useEffect(() => {
-    if (!trendRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(trendRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!trendRef.current) return;
+      trendChart.current?.destroy();
 
+      const ctx = trendRef.current.getContext("2d");
       const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
       const labels = (derivedWeeklyTrend?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const sales = derivedWeeklyTrend?.sales ?? [];
@@ -1906,9 +2304,7 @@ export default function SalesAnalysis() {
             borderWidth: 1.5,
             borderRadius: 4,
             yAxisID: "ySales",
-            datalabels: {
-              display: false
-            }
+            datalabels: { display: false }
           },
           {
             label: "Cumulative (Lakhs)",
@@ -1931,7 +2327,7 @@ export default function SalesAnalysis() {
               offset: 2,
               font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
               color: "#10b981",
-              formatter: (v) => `₹${v.toFixed(1)}L`
+              formatter: (v) => `₹${safeToFixed(v, 1)}L`
             }
           }
         ];
@@ -1984,7 +2380,7 @@ export default function SalesAnalysis() {
             padding: { top: 2, bottom: 2, left: 5, right: 5 },
             borderColor: "rgba(45, 109, 232, 0.4)",
             color: "#2d6de8",
-            formatter: (v) => `₹${v.toFixed(1)}L`
+            formatter: (v) => `₹${safeToFixed(v, 1)}L`
           }
         }];
 
@@ -2029,7 +2425,7 @@ export default function SalesAnalysis() {
             padding: { top: 2, bottom: 2, left: 5, right: 5 },
             borderColor: "rgba(16, 185, 129, 0.4)",
             color: "#10b981",
-            formatter: (v) => `₹${v.toFixed(1)}L`
+            formatter: (v) => `₹${safeToFixed(v, 1)}L`
           }
         }];
 
@@ -2048,90 +2444,88 @@ export default function SalesAnalysis() {
         };
       }
 
-      trendChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: "bar",
-        data: {
-          labels,
-          datasets
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: "index", intersect: false },
-          animation: {
-            delay: (context) => {
-              let delay = 0;
-              if (context.type === 'data' && context.mode === 'default') {
-                delay = context.dataIndex * 50;
-              }
-              return delay;
+      try {
+        trendChart.current = new Chart(ctx, {
+          type: "bar",
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            animation: {
+              delay: (context) => {
+                let delay = 0;
+                if (context.type === 'data' && context.mode === 'default') {
+                  delay = context.dataIndex * 50;
+                }
+                return delay;
+              },
+              duration: 1000,
+              easing: "easeOutBack",
             },
-            duration: 1000,
-            easing: "easeOutBack",
-          },
-          plugins: {
-            legend: {
-              labels: { font: { size: 10, weight: "600", family: 'Plus Jakarta Sans' }, boxWidth: 12, padding: 14 },
-            },
-            tooltip: {
-              callbacks: {
-                label(ctx) {
-                  const val = ctx.parsed.y ?? 0;
-                  const idx = ctx.dataIndex;
-                  const dataset = ctx.dataset;
-                  const prev = dataset.data[idx - 1];
-                  let text = `${dataset.label}: ${formatTooltipLakhs(val * 100000)}`;
-                  if (dataset.label.toLowerCase().includes("weekly") && prev && prev > 0) {
-                    const pct = ((val - prev) / prev) * 100;
-                    const diff = val - prev;
-                    const diffText = diff >= 0 ? `+₹${(diff).toFixed(2)}L` : `-₹${(Math.abs(diff)).toFixed(2)}L`;
-                    text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% WoW, ${diffText})`;
-                  }
-                  return text;
+            plugins: {
+              legend: { labels: { font: { size: 10, weight: "600", family: 'Plus Jakarta Sans' }, boxWidth: 12, padding: 14 } },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const val = ctx.parsed.y ?? 0;
+                    const idx = ctx.dataIndex;
+                    const dataset = ctx.dataset;
+                    const prev = dataset?.data?.[idx - 1];
+                    const lbl = dataset?.label || "";
+                    let text = `${lbl}: ${formatTooltipLakhs(val * 100000)}`;
+                    if (lbl.toLowerCase().includes("weekly") && prev && prev > 0) {
+                      const pct = ((val - prev) / prev) * 100;
+                      const diff = val - prev;
+                      const truncatedDiff = (Math.floor(Math.abs(diff) * 1000) / 1000).toFixed(3);
+                      const diffText = diff >= 0 ? `+₹${truncatedDiff}L` : `-₹${truncatedDiff}L`;
+                      text += ` (${pct >= 0 ? "+" : ""}${safeToFixed(pct, 1)}% WoW, ${diffText})`;
+                    }
+                    return text;
+                  },
                 },
               },
-            },
-            datalabels: {
-              display: (context) => {
-                const d = context.dataset.datalabels?.display;
-                if (typeof d === 'function') {
-                  return d(context);
+              datalabels: {
+                display: (context) => {
+                  const d = context.dataset.datalabels?.display;
+                  if (typeof d === 'function') return d(context);
+                  return d ?? false;
                 }
-                return d ?? false;
               }
-            }
-          },
-          scales
-        }
-      });
-      trendChart.current = chartInstance;
-    });
+            },
+            scales
+          }
+        });
+      } catch (err) {
+        console.error("Weekly trend chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       trendChart.current?.destroy();
     };
-  }, [derivedWeeklyTrend, loading, weeklyChartType]);
+  }, [derivedWeeklyTrend, weeklyChartType, loading]);
   useEffect(() => {
-    if (!monthlyTrendRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(monthlyTrendRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
-      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!monthlyTrendRef.current) return;
+      monthlyTrendChart.current?.destroy();
+
+      const ctx = monthlyTrendRef.current.getContext("2d");
       const isBar = performanceChartType === "bar";
       const isShare = performanceChartType === "share";
 
-      // Pull real labels & values from API data
       const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
       const apiLabels = (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiValuesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
 
-      // Compute MoM growth for "share" view
+      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+
       const growthData = apiValuesLakhs.map((v, i) => {
-        if (i === 0 || apiValuesLakhs[i - 1] === 0) return 0;
-        return parseFloat(((v - apiValuesLakhs[i - 1]) / apiValuesLakhs[i - 1] * 100).toFixed(1));
+        if (i === 0 || !apiValuesLakhs[i - 1]) return 0;
+        const prev = apiValuesLakhs[i - 1];
+        return parseFloat((((v - prev) / prev) * 100).toFixed(1));
       });
 
       if (isBar) {
@@ -2142,164 +2536,164 @@ export default function SalesAnalysis() {
         gradient.addColorStop(1, "rgba(99, 102, 241, 0.02)");
       }
 
-      monthlyTrendChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: isBar ? "bar" : "line",
-        data: {
-          labels: apiLabels,
-          datasets: [
-            {
-              label: isShare ? "Growth Rate (%)" : "Sales Value (Lakhs)",
-              data: isShare ? growthData : apiValuesLakhs,
-              backgroundColor: gradient,
-              borderColor: "rgba(99, 102, 241, 1)",
-              borderWidth: isBar ? 1.5 : 2.5,
-              borderRadius: isBar ? 6 : 0,
-              fill: !isBar,
-              tension: isBar ? 0 : 0.4,
-              pointRadius: isBar ? 0 : 4,
-              pointHoverRadius: isBar ? 0 : 6,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "rgba(99, 102, 241, 1)",
-              pointBorderWidth: 2,
-              yAxisID: "y",
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: {
-            delay: (context) => {
-              let delay = 0;
-              if (context.type === 'data' && context.mode === 'default') {
-                delay = context.dataIndex * 100; // 100ms staggered delay
+      try {
+        monthlyTrendChart.current = new Chart(ctx, {
+          type: isBar ? "bar" : "line",
+          data: {
+            labels: apiLabels,
+            datasets: [
+              {
+                label: isShare ? "Growth Rate (%)" : "Sales Value (Lakhs)",
+                data: isShare ? growthData : apiValuesLakhs,
+                backgroundColor: gradient,
+                borderColor: "rgba(99, 102, 241, 1)",
+                borderWidth: isBar ? 1.5 : 2.5,
+                borderRadius: isBar ? 6 : 0,
+                fill: !isBar,
+                tension: isBar ? 0 : 0.4,
+                pointRadius: isBar ? 0 : 4,
+                pointHoverRadius: isBar ? 0 : 6,
+                pointBackgroundColor: "#ffffff",
+                pointBorderColor: "rgba(99, 102, 241, 1)",
+                pointBorderWidth: 2,
+                yAxisID: "y",
               }
-              return delay;
-            },
-            duration: 1000,
-            easing: "easeOutBack", // Premium springy animation
+            ]
           },
-          plugins: {
-            legend: {
-              display: false
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              delay: (context) => {
+                let delay = 0;
+                if (context.type === 'data' && context.mode === 'default') {
+                  delay = context.dataIndex * 100;
+                }
+                return delay;
+              },
+              duration: 1000,
+              easing: "easeOutBack",
             },
-            tooltip: {
-              callbacks: {
-                label(ctx) {
-                  const val = ctx.parsed.y ?? 0;
-                  const idx = ctx.dataIndex;
-                  const dataset = ctx.dataset;
-                  const prev = dataset.data[idx - 1];
-                  let text = "";
-                  if (isShare) {
-                    text = `${ctx.label}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + val.toFixed(1) + "%"}`;
-                  } else {
-                    text = `Sales Value: ₹${val.toFixed(2)}L`;
-                    if (prev && prev > 0) {
-                       const pct = ((val - prev) / prev) * 100;
-                       const diff = val - prev;
-                       const diffText = diff >= 0 ? `+₹${diff.toFixed(2)}L` : `-₹${Math.abs(diff).toFixed(2)}L`;
-                       text += ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% MoM, ${diffText})`;
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const val = Number(ctx.parsed.y) || 0;
+                    const idx = ctx.dataIndex;
+                    const dataset = ctx.dataset;
+                    const prev = dataset?.data?.[idx - 1];
+                    let text = "";
+                    if (isShare) {
+                      text = `${ctx.label || ''}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + safeToFixed(val, 1) + "%"}`;
+                    } else {
+                      const val3 = (Math.floor(val * 1000) / 1000).toFixed(3);
+                      text = `Sales Value: ₹${val3}L`;
+                      if (prev != null && Number(prev) > 0) {
+                        const pVal = Number(prev);
+                        const pct = ((val - pVal) / pVal) * 100;
+                        const diff = val - pVal;
+                        const diffText = (Math.floor(Math.abs(diff) * 1000) / 1000).toFixed(3);
+                        const diffSign = diff >= 0 ? `+₹${diffText}L` : `-₹${diffText}L`;
+                        text += ` (${pct >= 0 ? "+" : ""}${safeToFixed(pct, 1)}% MoM, ${diffSign})`;
+                      }
                     }
+                    return text;
                   }
-                  return text;
+                }
+              },
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 8,
+                font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1.5,
+                borderRadius: 6,
+                padding: { top: 4, bottom: 4, left: 6, right: 6 },
+                borderColor: (ctx) => {
+                  if (isShare) {
+                    const val = Number(ctx.dataset?.data?.[ctx.dataIndex]) || 0;
+                    return val === 0 ? "rgba(100, 116, 139, 0.4)" : (val > 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)");
+                  }
+                  return "rgba(99, 102, 241, 0.4)";
+                },
+                color: (ctx) => {
+                  if (isShare) {
+                    const val = Number(ctx.dataset?.data?.[ctx.dataIndex]) || 0;
+                    return val === 0 ? "#64748b" : (val > 0 ? "#10b981" : "#ef4444");
+                  }
+                  return "#4f46e5";
+                },
+                formatter: (v, context) => {
+                  const num = Number(v) || 0;
+                  if (isShare) {
+                    return num === 0 ? "—" : `${num > 0 ? "↑" : "↓"} ${safeToFixed(Math.abs(num), 1)}%`;
+                  }
+                  const num3 = (Math.floor(num * 1000) / 1000).toFixed(3);
+                  let label = `₹${num3}L`;
+                  const idx = context.dataIndex;
+                  const prev = context.dataset?.data?.[idx - 1];
+                  if (prev != null && Number(prev) > 0) {
+                    const pVal = Number(prev);
+                    const pct = ((num - pVal) / pVal) * 100;
+                    const sign = pct >= 0 ? "↑" : "↓";
+                    label += ` (${sign}${safeToFixed(Math.abs(pct), 1)}%)`;
+                  }
+                  return label;
                 }
               }
             },
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 8,
-              font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1.5,
-              borderRadius: 6,
-              padding: { top: 4, bottom: 4, left: 6, right: 6 },
-              borderColor: (ctx) => {
-                if (isShare) {
-                  const val = ctx.dataset.data[ctx.dataIndex];
-                  return val === 0 ? "rgba(100, 116, 139, 0.4)" : (val > 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)");
-                }
-                return "rgba(99, 102, 241, 0.4)";
+            scales: {
+              y: {
+                type: "linear",
+                position: "left",
+                max: isShare ? undefined : Math.ceil((Math.max(0, ...apiValuesLakhs) || 1) * 1.25),
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => isShare ? `${v}%` : `₹${v}L` }
               },
-              color: (ctx) => {
-                if (isShare) {
-                  const val = ctx.dataset.data[ctx.dataIndex];
-                  return val === 0 ? "#64748b" : (val > 0 ? "#10b981" : "#ef4444");
-                }
-                return "#4f46e5";
-              },
-              formatter: (v, context) => {
-                if (isShare) {
-                  return v === 0 ? "—" : `${v > 0 ? "↑" : "↓"} ${Math.abs(v).toFixed(1)}%`;
-                }
-                let label = `₹${v.toFixed(1)}L`;
-                const idx = context.dataIndex;
-                const prev = context.dataset.data[idx - 1];
-                if (prev && prev > 0) {
-                  const pct = ((v - prev) / prev) * 100;
-                  const sign = pct >= 0 ? "↑" : "↓";
-                  label += ` (${sign}${Math.abs(pct).toFixed(1)}%)`;
-                }
-                return label;
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
               }
-            }
-          },
-          scales: {
-            y: {
-              type: "linear",
-              position: "left",
-              max: isShare ? undefined : Math.ceil((Math.max(0, ...apiValuesLakhs) || 1) * 1.25),
-              grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: {
-                font: { family: 'Plus Jakarta Sans', size: 9 },
-                color: '#312e81',
-                callback: (v) => isShare ? `${v}%` : `₹${v}L`
-              }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
             }
           }
-        }
-      });
-      monthlyTrendChart.current = chartInstance;
-    });
+        });
+      } catch (err) {
+        console.error("Monthly trend chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       monthlyTrendChart.current?.destroy();
     };
-  }, [loading, performanceChartType, derivedMonthlyTrendData]);
+  }, [performanceChartType, derivedMonthlyTrendData, loading]);
   useEffect(() => {
-    if (!billTypeRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(billTypeRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!billTypeRef.current) return;
+      billTypeChart.current?.destroy();
+
+      const ctx = billTypeRef.current.getContext("2d");
       const isBar = performanceChartType === "bar";
       const isShare = performanceChartType === "share";
       const isBarOrShare = isBar || isShare;
 
-      // Palette of gradients — one per bill type (cycled)
       const PALETTE_STOPS = [
-        ["rgba(79, 70, 229, 0.95)",  "rgba(79, 70, 229, 0.4)",  "rgba(79, 70, 229, 0.5)",  "rgba(79, 70, 229, 0.05)",  "rgba(79, 70, 229, 1)"],
+        ["rgba(79, 70, 229, 0.95)", "rgba(79, 70, 229, 0.4)", "rgba(79, 70, 229, 0.5)", "rgba(79, 70, 229, 0.05)", "rgba(79, 70, 229, 1)"],
         ["rgba(124, 58, 237, 0.95)", "rgba(124, 58, 237, 0.4)", "rgba(124, 58, 237, 0.5)", "rgba(124, 58, 237, 0.05)", "rgba(124, 58, 237, 1)"],
         ["rgba(168, 85, 247, 0.95)", "rgba(168, 85, 247, 0.4)", "rgba(168, 85, 247, 0.5)", "rgba(168, 85, 247, 0.05)", "rgba(168, 85, 247, 1)"],
-        ["rgba(192, 132, 252, 0.9)", "rgba(192, 132, 252, 0.35)","rgba(192, 132, 252, 0.5)","rgba(192, 132, 252, 0.05)","rgba(192, 132, 252, 1)"],
+        ["rgba(192, 132, 252, 0.9)", "rgba(192, 132, 252, 0.35)", "rgba(192, 132, 252, 0.5)", "rgba(192, 132, 252, 0.05)", "rgba(192, 132, 252, 1)"],
         ["rgba(59, 130, 246, 0.95)", "rgba(59, 130, 246, 0.4)", "rgba(59, 130, 246, 0.5)", "rgba(59, 130, 246, 0.05)", "rgba(59, 130, 246, 1)"],
         ["rgba(16, 185, 129, 0.95)", "rgba(16, 185, 129, 0.4)", "rgba(16, 185, 129, 0.5)", "rgba(16, 185, 129, 0.05)", "rgba(16, 185, 129, 1)"],
       ];
 
-      // Build real datasets from API
       const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
       const apiLabels = (derivedBillTypeRevenueData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiDatasets = derivedBillTypeRevenueData?.datasets ?? [];
 
-      // Compute per-month totals for share view
       const monthTotals = apiLabels.map((_, mi) =>
         apiDatasets.reduce((sum, ds) => sum + (ds.data_lakhs?.[mi] ?? 0), 0)
       );
@@ -2311,7 +2705,7 @@ export default function SalesAnalysis() {
         grad.addColorStop(1, isBarOrShare ? stops[1] : stops[3]);
 
         const shareData = ds.data_lakhs?.map((v, mi) =>
-          monthTotals[mi] > 0 ? parseFloat(((v / monthTotals[mi]) * 100).toFixed(1)) : 0
+          monthTotals[mi] > 0 ? parseFloat(((v / monthTotals[mi]) * 100).toFixed(2)) : 0
         ) ?? [];
 
         return {
@@ -2319,310 +2713,375 @@ export default function SalesAnalysis() {
           data: isShare ? shareData : (ds.data_lakhs ?? []),
           backgroundColor: grad,
           borderColor: stops[4],
-          borderWidth: isBarOrShare ? 1 : 2,
+          borderWidth: isBarOrShare ? 1 : 2.5,
           borderRadius: isBarOrShare ? 4 : 0,
-          fill: !isBarOrShare,
-          tension: isBarOrShare ? 0 : 0.3,
-          pointRadius: 0,
-          pointHoverRadius: 4,
+          fill: false,
+          tension: isBarOrShare ? 0 : 0.4,
+          pointRadius: isBarOrShare ? 0 : 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: stops[4],
+          pointBorderWidth: 2,
         };
       });
 
-      billTypeChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: isBarOrShare ? "bar" : "line",
-        data: {
-          labels: apiLabels,
-          datasets: chartDatasets,
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'top',
-              labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
-            },
-            datalabels: {
-              display: isBarOrShare ? (ctx) => {
-                const val = ctx.dataset.data[ctx.dataIndex];
-                return isShare ? val > 4 : val > 0.8;
-              } : false,
-              color: "#ffffff",
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              formatter: (v) => isShare ? `${v.toFixed(0)}%` : `₹${v.toFixed(1)}L`
-            }
+      try {
+        billTypeChart.current = new Chart(ctx, {
+          type: isBarOrShare ? "bar" : "line",
+          data: {
+            labels: apiLabels,
+            datasets: chartDatasets,
           },
-          scales: {
-            y: {
-              stacked: true,
-              max: isShare ? 100 : undefined,
-              grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: {
-                font: { family: 'Plus Jakarta Sans', size: 9 },
-                color: '#312e81',
-                callback: (v) => isShare ? `${v}%` : `₹${v}L`
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
+              },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const val = Number(ctx.parsed.y) || 0;
+                    const lbl = ctx.dataset?.label || "";
+                    if (isShare) return `${lbl}: ${safeToFixed(val, 2)}%`;
+                    const val3 = (Math.floor(val * 1000) / 1000).toFixed(3);
+                    return `${lbl}: ₹${val3}L`;
+                  }
+                }
+              },
+              datalabels: {
+                display: (ctx) => {
+                  const val = Number(ctx.dataset?.data?.[ctx.dataIndex]) || 0;
+                  if (isShare) return val > 4;
+                  if (isBar) return val > 0.8;
+                  return val > 0.001;
+                },
+                align: isBarOrShare ? "center" : "top",
+                anchor: isBarOrShare ? "center" : "end",
+                color: isBarOrShare ? "#ffffff" : "#4f46e5",
+                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                formatter: (v) => {
+                  const num = Number(v) || 0;
+                  if (isShare) return `${safeToFixed(num, 2)}%`;
+                  return `₹${(Math.floor(num * 1000) / 1000).toFixed(3)}L`;
+                }
               }
             },
-            x: {
-              stacked: isBarOrShare,
-              grid: { display: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+            scales: {
+              y: {
+                stacked: isBarOrShare,
+                max: isShare ? 100 : undefined,
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans', size: 9 },
+                  color: '#312e81',
+                  callback: (v) => isShare ? `${v}%` : `₹${v}L`
+                }
+              },
+              x: {
+                stacked: isBarOrShare,
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              }
             }
           }
-        }
-      });
-      billTypeChart.current = chartInstance;
-    });
+        });
+      } catch (err) {
+        console.error("Bill type chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       billTypeChart.current?.destroy();
     };
-  }, [loading, performanceChartType, derivedBillTypeRevenueData]);
-
-
+  }, [performanceChartType, derivedBillTypeRevenueData, loading]);
 
   useEffect(() => {
-    if (!taxRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(taxRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!taxRef.current) return;
+      taxChart.current?.destroy();
+
+      const ctx = taxRef.current.getContext("2d");
       const isBar = performanceChartType === "bar";
       const isShare = performanceChartType === "share";
 
-      // Real data from API
       const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
       const apiLabels = (derivedMonthlyTaxData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiTaxLakhs = derivedMonthlyTaxData?.tax_values_lakhs ?? [];
-      // Sales lakhs for combo view (line view) from monthly trend API
       const apiSalesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
 
-      taxChart.current?.destroy();
+      try {
+        if (isBar) {
+          const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+          gradient.addColorStop(0, "rgba(139, 92, 246, 0.95)");
+          gradient.addColorStop(1, "rgba(139, 92, 246, 0.15)");
 
-      if (isBar) {
-        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-        gradient.addColorStop(0, "rgba(139, 92, 246, 0.95)");
-        gradient.addColorStop(1, "rgba(139, 92, 246, 0.15)");
-
-        chartInstance = new Chart(canvas, {
-          type: "bar",
-          data: {
-            labels: apiLabels,
-            datasets: [
-              {
-                label: "Tax Value (Lakhs)",
-                data: apiTaxLakhs,
-                backgroundColor: gradient,
-                borderColor: "rgba(139, 92, 246, 1)",
-                borderWidth: 1.5,
-                borderRadius: 6,
-                yAxisID: "y",
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: false
-              },
-              datalabels: {
-                display: true,
-                align: "end",
-                anchor: "end",
-                offset: 2,
-                font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-                color: "#7c3aed",
-                formatter: (v) => `₹${Number(v).toFixed(2)}L`
-              }
+          taxChart.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: apiLabels,
+              datasets: [
+                {
+                  label: "Tax Value (Lakhs)",
+                  data: apiTaxLakhs,
+                  backgroundColor: gradient,
+                  borderColor: "rgba(139, 92, 246, 1)",
+                  borderWidth: 1.5,
+                  borderRadius: 6,
+                  yAxisID: "y",
+                }
+              ]
             },
-            scales: {
-              y: {
-                type: "linear",
-                position: "left",
-                grid: { color: "rgba(99, 102, 241, 0.05)" },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
-              },
-              x: {
-                grid: { display: false },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
-              }
-            }
-          }
-        });
-      } else if (isShare) {
-        // Effective tax rate = taxLakhs / salesLakhs * 100
-        const effectiveTaxRate = apiTaxLakhs.map((t, i) => {
-          const s = apiSalesLakhs[i];
-          return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
-        });
-        const shareLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-
-        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-        gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
-        gradient.addColorStop(1, "rgba(139, 92, 246, 0.02)");
-
-        chartInstance = new Chart(canvas, {
-          type: "line",
-          data: {
-            labels: shareLabels,
-            datasets: [
-              {
-                label: "Effective Tax Rate (%)",
-                data: effectiveTaxRate,
-                backgroundColor: gradient,
-                borderColor: "rgba(139, 92, 246, 1)",
-                borderWidth: 2.5,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                pointBackgroundColor: "#ffffff",
-                pointBorderColor: "rgba(139, 92, 246, 1)",
-                pointBorderWidth: 2,
-                yAxisID: "y",
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: false
-              },
-              datalabels: {
-                display: true,
-                align: "top",
-                anchor: "end",
-                offset: 4,
-                font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
-                color: "#7c3aed",
-                formatter: (v) => `${Number(v).toFixed(2)}%`
-              }
-            },
-            scales: {
-              y: {
-                type: "linear",
-                position: "left",
-                grid: { color: "rgba(99, 102, 241, 0.05)" },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `${v.toFixed(2)}%` }
-              },
-              x: {
-                grid: { display: false },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
-              }
-            }
-          }
-        });
-      } else {
-        // Trend / Line View: combo bar (sales) + line (tax)
-        const gradSales = ctx.createLinearGradient(0, 0, 0, 240);
-        gradSales.addColorStop(0, "rgba(59, 130, 246, 0.85)");
-        gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
-
-        // Use tax labels if available, else fall back to sales trend labels
-        const comboLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
-
-        chartInstance = new Chart(canvas, {
-          type: "bar",
-          data: {
-            labels: comboLabels,
-            datasets: [
-              {
-                label: "Sales Value (Lakhs)",
-                type: "bar",
-                data: apiSalesLakhs,
-                backgroundColor: gradSales,
-                borderColor: "rgba(59, 130, 246, 1)",
-                borderWidth: 1.5,
-                borderRadius: 4,
-                yAxisID: "ySales",
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
                 datalabels: {
-                  display: false
+                  display: true,
+                  align: "end",
+                  anchor: "end",
+                  offset: 2,
+                  font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+                  color: "#7c3aed",
+                  formatter: (v) => `₹${safeToFixed(v, 2)}L`
                 }
               },
-              {
-                label: "Tax Value (Lakhs)",
-                type: "line",
-                data: apiTaxLakhs,
-                borderColor: "rgba(139, 92, 246, 1)",
-                borderWidth: 2.5,
-                tension: 0.4,
-                fill: false,
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                pointBackgroundColor: "#ffffff",
-                pointBorderColor: "rgba(139, 92, 246, 1)",
-                pointBorderWidth: 1.5,
-                yAxisID: "yTax",
+              scales: {
+                y: {
+                  type: "linear",
+                  position: "left",
+                  grid: { color: "rgba(99, 102, 241, 0.05)" },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `₹${v}L` }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+                }
+              }
+            }
+          });
+        } else if (isShare) {
+          const effectiveTaxRate = apiTaxLakhs.map((t, i) => {
+            const s = apiSalesLakhs[i];
+            return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
+          });
+          const shareLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+
+          const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+          gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
+          gradient.addColorStop(1, "rgba(139, 92, 246, 0.02)");
+
+          taxChart.current = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: shareLabels,
+              datasets: [
+                {
+                  label: "Effective Tax Rate (%)",
+                  data: effectiveTaxRate,
+                  backgroundColor: gradient,
+                  borderColor: "rgba(139, 92, 246, 1)",
+                  borderWidth: 2.5,
+                  fill: true,
+                  tension: 0.4,
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  pointBackgroundColor: "#ffffff",
+                  pointBorderColor: "rgba(139, 92, 246, 1)",
+                  pointBorderWidth: 2,
+                  yAxisID: "y",
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
                 datalabels: {
                   display: true,
                   align: "top",
                   anchor: "end",
-                  offset: 2,
-                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  offset: 4,
+                  font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
                   color: "#7c3aed",
-                  formatter: (v) => `₹${Number(v).toFixed(2)}L`
+                  formatter: (v) => `${safeToFixed(v, 2)}%`
+                }
+              },
+              scales: {
+                y: {
+                  type: "linear",
+                  position: "left",
+                  grid: { color: "rgba(99, 102, 241, 0.05)" },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `${safeToFixed(v, 2)}%` }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
                 }
               }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top',
-                labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
-              }
+            }
+          });
+        } else {
+          const gradSales = ctx.createLinearGradient(0, 0, 0, 240);
+          gradSales.addColorStop(0, "rgba(59, 130, 246, 0.85)");
+          gradSales.addColorStop(1, "rgba(59, 130, 246, 0.15)");
+
+          const comboLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+
+          taxChart.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: comboLabels,
+              datasets: [
+                {
+                  label: "Sales Value (Lakhs)",
+                  type: "bar",
+                  data: apiSalesLakhs,
+                  backgroundColor: gradSales,
+                  borderColor: "rgba(59, 130, 246, 1)",
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  yAxisID: "ySales",
+                  datalabels: { display: false }
+                },
+                {
+                  label: "Tax Value (Lakhs)",
+                  type: "line",
+                  data: apiTaxLakhs,
+                  borderColor: "rgba(139, 92, 246, 1)",
+                  borderWidth: 2.5,
+                  tension: 0.4,
+                  fill: false,
+                  pointRadius: 3,
+                  pointHoverRadius: 5,
+                  pointBackgroundColor: "#ffffff",
+                  pointBorderColor: "rgba(139, 92, 246, 1)",
+                  pointBorderWidth: 1.5,
+                  yAxisID: "yTax",
+                  datalabels: {
+                    display: true,
+                    align: "top",
+                    anchor: "end",
+                    offset: 2,
+                    font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                    color: "#7c3aed",
+                    formatter: (v) => `₹${safeToFixed(v, 2)}L`
+                  }
+                }
+              ]
             },
-            scales: {
-              ySales: {
-                type: "linear",
-                position: "left",
-                grid: { color: "rgba(99, 102, 241, 0.05)" },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#2563eb', callback: (v) => `₹${v}L` },
-                title: { display: true, text: "Sales Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#2563eb' }
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'top',
+                  labels: { font: { family: 'Plus Jakarta Sans', size: 10 }, color: '#312e81' }
+                }
               },
-              yTax: {
-                type: "linear",
-                position: "right",
-                grid: { drawOnChartArea: false },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${Number(v).toFixed(2)}L` },
-                title: { display: true, text: "Tax Liability", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#7c3aed' }
-              },
-              x: {
-                grid: { display: false },
-                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              scales: {
+                ySales: {
+                  type: "linear",
+                  position: "left",
+                  grid: { color: "rgba(99, 102, 241, 0.05)" },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#2563eb', callback: (v) => `₹${v}L` },
+                  title: { display: true, text: "Sales Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#2563eb' }
+                },
+                yTax: {
+                  type: "linear",
+                  position: "right",
+                  grid: { drawOnChartArea: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#7c3aed', callback: (v) => `₹${safeToFixed(v, 2)}L` },
+                  title: { display: true, text: "Tax Liability", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#7c3aed' }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+                }
               }
             }
-          }
-        });
+          });
+        }
+      } catch (err) {
+        console.error("Tax chart init error:", err);
       }
-      taxChart.current = chartInstance;
-    });
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       taxChart.current?.destroy();
     };
-  }, [loading, performanceChartType, derivedMonthlyTaxData, derivedMonthlyTrendData]);
+  }, [performanceChartType, derivedMonthlyTaxData, derivedMonthlyTrendData, loading]);
+
+  const weeklyPlanVsActual = useMemo(() => {
+    if (!filteredPlanVsActual || filteredPlanVsActual.length === 0) {
+      return { labels: [], planned: [], dispatched: [], sortedKeys: [] };
+    }
+
+    const weekMap = {};
+    filteredPlanVsActual.forEach((row) => {
+      if (!row.date) return;
+      const d = new Date(row.date);
+      if (isNaN(d.getTime())) return;
+
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const day = d.getDate();
+
+      let wk = 5;
+      if (day <= 7) wk = 1;
+      else if (day <= 14) wk = 2;
+      else if (day <= 21) wk = 3;
+      else if (day <= 28) wk = 4;
+
+      const key = `${year}-${String(month + 1).padStart(2, "0")}-W${wk}`;
+      const monthShort = d.toLocaleString("en-US", { month: "short" });
+      const label = `W${wk} ${monthShort}`;
+
+      if (!weekMap[key]) {
+        weekMap[key] = {
+          label,
+          key,
+          planQty: 0,
+          dispatchQty: 0,
+          year,
+          month,
+          wk,
+        };
+      }
+
+      weekMap[key].planQty += Number(row.planQty || 0);
+      weekMap[key].dispatchQty += Number(row.dispatchQty || 0);
+    });
+
+    const sortedKeys = Object.values(weekMap).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      if (a.month !== b.month) return a.month - b.month;
+      return a.wk - b.wk;
+    });
+
+    const labels = sortedKeys.map((item) => item.label);
+    const planned = sortedKeys.map((item) => item.planQty);
+    const dispatched = sortedKeys.map((item) => item.dispatchQty);
+
+    return { labels, planned, dispatched, sortedKeys };
+  }, [filteredPlanVsActual]);
 
   useEffect(() => {
-    if (!planRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(planRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!planRef.current) return;
+      planChart.current?.destroy();
 
-      const labels = filteredPlanVsActual.map((row) => row.partNoDesc.split(" - ")[0]);
-      const planned = filteredPlanVsActual.map((row) => row.planQty);
-      const dispatched = filteredPlanVsActual.map((row) => row.dispatchQty);
+      const ctx = planRef.current.getContext("2d");
+      const { labels, planned, dispatched, sortedKeys } = weeklyPlanVsActual;
 
       const gradPlanned = ctx.createLinearGradient(0, 0, 0, 240);
       gradPlanned.addColorStop(0, "rgba(139, 92, 246, 0.95)");
@@ -2632,113 +3091,166 @@ export default function SalesAnalysis() {
       gradDispatched.addColorStop(0, "rgba(16, 185, 129, 0.95)");
       gradDispatched.addColorStop(1, "rgba(16, 185, 129, 0.15)");
 
-      planChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        type: "bar",
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: "Planned Quantity",
-              data: planned,
-              backgroundColor: gradPlanned,
-              borderColor: "rgba(139, 92, 246, 1)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-            },
-            {
-              label: "Dispatched Quantity",
-              data: dispatched,
-              backgroundColor: gradDispatched,
-              borderColor: "rgba(16, 185, 129, 1)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: {
-            delay: (context) => {
-              let delay = 0;
-              if (context.type === 'data' && context.mode === 'default') {
-                delay = context.dataIndex * 80;
+      const maxVal = Math.max(0, ...planned, ...dispatched);
+
+      try {
+        planChart.current = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Planned Quantity",
+                data: planned,
+                backgroundColor: gradPlanned,
+                borderColor: "rgba(139, 92, 246, 1)",
+                borderWidth: 1.5,
+                borderRadius: 4,
+              },
+              {
+                label: "Actual Dispatched Quantity",
+                data: dispatched,
+                backgroundColor: gradDispatched,
+                borderColor: "rgba(16, 185, 129, 1)",
+                borderWidth: 1.5,
+                borderRadius: 4,
               }
-              return delay;
-            },
-            duration: 1000,
-            easing: "easeOutBack",
+            ]
           },
-          plugins: {
-            legend: {
-              position: "top",
-              labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              delay: (context) => {
+                let delay = 0;
+                if (context.type === 'data' && context.mode === 'default') {
+                  delay = context.dataIndex * 80;
+                }
+                return delay;
+              },
+              duration: 1000,
+              easing: "easeOutBack",
             },
-            tooltip: {
-              callbacks: {
-                label(ctx) {
-                  const row = filteredPlanVsActual[ctx.dataIndex];
-                  if (ctx.datasetIndex === 0) {
-                    return `Planned: ${ctx.parsed.y} qty (${row.partNoDesc})`;
-                  } else {
-                    return `Dispatched: ${ctx.parsed.y} qty / ${row.planQty} planned`;
+            plugins: {
+              legend: {
+                position: "top",
+                labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+              },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const item = sortedKeys[ctx.dataIndex];
+                    const val = Number(ctx.parsed.y) || 0;
+                    if (ctx.datasetIndex === 0) {
+                      return `Planned Qty: ${formatQty(val)} (${item?.label || '—'})`;
+                    } else {
+                      return `Actual Dispatched Qty: ${formatQty(val)} / ${formatQty(item?.planQty || 0)} planned`;
+                    }
                   }
                 }
+              },
+              datalabels: {
+                display: true,
+                align: "top",
+                anchor: "end",
+                offset: 4,
+                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                borderColor: (ctx) => ctx.datasetIndex === 0 ? "rgba(139, 92, 246, 0.4)" : "rgba(16, 185, 129, 0.4)",
+                color: (ctx) => ctx.datasetIndex === 0 ? "#7c3aed" : "#10b981",
+                formatter: (v) => formatQty(v)
               }
             },
-            datalabels: {
-              display: true,
-              align: "top",
-              anchor: "end",
-              offset: 4,
-              font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderWidth: 1,
-              borderRadius: 4,
-              padding: { top: 2, bottom: 2, left: 4, right: 4 },
-              borderColor: (ctx) => ctx.datasetIndex === 0 ? "rgba(139, 92, 246, 0.4)" : "rgba(16, 185, 129, 0.4)",
-              color: (ctx) => ctx.datasetIndex === 0 ? "#7c3aed" : "#10b981",
-              formatter: (v) => formatQty(v)
-            }
-          },
-          scales: {
-            y: {
-              type: "linear",
-              max: Math.ceil((Math.max(0, ...planned) || 1) * 1.25),
-              grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: {
-                font: { family: 'Plus Jakarta Sans', size: 9 },
-                color: '#312e81'
+            scales: {
+              y: {
+                type: "linear",
+                max: maxVal > 0 ? Math.ceil(maxVal * 1.25) : 10,
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans', size: 9 },
+                  color: '#312e81'
+                }
+              },
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
               }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
             }
           }
-        }
-      });
-      planChart.current = chartInstance;
-    });
+        });
+      } catch (err) {
+        console.error("Plan chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       planChart.current?.destroy();
     };
-  }, [filteredPlanVsActual]);
-  useEffect(() => {
-    if (!projRef.current) return;
-    let chartInstance = null;
-    const cancelReady = initChartWhenReady(projRef, (canvas) => {
-      const ctx = canvas.getContext("2d");
+  }, [filteredPlanVsActual, loading]);
 
-      const labels = filteredProjections.map((row) => row.customer.split(" ")[0]);
-      const dispatchedQty = filteredProjections.map((row) => row.dispQty);
-      const pendingQty = filteredProjections.map((row) => row.pendQty);
-      const totalAmtLakhs = filteredProjections.map((row) => row.totAmt / 100_000);
-      const pendingValLakhs = filteredProjections.map((row) => row.pendVal / 100_000);
+  const monthlyProjectionsChartData = useMemo(() => {
+    if (!filteredProjections || filteredProjections.length === 0) {
+      return { labels: [], dispatchedQty: [], pendingQty: [], totalAmtLakhs: [], pendingValLakhs: [], sortedMonths: [] };
+    }
+
+    const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+    const monthMap = {};
+    filteredProjections.forEach((row) => {
+      const mStr = (row.schdMonth || row.month || "Unknown").trim();
+      if (!monthMap[mStr]) {
+        const parts = mStr.toLowerCase().split(" ");
+        let mIdx = MONTHS.indexOf(parts[0]);
+        let yVal = parseInt(parts[1]) || new Date().getFullYear();
+        if (mIdx === -1) mIdx = 0;
+        const sortVal = yVal * 12 + mIdx;
+
+        monthMap[mStr] = {
+          monthLabel: mStr,
+          sortVal,
+          dispQty: 0,
+          pendQty: 0,
+          totAmt: 0,
+          pendVal: 0,
+        };
+      }
+
+      monthMap[mStr].dispQty += Number(row.dispQty || 0);
+      monthMap[mStr].pendQty += Number(row.pendQty || 0);
+      monthMap[mStr].totAmt += Number(row.totAmt || 0);
+      monthMap[mStr].pendVal += Number(row.pendVal || 0);
+    });
+
+    const sortedMonths = Object.values(monthMap).sort((a, b) => a.sortVal - b.sortVal);
+
+    const labels = sortedMonths.map((m) => m.monthLabel);
+    const dispatchedQty = sortedMonths.map((m) => m.dispQty);
+    const pendingQty = sortedMonths.map((m) => m.pendQty);
+    const totalAmtLakhs = sortedMonths.map((m) => jsRound(m.totAmt / 100_000, 2));
+    const pendingValLakhs = sortedMonths.map((m) => jsRound(m.pendVal / 100_000, 2));
+
+    return {
+      labels,
+      dispatchedQty,
+      pendingQty,
+      totalAmtLakhs,
+      pendingValLakhs,
+      sortedMonths,
+    };
+  }, [filteredProjections]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (!projRef.current) return;
+      projChart.current?.destroy();
+
+      const ctx = projRef.current.getContext("2d");
+      const { labels, dispatchedQty, pendingQty, totalAmtLakhs, pendingValLakhs, sortedMonths } = monthlyProjectionsChartData;
 
       const gradDisp = ctx.createLinearGradient(0, 0, 0, 240);
       gradDisp.addColorStop(0, "rgba(16, 185, 129, 0.85)");
@@ -2748,199 +3260,213 @@ export default function SalesAnalysis() {
       gradPend.addColorStop(0, "rgba(249, 115, 22, 0.85)");
       gradPend.addColorStop(1, "rgba(249, 115, 22, 0.15)");
 
-      projChart.current?.destroy();
-      chartInstance = new Chart(canvas, {
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              type: "bar",
-              label: "Dispatched Qty (Units)",
-              data: dispatchedQty,
-              backgroundColor: gradDisp,
-              borderColor: "rgba(16, 185, 129, 1)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-              yAxisID: "yQty",
-              datalabels: {
-                display: true,
-                align: "top",
-                anchor: "end",
-                offset: 2,
-                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                backgroundColor: "rgba(255, 255, 255, 0.95)",
-                borderWidth: 1,
-                borderRadius: 4,
-                padding: { top: 2, bottom: 2, left: 4, right: 4 },
-                borderColor: "rgba(16, 185, 129, 0.4)",
-                color: "#10b981",
-                formatter: (v) => formatQty(v)
-              }
-            },
-            {
-              type: "bar",
-              label: "Pending Qty (Units)",
-              data: pendingQty,
-              backgroundColor: gradPend,
-              borderColor: "rgba(249, 115, 22, 1)",
-              borderWidth: 1.5,
-              borderRadius: 4,
-              yAxisID: "yQty",
-              datalabels: {
-                display: true,
-                align: "top",
-                anchor: "end",
-                offset: 2,
-                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                backgroundColor: "rgba(255, 255, 255, 0.95)",
-                borderWidth: 1,
-                borderRadius: 4,
-                padding: { top: 2, bottom: 2, left: 4, right: 4 },
-                borderColor: "rgba(249, 115, 22, 0.4)",
-                color: "#ea580c",
-                formatter: (v) => formatQty(v)
-              }
-            },
-            {
-              type: "line",
-              label: "Total Order Value (Lakhs)",
-              data: totalAmtLakhs,
-              borderColor: "rgba(79, 70, 229, 1)",
-              borderWidth: 2.5,
-              tension: 0.4,
-              fill: false,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "rgba(79, 70, 229, 1)",
-              pointBorderWidth: 2,
-              yAxisID: "yValue",
-              datalabels: {
-                display: true,
-                align: "top",
-                anchor: "end",
-                offset: 6,
-                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                backgroundColor: "rgba(255, 255, 255, 0.95)",
+      try {
+        projChart.current = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                type: "bar",
+                label: "Dispatched Qty (Units)",
+                data: dispatchedQty,
+                backgroundColor: gradDisp,
+                borderColor: "rgba(16, 185, 129, 1)",
                 borderWidth: 1.5,
                 borderRadius: 4,
-                padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                borderColor: "rgba(79, 70, 229, 0.4)",
-                color: "#4f46e5",
-                formatter: (v) => `₹${v.toFixed(1)}L`
-              }
-            },
-            {
-              type: "line",
-              label: "Pending Value (Lakhs)",
-              data: pendingValLakhs,
-              borderColor: "rgba(239, 68, 68, 1)",
-              borderWidth: 2.5,
-              tension: 0.4,
-              fill: false,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "rgba(239, 68, 68, 1)",
-              pointBorderWidth: 2,
-              yAxisID: "yValue",
-              datalabels: {
-                display: true,
-                align: "top",
-                anchor: "end",
-                offset: 6,
-                font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                yAxisID: "yQty",
+                datalabels: {
+                  display: true,
+                  align: "top",
+                  anchor: "end",
+                  offset: 2,
+                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderWidth: 1,
+                  borderRadius: 4,
+                  padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                  borderColor: "rgba(16, 185, 129, 0.4)",
+                  color: "#10b981",
+                  formatter: (v) => formatQty(v)
+                }
+              },
+              {
+                type: "bar",
+                label: "Pending Qty (Units)",
+                data: pendingQty,
+                backgroundColor: gradPend,
+                borderColor: "rgba(249, 115, 22, 1)",
                 borderWidth: 1.5,
                 borderRadius: 4,
-                padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                borderColor: "rgba(239, 68, 68, 0.4)",
-                color: "#ef4444",
-                formatter: (v) => `₹${v.toFixed(1)}L`
+                yAxisID: "yQty",
+                datalabels: {
+                  display: true,
+                  align: "top",
+                  anchor: "end",
+                  offset: 2,
+                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderWidth: 1,
+                  borderRadius: 4,
+                  padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                  borderColor: "rgba(249, 115, 22, 0.4)",
+                  color: "#ea580c",
+                  formatter: (v) => formatQty(v)
+                }
+              },
+              {
+                type: "line",
+                label: "Total Order Value (Lakhs)",
+                data: totalAmtLakhs,
+                borderColor: "rgba(79, 70, 229, 1)",
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: false,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "#ffffff",
+                pointBorderColor: "rgba(79, 70, 229, 1)",
+                pointBorderWidth: 2,
+                yAxisID: "yValue",
+                datalabels: {
+                  display: true,
+                  align: "top",
+                  anchor: "end",
+                  offset: 6,
+                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                  borderColor: "rgba(79, 70, 229, 0.4)",
+                  color: "#4f46e5",
+                  formatter: (v) => `₹${safeToFixed(v, 1)}L`
+                }
+              },
+              {
+                type: "line",
+                label: "Pending Value (Lakhs)",
+                data: pendingValLakhs,
+                borderColor: "rgba(239, 68, 68, 1)",
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: false,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "#ffffff",
+                pointBorderColor: "rgba(239, 68, 68, 1)",
+                pointBorderWidth: 2,
+                yAxisID: "yValue",
+                datalabels: {
+                  display: true,
+                  align: "top",
+                  anchor: "end",
+                  offset: 6,
+                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                  borderColor: "rgba(239, 68, 68, 0.4)",
+                  color: "#ef4444",
+                  formatter: (v) => `₹${safeToFixed(v, 1)}L`
+                }
               }
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: {
-            delay: (context) => {
-              let delay = 0;
-              if (context.type === 'data' && context.mode === 'default') {
-                delay = context.dataIndex * 100;
-              }
-              return delay;
-            },
-            duration: 1000,
-            easing: "easeOutBack",
+            ]
           },
-          plugins: {
-            legend: {
-              position: "top",
-              labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              delay: (context) => {
+                let delay = 0;
+                if (context.type === 'data' && context.mode === 'default') {
+                  delay = context.dataIndex * 100;
+                }
+                return delay;
+              },
+              duration: 1000,
+              easing: "easeOutBack",
             },
-            tooltip: {
-              callbacks: {
-                label(ctx) {
-                  const row = filteredProjections[ctx.dataIndex];
-                  const val = ctx.parsed.y ?? 0;
-                  if (ctx.dataset.type === "bar") {
-                    return `${ctx.dataset.label}: ${formatQty(val)} units (Customer: ${row.customer})`;
-                  } else {
-                    return `${ctx.dataset.label}: ₹${val.toFixed(2)} Lakhs (Customer: ${row.customer})`;
+            plugins: {
+              legend: {
+                position: "top",
+                labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' }, color: '#312e81' }
+              },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const monthData = sortedMonths[ctx.dataIndex];
+                    const val = Number(ctx.parsed.y) || 0;
+                    const lbl = ctx.dataset?.label || "";
+                    if (ctx.dataset.type === "bar") {
+                      return `${lbl}: ${formatQty(val)} units (${monthData?.monthLabel || '—'})`;
+                    } else {
+                      return `${lbl}: ₹${safeToFixed(val, 2)} Lakhs (${monthData?.monthLabel || '—'})`;
+                    }
                   }
                 }
               }
-            }
-          },
-          scales: {
-            yQty: {
-              type: "linear",
-              position: "left",
-              grid: { color: "rgba(99, 102, 241, 0.05)" },
-              ticks: {
-                font: { family: 'Plus Jakarta Sans', size: 9 },
-                color: '#312e81',
-                callback: (v) => `${v} units`
-              },
-              title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
             },
-            yValue: {
-              type: "linear",
-              position: "right",
-              grid: { drawOnChartArea: false },
-              ticks: {
-                font: { family: 'Plus Jakarta Sans', size: 9 },
-                color: '#4f46e5',
-                callback: (v) => `₹${v}L`
+            scales: {
+              yQty: {
+                type: "linear",
+                position: "left",
+                grid: { color: "rgba(99, 102, 241, 0.05)" },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans', size: 9 },
+                  color: '#312e81',
+                  callback: (v) => `${v} units`
+                },
+                title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
               },
-              title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              yValue: {
+                type: "linear",
+                position: "right",
+                grid: { drawOnChartArea: false },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans', size: 9 },
+                  color: '#4f46e5',
+                  callback: (v) => `₹${v}L`
+                },
+                title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
+              },
+              x: {
+                grid: { display: false },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81' }
+              }
             }
           }
-        }
-      });
-      projChart.current = chartInstance;
-    });
+        });
+      } catch (err) {
+        console.error("Proj chart init error:", err);
+      }
+    }, 50);
 
     return () => {
-      cancelReady();
-      chartInstance?.destroy();
+      clearTimeout(timer);
       projChart.current?.destroy();
     };
-  }, [filteredProjections]);
+  }, [monthlyProjectionsChartData, loading]);
 
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
+    let fromDate = dateRange.from;
+    let toDate = dateRange.to;
+
+    if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      const dflt = getTodayMonthRange();
+      fromDate = dflt.from;
+      toDate = dflt.to;
+      setDateRange(dflt);
+      return;
+    }
+
     setLoading(true);
     const params = new URLSearchParams({
-      from: toIsoDate(dateRange.from),
-      to: toIsoDate(dateRange.to),
+      from: toIsoDate(fromDate),
+      to: toIsoDate(toDate),
     });
+    if (invoiceBtype) params.set("btype", invoiceBtype);
     if (debouncedSearchQuery) {
       params.set("search", debouncedSearchQuery);
     }
@@ -2961,6 +3487,23 @@ export default function SalesAnalysis() {
         if (err.name !== "AbortError") {
           console.error("Sales summary fetch failed:", err);
           setSummary(null);
+        }
+      });
+
+    const pGT = fetch(`${API_BASE}/sales-analysis/grand-total/?${params}`, fetchOpts)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Grand total fetch error:", data?.error || r.statusText);
+          setGrandTotalVal(null);
+          return;
+        }
+        setGrandTotalVal(data?.grand_total ?? null);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Grand total fetch failed:", err);
+          setGrandTotalVal(null);
         }
       });
 
@@ -3169,20 +3712,28 @@ export default function SalesAnalysis() {
       });
 
     Promise.all([p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13]).finally(() => {
-      if (!ctrl.signal.aborted) {
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, debouncedSearchQuery]);
+  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
 
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
+    let fromDate = dateRange.from;
+    let toDate = dateRange.to;
+
+    if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      const dflt = getTodayMonthRange();
+      fromDate = dflt.from;
+      toDate = dflt.to;
+      setDateRange(dflt);
+      return;
+    }
+
     setTableLoading(true);
     const params = new URLSearchParams({
-      from: toIsoDate(dateRange.from),
-      to: toIsoDate(dateRange.to),
+      from: toIsoDate(fromDate),
+      to: toIsoDate(toDate),
     });
     if (invoiceBtype) params.set("btype", invoiceBtype);
     if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
@@ -3211,9 +3762,7 @@ export default function SalesAnalysis() {
         }
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) {
-          setTableLoading(false);
-        }
+        setTableLoading(false);
       });
 
     return () => ctrl.abort();
@@ -3228,8 +3777,12 @@ export default function SalesAnalysis() {
     setFilters({ customer: "All Customers", product: "All Products", salesGroup: "Sales Group", rejection: "No" });
   };
 
+  const isGlobalLoading = loading || tableLoading;
+
   return (
     <div className="sa-root">
+      {/* ── Global Top Loading Progress Bar ── */}
+      <div className={`sa-global-progress-bar ${isGlobalLoading ? "sa-global-progress-bar--active" : ""}`} />
 
       {/* ── Page Header ── */}
       <div className="sa-page-header">
@@ -3272,7 +3825,7 @@ export default function SalesAnalysis() {
             <input
               type="text"
               className="sa-search-input"
-              placeholder="Search no, customer, part..."
+              placeholder="Search no part..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -3575,1278 +4128,1263 @@ export default function SalesAnalysis() {
         </button>
       </div>
 
-      {!loading && invoiceRows.length === 0 ? (
-        <div className="sa-card sa-no-data-card" style={{ animationDelay: '0.1s' }}>
-          <div className="sa-no-data-content">
-            <div className="sa-no-data-icon-wrap">
-              <Inbox size={48} className="sa-no-data-icon" />
+      {/* ── Summary Strip ── */}
+      <div className="sa-summary-strip">
+        {[
+          { label: "Period", val: loading ? <div className="sa-skeleton" style={{ width: '75px', height: '14px', borderRadius: '4px' }} /> : derivedSummary?.period ?? "—", sm: true },
+          { label: "Grand Total", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : grandTotalVal != null ? `₹${formatRupees(grandTotalVal)}` : (derivedSummary ? `₹${formatRupees(derivedSummary.grand_total)}` : "—") },
+          { label: "Total Invoices", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.total_invoices) : "—" },
+          { label: "Customers", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.customers) : "—" },
+          { label: "Total Qty Sold", val: loading ? <div className="sa-skeleton" style={{ width: '55px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? formatQty(derivedSummary.total_qty_sold) : "—" },
+          { label: "Avg Invoice", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.avg_invoice)}` : "—" },
+          {
+            label: "Turn Over",
+            val: loading ? <div className="sa-skeleton" style={{ width: '65px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${Number(derivedSummary.turn_over_lakhs).toFixed(3)}L` : "—",
+            green: true,
+          },
+        ].map((s, i) => (
+          <div className="sa-summary-item" key={i}>
+            <div className="sa-summary-item__label">{s.label}</div>
+            <div className={`sa-summary-item__val${s.sm ? " sa-summary-item__val--sm" : ""}${s.green ? " sa-summary-item__val--green" : ""}`}>
+              {s.val}
             </div>
-            <h3 className="sa-no-data-title">No Data found for this Period</h3>
-            <p className="sa-no-data-sub">
-              There are no transactions recorded between <strong>{dateRange.from ? dateRange.from.toLocaleDateString() : ""}</strong> and <strong>{dateRange.to ? dateRange.to.toLocaleDateString() : ""}</strong>.
-            </p>
-            <button className="sa-btn sa-btn--primary sa-no-data-btn" onClick={resetFilters}>
-              Reset Date Range
+          </div>
+        ))}
+      </div>
+
+      {/* ── KPI Cards ── */}
+      <div className="sa-kpi-grid">
+        {kpiCards.map((k, i) => {
+          const Icon = k.icon;
+          return (
+            <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i, borderTopColor: k.iconColor }}>
+              <div className="sa-kpi-card__glow" />
+              <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
+                <Icon size={22} />
+              </div>
+              <div className="sa-kpi-card__label">{k.label}</div>
+              <div className="sa-kpi-card__val">
+                {loading ? <div className="sa-skeleton" style={{ width: '60%', height: '24px', margin: '4px 0', borderRadius: '4px' }} /> : k.value}
+              </div>
+              <div className="sa-kpi-card__sub">
+                {loading ? <div className="sa-skeleton" style={{ width: '80%', height: '12px', margin: '4px 0', borderRadius: '3px' }} /> : k.sub}
+              </div>
+              {loading ? (
+                <div className="sa-skeleton" style={{ width: '40%', height: '12px', marginTop: '6px', borderRadius: '3px' }} />
+              ) : (
+                <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Average Selling Rate KPI Cards (Row 2) ── */}
+      <div className="sa-kpi-grid sa-kpi-grid--4col" style={{ marginTop: '-8px' }}>
+        {avgRateCards.map((k, i) => {
+          const Icon = k.icon;
+          return (
+            <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i + 5, borderTopColor: k.iconColor }}>
+              <div className="sa-kpi-card__glow" />
+              <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
+                <Icon size={22} />
+              </div>
+              <div className="sa-kpi-card__label">{k.label}</div>
+              <div className="sa-kpi-card__val">
+                {loading ? <div className="sa-skeleton" style={{ width: '60%', height: '24px', margin: '4px 0', borderRadius: '4px' }} /> : k.value}
+              </div>
+              <div className="sa-kpi-card__sub">
+                {loading ? <div className="sa-skeleton" style={{ width: '80%', height: '12px', margin: '4px 0', borderRadius: '3px' }} /> : k.sub}
+              </div>
+              {loading ? (
+                <div className="sa-skeleton" style={{ width: '40%', height: '12px', marginTop: '6px', borderRadius: '3px' }} />
+              ) : (
+                <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Weekly Sales Trend (Full Width Row) ── */}
+      <div className="sa-animate" style={{ marginBottom: "1.4rem" }}>
+        <div className="sa-card sa-card--chart" style={{ width: "100%" }}>
+          <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && derivedWeeklyTrend?.period ? ` (${derivedWeeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div className="sa-chart-type-toggle">
+                <button
+                  className={`sa-toggle-btn ${weeklyChartType === "combo" ? "active" : ""}`}
+                  onClick={() => setWeeklyChartType("combo")}
+                >
+                  Combo View
+                </button>
+                <button
+                  className={`sa-toggle-btn ${weeklyChartType === "cumulative" ? "active" : ""}`}
+                  onClick={() => setWeeklyChartType("cumulative")}
+                >
+                  Cumulative View
+                </button>
+                <button
+                  className={`sa-toggle-btn ${weeklyChartType === "weekly" ? "active" : ""}`}
+                  onClick={() => setWeeklyChartType("weekly")}
+                >
+                  Weekly View
+                </button>
+              </div>
+              <span className="sa-badge sa-badge--blue" style={{ margin: 0 }}>
+                {loading ? (
+                  <div className="sa-skeleton" style={{ width: '50px', height: '10px' }} />
+                ) : derivedWeeklyTrend != null ? (
+                  `₹${Number(derivedWeeklyTrend.turn_over_lakhs ?? 0).toFixed(3)}L Total`
+                ) : summary ? (
+                  `₹${Number(summary.turn_over_lakhs ?? 0).toFixed(3)}L Total`
+                ) : "—"}
+              </span>
+            </div>
+          </div>
+          {loading ? (
+            <div className="sa-chart-skeleton" style={{ height: "300px" }}><div className="sa-skeleton" /></div>
+          ) : (
+            <div className="sa-chart-wrap" style={{ height: "300px" }}><canvas ref={trendRef} /></div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Revenue by Customer & Product (Dual Column Row) ── */}
+      <div className="sa-donuts-row sa-animate">
+        {/* Customer Revenue Card */}
+        <div className="sa-card sa-card--chart sa-card--donut">
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Building2 size={16} style={{ color: "#10b981" }} /> Revenue by Customer
+            </span>
+          </div>
+          {loading ? (
+            <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
+          ) : (
+            <div className="sa-donut-layout">
+              <div className="sa-donut-chart-container">
+                <canvas ref={custRef} />
+                <div className="sa-donut-center-info">
+                  <span className="sa-center-val">
+                    ₹{(Math.floor(Number(derivedSummary?.turn_over_lakhs ?? 0) * 1000) / 1000).toFixed(3)}L
+                  </span>
+                  <span className="sa-center-lbl">Total Sales</span>
+                  <span className="sa-center-sub">
+                    {custLabels.length} Customers
+                  </span>
+                </div>
+              </div>
+              <div className="sa-donut-legend">
+                {custLabels.map((lbl, idx) => (
+                  <div
+                    key={lbl}
+                    className={`sa-legend-item ${hoveredCustIndex === idx ? 'active' : ''}`}
+                    onMouseEnter={() => handleCustLegendHover(idx)}
+                    onMouseLeave={handleCustLegendLeave}
+                    title={lbl}
+                  >
+                    <div className="sa-legend-item-header">
+                      <div
+                        className="sa-legend-bullet"
+                        style={{
+                          background: `linear-gradient(135deg, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].start}, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].end})`
+                        }}
+                      />
+                      <span className="sa-legend-name">{lbl}</span>
+                      <span className="sa-legend-pct">{custPercentages[idx]?.toFixed(1)}%</span>
+                    </div>
+                    <div className="sa-legend-value-row">
+                      <span className="sa-legend-val">{getCustValue(custPercentages[idx], idx)}</span>
+                    </div>
+                    <div className="sa-legend-progress-bar">
+                      <div
+                        className="sa-legend-progress-fill"
+                        style={{
+                          width: `${custPercentages[idx]}%`,
+                          background: `linear-gradient(90deg, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].start}, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].end})`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Despatch Plan Pending Result Table Card */}
+        <div className="sa-card sa-card--table sa-card--despatch-plan">
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={16} style={{ color: "#2d6de8" }} /> Despatch Plan Pending Result
+            </span>
+          </div>
+          <div className="sa-table-scroll sa-despatch-table-wrap">
+            <table className="sa-table sa-despatch-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Part No</th>
+                  <th>Description</th>
+                  <th className="sa-num">Pending Planned Qty</th>
+                  <th className="sa-num">Planned Qty</th>
+                  <th className="sa-num">Available Qty</th>
+                  <th className="sa-num">Despatch Qty</th>
+                  <th className="sa-num">Cancel</th>
+                  <th>Inv No</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  [...Array(5)].map((_, idx) => (
+                    <tr key={idx}>
+                      <td><div className="sa-skeleton" style={{ width: '120px', height: '12px' }} /></td>
+                      <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                      <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '20px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
+                    </tr>
+                  ))
+                ) : filteredDespatchPlan.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      No pending despatch plan records found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDespatchPlan.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600, color: "#1e293b" }} title={row.customer}>{row.customer}</td>
+                      <td><span className="sa-trace-code">{row.partNo}</span></td>
+                      <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
+                      <td className="sa-num" style={{ fontWeight: 700, color: "#d97706" }}>{formatQty(row.pendingPlannedQty)}</td>
+                      <td className="sa-num">{formatQty(row.plannedQty)}</td>
+                      <td className="sa-num">{formatQty(row.availableQty)}</td>
+                      <td className="sa-num" style={{ fontWeight: 600, color: "#16a34a" }}>{formatQty(row.despatchQty)}</td>
+                      <td className="sa-num">{row.cancel}</td>
+                      <td><span className="sa-inv-no">{row.invNo}</span></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Monthly Analytics Section ── */}
+      <div className="sa-card sa-monthly-analytics-card">
+        <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Monthly Performance & Bill Type Analytics
+          </span>
+          <div className="sa-chart-type-toggle">
+            <button
+              className={`sa-toggle-btn ${performanceChartType === "bar" ? "active" : ""}`}
+              onClick={() => setPerformanceChartType("bar")}
+            >
+              Bar View
+            </button>
+            <button
+              className={`sa-toggle-btn ${performanceChartType === "line" ? "active" : ""}`}
+              onClick={() => setPerformanceChartType("line")}
+            >
+              Trend View
+            </button>
+            <button
+              className={`sa-toggle-btn ${performanceChartType === "share" ? "active" : ""}`}
+              onClick={() => setPerformanceChartType("share")}
+            >
+              Share View
             </button>
           </div>
         </div>
-      ) : (
-        <>
-          {/* ── Summary Strip ── */}
-          <div className="sa-summary-strip">
-            {[
-              { label: "Period", val: loading ? <div className="sa-skeleton" style={{ width: '75px', height: '14px', borderRadius: '4px' }} /> : derivedSummary?.period ?? "—", sm: true },
-              { label: "Grand Total", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.grand_total)}` : "—" },
-              { label: "Total Invoices", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.total_invoices) : "—" },
-              { label: "Customers", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.customers) : "—" },
-              { label: "Total Qty Sold", val: loading ? <div className="sa-skeleton" style={{ width: '55px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? formatQty(derivedSummary.total_qty_sold) : "—" },
-              { label: "Avg Invoice", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.avg_invoice)}` : "—" },
-              {
-                label: "Turn Over",
-                val: loading ? <div className="sa-skeleton" style={{ width: '65px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${Number(derivedSummary.turn_over_lakhs).toFixed(2)}L` : "—",
-                green: true,
-              },
-            ].map((s, i) => (
-              <div className="sa-summary-item" key={i}>
-                <div className="sa-summary-item__label">{s.label}</div>
-                <div className={`sa-summary-item__val${s.sm ? " sa-summary-item__val--sm" : ""}${s.green ? " sa-summary-item__val--green" : ""}`}>
-                  {s.val}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ── KPI Cards ── */}
-          <div className="sa-kpi-grid">
-            {kpiCards.map((k, i) => {
-              const Icon = k.icon;
-              return (
-                <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i, borderTopColor: k.iconColor }}>
-                  <div className="sa-kpi-card__glow" />
-                  <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
-                    <Icon size={22} />
-                  </div>
-                  <div className="sa-kpi-card__label">{k.label}</div>
-                  <div className="sa-kpi-card__val">
-                    {loading ? <div className="sa-skeleton" style={{ width: '60%', height: '24px', margin: '4px 0', borderRadius: '4px' }} /> : k.value}
-                  </div>
-                  <div className="sa-kpi-card__sub">
-                    {loading ? <div className="sa-skeleton" style={{ width: '80%', height: '12px', margin: '4px 0', borderRadius: '3px' }} /> : k.sub}
-                  </div>
-                  {loading ? (
-                    <div className="sa-skeleton" style={{ width: '40%', height: '12px', marginTop: '6px', borderRadius: '3px' }} />
-                  ) : (
-                    <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ── Average Selling Rate KPI Cards (Row 2) ── */}
-          <div className="sa-kpi-grid sa-kpi-grid--4col" style={{ marginTop: '-8px' }}>
-            {avgRateCards.map((k, i) => {
-              const Icon = k.icon;
-              return (
-                <div className="sa-kpi-card" key={i} style={{ "--kpi-idx": i + 5, borderTopColor: k.iconColor }}>
-                  <div className="sa-kpi-card__glow" />
-                  <div className="sa-kpi-card__icon" style={{ display: 'inline-flex', alignItems: 'center', color: k.iconColor }}>
-                    <Icon size={22} />
-                  </div>
-                  <div className="sa-kpi-card__label">{k.label}</div>
-                  <div className="sa-kpi-card__val">
-                    {loading ? <div className="sa-skeleton" style={{ width: '60%', height: '24px', margin: '4px 0', borderRadius: '4px' }} /> : k.value}
-                  </div>
-                  <div className="sa-kpi-card__sub">
-                    {loading ? <div className="sa-skeleton" style={{ width: '80%', height: '12px', margin: '4px 0', borderRadius: '3px' }} /> : k.sub}
-                  </div>
-                  {loading ? (
-                    <div className="sa-skeleton" style={{ width: '40%', height: '12px', marginTop: '6px', borderRadius: '3px' }} />
-                  ) : (
-                    <span className={`sa-kpi-card__trend sa-kpi-card__trend--${k.type}`}>{k.trend}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ── Weekly Sales Trend (Full Width Row) ── */}
-          <div className="sa-animate" style={{ marginBottom: "1.4rem" }}>
-            <div className="sa-card sa-card--chart" style={{ width: "100%" }}>
-              <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && derivedWeeklyTrend?.period ? ` (${derivedWeeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
+        <div className="sa-monthly-charts-row">
+          <div className="sa-monthly-chart-container" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h4 className="sa-chart-title" style={{ margin: 0 }}>
+                {performanceChartType === "share" ? "Sales Growth Rate (MoM)" : "Monthly Sales Trend (Value)"}
+              </h4>
+              {performanceChartType !== "share" && !loading && monthlyAvg > 0 && (
+                <span className="sa-badge sa-badge--purple" style={{ margin: 0, fontSize: '0.72rem', fontWeight: '700', padding: '3px 8px', borderRadius: '6px' }}>
+                  ₹{monthlyAvg.toFixed(2)}L Avg
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div className="sa-chart-type-toggle">
-                    <button
-                      className={`sa-toggle-btn ${weeklyChartType === "combo" ? "active" : ""}`}
-                      onClick={() => setWeeklyChartType("combo")}
-                    >
-                      Combo View
-                    </button>
-                    <button
-                      className={`sa-toggle-btn ${weeklyChartType === "cumulative" ? "active" : ""}`}
-                      onClick={() => setWeeklyChartType("cumulative")}
-                    >
-                      Cumulative View
-                    </button>
-                    <button
-                      className={`sa-toggle-btn ${weeklyChartType === "weekly" ? "active" : ""}`}
-                      onClick={() => setWeeklyChartType("weekly")}
-                    >
-                      Weekly View
-                    </button>
-                  </div>
-                  <span className="sa-badge sa-badge--blue" style={{ margin: 0 }}>
-                    {loading ? (
-                      <div className="sa-skeleton" style={{ width: '50px', height: '10px' }} />
-                    ) : derivedWeeklyTrend != null ? (
-                      `₹${Number(derivedWeeklyTrend.turn_over_lakhs ?? 0).toFixed(2)}L Total`
-                    ) : summary ? (
-                      `₹${Number(summary.turn_over_lakhs ?? 0).toFixed(2)}L Total`
-                    ) : "—"}
-                  </span>
-                </div>
-              </div>
-              {loading ? (
-                <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
-              ) : (
-                <div className="sa-chart-wrap" style={{ height: "300px" }}><canvas ref={trendRef} /></div>
               )}
             </div>
-          </div>
-
-          {/* ── Revenue by Customer & Product (Dual Column Row) ── */}
-          <div className="sa-donuts-row sa-animate">
-            {/* Customer Revenue Card */}
-            <div className="sa-card sa-card--chart sa-card--donut">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={16} style={{ color: "#10b981" }} /> Revenue by Customer
-                </span>
-              </div>
-              {loading ? (
-                <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
-              ) : (
-                <div className="sa-donut-layout">
-                  <div className="sa-donut-chart-container">
-                    <canvas ref={custRef} />
-                    <div className="sa-donut-center-info">
-                      {hoveredCustIndex !== -1 && custLabels[hoveredCustIndex] ? (
-                        <>
-                          <span className="sa-center-val">{custPercentages[hoveredCustIndex]?.toFixed(1)}%</span>
-                          <span className="sa-center-lbl" title={custLabels[hoveredCustIndex]}>
-                            {custLabels[hoveredCustIndex]}
-                          </span>
-                          <span className="sa-center-sub">
-                            {getCustValue(custPercentages[hoveredCustIndex])}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="sa-center-val">
-                            ₹{Number(derivedSummary?.turn_over_lakhs ?? 0).toFixed(2)}L
-                          </span>
-                          <span className="sa-center-lbl">Total Sales</span>
-                          <span className="sa-center-sub">
-                            {custLabels.length} Customers
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="sa-donut-legend">
-                    {custLabels.map((lbl, idx) => (
-                      <div
-                        key={lbl}
-                        className={`sa-legend-item ${hoveredCustIndex === idx ? 'active' : ''}`}
-                        onMouseEnter={() => handleCustLegendHover(idx)}
-                        onMouseLeave={handleCustLegendLeave}
-                        title={lbl}
-                      >
-                        <div className="sa-legend-item-header">
-                          <div
-                            className="sa-legend-bullet"
-                            style={{
-                              background: `linear-gradient(135deg, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].start}, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].end})`
-                            }}
-                          />
-                          <span className="sa-legend-name">{lbl}</span>
-                          <span className="sa-legend-pct">{custPercentages[idx]?.toFixed(1)}%</span>
-                        </div>
-                        <div className="sa-legend-value-row">
-                          <span className="sa-legend-val">{getCustValue(custPercentages[idx])}</span>
-                        </div>
-                        <div className="sa-legend-progress-bar">
-                          <div
-                            className="sa-legend-progress-fill"
-                            style={{
-                              width: `${custPercentages[idx]}%`,
-                              background: `linear-gradient(90deg, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].start}, ${GRADIENTS_CUSTOMER[idx % GRADIENTS_CUSTOMER.length].end})`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Product Revenue Card */}
-            <div className="sa-card sa-card--chart sa-card--donut">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Package size={16} style={{ color: "#f97316" }} /> Revenue by Product
-                </span>
-              </div>
-              {loading ? (
-                <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
-              ) : (
-                <div className="sa-donut-layout">
-                  <div className="sa-donut-chart-container">
-                    <canvas ref={prodRef} />
-                    <div className="sa-donut-center-info">
-                      {hoveredProdIndex !== -1 && prodLabels[hoveredProdIndex] ? (
-                        <>
-                          <span className="sa-center-val">{prodPercentages[hoveredProdIndex]?.toFixed(1)}%</span>
-                          <span className="sa-center-lbl" title={prodLabels[hoveredProdIndex]}>
-                            {prodLabels[hoveredProdIndex]}
-                          </span>
-                          <span className="sa-center-sub">
-                            {getProdQty(prodPercentages[hoveredProdIndex])}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="sa-center-val">
-                            {Number(derivedSummary?.total_qty_sold ?? 0).toLocaleString("en-IN")}
-                          </span>
-                          <span className="sa-center-lbl">Total Qty</span>
-                          <span className="sa-center-sub">
-                            Units Sold
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="sa-donut-legend">
-                    {prodLabels.map((lbl, idx) => (
-                      <div
-                        key={lbl}
-                        className={`sa-legend-item ${hoveredProdIndex === idx ? 'active' : ''}`}
-                        onMouseEnter={() => handleProdLegendHover(idx)}
-                        onMouseLeave={handleProdLegendLeave}
-                        title={lbl}
-                      >
-                        <div className="sa-legend-item-header">
-                          <div
-                            className="sa-legend-bullet"
-                            style={{
-                              background: `linear-gradient(135deg, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].start}, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].end})`
-                            }}
-                          />
-                          <span className="sa-legend-name">{lbl}</span>
-                          <span className="sa-legend-pct">{prodPercentages[idx]?.toFixed(1)}%</span>
-                        </div>
-                        <div className="sa-legend-value-row">
-                          <span className="sa-legend-val">{getProdQty(prodPercentages[idx])}</span>
-                        </div>
-                        <div className="sa-legend-progress-bar">
-                          <div
-                            className="sa-legend-progress-fill"
-                            style={{
-                              width: `${prodPercentages[idx]}%`,
-                              background: `linear-gradient(90deg, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].start}, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].end})`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Monthly Analytics Section ── */}
-          <div className="sa-card sa-monthly-analytics-card">
-            <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Monthly Performance & Bill Type Analytics
-              </span>
-              <div className="sa-chart-type-toggle">
-                <button
-                  className={`sa-toggle-btn ${performanceChartType === "bar" ? "active" : ""}`}
-                  onClick={() => setPerformanceChartType("bar")}
-                >
-                  Bar View
-                </button>
-                <button
-                  className={`sa-toggle-btn ${performanceChartType === "line" ? "active" : ""}`}
-                  onClick={() => setPerformanceChartType("line")}
-                >
-                  Trend View
-                </button>
-                <button
-                  className={`sa-toggle-btn ${performanceChartType === "share" ? "active" : ""}`}
-                  onClick={() => setPerformanceChartType("share")}
-                >
-                  Share View
-                </button>
-              </div>
-            </div>
-            <div className="sa-monthly-charts-row">
-              <div className="sa-monthly-chart-container" style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <h4 className="sa-chart-title" style={{ margin: 0 }}>
-                    {performanceChartType === "share" ? "Sales Growth Rate (MoM)" : "Monthly Sales Trend (Value)"}
-                  </h4>
-                  {performanceChartType !== "share" && !loading && monthlyAvg > 0 && (
-                    <span className="sa-badge sa-badge--purple" style={{ margin: 0, fontSize: '0.72rem', fontWeight: '700', padding: '3px 8px', borderRadius: '6px' }}>
-                      ₹{monthlyAvg.toFixed(2)}L Avg
-                    </span>
-                  )}
-                </div>
-                {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
-                ) : (
-                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
-                    <canvas ref={monthlyTrendRef} />
-                  </div>
-                )}
-              </div>
-              <div className="sa-monthly-chart-container">
-                <h4 className="sa-chart-title">
-                  {performanceChartType === "share" ? "Bill Type Revenue Share (%)" : "Bill Type Revenue Contribution (Month-wise)"}
-                </h4>
-                {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
-                ) : (
-                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
-                    <canvas ref={billTypeRef} />
-                  </div>
-                )}
-              </div>
-              <div className="sa-monthly-chart-container">
-                <h4 className="sa-chart-title">
-                  {performanceChartType === "share"
-                    ? "Effective Tax Rate (%)"
-                    : (performanceChartType === "line" ? "Monthly Sales & Tax Correlation" : "Monthly Tax Trend (Value)")}
-                </h4>
-                {loading ? (
-                  <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
-                ) : (
-                  <div className="sa-chart-wrap" style={{ height: '320px' }}>
-                    <canvas ref={taxRef} />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-
-          {/* ── Two-Col: Ranking + Month Summary ── */}
-          <div className="sa-two-col">
-
-            {/* Customer Ranking */}
-            <div className="sa-card">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Trophy size={16} style={{ color: "#8b5cf6" }} /> Customer Revenue Ranking
-                </span>
-                <span className="sa-card__sub">by invoice value</span>
-              </div>
-              <div className="sa-rank-list">
-                {loading ? (
-                  [...Array(5)].map((_, idx) => (
-                    <div className="sa-rank-row" key={idx} style={{ padding: '12px 20px' }}>
-                      <div className="sa-rank-row__num"><div className="sa-skeleton" style={{ width: '12px', height: '12px' }} /></div>
-                      <div className="sa-rank-row__name" style={{ flex: 1, margin: '0 12px' }}><div className="sa-skeleton" style={{ width: '70%', height: '12px' }} /></div>
-                      <div className="sa-rank-row__amount" style={{ marginRight: '12px' }}><div className="sa-skeleton" style={{ width: '40px', height: '12px' }} /></div>
-                      <div className="sa-rank-row__pct"><div className="sa-skeleton" style={{ width: '30px', height: '12px' }} /></div>
-                    </div>
-                  ))
-                ) : (customerRanking.length ? customerRanking : [{ name: "—", barW: "0%", color: "#94a3b8", amount: "—", pct: "—" }]).map((c, i) => (
-                  <div className="sa-rank-row" key={i} style={{ "--ri": i }}>
-                    <div className="sa-rank-row__num">{i + 1}</div>
-                    <div className="sa-rank-row__name">{c.name}</div>
-                    <div className="sa-rank-row__bar-bg">
-                      <div className="sa-rank-row__bar" style={{ width: c.barW, background: c.color }} />
-                    </div>
-                    <div className="sa-rank-row__amount">{c.amount}</div>
-                    <div className="sa-rank-row__pct">{c.pct}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Month Summary */}
-            <div className="sa-card sa-card--month">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Sales Summary
-                </span>
-                <span className="sa-badge sa-badge--green">
-                  {loading ? (
-                    <div className="sa-skeleton" style={{ width: '40px', height: '10px' }} />
-                  ) : (
-                    derivedMonthSummary?.period ?? summary?.period ?? "—"
-                  )}
-                </span>
-              </div>
-              <div className="sa-month-table-wrap sa-month-table-wrap--scroll">
-                <table className="sa-mini-table">
-                  <thead>
-                    <tr>
-                      <th>Month</th>
-                      <th className="sa-num">Invoices</th>
-                      <th className="sa-num">Qty Sold</th>
-                      <th className="sa-num">Amount (₹)</th>
-                      <th className="sa-num">Growth</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      [...Array(4)].map((_, idx) => (
-                        <tr key={idx}>
-                          <td><div className="sa-skeleton" style={{ width: '60px', height: '12px' }} /></td>
-                          <td><div className="sa-skeleton" style={{ width: '25px', height: '12px' }} /></td>
-                          <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                          <td className="sa-num"><div className="sa-skeleton" style={{ width: '70px', height: '12px', marginLeft: 'auto' }} /></td>
-                          <td className="sa-num"><div className="sa-skeleton" style={{ width: '45px', height: '16px', borderRadius: '4px', marginLeft: 'auto' }} /></td>
-                        </tr>
-                      ))
-                    ) : (
-                      (() => {
-                        const maxMonthAmount = Math.max(...(derivedMonthSummary?.rows?.map(r => r.amount || 0) || [1])) || 1;
-                        return (derivedMonthSummary?.rows?.length ? derivedMonthSummary.rows : []).map((row, i) => (
-                          <tr key={i} className="sa-month-row">
-                            <td><strong className="sa-month-lbl">{row.month}</strong></td>
-                            <td className="sa-num"><span className="sa-month-invoices">{row.invoices}</span></td>
-                            <td className="sa-num">{formatQty(row.qty_sold)}</td>
-                            <td className="sa-num">
-                              <div className="sa-month-amt-val">{formatRupees(row.amount)}</div>
-                              {row.amount > 0 && (
-                                <div className="sa-month-amt-bar">
-                                  <div
-                                    className="sa-month-amt-bar-fill"
-                                    style={{ width: `${(row.amount / maxMonthAmount) * 100}%` }}
-                                  />
-                                </div>
-                              )}
-                            </td>
-                            <td className="sa-num">
-                              {row.growth_pct == null ? (
-                                <span className="sa-badge sa-badge--gray">—</span>
-                              ) : row.growth_pct >= 0 ? (
-                                <span className="sa-badge sa-badge--green sa-badge--growth">
-                                  <span className="sa-growth-arrow">↑</span> {row.growth_pct}%
-                                </span>
-                              ) : (
-                                <span className="sa-badge sa-badge--red sa-badge--growth">
-                                  <span className="sa-growth-arrow">↓</span> {Math.abs(row.growth_pct)}%
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ));
-                      })()
-                    )}
-                    {!loading && !derivedMonthSummary?.rows?.length && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {loading ? (
-                <div style={{ padding: '12px 20px' }}>
-                  <div className="sa-skeleton" style={{ width: '100%', height: '24px', borderRadius: '4px' }} />
-                </div>
-              ) : derivedMonthSummary?.totals ? (
-                <table className="sa-mini-table sa-mini-table--total">
-                  <tbody>
-                    <tr className="sa-mini-table__total">
-                      <td><strong>Total</strong></td>
-                      <td className="sa-num"><strong>{derivedMonthSummary.totals.invoices}</strong></td>
-                      <td className="sa-num"><strong>{formatQty(derivedMonthSummary.totals.qty_sold)}</strong></td>
-                      <td className="sa-num">
-                        <div className="sa-month-total-amt">{formatRupees(derivedMonthSummary.totals.amount)}</div>
-                      </td>
-                      <td className="sa-num">—</td>
-                    </tr>
-                  </tbody>
-                </table>
-              ) : null}
-              <div className="sa-inv-status">
-                <div className="sa-inv-status__label">Invoice Status — No. of Invoices</div>
-                <div className="sa-inv-status__row">
-                  {loading ? (
-                    [...Array(3)].map((_, idx) => (
-                      <div key={idx} className="sa-inv-status__box" style={{ background: "#f8fafc", flex: 1, minWidth: '80px', padding: '10px' }}>
-                        <div className="sa-skeleton" style={{ width: '60px', height: '10px', marginBottom: '6px' }} />
-                        <div className="sa-skeleton" style={{ width: '30px', height: '14px' }} />
-                      </div>
-                    ))
-                  ) : (derivedMonthSummary?.invoice_status ?? []).map((group) => (
-                    <div
-                      key={group.key}
-                      className={`sa-inv-status__box sa-inv-status__box--group sa-inv-status__box--${group.key}`}
-                    >
-                      <div className="sa-inv-status__box-header">
-                        <div className="sa-inv-status__box-lbl">{group.label}</div>
-                        <div className="sa-inv-status__box-val">{group.total}</div>
-                      </div>
-                      <div className="sa-inv-status__items">
-                        {group.items.map((item) => (
-                          <div key={item.btype} className="sa-inv-status__item">
-                            <span className="sa-inv-status__item-lbl">{item.btype}</span>
-                            <span className="sa-inv-status__item-val">{item.count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {!loading && !derivedMonthSummary?.invoice_status?.length && (
-                    <>
-                      {["With Material", "Labour Charges", "Export Only"].map((label) => (
-                        <div key={label} className="sa-inv-status__box" style={{ background: "#f1f5f9" }}>
-                          <div className="sa-inv-status__box-lbl" style={{ color: "#64748b" }}>{label}</div>
-                          <div className="sa-inv-status__box-val" style={{ color: "#475569" }}>—</div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Invoice Table ── */}
-          <div className="sa-card sa-card--table">
-            <div className="sa-card__head">
-              <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
-              </span>
-              <div className="sa-inv-head-actions">
-                {tableLoading ? (
-                  <div className="sa-skeleton" style={{ width: '120px', height: '18px', borderRadius: '4px' }} />
-                ) : invoiceStats.lines > 0 && (
-                  <div className="sa-inv-filter__meta">
-                    <span className="sa-badge sa-badge--blue">{invoiceStats.lines} lines</span>
-                    <span className="sa-badge sa-badge--green">{invoiceStats.invoices} invoices</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="sa-table-scroll">
-              <table className="sa-table">
-                <thead>
-                  <tr>
-                    <th>Invoice No</th>
-                    <th>Date</th>
-                    <th>Customer</th>
-                    <th>Part No</th>
-                    <th>Description</th>
-                    <th className="sa-num">Qty</th>
-                    <th className="sa-num">Rate (₹)</th>
-                    <th className="sa-num">Amount (₹)</th>
-                    <th className="sa-e-invoice">E.Invoice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableLoading ? (
-                    [...Array(6)].map((_, idx) => (
-                      <tr key={idx}>
-                        <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '75px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '50px', height: '12px' }} /></td>
-                      </tr>
-                    ))
-                  ) : (
-                    (filteredInvoices.length ? filteredInvoices : []).map((r, i) => (
-                      <tr key={`${r.invoice_no}-${i}`} style={{ "--ri": i }}>
-                        <td><strong className="sa-inv-no">{r.invoice_no || "—"}</strong></td>
-                        <td className="sa-date">{formatInvDate(r.date)}</td>
-                        <td>{r.customer || "—"}</td>
-                        <td className="sa-part-no">{r.part_no || "—"}</td>
-                        <td>{r.description || "—"}</td>
-                        <td className="sa-num">{formatQty(r.qty)}</td>
-                        <td className="sa-num">{formatRate(r.rate)}</td>
-                        <td className="sa-num"><strong>{formatRate(r.amount)}</strong></td>
-                        <td className="sa-e-invoice">{r.e_invoice || "—"}</td>
-                      </tr>
-                    ))
-                  )}
-                  {!tableLoading && !filteredInvoices.length && (
-                    <tr>
-                      <td colSpan={9} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="sa-action-bar">
-              {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to Excel…")}>📥 Export Excel</button> */}
-              {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to PDF…")}>📄 Export PDF</button> */}
-              {/* <button className="sa-btn sa-btn--ghost" onClick={() => window.print()}>🖨️ Print</button> */}
-            </div>
-          </div>
-          {/* ── Projection Table ── */}
-          <div className="sa-card sa-card--table sa-proj-card">
-            <div className="sa-card__head">
-              <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span className="sa-badge sa-badge--purple">{new Set(filteredProjections.map((r) => r.customer)).size} Active Customers</span>
-                <span className="sa-badge sa-badge--blue" style={{ background: 'rgba(45, 109, 232, 0.08)', color: '#2d6de8', border: '1px solid rgba(45, 109, 232, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Total Amt: ₹{formatRupees(projectionTotals.totAmt)}</span>
-                <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
-              </div>
-            </div>
-            {/* Order Book Analysis Combo Chart */}
-            <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
-              <div className="sa-chart-wrap" style={{ height: '300px' }}>
-                <canvas ref={projRef} />
-              </div>
-            </div>
-            <div className="sa-table-scroll">
-              <table className="sa-table sa-proj-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th className="sa-sortable" onClick={() => handleProjSort("customer")}>
-                      Customer Name <SortIcon active={projSortField === "customer"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-sortable" onClick={() => handleProjSort("month")}>
-                      Month <SortIcon active={projSortField === "month"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pos")}>
-                      No. PO's <SortIcon active={projSortField === "pos"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("totQty")}>
-                      Tot Qty <SortIcon active={projSortField === "totQty"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("totAmt")}>
-                      Tot Amt (₹) <SortIcon active={projSortField === "totAmt"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-sortable" onClick={() => handleProjSort("schdMonth")}>
-                      Schd Month <SortIcon active={projSortField === "schdMonth"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("schdQty")}>
-                      Schd Qty <SortIcon active={projSortField === "schdQty"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("dispQty")}>
-                      Dispatched Qty <SortIcon active={projSortField === "dispQty"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendQty")}>
-                      Pending Qty <SortIcon active={projSortField === "pendQty"} asc={projSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendVal")}>
-                      Pending Value (₹) <SortIcon active={projSortField === "pendVal"} asc={projSortAsc} />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(5)].map((_, idx) => (
-                      <tr key={idx}>
-                        <td><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '180px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '30px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '75px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
-                        <td className="sa-num"><div className="sa-skeleton" style={{ width: '70px', height: '12px', marginLeft: 'auto' }} /></td>
-                      </tr>
-                    ))
-                  ) : (
-                    <>
-                      {sortedProjections.map((row, i) => (
-                        <tr key={i} className="sa-proj-row" style={{ "--ri": i }}>
-                          <td>{i + 1}</td>
-                          <td><strong className="sa-proj-cust-name">{row.customer}</strong></td>
-                          <td>{row.month}</td>
-                          <td className="sa-num">{row.pos}</td>
-                          <td className="sa-num">{formatQty(row.totQty)}</td>
-                          <td className="sa-num">₹{formatRupees(row.totAmt)}</td>
-                          <td>{row.schdMonth}</td>
-                          <td className="sa-num">{formatQty(row.schdQty)}</td>
-                          <td className="sa-num">{formatQty(row.dispQty)}</td>
-                          <td className="sa-num">
-                            {row.pendQty === 0 ? (
-                              <span className="sa-badge sa-badge--green">Fully Dispatched</span>
-                            ) : (
-                              formatQty(row.pendQty)
-                            )}
-                          </td>
-                          <td className="sa-num">
-                            {row.pendVal === 0 ? (
-                              <span className="sa-badge sa-badge--green">₹0</span>
-                            ) : (
-                              <span className={`sa-badge ${row.pendVal > 2000000 ? "sa-badge--red" : "sa-badge--orange"}`}>
-                                ₹{formatRupees(row.pendVal)}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {/* Summary Row */}
-                      <tr className="sa-proj-total-row">
-                        <td colSpan={2}><strong>Total</strong></td>
-                        <td></td>
-                        <td className="sa-num"><strong>{projectionTotals.pos}</strong></td>
-                        <td className="sa-num"><strong>{formatQty(projectionTotals.totQty)}</strong></td>
-                        <td className="sa-num"><strong>₹{formatRupees(projectionTotals.totAmt)}</strong></td>
-                        <td></td>
-                        <td className="sa-num"><strong>{formatQty(projectionTotals.schdQty)}</strong></td>
-                        <td className="sa-num"><strong>{formatQty(projectionTotals.dispQty)}</strong></td>
-                        <td className="sa-num"><strong>{formatQty(projectionTotals.pendQty)}</strong></td>
-                        <td className="sa-num"><strong>₹{formatRupees(projectionTotals.pendVal)}</strong></td>
-                      </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ── Plan vs Actual Section ── */}
-          <div className="sa-card sa-card--table sa-plan-actual-card sa-animate">
-            <div className="sa-card__head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Scale size={16} style={{ color: "#8b5cf6" }} />
-                <span className="sa-card__title">Plan Vs Actual Performance Ledger</span>
-              </div>
-              <div className="sa-po-head-actions">
-                {/* Search Input */}
-                <div className="sa-po-search-wrapper">
-                  <Search size={14} className="sa-po-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search Customer, Part..."
-                    value={planSearchQuery}
-                    onChange={(e) => setPlanSearchQuery(e.target.value)}
-                    className="sa-po-search-input"
-                  />
-                  {planSearchQuery && (
-                    <button onClick={() => setPlanSearchQuery("")} className="sa-po-search-clear">
-                      &times;
-                    </button>
-                  )}
-                </div>
-                {/* KPI Suffixes */}
-                <div className="sa-po-badges">
-                  <span className="sa-badge sa-badge--purple">
-                    Total Planned: {formatQty(planTotals.planned)}
-                  </span>
-                  <span className="sa-badge sa-badge--green">
-                    Total Dispatched: {formatQty(planTotals.dispatched)}
-                  </span>
-                  <span className="sa-badge sa-badge--blue">
-                    Avg Dispatch: {planTotals.avgPct.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Split layout: Chart top, Table bottom */}
-            <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
-              <div className="sa-chart-wrap" style={{ height: '300px' }}>
-                <canvas ref={planRef} />
-              </div>
-            </div>
-
-            <div className="sa-table-scroll">
-              <table className="sa-table sa-plan-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th className="sa-sortable" onClick={() => handlePlanSort("date")}>
-                      Date <SortIcon active={planSortField === "date"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePlanSort("customer")}>
-                      Customer Name <SortIcon active={planSortField === "customer"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePlanSort("partNoDesc")}>
-                      PartNo - Description <SortIcon active={planSortField === "partNoDesc"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("planQty")}>
-                      Plan Qty <SortIcon active={planSortField === "planQty"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("availableQty")}>
-                      Available Qty <SortIcon active={planSortField === "availableQty"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePlanSort("dispatchQty")}>
-                      Dispatch Qty <SortIcon active={planSortField === "dispatchQty"} asc={planSortAsc} />
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePlanSort("status")}>
-                      Dispatch Status <SortIcon active={planSortField === "status"} asc={planSortAsc} />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedPlanVsActual.length ? (
-                    sortedPlanVsActual.map((row, i) => {
-                      const pct = row.planQty > 0 ? (row.dispatchQty / row.planQty) * 100 : 0;
-                      let statusText = "Not Started";
-                      let badgeClass = "sa-badge--red";
-                      if (pct === 100) {
-                        statusText = "Complete";
-                        badgeClass = "sa-badge--green";
-                      } else if (pct > 0) {
-                        statusText = "In Progress";
-                        badgeClass = "sa-badge--orange";
-                      }
-                      
-                      return (
-                        <tr key={i} className="sa-po-row" style={{ "--ri": i }}>
-                          <td>{i + 1}</td>
-                          <td className="sa-date">{formatToDdMmYyyy(row.date)}</td>
-                          <td><span className="sa-po-cust-name" title={row.customer}>{row.customer}</span></td>
-                          <td><span className="sa-po-part-desc" title={row.partNoDesc}>{row.partNoDesc}</span></td>
-                          <td className="sa-num">{formatQty(row.planQty)}</td>
-                          <td className="sa-num">{formatQty(row.availableQty)}</td>
-                          <td className="sa-num">{formatQty(row.dispatchQty)}</td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span className={`sa-badge ${badgeClass}`} style={{ minWidth: '75px', textAlign: 'center' }}>
-                                {statusText} ({pct.toFixed(0)}%)
-                              </span>
-                              <div className="sa-legend-progress-bar" style={{ width: '80px', margin: 0, height: '6px', background: '#e2e8f0' }}>
-                                <div
-                                  className="sa-legend-progress-fill"
-                                  style={{
-                                    width: `${pct}%`,
-                                    height: '100%',
-                                    borderRadius: '99px',
-                                    background: pct === 100 
-                                      ? 'linear-gradient(90deg, #10b981, #34d399)' 
-                                      : pct > 0 
-                                        ? 'linear-gradient(90deg, #f97316, #fb923c)' 
-                                        : '#ef4444',
-                                    transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: "center", color: "#94a3b8" }}>No data matching filters</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ── Traceability Table ── */}
-          <div className="sa-card sa-card--table sa-trace-card">
-            <div className="sa-card__head">
-              <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Link size={16} style={{ color: "#06b6d4" }} /> End-to-End Order Traceability Ledger
-              </span>
-              {/* <span className="sa-badge sa-badge--cyan">Trace Status - Active</span> */}
-            </div>
-            <div className="sa-table-scroll">
-              <table className="sa-table sa-trace-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Customer Name</th>
-                    <th>Invoice No</th>
-                    <th>Invoice Date</th>
-                    <th>Dc No</th>
-                    <th>Dc Date</th>
-                    <th>GRN/PO Det</th>
-                    <th>Routecard No</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(5)].map((_, idx) => (
-                      <tr key={idx}>
-                        <td><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                        <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                      </tr>
-                    ))
-                  ) : (
-                    filteredTraceability.map((row, i) => (
-                      <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
-                        <td>{i + 1}</td>
-                        <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
-                        <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
-                        <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
-                        <td>{row.dcNo}</td>
-                        <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
-                        <td><span className="sa-trace-po">{row.grnPo}</span></td>
-                        <td><span className="sa-trace-code">{row.rcNo}</span></td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ── PO Ledger Table ── */}
-          <div className="sa-card sa-card--table sa-po-card sa-animate">
-            <div className="sa-card__head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={16} style={{ color: "#ec4899" }} />
-                <span className="sa-card__title">Purchase Order (PO) Ledger</span>
-              </div>
-
-              <div className="sa-po-head-actions">
-                {/* Search Input */}
-                <div className="sa-po-search-wrapper">
-                  <Search size={14} className="sa-po-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search PO No, Customer, Part..."
-                    value={poSearchQuery}
-                    onChange={(e) => {
-                      setPoSearchQuery(e.target.value);
-                      setPoPage(1);
-                    }}
-                    className="sa-po-search-input"
-                  />
-                  {poSearchQuery && (
-                    <button onClick={() => { setPoSearchQuery(""); setPoPage(1); }} className="sa-po-search-clear">
-                      &times;
-                    </button>
-                  )}
-                </div>
-
-                {/* Pending Only Switch */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => { setPoPendingOnly(!poPendingOnly); setPoPage(1); }}>
-                  <div className={`sa-po-toggle-switch ${poPendingOnly ? 'active' : ''}`} style={{
-                    width: '36px',
-                    height: '20px',
-                    backgroundColor: poPendingOnly ? '#db2777' : '#cbd5e1',
-                    borderRadius: '99px',
-                    position: 'relative',
-                    transition: 'all 0.2s ease',
-                    cursor: 'pointer'
-                  }}>
-                    <div className="sa-po-toggle-handle" style={{
-                      width: '14px',
-                      height: '14px',
-                      backgroundColor: '#fff',
-                      borderRadius: '50%',
-                      position: 'absolute',
-                      top: '3px',
-                      left: poPendingOnly ? '19px' : '3px',
-                      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
-                    }} />
-                  </div>
-                  <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#475569' }}>Pending Only</span>
-                </div>
-
-                {/* Badges and Totals */}
-                <div className="sa-po-badges">
-                  {/* <span className="sa-badge sa-badge--purple">{filteredPoLedger.length} POs</span> */}
-                  <span className="sa-badge sa-badge--blue" title="Filtered PO total value">
-                    Val: ₹{formatRupees(poTotals.totVal)}
-                  </span>
-                  <span className="sa-badge sa-badge--orange" title="Filtered Pending value">
-                    Pend: ₹{formatRupees(poTotals.totPendVal)}
-                  </span>
-                </div>
-
-                {/* CSV Export Button */}
-                <button onClick={handlePoExport} className="sa-btn sa-btn--primary sa-po-export-btn" title="Export PO Ledger to CSV" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Download size={14} /> Export CSV
-                </button>
-              </div>
-            </div>
-
-            <div className="sa-table-scroll">
-              <table className="sa-table sa-po-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("type")}>
-                      Type {poSortField === "type" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("apoNo")}>
-                      Apono {poSortField === "apoNo" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("poNo")}>
-                      Po No {poSortField === "poNo" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("poDate")}>
-                      Po Date {poSortField === "poDate" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("custName")}>
-                      Cust Name {poSortField === "custName" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("partDesc")}>
-                      PartNO - Description {poSortField === "partDesc" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("poSlNo")}>
-                      Po Sl.No {poSortField === "poSlNo" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("qty")}>
-                      Qty {poSortField === "qty" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("shortCloseQty")}>
-                      Short Close Qty {poSortField === "shortCloseQty" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("rate")}>
-                      Rate {poSortField === "rate" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("value")}>
-                      Value {poSortField === "value" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("dcNo")}>
-                      Dc.NO {poSortField === "dcNo" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-sortable" onClick={() => handlePoSort("dcDate")}>
-                      Dc Dt {poSortField === "dcDate" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("dcQty")}>
-                      Dc Qty {poSortField === "dcQty" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("pendingQty")}>
-                      Pending Qty {poSortField === "pendingQty" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("pendingValue")}>
-                      Pending Value {poSortField === "pendingValue" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th className="sa-num sa-sortable" onClick={() => handlePoSort("ageDays")}>
-                      Age Days {poSortField === "ageDays" && (poSortAsc ? "▲" : "▼")}
-                    </th>
-                    <th>Invoice No & Dt</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedPoLedger.length ? (
-                    paginatedPoLedger.map((row, i) => {
-                      const absoluteRowIdx = (poPage - 1) * poPageSize + i + 1;
-                      return (
-                        <tr key={`${row.poNo}-${i}`} className="sa-po-row" style={{ "--ri": i }}>
-                          <td>{absoluteRowIdx}</td>
-                          <td>
-                            <span className={`sa-badge sa-badge--type-${row.type.toLowerCase().replace(/[^a-z]/g, "")}`}>
-                              {row.type}
-                            </span>
-                          </td>
-                          <td><span className="sa-po-apo-code">{row.apoNo}</span></td>
-                          <td><strong className="sa-po-code">{row.poNo}</strong></td>
-                          <td className="sa-date">{formatToDdMmYyyy(row.poDate)}</td>
-                          <td><span className="sa-po-cust-name" title={row.custName}>{row.custName}</span></td>
-                          <td><span className="sa-po-part-desc" title={row.partDesc}>{row.partDesc}</span></td>
-                          <td><span className="sa-po-sl-no" style={{ fontWeight: '600', color: '#475569' }}>{row.poSlNo || "—"}</span></td>
-                          <td className="sa-num">{formatQty(row.qty)}</td>
-                          <td className="sa-num">{formatQty(row.shortCloseQty)}</td>
-                          <td className="sa-num">₹{formatQty(row.rate)}</td>
-                          <td className="sa-num"><strong>₹{formatRupees(row.value)}</strong></td>
-                          <td>
-                            {row.dcNo === "—" ? (
-                              <span className="sa-dash-gray">—</span>
-                            ) : (
-                              <strong className="sa-po-dc-code">{row.dcNo}</strong>
-                            )}
-                          </td>
-                          <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
-                          <td className="sa-num">{formatQty(row.dcQty)}</td>
-                          <td className="sa-num">
-                            {row.pendingQty === 0 ? (
-                              <span className="sa-badge sa-badge--green">Fully Dispatched</span>
-                            ) : (
-                              formatQty(row.pendingQty)
-                            )}
-                          </td>
-                          <td className="sa-num">
-                            {row.pendingValue === 0 ? (
-                              <span className="sa-badge sa-badge--green">₹0</span>
-                            ) : (
-                              <span className={`sa-badge ${row.pendingValue > 500000 ? "sa-badge--red" : "sa-badge--orange"}`}>
-                                ₹{formatRupees(row.pendingValue)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="sa-num">
-                            {row.ageDays === 0 ? (
-                              "—"
-                            ) : (
-                              <span className={`sa-po-age ${row.ageDays > 45 ? "sa-po-age--old" : row.ageDays > 30 ? "sa-po-age--medium" : "sa-po-age--young"}`}>
-                                {row.ageDays} days
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            {row.invNoDt === "—" ? (
-                              <span className="sa-dash-gray">—</span>
-                            ) : (
-                              <span className="sa-po-inv-details">{formatToDdMmYyyy(row.invNoDt)}</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={18} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
-                        No purchase orders found matching your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination controls */}
-            {totalPoPages > 1 && (
-              <div className="sa-po-pagination">
-                <button
-                  onClick={() => setPoPage(p => Math.max(1, p - 1))}
-                  disabled={poPage === 1}
-                  className="sa-pagination-btn"
-                >
-                  ◀ Previous
-                </button>
-                <div className="sa-pagination-pages">
-                  {getPageNumbers.map((item, idx) => {
-                    if (item === "...") {
-                      return (
-                        <span key={`ellipsis-${idx}`} className="sa-pagination-ellipsis">
-                          ...
-                        </span>
-                      );
-                    }
-                    return (
-                      <button
-                        key={item}
-                        onClick={() => setPoPage(item)}
-                        className={`sa-pagination-page-btn ${poPage === item ? 'active' : ''}`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={() => setPoPage(p => Math.min(totalPoPages, p + 1))}
-                  disabled={poPage === totalPoPages}
-                  className="sa-pagination-btn"
-                >
-                  Next ▶
-                </button>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '320px' }}>
+                <canvas ref={monthlyTrendRef} />
               </div>
             )}
           </div>
-
-          {/* ── Two-Col: Top Products + Insights ── */}
-          <div className="sa-two-col">
-
-            {/* Top Products */}
-            <div className="sa-card">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Package size={16} style={{ color: "#f97316" }} /> Top Products by Revenue
-                </span>
-                <span className="sa-card__sub">
-                  {loading ? (
-                    <div className="sa-skeleton" style={{ width: '40px', height: '10px' }} />
-                  ) : (
-                    topProductsRaw?.period ?? summary?.period ?? "—"
-                  )}
-                </span>
+          <div className="sa-monthly-chart-container">
+            <h4 className="sa-chart-title">
+              {performanceChartType === "share" ? "Bill Type Revenue Share (%)" : "Bill Type Revenue Contribution (Month-wise)"}
+            </h4>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '320px' }}>
+                <canvas ref={billTypeRef} />
               </div>
-              <div className="sa-prod-list">
-                {loading ? (
-                  [...Array(5)].map((_, idx) => (
-                    <div className="sa-prod-row" key={idx} style={{ padding: '12px 20px' }}>
-                      <div className="sa-prod-row__info" style={{ flex: 1 }}>
-                        <div className="sa-skeleton" style={{ width: '80%', height: '12px', marginBottom: '6px' }} />
-                        <div className="sa-skeleton" style={{ width: '40%', height: '10px' }} />
-                      </div>
-                      <div className="sa-prod-row__qty" style={{ margin: '0 12px' }}><div className="sa-skeleton" style={{ width: '40px', height: '12px' }} /></div>
-                      <div className="sa-prod-row__amount"><div className="sa-skeleton" style={{ width: '50px', height: '12px' }} /></div>
-                    </div>
-                  ))
-                ) : (topProducts.length ? topProducts : [{ name: "—", code: "—", barW: "0%", color: "#94a3b8", qty: "—", amount: "—" }]).map((p, i) => (
-                  <div className="sa-prod-row" key={i} style={{ "--pi": i }}>
-                    <div className="sa-prod-row__info">
-                      <div className="sa-prod-row__name">{p.name}</div>
-                      <div className="sa-prod-row__code">{p.code}</div>
-                    </div>
-                    <div className="sa-prod-row__bar-bg">
-                      <div className="sa-prod-row__bar" style={{ width: p.barW, background: p.color }} />
-                    </div>
-                    <div className="sa-prod-row__qty">{p.qty}</div>
-                    <div className="sa-prod-row__amount">{p.amount}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Insights */}
-            <div className="sa-card">
-              <div className="sa-card__head">
-                <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Lightbulb size={16} style={{ color: "#eab308" }} /> Management Insights
-                </span>
-                <span className="sa-badge sa-badge--orange">5 Key Points</span>
-              </div>
-              <div className="sa-insight-list">
-                {INSIGHTS.map((ins, i) => {
-                  const IconComp = ins.icon;
-                  return (
-                    <div className="sa-insight-row" key={i} style={{ "--ii": i }}>
-                      <div className="sa-insight-row__icon" style={{ display: "inline-flex", alignItems: "center", color: ins.iconColor, marginTop: "2px" }}>
-                        <IconComp size={16} />
-                      </div>
-                      <div className="sa-insight-row__body">
-                        <div className="sa-insight-row__title">{ins.title}</div>
-                        <div className="sa-insight-row__sub">{ins.sub}</div>
-                      </div>
-                      <div className="sa-insight-row__val" style={{ color: ins.valColor }}>{ins.val}</div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="sa-priority-box">
-                <div className="sa-priority-box__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Pin size={14} style={{ color: "#ef4444", transform: "rotate(45deg)" }} /> Priority Action for Management
-                </div>
-                <div className="sa-priority-box__body">
-                  Feb sales slump needs immediate attention. Confirm pending orders from{" "}
-                  <strong>VR Foundries</strong> and <strong>Vasanthi Foundry</strong> for March delivery
-                  schedule. Also review SS Round Bar pricing — currently below contribution margin threshold.
-                </div>
-              </div>
-            </div>
-
+            )}
           </div>
-        </>
-      )}
+          <div className="sa-monthly-chart-container">
+            <h4 className="sa-chart-title">
+              {performanceChartType === "share"
+                ? "Effective Tax Rate (%)"
+                : (performanceChartType === "line" ? "Monthly Sales & Tax Correlation" : "Monthly Tax Trend (Value)")}
+            </h4>
+            {loading ? (
+              <div className="sa-chart-skeleton" style={{ height: '320px' }}><div className="sa-skeleton" /></div>
+            ) : (
+              <div className="sa-chart-wrap" style={{ height: '320px' }}>
+                <canvas ref={taxRef} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* ── Two-Col: Ranking + Month Summary ── */}
+      <div className="sa-two-col">
+
+        {/* Customer Ranking */}
+        <div className="sa-card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Trophy size={16} style={{ color: "#8b5cf6" }} /> Customer Revenue Ranking
+            </span>
+            <span className="sa-card__sub">by invoice value</span>
+          </div>
+          <div className="sa-rank-list">
+            {loading ? (
+              [...Array(5)].map((_, idx) => (
+                <div className="sa-rank-row" key={idx} style={{ padding: '12px 20px' }}>
+                  <div className="sa-rank-row__num"><div className="sa-skeleton" style={{ width: '12px', height: '12px' }} /></div>
+                  <div className="sa-rank-row__name" style={{ flex: 1, margin: '0 12px' }}><div className="sa-skeleton" style={{ width: '70%', height: '12px' }} /></div>
+                  <div className="sa-rank-row__amount" style={{ marginRight: '12px' }}><div className="sa-skeleton" style={{ width: '40px', height: '12px' }} /></div>
+                  <div className="sa-rank-row__pct"><div className="sa-skeleton" style={{ width: '30px', height: '12px' }} /></div>
+                </div>
+              ))
+            ) : (customerRanking.length ? customerRanking : [{ name: "—", barW: "0%", color: "#94a3b8", amount: "—", pct: "—" }]).map((c, i) => (
+              <div className="sa-rank-row" key={i} style={{ "--ri": i }}>
+                <div className="sa-rank-row__num">{i + 1}</div>
+                <div className="sa-rank-row__name">{c.name}</div>
+                <div className="sa-rank-row__bar-bg">
+                  <div className="sa-rank-row__bar" style={{ width: c.barW, background: c.color }} />
+                </div>
+                <div className="sa-rank-row__amount">{c.amount}</div>
+                <div className="sa-rank-row__pct">{c.pct}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Month Summary */}
+        <div className="sa-card sa-card--month">
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Sales Summary
+            </span>
+            <span className="sa-badge sa-badge--green">
+              {loading ? (
+                <div className="sa-skeleton" style={{ width: '40px', height: '10px' }} />
+              ) : (
+                derivedMonthSummary?.period ?? summary?.period ?? "—"
+              )}
+            </span>
+          </div>
+          <div className="sa-month-table-wrap sa-month-table-wrap--scroll">
+            <table className="sa-mini-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th className="sa-num">Invoices</th>
+                  <th className="sa-num">Qty Sold</th>
+                  <th className="sa-num">Amount (₹)</th>
+                  <th className="sa-num">Growth</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  [...Array(4)].map((_, idx) => (
+                    <tr key={idx}>
+                      <td><div className="sa-skeleton" style={{ width: '60px', height: '12px' }} /></td>
+                      <td><div className="sa-skeleton" style={{ width: '25px', height: '12px' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '70px', height: '12px', marginLeft: 'auto' }} /></td>
+                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '45px', height: '16px', borderRadius: '4px', marginLeft: 'auto' }} /></td>
+                    </tr>
+                  ))
+                ) : (
+                  (() => {
+                    const maxMonthAmount = Math.max(...(derivedMonthSummary?.rows?.map(r => r.amount || 0) || [1])) || 1;
+                    return (derivedMonthSummary?.rows?.length ? derivedMonthSummary.rows : []).map((row, i) => (
+                      <tr key={i} className="sa-month-row">
+                        <td><strong className="sa-month-lbl">{row.month}</strong></td>
+                        <td className="sa-num"><span className="sa-month-invoices">{row.invoices}</span></td>
+                        <td className="sa-num">{formatQty(row.qty_sold)}</td>
+                        <td className="sa-num">
+                          <div className="sa-month-amt-val">{formatRupees(row.amount)}</div>
+                          {row.amount > 0 && (
+                            <div className="sa-month-amt-bar">
+                              <div
+                                className="sa-month-amt-bar-fill"
+                                style={{ width: `${(row.amount / maxMonthAmount) * 100}%` }}
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td className="sa-num">
+                          {row.growth_pct == null ? (
+                            <span className="sa-badge sa-badge--gray">—</span>
+                          ) : row.growth_pct >= 0 ? (
+                            <span className="sa-badge sa-badge--green sa-badge--growth">
+                              <span className="sa-growth-arrow">↑</span> {row.growth_pct}%
+                            </span>
+                          ) : (
+                            <span className="sa-badge sa-badge--red sa-badge--growth">
+                              <span className="sa-growth-arrow">↓</span> {Math.abs(row.growth_pct)}%
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ));
+                  })()
+                )}
+                {!loading && !derivedMonthSummary?.rows?.length && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {loading ? (
+            <div style={{ padding: '12px 20px' }}>
+              <div className="sa-skeleton" style={{ width: '100%', height: '24px', borderRadius: '4px' }} />
+            </div>
+          ) : derivedMonthSummary?.totals ? (
+            <table className="sa-mini-table sa-mini-table--total">
+              <tbody>
+                <tr className="sa-mini-table__total">
+                  <td><strong>Total</strong></td>
+                  <td className="sa-num"><strong>{derivedMonthSummary.totals.invoices}</strong></td>
+                  <td className="sa-num"><strong>{formatQty(derivedMonthSummary.totals.qty_sold)}</strong></td>
+                  <td className="sa-num">
+                    <div className="sa-month-total-amt">{formatRupees(derivedMonthSummary.totals.amount)}</div>
+                  </td>
+                  <td className="sa-num">—</td>
+                </tr>
+              </tbody>
+            </table>
+          ) : null}
+          <div className="sa-inv-status">
+            <div className="sa-inv-status__label">Invoice Status — No. of Invoices</div>
+            <div className="sa-inv-status__row">
+              {loading ? (
+                [...Array(3)].map((_, idx) => (
+                  <div key={idx} className="sa-inv-status__box" style={{ background: "#f8fafc", flex: 1, minWidth: '80px', padding: '10px' }}>
+                    <div className="sa-skeleton" style={{ width: '60px', height: '10px', marginBottom: '6px' }} />
+                    <div className="sa-skeleton" style={{ width: '30px', height: '14px' }} />
+                  </div>
+                ))
+              ) : (derivedMonthSummary?.invoice_status ?? []).map((group) => (
+                <div
+                  key={group.key}
+                  className={`sa-inv-status__box sa-inv-status__box--group sa-inv-status__box--${group.key}`}
+                >
+                  <div className="sa-inv-status__box-header">
+                    <div className="sa-inv-status__box-lbl">{group.label}</div>
+                    <div className="sa-inv-status__box-val">{group.total}</div>
+                  </div>
+                  <div className="sa-inv-status__items">
+                    {group.items.map((item) => (
+                      <div key={item.btype} className="sa-inv-status__item">
+                        <span className="sa-inv-status__item-lbl">{item.btype}</span>
+                        <span className="sa-inv-status__item-val">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!loading && !derivedMonthSummary?.invoice_status?.length && (
+                <>
+                  {["With Material", "Labour Charges", "Export Only"].map((label) => (
+                    <div key={label} className="sa-inv-status__box" style={{ background: "#f1f5f9" }}>
+                      <div className="sa-inv-status__box-lbl" style={{ color: "#64748b" }}>{label}</div>
+                      <div className="sa-inv-status__box-val" style={{ color: "#475569" }}>—</div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Invoice Table ── */}
+      <div className="sa-card sa-card--table">
+        <div className="sa-card__head">
+          <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
+          </span>
+          <div className="sa-inv-head-actions">
+            {tableLoading ? (
+              <div className="sa-skeleton" style={{ width: '120px', height: '18px', borderRadius: '4px' }} />
+            ) : invoiceStats.lines > 0 && (
+              <div className="sa-inv-filter__meta">
+                <span className="sa-badge sa-badge--blue">{invoiceStats.lines} lines</span>
+                <span className="sa-badge sa-badge--green">{invoiceStats.invoices} invoices</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="sa-table-scroll">
+          <table className="sa-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleInvSort("invoice_no")} style={{ cursor: "pointer" }}>Invoice No {invSortConfig.key === "invoice_no" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th onClick={() => handleInvSort("date")} style={{ cursor: "pointer" }}>Date {invSortConfig.key === "date" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th onClick={() => handleInvSort("customer")} style={{ cursor: "pointer" }}>Customer {invSortConfig.key === "customer" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th onClick={() => handleInvSort("part_no")} style={{ cursor: "pointer" }}>Part No {invSortConfig.key === "part_no" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th onClick={() => handleInvSort("description")} style={{ cursor: "pointer" }}>Description {invSortConfig.key === "description" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th className="sa-num" onClick={() => handleInvSort("qty")} style={{ cursor: "pointer" }}>Qty {invSortConfig.key === "qty" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th onClick={() => handleInvSort("uom")} style={{ cursor: "pointer" }}>UOM {invSortConfig.key === "uom" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th className="sa-num" onClick={() => handleInvSort("rate")} style={{ cursor: "pointer" }}>Rate (₹) {invSortConfig.key === "rate" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th className="sa-num" onClick={() => handleInvSort("amount")} style={{ cursor: "pointer" }}>Amount (₹) {invSortConfig.key === "amount" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+                <th className="sa-e-invoice" onClick={() => handleInvSort("e_invoice")} style={{ cursor: "pointer" }}>E.Invoice {invSortConfig.key === "e_invoice" ? (invSortConfig.direction === "asc" ? "↑" : "↓") : ""}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableLoading ? (
+                [...Array(6)].map((_, idx) => (
+                  <tr key={idx}>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '30px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '75px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '50px', height: '12px' }} /></td>
+                  </tr>
+                ))
+              ) : (
+                (filteredInvoices.length ? filteredInvoices : []).map((r, i) => (
+                  <tr key={`${r.invoice_no}-${i}`} style={{ "--ri": i }}>
+                    <td><strong className="sa-inv-no">{r.invoice_no || "—"}</strong></td>
+                    <td className="sa-date">{formatInvDate(r.date)}</td>
+                    <td>{r.customer || "—"}</td>
+                    <td className="sa-part-no">{r.part_no || "—"}</td>
+                    <td>{r.description || "—"}</td>
+                    <td className="sa-num">{formatQty(r.qty)}</td>
+                    <td>{r.uom || "—"}</td>
+                    <td className="sa-num">{formatRate(r.rate)}</td>
+                    <td className="sa-num"><strong>{formatRate(r.amount)}</strong></td>
+                    <td className="sa-e-invoice">{r.e_invoice || "—"}</td>
+                  </tr>
+                ))
+              )}
+              {!tableLoading && !filteredInvoices.length && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="sa-action-bar">
+          {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to Excel…")}>📥 Export Excel</button> */}
+          {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to PDF…")}>📄 Export PDF</button> */}
+          {/* <button className="sa-btn sa-btn--ghost" onClick={() => window.print()}>🖨️ Print</button> */}
+        </div>
+      </div>
+      {/* ── Projection Table ── */}
+      <div className="sa-card sa-card--table sa-proj-card">
+        <div className="sa-card__head">
+          <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <span className="sa-badge sa-badge--purple">{new Set(filteredProjections.map((r) => r.customer)).size} Active Customers</span>
+            <span className="sa-badge sa-badge--blue" style={{ background: 'rgba(45, 109, 232, 0.08)', color: '#2d6de8', border: '1px solid rgba(45, 109, 232, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Total Amt: ₹{formatRupees(projectionTotals.totAmt)}</span>
+            <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
+          </div>
+        </div>
+        {/* Order Book Analysis Combo Chart */}
+        <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
+          {loading ? (
+            <div className="sa-chart-skeleton" style={{ height: '300px' }}><div className="sa-skeleton" /></div>
+          ) : (
+            <div className="sa-chart-wrap" style={{ height: '300px' }}>
+              <canvas ref={projRef} />
+            </div>
+          )}
+        </div>
+        <div className="sa-table-scroll">
+          <table className="sa-table sa-proj-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th className="sa-sortable" onClick={() => handleProjSort("customer")}>
+                  Customer Name <SortIcon active={projSortField === "customer"} asc={projSortAsc} />
+                </th>
+                <th className="sa-sortable" onClick={() => handleProjSort("month")}>
+                  Month <SortIcon active={projSortField === "month"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("pos")}>
+                  No. PO's <SortIcon active={projSortField === "pos"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("totQty")}>
+                  Tot Qty <SortIcon active={projSortField === "totQty"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("totAmt")}>
+                  Tot Amt (₹) <SortIcon active={projSortField === "totAmt"} asc={projSortAsc} />
+                </th>
+                <th className="sa-sortable" onClick={() => handleProjSort("schdMonth")}>
+                  Schd Month <SortIcon active={projSortField === "schdMonth"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("schdQty")}>
+                  Schd Qty <SortIcon active={projSortField === "schdQty"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("dispQty")}>
+                  Dispatched Qty <SortIcon active={projSortField === "dispQty"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendQty")}>
+                  Pending Qty <SortIcon active={projSortField === "pendQty"} asc={projSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handleProjSort("pendVal")}>
+                  Pending Value (₹) <SortIcon active={projSortField === "pendVal"} asc={projSortAsc} />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(5)].map((_, idx) => (
+                  <tr key={idx}>
+                    <td><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '180px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '30px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '75px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '70px', height: '12px', marginLeft: 'auto' }} /></td>
+                  </tr>
+                ))
+              ) : (
+                <>
+                  {sortedProjections.map((row, i) => (
+                    <tr key={i} className="sa-proj-row" style={{ "--ri": i }}>
+                      <td>{i + 1}</td>
+                      <td><strong className="sa-proj-cust-name">{row.customer}</strong></td>
+                      <td>{row.month}</td>
+                      <td className="sa-num">{row.pos}</td>
+                      <td className="sa-num">{formatQty(row.totQty)}</td>
+                      <td className="sa-num">₹{formatRupees(row.totAmt)}</td>
+                      <td>{row.schdMonth}</td>
+                      <td className="sa-num">{formatQty(row.schdQty)}</td>
+                      <td className="sa-num">{formatQty(row.dispQty)}</td>
+                      <td className="sa-num">
+                        {row.pendQty === 0 ? (
+                          <span className="sa-badge sa-badge--green">Fully Dispatched</span>
+                        ) : (
+                          formatQty(row.pendQty)
+                        )}
+                      </td>
+                      <td className="sa-num">
+                        {row.pendVal === 0 ? (
+                          <span className="sa-badge sa-badge--green">₹0</span>
+                        ) : (
+                          <span className={`sa-badge ${row.pendVal > 2000000 ? "sa-badge--red" : "sa-badge--orange"}`}>
+                            ₹{formatRupees(row.pendVal)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Summary Row */}
+                  <tr className="sa-proj-total-row">
+                    <td colSpan={2}><strong>Total</strong></td>
+                    <td></td>
+                    <td className="sa-num"><strong>{projectionTotals.pos}</strong></td>
+                    <td className="sa-num"><strong>{formatQty(projectionTotals.totQty)}</strong></td>
+                    <td className="sa-num"><strong>₹{formatRupees(projectionTotals.totAmt)}</strong></td>
+                    <td></td>
+                    <td className="sa-num"><strong>{formatQty(projectionTotals.schdQty)}</strong></td>
+                    <td className="sa-num"><strong>{formatQty(projectionTotals.dispQty)}</strong></td>
+                    <td className="sa-num"><strong>{formatQty(projectionTotals.pendQty)}</strong></td>
+                    <td className="sa-num"><strong>₹{formatRupees(projectionTotals.pendVal)}</strong></td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Plan vs Actual Section ── */}
+      <div className="sa-card sa-card--table sa-plan-actual-card sa-animate">
+        <div className="sa-card__head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Scale size={16} style={{ color: "#8b5cf6" }} />
+            <span className="sa-card__title">Plan Vs Actual Performance Ledger</span>
+          </div>
+          <div className="sa-po-head-actions">
+            {/* Search Input */}
+            <div className="sa-po-search-wrapper">
+              <Search size={14} className="sa-po-search-icon" />
+              <input
+                type="text"
+                placeholder="Search Customer, Part..."
+                value={planSearchQuery}
+                onChange={(e) => setPlanSearchQuery(e.target.value)}
+                className="sa-po-search-input"
+              />
+              {planSearchQuery && (
+                <button onClick={() => setPlanSearchQuery("")} className="sa-po-search-clear">
+                  &times;
+                </button>
+              )}
+            </div>
+            {/* KPI Suffixes */}
+            <div className="sa-po-badges">
+              <span className="sa-badge sa-badge--purple">
+                Total Planned: {formatQty(planTotals.planned)}
+              </span>
+              <span className="sa-badge sa-badge--green">
+                Total Dispatched: {formatQty(planTotals.dispatched)}
+              </span>
+              <span className="sa-badge sa-badge--blue">
+                Avg Dispatch: {planTotals.avgPct.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Split layout: Chart top, Table bottom */}
+        <div style={{ padding: '16px', borderBottom: '1px solid rgba(99, 102, 241, 0.08)' }}>
+          {loading ? (
+            <div className="sa-chart-skeleton" style={{ height: '300px' }}><div className="sa-skeleton" /></div>
+          ) : (
+            <div className="sa-chart-wrap" style={{ height: '300px' }}>
+              <canvas ref={planRef} />
+            </div>
+          )}
+        </div>
+
+        <div className="sa-table-scroll">
+          <table className="sa-table sa-plan-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th className="sa-sortable" onClick={() => handlePlanSort("date")}>
+                  Date <SortIcon active={planSortField === "date"} asc={planSortAsc} />
+                </th>
+                <th className="sa-sortable" onClick={() => handlePlanSort("customer")}>
+                  Party Name <SortIcon active={planSortField === "customer"} asc={planSortAsc} />
+                </th>
+                <th className="sa-sortable" onClick={() => handlePlanSort("partNoDesc")}>
+                  PartNo - Description <SortIcon active={planSortField === "partNoDesc"} asc={planSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePlanSort("planQty")}>
+                  Plan Qty <SortIcon active={planSortField === "planQty"} asc={planSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePlanSort("availableQty")}>
+                  Available Qty <SortIcon active={planSortField === "availableQty"} asc={planSortAsc} />
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePlanSort("dispatchQty")}>
+                  Dispatch Qty <SortIcon active={planSortField === "dispatchQty"} asc={planSortAsc} />
+                </th>
+                <th className="sa-sortable" onClick={() => handlePlanSort("status")}>
+                  Dispatch Status <SortIcon active={planSortField === "status"} asc={planSortAsc} />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedPlanVsActual.length ? (
+                sortedPlanVsActual.map((row, i) => {
+                  const pct = row.planQty > 0 ? (row.dispatchQty / row.planQty) * 100 : 0;
+                  let statusText = "Not Started";
+                  let badgeClass = "sa-badge--red";
+                  if (pct === 100) {
+                    statusText = "Complete";
+                    badgeClass = "sa-badge--green";
+                  } else if (pct > 0) {
+                    statusText = "In Progress";
+                    badgeClass = "sa-badge--orange";
+                  }
+
+                  return (
+                    <tr key={i} className="sa-po-row" style={{ "--ri": i }}>
+                      <td>{i + 1}</td>
+                      <td className="sa-date">{formatToDdMmYyyy(row.date)}</td>
+                      <td><span className="sa-po-cust-name" title={row.customer}>{row.customer}</span></td>
+                      <td><span className="sa-po-part-desc" title={row.partNoDesc}>{row.partNoDesc}</span></td>
+                      <td className="sa-num">{formatQty(row.planQty)}</td>
+                      <td className="sa-num">{formatQty(row.availableQty)}</td>
+                      <td className="sa-num">{formatQty(row.dispatchQty)}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className={`sa-badge ${badgeClass}`} style={{ minWidth: '75px', textAlign: 'center' }}>
+                            {statusText} ({pct.toFixed(0)}%)
+                          </span>
+                          <div className="sa-legend-progress-bar" style={{ width: '80px', margin: 0, height: '6px', background: '#e2e8f0' }}>
+                            <div
+                              className="sa-legend-progress-fill"
+                              style={{
+                                width: `${pct}%`,
+                                height: '100%',
+                                borderRadius: '99px',
+                                background: pct === 100
+                                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                                  : pct > 0
+                                    ? 'linear-gradient(90deg, #f97316, #fb923c)'
+                                    : '#ef4444',
+                                transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", color: "#94a3b8" }}>No data matching filters</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Traceability Table ── */}
+      <div className="sa-card sa-card--table sa-trace-card">
+        <div className="sa-card__head">
+          <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Link size={16} style={{ color: "#06b6d4" }} /> End-to-End Order Traceability Ledger
+          </span>
+          {/* <span className="sa-badge sa-badge--cyan">Trace Status - Active</span> */}
+        </div>
+        <div className="sa-table-scroll">
+          <table className="sa-table sa-trace-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: "center" }}>#</th>
+                <th style={{ textAlign: "center" }}>CUSTOMER NAME</th>
+                <th style={{ textAlign: "center" }}>INVOICE NO</th>
+                <th style={{ textAlign: "center" }}>INVOICE DATE</th>
+                <th style={{ textAlign: "center" }}>DC NO</th>
+                <th style={{ textAlign: "center" }}>DC DATE</th>
+                <th style={{ textAlign: "center" }}>GRN/PO DET</th>
+                <th style={{ textAlign: "center" }}>ROUTECARD NO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(5)].map((_, idx) => (
+                  <tr key={idx}>
+                    <td><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "left" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "left" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                  </tr>
+                ))
+              ) : (
+                filteredTraceability.map((row, i) => (
+                  <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
+                    <td>{i + 1}</td>
+                    <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
+                    <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
+                    <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
+                    <td>{row.dcNo}</td>
+                    <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
+                    <td style={{ textAlign: "left" }}><span className="sa-trace-po">{row.grnPo}</span></td>
+                    <td style={{ textAlign: "left" }}><span className="sa-trace-code">{row.rcNo}</span></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── PO Ledger Table ── */}
+      <div className="sa-card sa-card--table sa-po-card sa-animate">
+        <div className="sa-card__head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FileText size={16} style={{ color: "#ec4899" }} />
+            <span className="sa-card__title">Purchase Order (PO) Ledger</span>
+          </div>
+
+          <div className="sa-po-head-actions">
+            {/* Search Input */}
+            <div className="sa-po-search-wrapper">
+              <Search size={14} className="sa-po-search-icon" />
+              <input
+                type="text"
+                placeholder="Search PO No, Customer, Part..."
+                value={poSearchQuery}
+                onChange={(e) => {
+                  setPoSearchQuery(e.target.value);
+                  setPoPage(1);
+                }}
+                className="sa-po-search-input"
+              />
+              {poSearchQuery && (
+                <button onClick={() => { setPoSearchQuery(""); setPoPage(1); }} className="sa-po-search-clear">
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {/* Pending Only Switch */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => { setPoPendingOnly(!poPendingOnly); setPoPage(1); }}>
+              <div className={`sa-po-toggle-switch ${poPendingOnly ? 'active' : ''}`} style={{
+                width: '36px',
+                height: '20px',
+                backgroundColor: poPendingOnly ? '#db2777' : '#cbd5e1',
+                borderRadius: '99px',
+                position: 'relative',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }}>
+                <div className="sa-po-toggle-handle" style={{
+                  width: '14px',
+                  height: '14px',
+                  backgroundColor: '#fff',
+                  borderRadius: '50%',
+                  position: 'absolute',
+                  top: '3px',
+                  left: poPendingOnly ? '19px' : '3px',
+                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                }} />
+              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#475569' }}>Pending Only</span>
+            </div>
+
+            {/* Badges and Totals */}
+            <div className="sa-po-badges">
+              {/* <span className="sa-badge sa-badge--purple">{filteredPoLedger.length} POs</span> */}
+              <span className="sa-badge sa-badge--blue" title="Filtered PO total value">
+                Val: ₹{formatRupees(poTotals.totVal)}
+              </span>
+              <span className="sa-badge sa-badge--orange" title="Filtered Pending value">
+                Pend: ₹{formatRupees(poTotals.totPendVal)}
+              </span>
+            </div>
+
+            {/* CSV Export Button */}
+            <button onClick={handlePoExport} className="sa-btn sa-btn--primary sa-po-export-btn" title="Export PO Ledger to CSV" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="sa-table-scroll">
+          <table className="sa-table sa-po-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th className="sa-sortable" onClick={() => handlePoSort("type")}>
+                  Type {poSortField === "type" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("apoNo")}>
+                  Apono {poSortField === "apoNo" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("poNo")}>
+                  Po No {poSortField === "poNo" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("poDate")}>
+                  Po Date {poSortField === "poDate" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("custName")}>
+                  Cust Name {poSortField === "custName" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("partDesc")}>
+                  PartNO - Description {poSortField === "partDesc" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("poSlNo")}>
+                  Po Sl.No {poSortField === "poSlNo" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("qty")}>
+                  Qty {poSortField === "qty" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("shortCloseQty")}>
+                  Shot Close Qty {poSortField === "shortCloseQty" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("shotCloseReason")}>
+                  Shot Close Reason {poSortField === "shotCloseReason" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("rate")}>
+                  Rate {poSortField === "rate" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("value")}>
+                  Value {poSortField === "value" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("dcNo")}>
+                  Dc.NO {poSortField === "dcNo" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("dcDate")}>
+                  Dc Dt {poSortField === "dcDate" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("dcQty")}>
+                  Dc Qty {poSortField === "dcQty" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("pendingQty")}>
+                  Pending Qty {poSortField === "pendingQty" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("pendingValue")}>
+                  Pending Value {poSortField === "pendingValue" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-num sa-sortable" onClick={() => handlePoSort("ageDays")}>
+                  Age Days {poSortField === "ageDays" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th>Invoice No & Dt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedPoLedger.length ? (
+                paginatedPoLedger.map((row, i) => {
+                  const absoluteRowIdx = (poPage - 1) * poPageSize + i + 1;
+                  return (
+                    <tr key={`${row.poNo}-${i}`} className="sa-po-row" style={{ "--ri": i }}>
+                      <td>{absoluteRowIdx}</td>
+                      <td>
+                        <span className={`sa-badge sa-badge--type-${row.type.toLowerCase().replace(/[^a-z]/g, "")}`}>
+                          {row.type}
+                        </span>
+                      </td>
+                      <td><span className="sa-po-apo-code">{row.apoNo}</span></td>
+                      <td><strong className="sa-po-code">{row.poNo}</strong></td>
+                      <td className="sa-date">{formatToDdMmYyyy(row.poDate)}</td>
+                      <td><span className="sa-po-cust-name" title={row.custName}>{row.custName}</span></td>
+                      <td><span className="sa-po-part-desc" title={row.partDesc}>{row.partDesc}</span></td>
+                      <td><span className="sa-po-sl-no" style={{ fontWeight: '600', color: '#475569' }}>{row.poSlNo || "—"}</span></td>
+                      <td className="sa-num">{formatQty(row.qty)}</td>
+                      <td className="sa-num">{formatQty(row.shortCloseQty)}</td>
+                      <td>{row.shotCloseReason || <span className="sa-dash-gray">—</span>}</td>
+                      <td className="sa-num">₹{formatExact(row.rate)}</td>
+                      <td className="sa-num"><strong>₹{formatExact(row.value)}</strong></td>
+                      <td>
+                        {row.dcNo === "—" ? (
+                          <span className="sa-dash-gray">—</span>
+                        ) : (
+                          <strong className="sa-po-dc-code">{row.dcNo}</strong>
+                        )}
+                      </td>
+                      <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
+                      <td className="sa-num">{formatQty(row.dcQty)}</td>
+                      <td className="sa-num">
+                        {row.pendingQty === 0 ? (
+                          <span className="sa-badge sa-badge--green">Fully Dispatched</span>
+                        ) : (
+                          formatQty(row.pendingQty)
+                        )}
+                      </td>
+                      <td className="sa-num">
+                        {row.pendingValue === 0 ? (
+                          <span className="sa-badge sa-badge--green">₹0</span>
+                        ) : (
+                          <span className={`sa-badge ${row.pendingValue > 500000 ? "sa-badge--red" : "sa-badge--orange"}`}>
+                            ₹{formatExact(row.pendingValue)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="sa-num">
+                        {row.ageDays === 0 ? (
+                          "—"
+                        ) : (
+                          <span className={`sa-po-age ${row.ageDays > 45 ? "sa-po-age--old" : row.ageDays > 30 ? "sa-po-age--medium" : "sa-po-age--young"}`}>
+                            {row.ageDays} days
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {row.invNoDt === "—" ? (
+                          <span className="sa-dash-gray">—</span>
+                        ) : (
+                          <span className="sa-po-inv-details">{formatToDdMmYyyy(row.invNoDt)}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={18} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
+                    No purchase orders found matching your search.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination controls */}
+        {totalPoPages > 1 && (
+          <div className="sa-po-pagination">
+            <button
+              onClick={() => setPoPage(p => Math.max(1, p - 1))}
+              disabled={poPage === 1}
+              className="sa-pagination-btn"
+            >
+              ◀ Previous
+            </button>
+            <div className="sa-pagination-pages">
+              {getPageNumbers.map((item, idx) => {
+                if (item === "...") {
+                  return (
+                    <span key={`ellipsis-${idx}`} className="sa-pagination-ellipsis">
+                      ...
+                    </span>
+                  );
+                }
+                return (
+                  <button
+                    key={item}
+                    onClick={() => setPoPage(item)}
+                    className={`sa-pagination-page-btn ${poPage === item ? 'active' : ''}`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setPoPage(p => Math.min(totalPoPages, p + 1))}
+              disabled={poPage === totalPoPages}
+              className="sa-pagination-btn"
+            >
+              Next ▶
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Two-Col: Top Products + Insights ── */}
+      <div className="sa-two-col">
+
+        {/* Top Products */}
+        <div className="sa-card">
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Package size={16} style={{ color: "#f97316" }} /> Top Products by Revenue
+            </span>
+            <span className="sa-card__sub">
+              {loading ? (
+                <div className="sa-skeleton" style={{ width: '40px', height: '10px' }} />
+              ) : (
+                topProductsRaw?.period ?? summary?.period ?? "—"
+              )}
+            </span>
+          </div>
+          <div className="sa-prod-list">
+            {loading ? (
+              [...Array(5)].map((_, idx) => (
+                <div className="sa-prod-row" key={idx} style={{ padding: '12px 20px' }}>
+                  <div className="sa-prod-row__info" style={{ flex: 1 }}>
+                    <div className="sa-skeleton" style={{ width: '80%', height: '12px', marginBottom: '6px' }} />
+                    <div className="sa-skeleton" style={{ width: '40%', height: '10px' }} />
+                  </div>
+                  <div className="sa-prod-row__qty" style={{ margin: '0 12px' }}><div className="sa-skeleton" style={{ width: '40px', height: '12px' }} /></div>
+                  <div className="sa-prod-row__amount"><div className="sa-skeleton" style={{ width: '50px', height: '12px' }} /></div>
+                </div>
+              ))
+            ) : (topProducts.length ? topProducts : [{ name: "—", code: "—", barW: "0%", color: "#94a3b8", qty: "—", amount: "—" }]).map((p, i) => (
+              <div className="sa-prod-row" key={i} style={{ "--pi": i }}>
+                <div className="sa-prod-row__info">
+                  <div className="sa-prod-row__name">{p.name}</div>
+                  <div className="sa-prod-row__code">{p.code}</div>
+                </div>
+                <div className="sa-prod-row__bar-bg">
+                  <div className="sa-prod-row__bar" style={{ width: p.barW, background: p.color }} />
+                </div>
+                <div className="sa-prod-row__qty">{p.qty}</div>
+                <div className="sa-prod-row__amount">{p.amount}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Insights */}
+        <div className="sa-card">
+          <div className="sa-card__head">
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Lightbulb size={16} style={{ color: "#eab308" }} /> Management Insights
+            </span>
+            <span className="sa-badge sa-badge--orange">{dynamicManagementInsights.insights.length} Key Points</span>
+          </div>
+          <div className="sa-insight-list">
+            {loading ? (
+              [...Array(5)].map((_, idx) => (
+                <div className="sa-insight-row" key={idx} style={{ padding: '10px 14px' }}>
+                  <div className="sa-skeleton" style={{ width: '16px', height: '16px', borderRadius: '4px' }} />
+                  <div className="sa-insight-row__body" style={{ flex: 1, margin: '0 10px' }}>
+                    <div className="sa-skeleton" style={{ width: '60%', height: '12px', marginBottom: '4px' }} />
+                    <div className="sa-skeleton" style={{ width: '90%', height: '10px' }} />
+                  </div>
+                  <div className="sa-skeleton" style={{ width: '40px', height: '12px' }} />
+                </div>
+              ))
+            ) : (
+              dynamicManagementInsights.insights.map((ins, i) => {
+                const IconComp = ins.icon;
+                return (
+                  <div className="sa-insight-row" key={i} style={{ "--ii": i }}>
+                    <div className="sa-insight-row__icon" style={{ display: "inline-flex", alignItems: "center", color: ins.iconColor, marginTop: "2px" }}>
+                      <IconComp size={16} />
+                    </div>
+                    <div className="sa-insight-row__body">
+                      <div className="sa-insight-row__title">{ins.title}</div>
+                      <div className="sa-insight-row__sub">{ins.sub}</div>
+                    </div>
+                    <div className="sa-insight-row__val" style={{ color: ins.valColor }}>{ins.val}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="sa-priority-box">
+            <div className="sa-priority-box__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Pin size={14} style={{ color: "#ef4444", transform: "rotate(45deg)" }} /> Priority Action for Management
+            </div>
+            <div className="sa-priority-box__body">
+              {loading ? (
+                <div className="sa-skeleton" style={{ width: '100%', height: '24px', borderRadius: '4px' }} />
+              ) : (
+                dynamicManagementInsights.priorityActionText
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }

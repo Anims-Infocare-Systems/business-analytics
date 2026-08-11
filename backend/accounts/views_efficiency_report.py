@@ -33,7 +33,11 @@ def _mac_expr(mac_col):
     return f"LTRIM(RTRIM(CAST([{mac_col}] AS NVARCHAR(128))))"
 
 
-def _idle_hours_expr(idle_col, acc_col, nonacc_col):
+def _idle_hours_expr(idle_col, acc_col, nonacc_col, kind="prod"):
+    if kind == "prod" and (acc_col or nonacc_col):
+        acc = f"ISNULL(CAST([{acc_col}] AS FLOAT), 0)" if acc_col else "0"
+        nonacc = f"ISNULL(CAST([{nonacc_col}] AS FLOAT), 0)" if nonacc_col else "0"
+        return f"CAST(({acc} + {nonacc}) / 3600.0 AS FLOAT)"
     if idle_col:
         return (
             f"CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', [{idle_col}]) "
@@ -117,7 +121,7 @@ def _build_union_branches(
             f"SELECT {_opr_expr(opr_col)} AS Operator, {_mac_expr(mac_col)} AS MacNo, "
             f"{date_cols}"
             f"{oaeff_sql} AS OAEFF, {opreff_sql} AS OPREFF, "
-            f"{_idle_hours_expr(idle_col, acc_col, nonacc_col)} AS IdleHrs "
+            f"{_idle_hours_expr(idle_col, acc_col, nonacc_col, kind)} AS IdleHrs "
             f"FROM {qt} WHERE {_sql_deleted_safe(del_col)} "
             f"AND CAST([{d_col}] AS DATE) BETWEEN ? AND ? AND {null_filter}"
         )
@@ -283,7 +287,7 @@ def _aggregate_sql(union_sql, group_by_machine, dept_join=None):
     if group_by_machine:
         return f"""
             SELECT
-                N'' AS Operator,
+                LTRIM(RTRIM(ISNULL(MAX(Operator), N''))) AS Operator,
                 LTRIM(RTRIM(ISNULL(MAX(Dept), N''))) AS Dept,
                 MacNo,
                 ROUND(AVG(COALESCE(OAEFF, 0)), 2) AS AvgOAEFF,
@@ -315,38 +319,117 @@ def _aggregate_sql(union_sql, group_by_machine, dept_join=None):
 
 
 def _fetch_efficiency_rows(cursor, start_date, end_date, include_cnc, include_conv, group_by_machine=False):
-    dept_join = _resolve_department_join(cursor) or _legacy_department_join()
-    branches, params = _build_union_branches(cursor, start_date, end_date, include_cnc, include_conv)
+    branches = []
+    params = []
 
-    if not branches:
-        branches = _legacy_union_branches(include_cnc, include_conv)
-        params = []
-        for _ in branches:
-            params.extend([start_date, end_date])
+    if include_cnc:
+        branches.append("""
+            SELECT
+                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
+                CAST(OAEFF AS FLOAT) AS OAEFF,
+                CAST(OPREFF AS FLOAT) AS OPREFF,
+                CAST((ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0)) / 3600.0 AS FLOAT) AS IdleHrs
+            FROM ProductionEntry
+            WHERE CAST(proddate AS DATE) BETWEEN ? AND ? 
+              AND ISNULL(CAST(deleted AS INT), 0) = 0
+              AND (OAEFF IS NOT NULL OR OPREFF IS NOT NULL)
+        """)
+        params.extend([start_date, end_date])
+
+    if include_conv:
+        branches.append("""
+            SELECT
+                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
+                CAST(OAEFF AS FLOAT) AS OAEFF,
+                CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
+                CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', IdleTime) / 3600.0 AS FLOAT) AS IdleHrs
+            FROM ConvProductionEntry
+            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? 
+              AND ISNULL(CAST(deleted AS INT), 0) = 0
+              AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
+        """)
+        params.extend([start_date, end_date])
+
+        branches.append("""
+            SELECT
+                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
+                CAST(OAEFF AS FLOAT) AS OAEFF,
+                CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
+                CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', IdleTime) / 3600.0 AS FLOAT) AS IdleHrs
+            FROM ConvProductionEntryRod
+            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? 
+              AND ISNULL(CAST(deleted AS INT), 0) = 0
+              AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
+        """)
+        params.extend([start_date, end_date])
 
     if not branches:
         return []
 
     union_sql = " UNION ALL ".join(branches)
-    agg_sql = _aggregate_sql(union_sql, group_by_machine, dept_join)
+
+    if group_by_machine:
+        group_by_clause = "GROUP BY MacNo"
+        order_by_clause = "ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, MacNo ASC"
+        select_op = "LTRIM(RTRIM(ISNULL(MAX(Operator), N''))) AS Operator"
+        where_extra = ""
+    else:
+        group_by_clause = "GROUP BY Operator, MacNo"
+        order_by_clause = "ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, Operator ASC, MacNo ASC"
+        select_op = "Operator"
+        where_extra = "AND Operator IS NOT NULL AND LTRIM(RTRIM(Operator)) <> N''"
+
+    sql = f"""
+        WITH AllProduction AS (
+            {union_sql}
+        ),
+        DetailWithDept AS (
+            SELECT
+                AR.Operator,
+                LTRIM(RTRIM(CAST(ISNULL(DM.Department, N'') AS NVARCHAR(256)))) AS Dept,
+                AR.MacNo,
+                AR.OAEFF,
+                AR.OPREFF,
+                AR.IdleHrs
+            FROM AllProduction AS AR
+            LEFT JOIN empmaster AS E
+                ON LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = LTRIM(RTRIM(AR.Operator))
+                AND ISNULL(CAST(E.deleted AS INT), 0) = 0
+            LEFT JOIN DepartmentMast AS DM
+                ON E.deptcode = DM.DeptCode
+                AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
+        )
+        SELECT
+            {select_op},
+            LTRIM(RTRIM(ISNULL(MAX(Dept), N''))) AS Dept,
+            MacNo,
+            ROUND(AVG(COALESCE(OAEFF, 0)), 2) AS AvgOAEFF,
+            ROUND(AVG(COALESCE(OPREFF, 0)), 2) AS AvgOPREFF,
+            CAST(100 AS FLOAT) AS AvgQFEFF,
+            ROUND(SUM(IdleHrs), 2) AS IdleTime,
+            CAST(0 AS FLOAT) AS RejPct
+        FROM DetailWithDept
+        WHERE MacNo IS NOT NULL AND LTRIM(RTRIM(MacNo)) <> N''
+          {where_extra}
+        {group_by_clause}
+        {order_by_clause};
+    """
 
     try:
-        cursor.execute(agg_sql, params)
+        cursor.execute(sql, params)
         return cursor.fetchall() or []
     except Exception:
-        # Retry with legacy production union + department join
-        branches = _legacy_union_branches(include_cnc, include_conv)
-        if not branches:
-            return []
-        params = []
-        for _ in branches:
-            params.extend([start_date, end_date])
-        union_sql = " UNION ALL ".join(branches)
-        agg_sql = _aggregate_sql(
-            union_sql, group_by_machine, _legacy_department_join()
-        )
-        cursor.execute(agg_sql, params)
-        return cursor.fetchall() or []
+        dept_join = _resolve_department_join(cursor) or _legacy_department_join()
+        b, p = _build_union_branches(cursor, start_date, end_date, include_cnc, include_conv)
+        if b:
+            u_sql = " UNION ALL ".join(b)
+            a_sql = _aggregate_sql(u_sql, group_by_machine, dept_join)
+            cursor.execute(a_sql, p)
+            return cursor.fetchall() or []
+        return []
 
 
 def _rows_to_table_arrays(rows, group_by_machine=False):
@@ -355,7 +438,7 @@ def _rows_to_table_arrays(rows, group_by_machine=False):
     for rank, row in enumerate(rows, start=1):
         operator, dept, mac, oaeff, opreff, qfeff, idle, rej = row
         record = [
-            "" if group_by_machine else str(operator or "").strip(),
+            str(operator or "").strip(),
             str(dept or "").strip(),
             str(mac or "").strip(),
             round(float(oaeff or 0), 2),
@@ -438,7 +521,11 @@ def _efficiency_data_cte_branches(include_cnc=True, include_conv=True):
                 OAEFF,
                 OPREFF,
                 QFNEW,
-                OEENEW,
+                CASE
+                    WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL
+                    THEN OAEFF * QFNEW
+                    ELSE NULL
+                END                               AS OEENEW,
                 deleted
             FROM ProductionEntry
             WHERE deleted = 0
@@ -952,12 +1039,19 @@ def efficiency_report(request):
     cursor = None
     table_rows = []
     monthwise = None
+    avg_idle_time = None
     try:
         cursor = conn.cursor()
         rows = _fetch_efficiency_rows(
             cursor, start_date, end_date, include_cnc, include_conv, group_by_machine,
         )
         table_rows = _rows_to_table_arrays(rows, group_by_machine)
+        
+        try:
+            avg_idle_time = _get_avg_idle_time(cursor, start_date, end_date)
+        except Exception:
+            avg_idle_time = None
+            
         try:
             monthwise = _overall_efficiency_monthwise(cursor, start_date, end_date)
         except Exception:
@@ -985,4 +1079,38 @@ def efficiency_report(request):
         "row_count": len(table_rows),
         "rows": table_rows,
         "monthwise": monthwise,
+        "avg_idle_time": avg_idle_time,
     })
+
+def _get_avg_idle_time(cursor, start_date, end_date):
+    sql = """
+    WITH IdleData AS
+    (
+        SELECT DATEDIFF(SECOND,'19000101',ISNULL(idlTime,'19000101')) AS IdleSeconds
+        FROM ProductionEntry
+        WHERE deleted = 0 AND proddate >= ? AND proddate < DATEADD(DAY,1,?)
+        UNION ALL
+        SELECT DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
+        FROM ConvProductionEntry
+        WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY,1,?)
+        UNION ALL
+        SELECT DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
+        FROM ConvProductionEntryRod
+        WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY,1,?)
+        UNION ALL
+        SELECT DATEDIFF(SECOND,'19000101',ISNULL(D.tottime,'19000101'))
+        FROM Machine_IdleEntryDet D
+        INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+        WHERE D.deleted = 0 AND M.deleted = 0 AND M.proddate >= ? AND M.proddate < DATEADD(DAY,1,?)
+    )
+    SELECT SUM(IdleSeconds)
+    FROM IdleData;
+    """
+    cursor.execute(sql, [start_date, end_date] * 4)
+    row = cursor.fetchone()
+    total_idle_seconds = int(row[0]) if row and row[0] else 0
+    days = (end_date - start_date).days + 1
+    if days <= 0:
+        days = 1
+    avg_idle_hours = (total_idle_seconds / 3600.0) / days
+    return round(avg_idle_hours, 2)

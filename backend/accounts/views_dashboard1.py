@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .views import get_tenant_connection, month_key_from_db
+from .views_qualityanalysis import QUALITY_VALUE_BASE_CTE as _QV_BASE_CTE
 
 
 def rupees_to_lakhs(amount):
@@ -59,13 +60,44 @@ def dashboard1_analysis_today_yesterday(selected_year, selected_month):
     return today_date, yesterday_date
 
 
-SALES_ANALYSIS_BTYPE_SQL = """
+def get_prev_quarter_dates(quarter_start_date):
+    prev_quarter_end = quarter_start_date - timedelta(days=1)
+    m = prev_quarter_end.month
+    y = prev_quarter_end.year
+    start_month = m - 2
+    prev_quarter_start = datetime(y, start_month, 1)
+    return prev_quarter_start, prev_quarter_end
+
+
+EXCLUDED_SALES_BTYPES_SQL = """
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT IN (
+        'with material rejection',
+        'raw material insp rej',
+        'raw material insp rejection',
+        'stores material insp rej',
+        'stores material insp rejection',
+        'debit note',
+        'sales return',
+        'credit note',
+        'reverse charge',
+        'revese charge'
+    )
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%credit%note%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%debit%note%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%sales%return%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%reverse%charge%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%revese%charge%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%material%rej%'
+    AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%insp%rej%'
+"""
+
+SALES_ANALYSIS_BTYPE_SQL = f"""
     SELECT
         ISNULL(btype, '') AS btype,
         SUM(ISNULL(tamt, 0)) AS total_amount
     FROM Bill_Mas
     WHERE deleted = 0
-      AND ISNULL(btype, '') <> 'Sales Return'
+      {EXCLUDED_SALES_BTYPES_SQL}
       AND CAST(invdt AS DATE) BETWEEN ? AND ?
     GROUP BY ISNULL(btype, '')
 """
@@ -119,11 +151,11 @@ def dashboard1_sales_kpi(request):
         cursor = conn.cursor()
         
         # ── Get Month-wise Sales for Current FY (for sparkline & current value) ──
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT MONTH(invdt) AS mth, SUM(tamt) AS total 
             FROM Bill_Mas 
             WHERE ISNULL(deleted, 0) = 0
-            AND ISNULL(bttype, '') <> 'Credit Note'
+            {EXCLUDED_SALES_BTYPES_SQL}
             AND CAST(invdt AS DATE) BETWEEN ? AND ?
             GROUP BY MONTH(invdt)
             ORDER BY mth
@@ -135,11 +167,11 @@ def dashboard1_sales_kpi(request):
         prev_fy_start = datetime(fy_start_year - 1, 4, 1)
         prev_fy_end = datetime(fy_start_year, 3, 31)
         
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT SUM(tamt) AS total 
             FROM Bill_Mas 
             WHERE ISNULL(deleted, 0) = 0
-            AND ISNULL(bttype, '') <> 'Credit Note'
+            {EXCLUDED_SALES_BTYPES_SQL}
             AND CAST(invdt AS DATE) BETWEEN ? AND ?
         """, (prev_fy_start, prev_fy_end))
         
@@ -153,11 +185,11 @@ def dashboard1_sales_kpi(request):
         else:
             current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
         
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT SUM(tamt) AS total 
             FROM Bill_Mas 
             WHERE ISNULL(deleted, 0) = 0
-            AND ISNULL(bttype, '') <> 'Credit Note'
+            {EXCLUDED_SALES_BTYPES_SQL}
             AND CAST(invdt AS DATE) BETWEEN ? AND ?
         """, (current_month_start, current_month_end))
         
@@ -168,22 +200,28 @@ def dashboard1_sales_kpi(request):
         prev_month_end = current_month_start - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
         
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT SUM(tamt) AS total 
             FROM Bill_Mas 
             WHERE ISNULL(deleted, 0) = 0
-            AND ISNULL(bttype, '') <> 'Credit Note'
+            {EXCLUDED_SALES_BTYPES_SQL}
             AND CAST(invdt AS DATE) BETWEEN ? AND ?
         """, (prev_month_start, prev_month_end))
         
         prev_month_row = cursor.fetchone()
         prev_month_total = float(prev_month_row[0] or 0) if prev_month_row else 0
 
+        day_before_yesterday_date = yesterday_date - timedelta(days=1)
+        prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
+
         sales_analysis = {
             "today": fetch_sales_analysis_bucket(cursor, today_date, today_date),
             "yesterday": fetch_sales_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "day_before_yesterday": fetch_sales_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_sales_analysis_bucket(cursor, current_month_start, current_month_end),
+            "prev_month": fetch_sales_analysis_bucket(cursor, prev_month_start, prev_month_end),
             "quarter": fetch_sales_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "prev_quarter": fetch_sales_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_sales_analysis_bucket(cursor, fy_start_date, fy_end_date),
         }
         
@@ -276,6 +314,15 @@ PURCHASE_TOTAL_SQL = """
       AND CAST(GM.grndate AS DATE) BETWEEN ? AND ?
 """
 
+PURCHASE_GRN_INVOICE_TOTAL_SQL = """
+    SELECT SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+    FROM grn_mas GM
+    INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
+    WHERE GM.deleted = 0
+      AND GRD.deleted = 0
+      AND CAST(GM.RefDate AS DATE) BETWEEN ? AND ?
+"""
+
 
 PURCHASE_ANALYSIS_PO_SQL = """
     SELECT SUM(ISNULL(amount, 0)) AS total_amount
@@ -285,6 +332,7 @@ PURCHASE_ANALYSIS_PO_SQL = """
         FROM POMas
         WHERE CAST(podate AS DATE) BETWEEN ? AND ?
           AND deleted = 0
+          AND ISNULL(dtype, '') <> 'Job Order'
     )
       AND deleted = 0
 """
@@ -395,18 +443,32 @@ def dashboard1_purchase_kpi(request):
         cursor = conn.cursor()
         month_totals = fetch_month_totals(cursor, PURCHASE_MONTHWISE_SQL, fy_start_date, fy_end_date)
         current_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, current_month_start, current_month_end)
+        grn_invoice_current_month_total = fetch_period_total(cursor, PURCHASE_GRN_INVOICE_TOTAL_SQL, current_month_start, current_month_end)
         prev_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, prev_month_start, prev_month_end)
+        grn_invoice_prev_month_total = fetch_period_total(cursor, PURCHASE_GRN_INVOICE_TOTAL_SQL, prev_month_start, prev_month_end)
+        day_before_yesterday_date = yesterday_date - timedelta(days=1)
+        prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
+
         purchase_analysis = {
             "today": fetch_purchase_analysis_bucket(cursor, today_date, today_date),
             "yesterday": fetch_purchase_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "day_before_yesterday": fetch_purchase_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_purchase_analysis_bucket(cursor, current_month_start, current_month_end),
+            "prev_month": fetch_purchase_analysis_bucket(cursor, prev_month_start, prev_month_end),
             "quarter": fetch_purchase_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "prev_quarter": fetch_purchase_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_purchase_analysis_bucket(cursor, fy_start_date, fy_end_date),
         }
         cursor.close()
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    # Calculate MoM delta for GRN Invoice
+    if grn_invoice_prev_month_total > 0:
+        grn_invoice_delta = ((grn_invoice_current_month_total - grn_invoice_prev_month_total) / grn_invoice_prev_month_total) * 100
+    else:
+        grn_invoice_delta = 0 if grn_invoice_current_month_total == 0 else 100
 
     payload = build_dashboard1_kpi_payload(
         "Purchase Value",
@@ -416,6 +478,14 @@ def dashboard1_purchase_kpi(request):
         selected_month,
         fy_start_year,
     )
+    payload["grn_value"] = current_month_total
+    payload["grn_delta"] = payload.get("delta")
+    payload["grn_delta_type"] = payload.get("delta_type")
+
+    payload["grn_invoice_value"] = grn_invoice_current_month_total
+    payload["grn_invoice_delta"] = round(abs(grn_invoice_delta), 1)
+    payload["grn_invoice_delta_type"] = "up" if grn_invoice_delta >= 0 else "dn"
+
     payload["analysis"] = purchase_analysis
 
     return Response({
@@ -431,25 +501,28 @@ def production_date_params(start_date, end_date):
 PRODUCTION_COMBINED_DATA_SQL = """
 WITH CombinedData AS (
     SELECT P.proddate AS EntryDate,
-        ((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto)
-              ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END
-         - ISNULL(P.accidletimesecs, 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue
+        (((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto)
+               ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END
+          - ISNULL(CASE WHEN SQL_VARIANT_PROPERTY(P.idlTime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, P.idlTime) ELSE CAST(ISNULL(P.idlTime, 0) AS INT) END, 0)) / 60.0)
+         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
     FROM ProductionEntry P
     LEFT JOIN MacMaster M ON P.macno = M.macno
     WHERE P.deleted = 0 AND CAST(P.proddate AS DATE) BETWEEN ? AND ?
     UNION ALL
     SELECT C.entrydate AS EntryDate,
-        ((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime)
-              ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END
-         - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue
+        (((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime)
+               ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END
+          - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 60.0)
+         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
     FROM ConvProductionEntry C
     LEFT JOIN MacMaster M ON C.macno = M.macno
     WHERE C.deleted = 0 AND CAST(C.entrydate AS DATE) BETWEEN ? AND ?
     UNION ALL
     SELECT R.entrydate AS EntryDate,
-        ((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime)
-              ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END
-         - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 3600.0) * ISNULL(M.RatePerHr, 0) AS ProductionValue
+        (((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime)
+               ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END
+          - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 60.0)
+         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
     FROM ConvProductionEntryRod R
     LEFT JOIN MacMaster M ON R.macno = M.macno
     WHERE R.deleted = 0 AND CAST(R.entrydate AS DATE) BETWEEN ? AND ?
@@ -552,11 +625,17 @@ def dashboard1_production_kpi(request):
         month_totals = fetch_production_month_totals(cursor, fy_start_date, fy_end_date)
         current_month_total = fetch_production_period_total(cursor, current_month_start, current_month_end)
         prev_month_total = fetch_production_period_total(cursor, prev_month_start, prev_month_end)
+        day_before_yesterday_date = yesterday_date - timedelta(days=1)
+        prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
+
         production_analysis = {
             "today": fetch_production_analysis_bucket(cursor, today_date, today_date),
             "yesterday": fetch_production_analysis_bucket(cursor, yesterday_date, yesterday_date),
+            "day_before_yesterday": fetch_production_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_production_analysis_bucket(cursor, current_month_start, current_month_end),
+            "prev_month": fetch_production_analysis_bucket(cursor, prev_month_start, prev_month_end),
             "quarter": fetch_production_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
+            "prev_quarter": fetch_production_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_production_analysis_bucket(cursor, fy_start_date, fy_end_date),
         }
         cursor.close()
@@ -580,153 +659,23 @@ def dashboard1_production_kpi(request):
     })
 
 
-QUALITY_VALUE_BASE_CTE = """
-WITH CTE_Rejection AS (
-    SELECT
-        CONVERT(DATE, IM.inspdate) AS RejDate,
-        DATENAME(MONTH, IM.inspdate) + '-' + CAST(YEAR(IM.inspdate) AS VARCHAR) AS Mnth,
-        D.PartNo,
-        D.Process,
-        CAST(ISNULL(D.matrej, 0) + ISNULL(D.macrej, 0) AS FLOAT) AS RejectionQty,
-        'INJOB' AS RejSource
-    FROM InJob_Det D
-    INNER JOIN InJob_Mas IM
-        ON D.inspno = IM.inspno
-    WHERE
-        ISNULL(D.deleted, 0) = 0
-        AND ISNULL(IM.deleted, 0) = 0
-        AND (ISNULL(D.matrej, 0) > 0 OR ISNULL(D.macrej, 0) > 0)
+# ── Quality Value SQL (reuses the canonical CTE from views_qualityanalysis) ──
+# Quality Value calculation rules per rejection line:
+#
+# 1. Job Product & Customer Raw Material (Customer Jobs):
+#    - Process Value = (Rate_1 + Rate_2 + ... + Rate_N) × RejectionQty
+#      if all process rates up to rejection sequence N exist in Commer_ProcDet.
+#    - Fallback = BaseRate × RejectionQty (Finished product Base Rate)
+#      if ANY process rate in 1..N is missing or zero.
+#
+# 2. 'With Material' Products:
+#    - Total Quality Value = Material Cost + Process / Finished Product Value
+#      Material Cost = (RM Rate × RM Consumption) × RejectionQty
+#      Process Value = Cumulative Process Rate × RejectionQty (or BaseRate × RejectionQty fallback)
 
-    UNION ALL
-
-    SELECT
-        CONVERT(DATE, FM.finspdate) AS RejDate,
-        DATENAME(MONTH, FM.finspdate) + '-' + CAST(YEAR(FM.finspdate) AS VARCHAR) AS Mnth,
-        F.PartNo,
-        F.Process,
-        CAST(ISNULL(F.qty, 0) AS FLOAT) AS RejectionQty,
-        'FINAL INSPECTION' AS RejSource
-    FROM FinalInspRejectionEntryOrg F
-    INNER JOIN FinalInspectionEntry FM
-        ON F.finspno = FM.finspno
-    WHERE
-        ISNULL(F.deleted, 0) = 0
-        AND ISNULL(FM.deleted, 0) = 0
-
-    UNION ALL
-
-    SELECT
-        CONVERT(DATE, IIM.inter_inspdate) AS RejDate,
-        DATENAME(MONTH, IIM.inter_inspdate) + '-' + CAST(YEAR(IIM.inter_inspdate) AS VARCHAR) AS Mnth,
-        IR.PartNo,
-        IR.Process,
-        CAST(ISNULL(IR.qty, 0) AS FLOAT) AS RejectionQty,
-        'INTER INSPECTION' AS RejSource
-    FROM Insp_RejectionEntry IR
-    INNER JOIN InterInspectionEntry IIM
-        ON IR.inter_inspno = IIM.inter_inspno
-    WHERE
-        ISNULL(IR.deleted, 0) = 0
-        AND ISNULL(IIM.deleted, 0) = 0
-),
-CTE_PartType AS (
-    SELECT
-        R.*,
-        CASE
-            WHEN WM.PartNo IS NOT NULL THEN 'With Material'
-            WHEN CJ.PartNo IS NOT NULL THEN 'Customer Job Raw Material'
-            WHEN PM.PartNo IS NOT NULL THEN 'Customer Product'
-            ELSE 'Unknown'
-        END AS PartType,
-        WM.RmName,
-        WM.Rmuom,
-        CAST(WM.WtQty AS FLOAT) AS WtQty,
-        CAST(WM.TotMmLength AS FLOAT) AS TotMmLength
-    FROM CTE_Rejection R
-    LEFT JOIN WithMatMas WM
-        ON R.PartNo = WM.PartNo
-        AND ISNULL(WM.deleted, 0) = 0
-    LEFT JOIN CustJobRawMat CJ
-        ON R.PartNo = CJ.PartNo
-        AND ISNULL(CJ.deleted, 0) = 0
-    LEFT JOIN ProductMast PM
-        ON R.PartNo = PM.PartNo
-        AND ISNULL(PM.deleted, 0) = 0
-),
-CTE_RejSeq AS (
-    SELECT
-        P.*,
-        PSD.seq AS RejSeq
-    FROM CTE_PartType P
-    LEFT JOIN ProcessSeqDet PSD
-        ON P.PartNo = PSD.partno
-        AND P.Process = PSD.process
-        AND ISNULL(PSD.deleted, 0) = 0
-),
-CTE_ProcessCalc AS (
-    SELECT
-        R.*,
-        (
-            SELECT
-                SUM(CAST(ISNULL(CPD.Rate, 0) AS FLOAT))
-            FROM ProcessSeqDet PSD
-            LEFT JOIN Commer_ProcDet CPD
-                ON PSD.partno = CPD.PartNo
-                AND PSD.process = CPD.Process
-                AND ISNULL(CPD.deleted, 0) = 0
-            WHERE
-                PSD.partno = R.PartNo
-                AND ISNULL(PSD.deleted, 0) = 0
-                AND PSD.seq <= R.RejSeq
-        ) AS ProcessRate,
-        (
-            SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
-            FROM Commer_BaseRateDet CBD
-            WHERE
-                CBD.PartNo = R.PartNo
-                AND ISNULL(CBD.deleted, 0) = 0
-            ORDER BY CBD.BReffdt DESC
-        ) AS FallbackBaseRate
-    FROM CTE_RejSeq R
-),
-CTE_RMRate AS (
-    SELECT
-        C.*,
-        (
-            SELECT TOP 1 CAST(CBD.BaseRate AS FLOAT)
-            FROM Commer_BaseRateDet CBD
-            INNER JOIN Commer_Mas CM
-                ON CBD.cmno = CM.cmno
-            WHERE
-                CBD.PartNo = C.RmName
-                AND ISNULL(CBD.deleted, 0) = 0
-                AND ISNULL(CM.deleted, 0) = 0
-                AND CM.btype = 'Raw Material'
-            ORDER BY CBD.BReffdt DESC
-        ) AS RMRate
-    FROM CTE_ProcessCalc C
-),
-CTE_QualityValue AS (
-    SELECT
-        RejDate,
-        (
-            CASE
-                WHEN PartType = 'With Material' AND Rmuom = 'NOS' THEN ISNULL(RMRate, 0) * RejectionQty
-                WHEN PartType = 'With Material' AND Rmuom = 'KGS' THEN ISNULL(WtQty, 0) * ISNULL(RMRate, 0) * RejectionQty
-                WHEN PartType = 'With Material' AND Rmuom = 'MTRS' THEN (ISNULL(TotMmLength, 0) / 1000.0) * ISNULL(RMRate, 0) * RejectionQty
-                ELSE 0
-            END
-        ) + (
-            CASE
-                WHEN ISNULL(ProcessRate, 0) > 0 THEN ProcessRate * RejectionQty
-                ELSE ISNULL(FallbackBaseRate, 0) * RejectionQty
-            END
-        ) AS TotalQualityValue
-    FROM CTE_RMRate
-)
-"""
-
-QUALITY_VALUE_MONTHWISE_SQL = QUALITY_VALUE_BASE_CTE + """
+def _get_quality_value_sqls():
+    cte = _QV_BASE_CTE.format(injob_filter="", final_filter="", inter_filter="")
+    monthwise_sql = cte + """
 SELECT
     MONTH(RejDate) AS month_num,
     SUM(TotalQualityValue) AS total_amount
@@ -735,12 +684,12 @@ WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
 GROUP BY MONTH(RejDate)
 ORDER BY month_num
 """
-
-QUALITY_VALUE_TOTAL_SQL = QUALITY_VALUE_BASE_CTE + """
+    total_sql = cte + """
 SELECT SUM(TotalQualityValue) AS total_amount
 FROM CTE_QualityValue
 WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
 """
+    return monthwise_sql, total_sql
 
 
 @api_view(["GET"])
@@ -766,10 +715,11 @@ def dashboard1_quality_value_kpi(request):
     prev_month_start = prev_month_end.replace(day=1)
 
     try:
+        monthwise_sql, total_sql = _get_quality_value_sqls()
         cursor = conn.cursor()
-        month_totals = fetch_month_totals(cursor, QUALITY_VALUE_MONTHWISE_SQL, fy_start_date, fy_end_date)
-        current_month_total = fetch_period_total(cursor, QUALITY_VALUE_TOTAL_SQL, current_month_start, current_month_end)
-        prev_month_total = fetch_period_total(cursor, QUALITY_VALUE_TOTAL_SQL, prev_month_start, prev_month_end)
+        month_totals = fetch_month_totals(cursor, monthwise_sql, fy_start_date, fy_end_date)
+        current_month_total = fetch_period_total(cursor, total_sql, current_month_start, current_month_end)
+        prev_month_total = fetch_period_total(cursor, total_sql, prev_month_start, prev_month_end)
         cursor.close()
         conn.close()
     except Exception as e:
@@ -788,11 +738,11 @@ def dashboard1_quality_value_kpi(request):
     })
 
 
-SALES_PROJECTIONS_SALES_SQL = """
+SALES_PROJECTIONS_SALES_SQL = f"""
     SELECT SUM(tamt) AS total
     FROM Bill_Mas
     WHERE deleted = 0
-      AND ISNULL(btype, '') NOT IN ('Credit Note')
+      {EXCLUDED_SALES_BTYPES_SQL}
       AND CAST(invdt AS DATE) BETWEEN ? AND ?
 """
 
@@ -823,6 +773,7 @@ PURCHASE_PROJECTIONS_SQL = """
             AND PD.deleted = 0
             AND YEAR(PM.podate) = ?
             AND MONTH(PM.podate) = ?
+            AND ISNULL(PM.dtype, '') <> 'Job Order'
         GROUP BY
             YEAR(PM.podate),
             MONTH(PM.podate),
@@ -1220,11 +1171,19 @@ def dashboard1_quality_rejections_weekly(request):
         cursor.execute(QUALITY_REJECTIONS_WEEKLY_SQL, params)
         rows = cursor.fetchall()
 
+        day_before_yesterday_date = yesterday_date - timedelta(days=1)
+        prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
+        prev_month_end = current_month_start - timedelta(days=1)
+        prev_month_start = prev_month_end.replace(day=1)
+
         analysis = {
             "today": fetch_quality_rejection_period_totals(cursor, today_date, today_date),
             "yesterday": fetch_quality_rejection_period_totals(cursor, yesterday_date, yesterday_date),
+            "day_before_yesterday": fetch_quality_rejection_period_totals(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_quality_rejection_period_totals(cursor, current_month_start, current_month_end),
+            "prev_month": fetch_quality_rejection_period_totals(cursor, prev_month_start, prev_month_end),
             "quarter": fetch_quality_rejection_period_totals(cursor, quarter_start_date, quarter_end_date),
+            "prev_quarter": fetch_quality_rejection_period_totals(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_quality_rejection_period_totals(cursor, fy_start_date, fy_end_date),
         }
 

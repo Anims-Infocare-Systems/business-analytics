@@ -57,6 +57,7 @@ import {
   PieChart,
   PanelLeftClose,
   PanelRightClose,
+  Search,
   X
 } from "lucide-react";
 
@@ -82,7 +83,8 @@ function Pp1SearchableMultiSelect({
   placeholder = "Search...",
   allLabel = "All Customers",
   searchPlaceholder = "Search customer...",
-  accentColor = "#2d6de8"
+  accentColor = "#2d6de8",
+  minWidth = "100%"
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -139,33 +141,34 @@ function Pp1SearchableMultiSelect({
   }
 
   return (
-    <div className="pp1-custom-select-wrap" ref={dropdownRef} style={{ width: '100%', minWidth: '180px', position: 'relative' }}>
+    <div className="pp1-custom-select-wrap" ref={dropdownRef} style={{ width: '100%', minWidth: minWidth, position: 'relative' }}>
       <button
         type="button"
         className={`pp1-custom-select-trigger ${isOpen ? "open" : ""} ${!isDefault ? "active" : ""}`}
         onClick={() => setIsOpen(!isOpen)}
         style={{
           width: '100%',
+          height: '28px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '8px 12px',
-          background: '#fcfdfe',
-          border: isOpen ? `1.5px solid ${accentColor}` : `1.5px solid ${!isDefault ? accentColor : '#d1e2ff'}`,
-          borderRadius: '8px',
+          padding: '0 10px',
+          background: '#ffffff',
+          border: isOpen ? `1px solid ${accentColor}` : `1px solid ${!isDefault ? accentColor : 'rgba(226, 232, 240, 0.9)'}`,
+          borderRadius: '6px',
           fontFamily: PP1_FONT,
-          fontSize: '12px',
-          fontWeight: 600,
+          fontSize: '11px',
+          fontWeight: 500,
           color: '#334155',
           cursor: 'pointer',
-          transition: 'all 0.22s ease',
+          transition: 'all 0.15s ease',
           boxSizing: 'border-box'
         }}
       >
-        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px', color: !isDefault ? accentColor : 'inherit' }}>
+        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: !isDefault ? accentColor : 'inherit' }}>
           {triggerText}
         </span>
-        <ChevronDown size={12} style={{ color: !isDefault ? accentColor : '#94a3b8', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={12} style={{ color: !isDefault ? accentColor : '#94a3b8', transition: 'transform 0.15s ease', transform: isOpen ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
       </button>
 
       {isOpen && (
@@ -696,12 +699,15 @@ function pp1EnhanceChartConfig(config, {
     (ds) => ds && !pp1IsTargetDataset(ds.label || "")
   ).length;
 
+  const isDoughnutOrPie = cfg.type === "doughnut" || cfg.type === "pie";
   opts.responsive = opts.responsive ?? true;
   opts.maintainAspectRatio = opts.maintainAspectRatio ?? false;
   opts.devicePixelRatio = opts.devicePixelRatio ?? PP1_DPR;
   opts.responsiveAnimationDuration = opts.responsiveAnimationDuration ?? 0;
   opts.transitions = { ...pp1ChartTransitions, ...(opts.transitions || {}) };
-  opts.interaction = { mode: "index", intersect: false, ...(opts.interaction || {}) };
+  opts.interaction = isDoughnutOrPie
+    ? { mode: "nearest", intersect: true, ...(opts.interaction || {}) }
+    : { mode: "index", intersect: false, ...(opts.interaction || {}) };
   opts.elements = { ...pp1ChartHoverElements, ...(opts.elements || {}) };
   opts.animation = { ...pp1ChartAnimation, ...(opts.animation || {}) };
   opts.layout = {
@@ -728,8 +734,8 @@ function pp1EnhanceChartConfig(config, {
     datalabels: isRadarChart
       ? { display: false }
       : (existingDatalabels !== undefined
-          ? existingDatalabels
-          : (enableDatalabels && !skipLabels ? pp1DataLabelsAuto({ valueMode }) : false)),
+        ? existingDatalabels
+        : (enableDatalabels && !skipLabels ? pp1DataLabelsAuto({ valueMode }) : false)),
   };
 
   if (opts.scales && typeof opts.scales === "object") {
@@ -962,7 +968,7 @@ function buildProdValueUrl(from, to, machine) {
   const fy = currentFinancialYearRange();
   const fromStr = (typeof from === "string" && from) ? from.slice(0, 10) : formatLocalYmd(from || fy.from);
   const toStr = (typeof to === "string" && to) ? to.slice(0, 10) : formatLocalYmd(to || fy.to);
-  let url = `/api/plant-performance/production-value/?from=${fromStr}&to=${toStr}&full_fy=1`;
+  let url = `/api/plant-performance/production-value/?from=${fromStr}&to=${toStr}&full_fy=0`;
   const m = (machine || "").trim();
   if (m) url += `&machineNo=${encodeURIComponent(m)}`;
   return url;
@@ -977,6 +983,13 @@ function filterProdValueDetailRows(rows, filters, defaultFrom, defaultTo) {
     if (activeFrom && /^\d{4}-\d{2}-\d{2}$/.test(activeFrom) && d < activeFrom) return false;
     if (activeTo && /^\d{4}-\d{2}-\d{2}$/.test(activeTo) && d > activeTo) return false;
     if (filters?.team && r.team !== filters.team) return false;
+    if (filters?.macGroup) {
+      const selectedGroups = filters.macGroup.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedGroups.length > 0) {
+        const mg = String(r.macGroup || "").toLowerCase();
+        if (!selectedGroups.includes(mg)) return false;
+      }
+    }
     if (filters?.machine) {
       const selectedMachines = filters.machine.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
       if (selectedMachines.length > 0) {
@@ -1039,8 +1052,16 @@ function fmtPct(n, d = 1) {
 }
 
 function fmtHours(n) {
+  if (n === null || n === undefined) return "—";
+  if (typeof n === "string" && (n.includes("Hrs") || n.includes("Mins"))) {
+    return n;
+  }
   const v = Number(n);
-  return Number.isNaN(v) ? "—" : `${v.toFixed(1)} h`;
+  if (Number.isNaN(v)) return "—";
+  const totalMins = Math.round(v * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs} Hrs ${mins} Mins`;
 }
 
 function qualitySplit(data) {
@@ -2188,13 +2209,26 @@ function IdleTimeView({ data, loading, uid }) {
               callbacks: {
                 label(ctx) {
                   const v = typeof ctx.parsed.x === "number" ? ctx.parsed.x : Number(ctx.raw) || 0;
-                  return ` ${v.toFixed(2)} h`;
+                  return ` ${fmtHours(v)}`;
                 },
               },
             },
           },
           scales: {
-            x: { beginAtZero: true, grid: { color: "rgba(0, 0, 0, 0.05)" }, ticks: { color: "#64748b", font: { size: 10 } } },
+            x: {
+              beginAtZero: true,
+              grid: { color: "rgba(0, 0, 0, 0.05)" },
+              ticks: {
+                color: "#64748b",
+                font: { size: 10 },
+                callback: (v) => {
+                  const totalMins = Math.round(Number(v || 0) * 60);
+                  const h = Math.floor(totalMins / 60);
+                  const m = totalMins % 60;
+                  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+                }
+              }
+            },
             y: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 0, autoSkip: false } },
           },
         },
@@ -3742,6 +3776,14 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     return Array.from(new Set(names)).sort();
   }, [data?.customerPoCompare?.rows]);
 
+  const allPoTypes = React.useMemo(() => {
+    const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
+      ? data.customerPoCompare.rows
+      : [];
+    const types = source.map(r => r.poType).filter(Boolean);
+    return Array.from(new Set(types)).sort();
+  }, [data?.customerPoCompare?.rows]);
+
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (custRef.current && !custRef.current.contains(event.target)) {
@@ -3815,6 +3857,12 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     if (filters.partNumber) {
       list = list.filter(r => r.partNumber && String(r.partNumber).toLowerCase().includes(filters.partNumber.toLowerCase()));
     }
+    if (filters.poType) {
+      const selectedTypes = filters.poType.split(",").map(t => t.trim()).filter(Boolean);
+      if (selectedTypes.length > 0) {
+        list = list.filter(r => r.poType && selectedTypes.includes(r.poType));
+      }
+    }
 
     // Aggregate values month-wise
     const monthGroup = {};
@@ -3845,7 +3893,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     });
 
     return sortedMonthsData;
-  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, data?.customerPoCompare?.rows]);
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, filters.poType, data?.customerPoCompare?.rows]);
 
   const handleReset = () => {
     onFilterChange({
@@ -3855,6 +3903,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
       poNumber: "",
       partNumber: "",
       category: "",
+      poType: "",
     });
     setChartType("line");
     setShowTargetOnly(false);
@@ -4025,7 +4074,6 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     const getFill = () => {
       if (isArea) return true;
       if (isStepped) return true;
-      if (isLine) return true;
       return false;
     };
 
@@ -4047,7 +4095,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     // Custom plugin to draw target horizontal line across the entire chart area
     const horizontalLinePlugin = {
       id: 'horizontalLine',
-      afterDraw: (chart) => {
+      afterDatasetsDraw: (chart) => {
         const yScale = chart.scales.y;
         const xScale = chart.scales.x;
         if (!yScale || !xScale) return;
@@ -4145,32 +4193,18 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
-        onClick: (event, elements, chart) => {
-          if (elements && elements.length > 0) {
-            const firstElement = elements[0];
-            const datasetIndex = firstElement.datasetIndex;
-            const clickedLabel = chart.data.datasets[datasetIndex].label;
-            if (clickedLabel === "Sales Target") {
-              setShowTargetOnly(prev => !prev);
-            }
-          }
-        },
         plugins: {
           legend: {
             ...pp1PremiumLegendBottom,
             onClick: (event, legendItem, legend) => {
-              if (legendItem.text === "Sales Target") {
-                setShowTargetOnly(prev => !prev);
+              const index = legendItem.datasetIndex;
+              const ci = legend.chart;
+              if (ci.isDatasetVisible(index)) {
+                ci.hide(index);
+                legendItem.hidden = true;
               } else {
-                const index = legendItem.datasetIndex;
-                const ci = legend.chart;
-                if (ci.isDatasetVisible(index)) {
-                  ci.hide(index);
-                  legendItem.hidden = true;
-                } else {
-                  ci.show(index);
-                  legendItem.hidden = false;
-                }
+                ci.show(index);
+                legendItem.hidden = false;
               }
             }
           },
@@ -4246,7 +4280,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
           </div>
 
           {/* Customer Autocomplete */}
-          <div className="pp1-filter-group" ref={custRef}>
+          <div className="pp1-filter-group" ref={custRef} style={{ minWidth: "130px", flex: "1 1 130px" }}>
             <label className="pp1-filter-label">Customer</label>
             <Pp1SearchableMultiSelect
               value={filters.customer}
@@ -4259,7 +4293,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
           </div>
 
           {/* Part Number Autocomplete */}
-          <div className="pp1-filter-group" ref={partRef}>
+          <div className="pp1-filter-group" ref={partRef} style={{ minWidth: "110px", flex: "1 1 110px" }}>
             <label className="pp1-filter-label">Part Number</label>
             <div className="pp1-part-autocomplete-wrap">
               <input
@@ -4292,6 +4326,19 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
             </div>
           </div>
 
+          {/* PO Type Dropdown Filter */}
+          <div className="pp1-filter-group" style={{ minWidth: "110px", flex: "1 1 110px" }}>
+            <label className="pp1-filter-label">PO Type</label>
+            <Pp1SearchableMultiSelect
+              value={filters.poType}
+              options={allPoTypes}
+              onChange={val => handleInputChange("poType", val)}
+              placeholder="PO Type..."
+              allLabel="All PO Types"
+              searchPlaceholder="Search PO type..."
+            />
+          </div>
+
           {/* Chart Type Dropdown Filter */}
           <div className="pp1-filter-group" ref={chartTypeRef}>
             <label className="pp1-filter-label">Chart Type</label>
@@ -4300,7 +4347,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
                 type="button"
                 className={`pp1-custom-select-trigger ${chartTypeOpen ? "open" : ""}`}
                 onClick={() => setChartTypeOpen(o => !o)}
-                style={{ minWidth: "135px" }}
+                style={{ minWidth: "110px" }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   {chartType === "bar" ? (
@@ -4502,6 +4549,12 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
     if (filters.partNumber) {
       list = list.filter(r => r.partNumber && String(r.partNumber).toLowerCase().includes(filters.partNumber.toLowerCase()));
     }
+    if (filters.poType) {
+      const selectedTypes = filters.poType.split(",").map(t => t.trim()).filter(Boolean);
+      if (selectedTypes.length > 0) {
+        list = list.filter(r => r.poType && selectedTypes.includes(r.poType));
+      }
+    }
 
     // Group by customer to make it Customer summary wise
     const customerGroups = {};
@@ -4521,7 +4574,19 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
     });
 
     return Object.values(customerGroups);
-  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, data?.customerPoCompare?.rows]);
+  }, [filters.fromDate, filters.toDate, filters.customer, filters.poNumber, filters.partNumber, filters.poType, data?.customerPoCompare?.rows]);
+
+  const totals = React.useMemo(() => {
+    let orderVal = 0;
+    let salesVal = 0;
+    let pendingVal = 0;
+    table1Rows.forEach(r => {
+      orderVal += Number(r.orderValue || 0);
+      salesVal += Number(r.salesValue || 0);
+      pendingVal += Number(r.pendingValue || 0);
+    });
+    return { orderValue: orderVal, salesValue: salesVal, pendingValue: pendingVal };
+  }, [table1Rows]);
 
   const sortedRows = React.useMemo(() => {
     if (sortIndex === null) {
@@ -4728,15 +4793,31 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
                     <td style={{ textAlign: "right", fontWeight: 600, color: "#b91c1c" }}>₹{salesTarget.toFixed(2)} L</td>
                   ) : (
                     <>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{fmtLakhs(r.orderValue)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{fmtLakhs(r.salesValue)} L</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{fmtLakhs(r.pendingValue)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>₹{fmtLakhs(r.orderValue, 4)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-green)" }}>₹{fmtLakhs(r.salesValue, 4)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: Number(r.pendingValue || 0) > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{fmtLakhs(r.pendingValue, 4)} L</td>
                     </>
                   )}
                 </tr>
               ))
             )}
           </tbody>
+          {sortedRows.length > 0 && (
+            <tfoot style={{ position: "sticky", bottom: 0, zIndex: 10, backgroundColor: "#ebf2ff", boxShadow: "0 -2px 6px rgba(0,0,0,0.06)" }}>
+              <tr style={{ borderTop: "2px solid #2d6de8", fontWeight: 800 }}>
+                <td style={{ padding: "10px 16px", fontWeight: 800, color: "#1e3a8a" }}>Total</td>
+                {showTargetOnly ? (
+                  <td style={{ textAlign: "right", padding: "10px 16px", fontWeight: 800, color: "#b91c1c" }}>₹{salesTarget.toFixed(4)} L</td>
+                ) : (
+                  <>
+                    <td style={{ textAlign: "right", padding: "10px 16px", fontWeight: 800, color: "#1e3a8a" }}>₹{fmtLakhs(totals.orderValue, 4)} L</td>
+                    <td style={{ textAlign: "right", padding: "10px 16px", fontWeight: 800, color: "var(--pp1-green)" }}>₹{fmtLakhs(totals.salesValue, 4)} L</td>
+                    <td style={{ textAlign: "right", padding: "10px 16px", fontWeight: 800, color: totals.pendingValue > 0 ? "var(--pp1-amber)" : "var(--pp1-text-3)" }}>₹{fmtLakhs(totals.pendingValue, 4)} L</td>
+                  </>
+                )}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -5258,7 +5339,7 @@ const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, i
                   ) : null}
                   <p
                     className="pp1-detail__chip-val pp1-kpi-val-premium"
-                    style={{ "--kv-delay": `${i * 70 + 80}ms`, fontSize: typeof k.value === "string" && k.value.includes("\n") ? "13px" : undefined }}
+                    style={{ "--kv-delay": `${i * 70 + 80}ms`, fontSize: typeof k.value === "string" && k.value.includes("\n") ? "11px" : undefined, whiteSpace: typeof k.value === "string" && k.value.includes("\n") ? "pre-line" : undefined, lineHeight: typeof k.value === "string" && k.value.includes("\n") ? "1.4" : undefined }}
                   >
                     {k.value}
                   </p>
@@ -5305,6 +5386,14 @@ const PremiumDashboardView = React.memo(function PremiumDashboardView({ title, i
 const parseSortValue = (val) => {
   if (val === undefined || val === null) return "";
   const s = String(val).trim();
+  // Hours & Minutes: e.g., 1 Hrs 15 Mins
+  if (s.includes("Hrs") || s.includes("Mins")) {
+    const hrsMatch = s.match(/(\d+)\s*Hrs/i);
+    const minsMatch = s.match(/(\d+)\s*Mins/i);
+    const h = hrsMatch ? parseInt(hrsMatch[1], 10) : 0;
+    const m = minsMatch ? parseInt(minsMatch[1], 10) : 0;
+    return h * 60 + m;
+  }
   // Currency with lakhs suffix: e.g., ₹1.500 L
   if (s.includes("₹") && s.endsWith(" L")) {
     const numStr = s.replace(/[₹\sL,]/g, "");
@@ -5640,6 +5729,26 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
 }
 
 /* ── Specific Dashboards View & Table components ── */
+const formatDynamicLakhs = (val) => {
+  const num = Number(val || 0);
+  if (num === 0) return "₹0.00 L";
+  const formatted = num.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+  return `₹${formatted} L`;
+};
+
+const formatDynamicKpi = (val) => {
+  const num = Number(val || 0);
+  if (num === 0) return "₹0.00L";
+  const formatted = num.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+  return `₹${formatted}L`;
+};
+
 /* ── GRN Value helpers (same filter/aggregate pattern as Customer PO vs Sales) ── */
 function normalizeGrnDate(d) {
   if (!d) return "";
@@ -5831,10 +5940,10 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
     const activeSupplierCount = Object.keys(supplierTotals).filter((s) => s !== "—").length;
 
     return [
-      { label: "Total Purchase Value", value: `₹${total.toFixed(2)}L`, icon: IndianRupee, color: "#ea580c" },
+      { label: "Total Purchase Value", value: formatDynamicKpi(total), icon: IndianRupee, color: "#ea580c" },
       { label: "Highest Supplier", value: highestVal > 0 ? highestSupplier : "—", icon: Award, color: "#3b82f6" },
       { label: "Highest Month", value: highestMonth !== "—" ? highestMonth : "—", icon: Calendar, color: "#10b981" },
-      { label: "Average Purchase", value: `₹${avg.toFixed(2)}L`, icon: BarChart2, color: "#f59e0b" },
+      { label: "Average Purchase", value: formatDynamicKpi(avg), icon: BarChart2, color: "#f59e0b" },
       { label: "Active Suppliers", value: activeSupplierCount.toString(), icon: Users, color: "#8b5cf6" }
     ];
   }, [filteredRows]);
@@ -6141,7 +6250,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
         </div>
 
         {/* Supplier Dropdown */}
-        <div className="pp1-filter-group" ref={suppRef}>
+        <div className="pp1-filter-group" ref={suppRef} style={{ minWidth: '130px', flex: '1 1 130px' }}>
           <label className="pp1-filter-label">Supplier</label>
           <Pp1SearchableMultiSelect
             value={filters.supplier}
@@ -6150,11 +6259,12 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
             placeholder="Search supplier..."
             allLabel="All Suppliers"
             searchPlaceholder="Search supplier..."
+            minWidth="100%"
           />
         </div>
 
         {/* Category Dropdown */}
-        <div className="pp1-filter-group" ref={catRef}>
+        <div className="pp1-filter-group" ref={catRef} style={{ minWidth: '110px', flex: '1 1 110px' }}>
           <label className="pp1-filter-label">GRN Type</label>
           <div className="pp1-custom-select-wrap">
             <button
@@ -6162,7 +6272,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
               className={`pp1-custom-select-trigger ${catOpen ? "open" : ""}`}
               onClick={() => setCatOpen(o => !o)}
             >
-              <span>{filters.category || "All Types"}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{filters.category || "All Types"}</span>
               <ChevronDown size={12} className="pp1-custom-select-caret" />
             </button>
             {catOpen && (
@@ -6227,7 +6337,7 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "1 1 135px" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
@@ -6405,6 +6515,18 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
     });
   }, [rowsMonthWise, sortIndex, sortDirection, columnsMonthWise]);
 
+  const totalRowData = React.useMemo(() => {
+    if (!sortedRowsMonthWise || sortedRowsMonthWise.length === 0) return null;
+    const monthTotals = uniqueMonths.map((_, mIdx) => {
+      return sortedRowsMonthWise.reduce((sum, row) => sum + Number(row[mIdx + 1] || 0), 0);
+    });
+    const grandTotal = sortedRowsMonthWise.reduce((sum, row) => {
+      const rowSum = row.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+      return sum + rowSum;
+    }, 0);
+    return { monthTotals, grandTotal };
+  }, [sortedRowsMonthWise, uniqueMonths]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd" style={{ paddingLeft: "16px", marginBottom: "8px" }}>Purchase Value Month Wise</div>
@@ -6455,14 +6577,40 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
                   <tr key={ri} className="pp1-cc-tbl__tr">
                     <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
                     {row.slice(1).map((val, vi) => (
-                      <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{val.toFixed(2)} L</td>
+                      <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>{formatDynamicLakhs(val)}</td>
                     ))}
-                    <td style={{ textAlign: "right", fontWeight: 700, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
+                    <td style={{ textAlign: "right", fontWeight: 700, color: "var(--pp1-blue)" }}>{formatDynamicLakhs(totalVal)}</td>
                   </tr>
                 );
               })
             )}
           </tbody>
+          {totalRowData && (
+            <tfoot>
+              <tr
+                style={{
+                  position: "sticky",
+                  bottom: 0,
+                  zIndex: 9,
+                  background: "#ffffff",
+                  boxShadow: "0 -3px 12px rgba(0, 0, 0, 0.08)",
+                  borderTop: "2px solid #2563eb"
+                }}
+              >
+                <td style={{ padding: "12px 16px", fontWeight: 800, color: "#0f172a", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  TOTAL
+                </td>
+                {totalRowData.monthTotals.map((mVal, mIdx) => (
+                  <td key={mIdx} style={{ textAlign: "right", padding: "12px 16px", fontWeight: 800, color: "#1d4ed8", fontSize: "12px" }}>
+                    {formatDynamicLakhs(mVal)}
+                  </td>
+                ))}
+                <td style={{ textAlign: "right", padding: "12px 16px", fontWeight: 800, color: "#059669", fontSize: "13px" }}>
+                  {formatDynamicLakhs(totalRowData.grandTotal)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -6977,7 +7125,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         </div>
 
         {/* Supplier Dropdown */}
-        <div className="pp1-filter-group" ref={suppRef}>
+        <div className="pp1-filter-group" ref={suppRef} style={{ minWidth: "130px", flex: "1 1 130px" }}>
           <label className="pp1-filter-label">Supplier</label>
           <Pp1SearchableMultiSelect
             value={filters.supplier}
@@ -7046,7 +7194,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "1 1 135px" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
@@ -7172,8 +7320,6 @@ function PurchaseValueBottomTable({ data, filters }) {
         uniqueMonths.forEach(m => {
           row.push(group[m] || 0);
         });
-        const total = uniqueMonths.reduce((s, m) => s + (group[m] || 0), 0);
-        row.push(total);
         return row;
       })
       .sort((a, b) => a[0].localeCompare(b[0]));
@@ -7223,21 +7369,28 @@ function PurchaseValueBottomTable({ data, filters }) {
     if (sortIndex === null || activeTab !== "month_wise") return monthWiseRows;
 
     return [...monthWiseRows].sort((a, b) => {
+      let valA, valB;
       if (sortIndex === 0) {
-        const valA = a[0] || "";
-        const valB = b[0] || "";
+        valA = a[0] || "";
+        valB = b[0] || "";
         return sortDirection === "asc"
           ? valA.localeCompare(valB)
           : valB.localeCompare(valA);
+      } else if (sortIndex === columns1.length - 1) {
+        valA = a.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+        valB = b.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+      } else {
+        valA = Number(a[sortIndex] || 0);
+        valB = Number(b[sortIndex] || 0);
       }
-      const valA = parseSortValue(a[sortIndex]);
-      const valB = parseSortValue(b[sortIndex]);
+
       if (valA < valB) return sortDirection === "asc" ? -1 : 1;
       if (valA > valB) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
-  }, [monthWiseRows, sortIndex, sortDirection, activeTab]);
+  }, [monthWiseRows, sortIndex, sortDirection, activeTab, columns1.length]);
 
+  /* ── Sorted Purchase Orders Summary Rows ── */
   const sortedSummaryRows = React.useMemo(() => {
     if (sortIndex === null || activeTab !== "orders_summary") return purchaseOrdersSummaryRows;
 
@@ -7262,10 +7415,31 @@ function PurchaseValueBottomTable({ data, filters }) {
     });
   }, [purchaseOrdersSummaryRows, sortIndex, sortDirection, activeTab]);
 
-  const monthWiseTableMinWidth = React.useMemo(
-    () => Math.max(720, 220 + Math.max(columns1.length - 1, 1) * 108),
-    [columns1.length]
-  );
+  const monthWiseTotalData = React.useMemo(() => {
+    if (!sortedMonthWiseRows || sortedMonthWiseRows.length === 0) return null;
+    const monthTotals = uniqueMonths.map((_, mIdx) => {
+      return sortedMonthWiseRows.reduce((sum, row) => sum + Number(row[mIdx + 1] || 0), 0);
+    });
+    const grandTotal = sortedMonthWiseRows.reduce((sum, row) => {
+      const rowSum = row.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+      return sum + rowSum;
+    }, 0);
+    return { monthTotals, grandTotal };
+  }, [sortedMonthWiseRows, uniqueMonths]);
+
+  const ordersSummaryTotalData = React.useMemo(() => {
+    if (!sortedSummaryRows || sortedSummaryRows.length === 0) return null;
+    let totalQty = 0;
+    let totalValue = 0;
+    sortedSummaryRows.forEach(r => {
+      const rawQty = String(r.qty || "").replace(/[^0-9.]/g, "");
+      if (rawQty) totalQty += parseFloat(rawQty) || 0;
+
+      const rawVal = String(r.value || "").replace(/[^0-9.]/g, "");
+      if (rawVal) totalValue += parseFloat(rawVal) || 0;
+    });
+    return { totalQty, totalValue };
+  }, [sortedSummaryRows]);
 
   const pvThBase = {
     position: "sticky",
@@ -7273,41 +7447,49 @@ function PurchaseValueBottomTable({ data, filters }) {
     zIndex: 10,
     cursor: "pointer",
     userSelect: "none",
-    padding: "12px 16px",
-    whiteSpace: "normal",
-    wordBreak: "break-word",
-    overflowWrap: "anywhere",
-    verticalAlign: "top",
+    padding: "10px 12px",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
+    background: "linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%)",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontWeight: 700,
+    letterSpacing: "0.5px",
+    textTransform: "uppercase",
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.08)",
   };
 
   const pvWrapCell = {
     whiteSpace: "normal",
     wordBreak: "break-word",
     overflowWrap: "anywhere",
-    verticalAlign: "top",
+    verticalAlign: "middle",
+    padding: "8px 12px",
   };
 
   const pvNoWrapCell = {
     whiteSpace: "nowrap",
-    verticalAlign: "top",
+    verticalAlign: "middle",
+    padding: "8px 12px",
   };
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both", display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--pp1-border, #e2e8f0)", gap: "16px", marginBottom: "12px", paddingLeft: "16px", flexShrink: 0 }}>
+      <div style={{ display: "flex", borderBottom: "2px solid #e2e8f0", gap: "20px", marginBottom: "12px", paddingLeft: "12px", flexShrink: 0 }}>
         <button
           type="button"
           onClick={() => setActiveTab("month_wise")}
           style={{
             background: "none",
             border: "none",
-            borderBottom: activeTab === "month_wise" ? "2px solid var(--pp1-blue)" : "2px solid transparent",
-            color: activeTab === "month_wise" ? "var(--pp1-blue)" : "var(--pp1-text-secondary, #64748b)",
+            borderBottom: activeTab === "month_wise" ? "3px solid #2563eb" : "3px solid transparent",
+            color: activeTab === "month_wise" ? "#1d4ed8" : "#64748b",
             fontWeight: 700,
-            padding: "8px 0",
+            padding: "8px 4px",
             fontSize: "13px",
-            cursor: "pointer"
+            cursor: "pointer",
+            transition: "all 0.2s ease"
           }}
         >
           Purchase Value Month Wise
@@ -7318,12 +7500,13 @@ function PurchaseValueBottomTable({ data, filters }) {
           style={{
             background: "none",
             border: "none",
-            borderBottom: activeTab === "orders_summary" ? "2px solid var(--pp1-blue)" : "2px solid transparent",
-            color: activeTab === "orders_summary" ? "var(--pp1-blue)" : "var(--pp1-text-secondary, #64748b)",
+            borderBottom: activeTab === "orders_summary" ? "3px solid #2563eb" : "3px solid transparent",
+            color: activeTab === "orders_summary" ? "#1d4ed8" : "#64748b",
             fontWeight: 700,
-            padding: "8px 0",
+            padding: "8px 4px",
             fontSize: "13px",
-            cursor: "pointer"
+            cursor: "pointer",
+            transition: "all 0.2s ease"
           }}
         >
           Purchase Orders Summary
@@ -7331,9 +7514,9 @@ function PurchaseValueBottomTable({ data, filters }) {
       </div>
 
       {/* Tables Container */}
-      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "4px", width: "100%", flex: "1 1 auto", minHeight: 0 }}>
+      <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 340, marginTop: "4px", width: "100%", flex: "1 1 auto", minHeight: 0, overflowX: "auto" }}>
         {activeTab === "month_wise" ? (
-          <table className="pp1-cc-tbl" style={{ minWidth: monthWiseTableMinWidth, width: "100%" }}>
+          <table className="pp1-cc-tbl" style={{ width: "100%", minWidth: "100%" }}>
             <thead>
               <tr>
                 {columns1.map((col, idx) => {
@@ -7349,8 +7532,8 @@ function PurchaseValueBottomTable({ data, filters }) {
                         textAlign: isRightAligned ? "right" : "left",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
-                        <span style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{col}</span>
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%", whiteSpace: "nowrap" }}>
+                        <span style={{ whiteSpace: "nowrap" }}>{col}</span>
                         <SortIcon active={isSorted} direction={sortDirection} />
                       </div>
                     </th>
@@ -7362,34 +7545,73 @@ function PurchaseValueBottomTable({ data, filters }) {
               {sortedMonthWiseRows.length === 0 ? (
                 <tr><td colSpan={columns1.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedMonthWiseRows.map((row, ri) => (
-                  <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row[0]}</td>
-                    {row.slice(1).map((val, vi, arr) => (
+                sortedMonthWiseRows.map((row, ri) => {
+                  const rowTotal = row.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+                  return (
+                    <tr key={ri} className="pp1-cc-tbl__tr">
+                      <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row[0]}</td>
+                      {row.slice(1).map((val, vi) => (
+                        <td
+                          key={vi}
+                          style={{
+                            ...pvNoWrapCell,
+                            textAlign: "right",
+                            fontWeight: 500,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatDynamicLakhs(val)}
+                        </td>
+                      ))}
                       <td
-                        key={vi}
                         style={{
-                          ...pvWrapCell,
+                          ...pvNoWrapCell,
                           textAlign: "right",
-                          fontWeight: vi === arr.length - 1 ? 700 : 500,
-                          color: vi === arr.length - 1 ? "var(--pp1-blue)" : undefined,
+                          fontWeight: 700,
+                          color: "var(--pp1-blue)",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        ₹{Number(val || 0).toFixed(2)} L
+                        {formatDynamicLakhs(rowTotal)}
                       </td>
-                    ))}
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
+            {monthWiseTotalData && (
+              <tfoot>
+                <tr
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    zIndex: 9,
+                    background: "#ffffff",
+                    boxShadow: "0 -3px 12px rgba(0, 0, 0, 0.08)",
+                    borderTop: "2px solid #2563eb"
+                  }}
+                >
+                  <td style={{ ...pvNoWrapCell, padding: "10px 14px", fontWeight: 800, color: "#0f172a", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    TOTAL
+                  </td>
+                  {monthWiseTotalData.monthTotals.map((mVal, mIdx) => (
+                    <td key={mIdx} style={{ ...pvNoWrapCell, textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#1d4ed8", fontSize: "12px" }}>
+                      {formatDynamicLakhs(mVal)}
+                    </td>
+                  ))}
+                  <td style={{ ...pvNoWrapCell, textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#059669", fontSize: "13px" }}>
+                    {formatDynamicLakhs(monthWiseTotalData.grandTotal)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         ) : (
-          <table className="pp1-cc-tbl" style={{ minWidth: 1200, width: "100%" }}>
+          <table className="pp1-cc-tbl" style={{ width: "100%", minWidth: "100%", tableLayout: "auto" }}>
             <thead>
               <tr>
                 {columns2.map((col, idx) => {
-                  const isRightAligned = idx > 5;
+                  const isRightAligned = idx >= 6;
                   const isSorted = sortIndex === idx;
                   const isSlNo = idx === 0;
 
@@ -7399,13 +7621,12 @@ function PurchaseValueBottomTable({ data, filters }) {
                       onClick={() => !isSlNo && handleSort(idx)}
                       style={{
                         ...pvThBase,
-                        ...(idx === 2 || idx === 3 ? pvNoWrapCell : {}),
-                        textAlign: isRightAligned ? "right" : "left",
+                        textAlign: isRightAligned ? "right" : isSlNo ? "center" : "left",
                         cursor: isSlNo ? "default" : "pointer",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
-                        <span style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{col}</span>
+                      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : isSlNo ? "center" : "flex-start", gap: "5px", width: "100%", whiteSpace: "nowrap" }}>
+                        <span style={{ whiteSpace: "nowrap" }}>{col}</span>
                         {!isSlNo && <SortIcon active={isSorted} direction={sortDirection} />}
                       </div>
                     </th>
@@ -7419,23 +7640,50 @@ function PurchaseValueBottomTable({ data, filters }) {
               ) : (
                 sortedSummaryRows.map((row, ri) => (
                   <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td style={pvWrapCell}>{ri + 1}</td>
-                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600 }}>{row.supplier}</td>
-                    <td style={pvNoWrapCell} className="pp1-cc-tbl__id">
+                    <td style={{ ...pvNoWrapCell, textAlign: "center", padding: "8px 6px", fontSize: "12px" }}>{ri + 1}</td>
+                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600, padding: "8px 10px", fontSize: "12px" }}>{row.supplier}</td>
+                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }} className="pp1-cc-tbl__id">
                       <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                         {row.poNo}
                       </span>
                     </td>
-                    <td style={pvNoWrapCell}>{row.poDate}</td>
-                    <td className="pp1-cc-tbl__mono" style={{ ...pvWrapCell, fontWeight: 600, color: "var(--pp1-text-primary, #334155)" }}>{row.code}</td>
-                    <td style={pvWrapCell}>{row.name}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.qty}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{row.rate}</td>
-                    <td style={{ ...pvWrapCell, textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums" }}>{row.value}</td>
+                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }}>{row.poDate}</td>
+                    <td className="pp1-cc-tbl__mono" style={{ ...pvNoWrapCell, padding: "8px 8px", fontWeight: 600, color: "var(--pp1-text-primary, #334155)", fontSize: "12px" }}>{row.code}</td>
+                    <td style={{ ...pvWrapCell, padding: "8px 10px", fontSize: "12px" }}>{row.name}</td>
+                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.qty}</td>
+                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.rate}</td>
+                    <td style={{ ...pvNoWrapCell, padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.value}</td>
                   </tr>
                 ))
               )}
             </tbody>
+            {ordersSummaryTotalData && (
+              <tfoot>
+                <tr
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    zIndex: 9,
+                    background: "#ffffff",
+                    boxShadow: "0 -3px 12px rgba(0, 0, 0, 0.08)",
+                    borderTop: "2px solid #2563eb"
+                  }}
+                >
+                  <td colSpan={6} style={{ ...pvNoWrapCell, padding: "10px 14px", fontWeight: 800, color: "#0f172a", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    TOTAL ({sortedSummaryRows.length} ORDERS)
+                  </td>
+                  <td style={{ ...pvNoWrapCell, textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#1d4ed8", fontSize: "12px" }}>
+                    {ordersSummaryTotalData.totalQty.toLocaleString("en-IN")}
+                  </td>
+                  <td style={{ ...pvNoWrapCell, textAlign: "right", padding: "10px 14px", fontWeight: 600, color: "#64748b", fontSize: "12px" }}>
+                    —
+                  </td>
+                  <td style={{ ...pvNoWrapCell, textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#059669", fontSize: "13px" }}>
+                    ₹{ordersSummaryTotalData.totalValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </div>
@@ -7978,6 +8226,8 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   const [activeTab, setActiveTab] = React.useState("turnover");
   const [sortField, setSortField] = React.useState("date"); // Default sorting by Date
   const [sortDirection, setSortDirection] = React.useState("asc");
+  const [selectedCustomers, setSelectedCustomers] = React.useState("");
+  const [selectedInvoices, setSelectedInvoices] = React.useState("");
 
   const salesRows = React.useMemo(
     () => (Array.isArray(data?.salesAnalysisCompare?.rows) ? data.salesAnalysisCompare.rows : []),
@@ -8014,6 +8264,39 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
     return Object.keys(monthMinDate).sort((a, b) => monthMinDate[a].localeCompare(monthMinDate[b]));
   }, [filteredRows]);
 
+  const customerOptions = React.useMemo(() => {
+    const set = new Set();
+    filteredRows.forEach((r) => {
+      if (r.customer && r.customer !== "—") set.add(r.customer);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filteredRows]);
+
+  const invoiceOptions = React.useMemo(() => {
+    const selectedCustList = selectedCustomers
+      ? selectedCustomers.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    const set = new Set();
+    filteredRows.forEach((r) => {
+      if (selectedCustList.length > 0 && !selectedCustList.includes(r.customer)) {
+        return;
+      }
+      if (r.invoiceNo && r.invoiceNo !== "—") set.add(r.invoiceNo);
+      if (r.partNo && r.partNo !== "—") set.add(r.partNo);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filteredRows, selectedCustomers]);
+
+  React.useEffect(() => {
+    if (!selectedInvoices) return;
+    const currentSelected = selectedInvoices.split(",").map((s) => s.trim()).filter(Boolean);
+    const validSelected = currentSelected.filter((inv) => invoiceOptions.includes(inv));
+    if (validSelected.length !== currentSelected.length) {
+      setSelectedInvoices(validSelected.join(", "));
+    }
+  }, [invoiceOptions, selectedInvoices]);
+
   const columnsTurnover = ["Customer Name", ...uniqueMonths.map((m) => `${m} (Lakhs)`), "Total Value (Lakhs)"];
 
   const rowsTurnover = React.useMemo(() => {
@@ -8040,12 +8323,27 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   }, [filteredRows, uniqueMonths]);
 
   const sortedInvoiceRows = React.useMemo(() => {
-    const rawRows = filteredRows.map((r) => ({
+    let rawRows = filteredRows.map((r) => ({
       customer: r.customer || "—",
       invoiceNo: r.invoiceNo || "—",
+      partNo: r.partNo || "",
       date: r.date || "—",
       salesValue: Number(r.salesValue || 0)
     }));
+
+    if (selectedCustomers) {
+      const selectedList = selectedCustomers.split(",").map((s) => s.trim()).filter(Boolean);
+      if (selectedList.length > 0) {
+        rawRows = rawRows.filter((r) => selectedList.includes(r.customer));
+      }
+    }
+
+    if (selectedInvoices) {
+      const selectedList = selectedInvoices.split(",").map((s) => s.trim()).filter(Boolean);
+      if (selectedList.length > 0) {
+        rawRows = rawRows.filter((r) => selectedList.includes(r.invoiceNo) || selectedList.includes(r.partNo));
+      }
+    }
 
     return rawRows.sort((a, b) => {
       const valA = a[sortField];
@@ -8063,7 +8361,24 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
       if (strA > strB) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
-  }, [filteredRows, sortField, sortDirection]);
+  }, [filteredRows, sortField, sortDirection, selectedCustomers, selectedInvoices]);
+
+  const turnoverMonthTotals = React.useMemo(() => {
+    return uniqueMonths.map((m, mIdx) => {
+      return rowsTurnover.reduce((sum, row) => sum + Number(row[mIdx + 1] || 0), 0);
+    });
+  }, [rowsTurnover, uniqueMonths]);
+
+  const turnoverGrandTotal = React.useMemo(() => {
+    return rowsTurnover.reduce((sum, row) => {
+      const rowSum = row.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+      return sum + rowSum;
+    }, 0);
+  }, [rowsTurnover]);
+
+  const invoiceTotalValue = React.useMemo(() => {
+    return sortedInvoiceRows.reduce((sum, r) => sum + Number(r.salesValue || 0), 0);
+  }, [sortedInvoiceRows]);
 
   const invoiceHeaders = [
     { label: "Sl.No", field: null, align: "left" },
@@ -8084,8 +8399,8 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
 
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
-      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", width: "100%", paddingBottom: "4px" }}>
+      <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "18px", borderBottom: "1px solid rgba(0,0,0,0.08)", flex: 1, paddingBottom: "4px" }}>
           <button
             type="button"
             style={{
@@ -8121,6 +8436,36 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
             Invoice Register
           </button>
         </div>
+
+        {activeTab === "invoiceRegister" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingBottom: "4px" }}>
+            <div style={{ width: "175px" }}>
+              <Pp1SearchableMultiSelect
+                value={selectedCustomers}
+                options={customerOptions}
+                onChange={setSelectedCustomers}
+                placeholder="All Customers"
+                allLabel="All Customers"
+                searchPlaceholder="Search customer..."
+                accentColor="var(--pp1-blue)"
+                minWidth="175px"
+              />
+            </div>
+
+            <div style={{ width: "175px" }}>
+              <Pp1SearchableMultiSelect
+                value={selectedInvoices}
+                options={invoiceOptions}
+                onChange={setSelectedInvoices}
+                placeholder="All Invoice"
+                allLabel="All Invoice"
+                searchPlaceholder="Search invoice"
+                accentColor="var(--pp1-blue)"
+                minWidth="175px"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="pp1-cc-tbl-wrap" style={{ maxHeight: 300, marginTop: "10px" }}>
@@ -8143,14 +8488,40 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
                     <tr key={ri} className="pp1-cc-tbl__tr">
                       <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{row[0]}</td>
                       {row.slice(1).map((val, vi) => (
-                        <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(val).toFixed(2)} L</td>
+                        <td key={vi} style={{ textAlign: "right", fontWeight: 600 }}>₹{Number(val).toFixed(4)} L</td>
                       ))}
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(2)} L</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "var(--pp1-blue)" }}>₹{totalVal.toFixed(4)} L</td>
                     </tr>
                   );
                 })
               )}
             </tbody>
+            {rowsTurnover.length > 0 && (
+              <tfoot>
+                <tr
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    zIndex: 9,
+                    background: "#ffffff",
+                    boxShadow: "0 -3px 12px rgba(0, 0, 0, 0.08)",
+                    borderTop: "2px solid #2563eb"
+                  }}
+                >
+                  <td style={{ padding: "10px 14px", fontWeight: 800, color: "#0f172a", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    TOTAL
+                  </td>
+                  {turnoverMonthTotals.map((mVal, mIdx) => (
+                    <td key={mIdx} style={{ textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#1d4ed8", fontSize: "12px" }}>
+                      ₹{mVal.toFixed(4)} L
+                    </td>
+                  ))}
+                  <td style={{ textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#059669", fontSize: "13px" }}>
+                    ₹{turnoverGrandTotal.toFixed(4)} L
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         ) : (
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
@@ -8258,13 +8629,34 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
                         letterSpacing: "-0.2px",
                         fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
                       }}>
-                        ₹{row.salesValue > 0 ? Number(row.salesValue).toFixed(2) : "0.00"} L
+                        ₹{row.salesValue > 0 ? Number(row.salesValue).toFixed(4) : "0.0000"} L
                       </span>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
+            {sortedInvoiceRows.length > 0 && (
+              <tfoot>
+                <tr
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    zIndex: 9,
+                    background: "#ffffff",
+                    boxShadow: "0 -3px 12px rgba(0, 0, 0, 0.08)",
+                    borderTop: "2px solid #2563eb"
+                  }}
+                >
+                  <td colSpan={4} style={{ padding: "10px 14px", fontWeight: 800, color: "#0f172a", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    TOTAL ({sortedInvoiceRows.length} INVOICES)
+                  </td>
+                  <td style={{ textAlign: "right", padding: "10px 14px", fontWeight: 800, color: "#059669", fontSize: "13px" }}>
+                    ₹{invoiceTotalValue.toFixed(4)} L
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </div>
@@ -8336,6 +8728,7 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       fromDate: "",
       toDate: "",
       team: "",
+      macGroup: "",
       machine: "",
       operator: "",
       customer: ""
@@ -8400,10 +8793,18 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
       );
       if (teamMacs.size) list = list.filter((r) => teamMacs.has(r.machine));
     }
+    if (filters?.macGroup) {
+      const selectedGroups = filters.macGroup.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedGroups.length > 0) {
+        list = list.filter((r) =>
+          selectedGroups.includes(String(r.macGroup || "").toLowerCase())
+        );
+      }
+    }
     if (filters?.machine) {
       const selectedMachines = filters.machine.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
       if (selectedMachines.length > 0) {
-        list = list.filter((r) => 
+        list = list.filter((r) =>
           selectedMachines.includes(String(r.machine || "").toLowerCase()) ||
           selectedMachines.includes(String(r.machineName || "").toLowerCase())
         );
@@ -8465,19 +8866,19 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
     if (chartBusy && !hasRows) {
       return [
         { label: "Total Production Value", value: "…", icon: IndianRupee, color: "#8b5cf6" },
-        { label: "Best Machine", value: "…", icon: Cpu, color: "#3b82f6" },
-        { label: "Highest Profit", value: "…", icon: TrendingUp, color: "#10b981" },
+        { label: "Highest Actual Value Machine", value: "…", icon: Cpu, color: "#3b82f6" },
+        { label: "Actual Value", value: "…", icon: TrendingUp, color: "#10b981" },
         { label: "Average Profit Ratio", value: "…", icon: Zap, color: "#f97316" },
-        { label: "Highest Profitability", value: "…", icon: Trophy, color: "#ec4899" }
+        { label: "Best Machine", value: "…", icon: Trophy, color: "#ec4899" }
       ];
     }
     if (!hasRows) {
       return [
         { label: "Total Production Value", value: "—", icon: IndianRupee, color: "#8b5cf6" },
-        { label: "Best Machine", value: "—", icon: Cpu, color: "#3b82f6" },
-        { label: "Highest Profit", value: "—", icon: TrendingUp, color: "#10b981" },
+        { label: "Highest Actual Value Machine", value: "—", icon: Cpu, color: "#3b82f6" },
+        { label: "Actual Value", value: "—", icon: TrendingUp, color: "#10b981" },
         { label: "Average Profit Ratio", value: "—", icon: Zap, color: "#f97316" },
-        { label: "Highest Profitability", value: "—", icon: Trophy, color: "#ec4899" }
+        { label: "Best Machine", value: "—", icon: Trophy, color: "#ec4899" }
       ];
     }
 
@@ -8510,10 +8911,10 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
 
     return [
       { label: "Total Production Value", value: `₹${(totalProd / 100000).toFixed(2)}L`, icon: IndianRupee, color: "#8b5cf6" },
-      { label: "Best Machine", value: bestMach, icon: Cpu, color: "#3b82f6" },
-      { label: "Highest Profit", value: `₹${(totalActual / 100000).toFixed(2)}L`, icon: TrendingUp, color: "#10b981" },
+      { label: "Highest Actual Value Machine", value: bestMach, icon: Cpu, color: "#3b82f6" },
+      { label: "Actual Value", value: `₹${(totalActual / 100000).toFixed(2)}L`, icon: TrendingUp, color: "#10b981" },
       { label: "Average Profit Ratio", value: `${avgProfitRatio.toFixed(1)}%`, icon: Zap, color: "#f97316" },
-      { label: "Highest Profitability", value: bestMachProf, icon: Trophy, color: "#ec4899" }
+      { label: "Best Machine", value: bestMachProf, icon: Trophy, color: "#ec4899" }
     ];
   }, [filteredMachineRows, chartBusy, hasRows]);
 
@@ -8534,9 +8935,9 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
         backgroundColor: chartType === "area" || chartType === "stepped"
           ? "rgba(139, 92, 246, 0.25)"
           : (isRadial ? "rgba(139, 92, 246, 0.2)" : (ctx) => pp1BarGradient(ctx.chart, [
-              { offset: 0, color: "rgba(139, 92, 246, 0.45)" },
-              { offset: 1, color: "rgba(139, 92, 246, 0.95)" },
-            ])),
+            { offset: 0, color: "rgba(139, 92, 246, 0.45)" },
+            { offset: 1, color: "rgba(139, 92, 246, 0.95)" },
+          ])),
         borderColor: "#8b5cf6",
         borderWidth: (chartType === "line" || chartType === "combo" || chartType === "area" || chartType === "stepped") ? 2.5 : 1.5,
         borderRadius: (chartType === "bar" || chartType === "combo") ? 6 : 0,
@@ -8676,6 +9077,14 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
     return Array.from(new Set(detailRows.map((d) => d.team).filter((t) => t && t !== "—"))).sort();
   }, [prodValueSource?.filterOptions?.teams, detailRows]);
 
+  const macGroups = React.useMemo(() => {
+    const api = prodValueSource?.filterOptions?.macGroups;
+    if (Array.isArray(api) && api.length) return api;
+    const groupsFromMach = machineRows.map(m => m.macGroup).filter(g => g && g !== "—");
+    const groupsFromDet = detailRows.map(d => d.macGroup).filter(g => g && g !== "—");
+    return Array.from(new Set([...groupsFromMach, ...groupsFromDet])).sort();
+  }, [prodValueSource?.filterOptions?.macGroups, machineRows, detailRows]);
+
   const machines = React.useMemo(() => {
     const api = prodValueSource?.filterOptions?.machines;
     if (Array.isArray(api) && api.length) return api;
@@ -8778,6 +9187,19 @@ function ProductionAnalysisReportDashboardView({ data, loading, filters, onFilte
               </div>
             )}
           </div>
+        </div>
+
+        {/* Mac Group Dropdown */}
+        <div className="pp1-filter-group" style={{ minWidth: "160px" }}>
+          <label className="pp1-filter-label">Mac Group</label>
+          <Pp1SearchableMultiSelect
+            value={filters.macGroup}
+            options={macGroups}
+            onChange={(val) => handleInputChange("macGroup", val)}
+            placeholder="Select Mac Group..."
+            allLabel="All Mac Groups"
+            searchPlaceholder="Search Mac Group..."
+          />
         </div>
 
         {/* Machine Dropdown */}
@@ -8933,8 +9355,22 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
         const teamMacs = new Set(list.filter((r) => r.team === filters.team).map((r) => r.machine));
         macList = macList.filter((r) => teamMacs.has(r.machine));
       }
+      if (filters?.macGroup) {
+        const selectedGroups = filters.macGroup.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (selectedGroups.length > 0) {
+          macList = macList.filter((r) =>
+            selectedGroups.includes(String(r.macGroup || "").toLowerCase())
+          );
+        }
+      }
       if (filters?.machine) {
-        macList = macList.filter((r) => r.machine === filters.machine || r.machineName === filters.machine);
+        const selectedMachines = filters.machine.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (selectedMachines.length > 0) {
+          macList = macList.filter((r) =>
+            selectedMachines.includes(String(r.machine || "").toLowerCase()) ||
+            selectedMachines.includes(String(r.machineName || "").toLowerCase())
+          );
+        }
       }
       if (filters?.operator) {
         const opMacs = new Set(
@@ -9295,7 +9731,7 @@ const formatLossValue = (val) => {
   return `₹${val.toLocaleString()}`;
 };
 
-function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig }) {
+function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, onIdleData }) {
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [liveLogs, setLiveLogs] = React.useState([]);
@@ -9393,6 +9829,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       .then(res => res.json())
       .then(json => {
         if (json) {
+          onIdleData?.(json);
           if (json.filter_options) {
             setFilterOptions({
               machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
@@ -9415,10 +9852,12 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             setLiveLogs([]);
           }
         } else {
+          onIdleData?.(null);
           setLiveLogs([]);
         }
       })
       .catch(() => {
+        onIdleData?.(null);
         setLiveLogs([]);
       })
       .finally(() => {
@@ -9485,7 +9924,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
 
 
     return [
-      { label: "Total Idle Hours", value: `${totalIdleHours.toFixed(1)} h`, icon: Timer, color: "#ef4444" },
+      { label: "Total Idle Hours", value: fmtHours(totalIdleHours), icon: Timer, color: "#ef4444" },
       { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: IndianRupee, color: "#ea580c" },
       { label: "Highest Loss Machine", value: highestLossMachine, icon: Settings, color: "#3b82f6" },
       { label: "Highest Loss Reason", value: highestLossReason, icon: AlertTriangle, color: "#f59e0b" }
@@ -9749,7 +10188,20 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } }
+          legend: { position: "top", labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true } },
+          tooltip: {
+            ...DT_TOOLTIP_CFG,
+            callbacks: {
+              label: (ctx) => {
+                const dsLabel = ctx.dataset.label || "";
+                const rawVal = Number(ctx.raw) || 0;
+                if (dsLabel.includes("Loss") || dsLabel.includes("Lakhs")) {
+                  return ` ${dsLabel}: ₹${rawVal.toFixed(3)} L`;
+                }
+                return ` ${dsLabel}: ${fmtHours(rawVal)}`;
+              }
+            }
+          }
         },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 10 } } },
@@ -9757,14 +10209,22 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
             type: "linear",
             position: "left",
             title: { display: true, text: "Idle Hours", color: "#3b82f6", font: { size: 10, weight: 700 } },
-            ticks: { font: { size: 9 } },
+            ticks: {
+              font: { size: 9 },
+              callback: (v) => {
+                const totalMins = Math.round(Number(v || 0) * 60);
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                return m > 0 ? `${h}h ${m}m` : `${h}h`;
+              }
+            },
             grid: { color: "rgba(0,0,0,0.05)" }
           },
           yLoss: {
             type: "linear",
             position: "right",
             title: { display: true, text: "Loss Value (Lakhs)", color: "#ef4444", font: { size: 10, weight: 700 } },
-            ticks: { font: { size: 9 }, callback: (v) => `${v}L` },
+            ticks: { font: { size: 9 }, callback: (v) => `₹${v}L` },
             grid: { display: false }
           }
         }
@@ -10053,14 +10513,27 @@ function IdleHoursReportBottomTable({ filters }) {
       const [y, m, day] = d.split("-");
       return `${day}-${m}-${y}`;
     };
-    return filteredLogs.map((r, idx) => [
-      String(idx + 1),
-      fmtDate(r.date),
-      r.machine,
-      `${Number(r.idleHours).toFixed(2)} h`,
-      r.ratePerHour > 0 ? `\u20b9${Number(r.ratePerHour).toLocaleString("en-IN")}` : "\u2014",
-      r.ratePerHour > 0 ? `\u20b9${((r.idleHours * r.ratePerHour) / 100000).toFixed(3)} L` : "\u2014"
-    ]);
+    const formatIdleHrsMins = (hDecimal) => {
+      const totalMins = Math.round(Number(hDecimal || 0) * 60);
+      const hrs = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      return `${hrs} Hrs ${mins} Mins`;
+    };
+    return filteredLogs.map((r, idx) => {
+      const idleMinutes = Math.round((Number(r.idleHours) || 0) * 60);
+      const ratePerHour = Number(r.ratePerHour || 0);
+      const ratePerMinute = ratePerHour / 60.0;
+      const lossValInLakhs = (idleMinutes * ratePerMinute) / 100000.0;
+
+      return [
+        String(idx + 1),
+        fmtDate(r.date),
+        r.machine,
+        formatIdleHrsMins(r.idleHours),
+        ratePerHour > 0 ? `\u20b9${Number(ratePerHour).toLocaleString("en-IN")}` : "\u2014",
+        ratePerHour > 0 ? `\u20b9${lossValInLakhs.toFixed(3)} L` : "\u2014"
+      ];
+    });
   }, [filteredLogs]);
 
   const handleSort = (idx) => {
@@ -10502,6 +10975,19 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
               usePointStyle: true,
               boxWidth: 8
             }
+          },
+          tooltip: {
+            ...DT_TOOLTIP_CFG,
+            callbacks: {
+              label: (ctx) => {
+                const dsLabel = ctx.dataset.label || "";
+                const rawVal = Number(ctx.raw) || 0;
+                if (dsLabel.includes("Loss") || dsLabel.includes("Value") || dsLabel.includes("Threshold")) {
+                  return ` ${dsLabel}: ₹${rawVal.toFixed(3)} L`;
+                }
+                return ` ${dsLabel}: ${fmtHours(rawVal)}`;
+              }
+            }
           }
         },
         scales: {
@@ -10517,7 +11003,15 @@ function IdleHoursNonAcceptedReasonLossReportView({ filters, onFilterChange, onC
             type: "linear",
             position: "right",
             title: { display: true, text: "Hours", color: "#3b82f6", font: { size: 10, weight: 700 } },
-            ticks: { font: { size: 9 }, callback: (v) => `${v}h` },
+            ticks: {
+              font: { size: 9 },
+              callback: (v) => {
+                const totalMins = Math.round(Number(v || 0) * 60);
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                return m > 0 ? `${h}h ${m}m` : `${h}h`;
+              }
+            },
             grid: { display: false }
           }
         }
@@ -11447,14 +11941,27 @@ function filterOeeRows(rows, filters, defaultFrom, defaultTo) {
   const activeFrom = filters.fromDate || defaultFrom;
   const activeTo = filters.toDate || defaultTo;
 
+  const normMac = (m) => {
+    if (!m) return "";
+    const s = String(m).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    return s.replace(/([a-z]+)0*(\d+)/g, "$1$2");
+  };
+
   return source.filter((r) => {
     const d = (r.date || "").slice(0, 10);
-    if (!d || d < activeFrom || d > activeTo) return false;
-    if (filters.machineType && String(r.machineType || "") !== String(filters.machineType)) return false;
+    if (d && (d < activeFrom || d > activeTo)) return false;
+    if (filters.machineType && String(r.machineType || "").toLowerCase() !== String(filters.machineType).toLowerCase()) return false;
     if (filters.machine) {
       const selected = filters.machine.split(",").map(m => m.trim()).filter(Boolean);
-      if (selected.length > 0 && !selected.includes(String(r.machine || ""))) {
-        return false;
+      if (selected.length > 0) {
+        const rMacNorm = normMac(r.machine);
+        const rMacRaw = String(r.machine || "").trim().toLowerCase();
+        const matches = selected.some(sel => {
+          const selNorm = normMac(sel);
+          const selRaw = String(sel || "").trim().toLowerCase();
+          return selRaw === rMacRaw || selNorm === rMacNorm;
+        });
+        if (!matches) return false;
       }
     }
     return true;
@@ -11503,13 +12010,13 @@ function buildOeeMachineSummaries(filteredRows, monthLabels) {
       };
     }
     const g = byKey[key];
-    const oee = Number(r.overallOee || 0);
-    if (r.month) {
+    const oee = r.overallOee != null ? Number(r.overallOee) : null;
+    if (r.month && oee != null) {
       g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + oee;
       g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
     }
     const d = (r.date || "").slice(0, 10);
-    if (d) {
+    if (d && oee != null) {
       g.dailySums[d] = (g.dailySums[d] || 0) + oee;
       g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
     }
@@ -11520,18 +12027,18 @@ function buildOeeMachineSummaries(filteredRows, monthLabels) {
   return Object.values(byKey).map((g) => {
     const monthly = monthLabels.map((mo) => {
       const c = g.monthlyCounts[mo] || 0;
-      return c ? Math.round(g.monthlySums[mo] / c) : 0;
+      return c ? Number((g.monthlySums[mo] / c).toFixed(2)) : 0;
     });
     const daily = allDates.map((d) => {
       const c = g.dailyCounts[d] || 0;
-      return c ? Math.round(g.dailySums[d] / c) : 0;
+      return c ? Number((g.dailySums[d] / c).toFixed(2)) : 0;
     });
     const activeDaily = daily.filter((v) => v > 0);
     const activeMonthly = monthly.filter((v) => v > 0);
     const avgVal = activeDaily.length
-      ? Math.round(activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length)
+      ? Number((activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length).toFixed(2))
       : activeMonthly.length
-        ? Math.round(activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length)
+        ? Number((activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length).toFixed(2))
         : 0;
     return {
       name: g.name,
@@ -11555,10 +12062,6 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
   };
 
   let summaries = machineSummaries;
-  if (!summaries.length && Array.isArray(rawRows) && rawRows.length) {
-    summaries = buildOeeMachineSummaries(rawRows, monthLabels);
-  }
-
   if (!summaries.length) {
     return { labels: [], datasets: [] };
   }
@@ -11578,7 +12081,7 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
           count += 1;
         }
       });
-      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+      return count ? Number((Math.min(100, Math.max(0, sum / count))).toFixed(2)) : 0;
     });
   } else if (xAxisGroup === "Day Wise") {
     const dayDates = summaries[0]?.dayDates || [];
@@ -11598,7 +12101,7 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
           count += 1;
         }
       });
-      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+      return count ? Number((Math.min(100, Math.max(0, sum / count))).toFixed(2)) : 0;
     });
   } else if (xAxisGroup === "Mac Wise") {
     labels = summaries.map((m) => m.name).sort();
@@ -11616,7 +12119,7 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
     labels = Object.keys(teamMap).sort();
     avgData = labels.map((t) => {
       const vals = teamMap[t];
-      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+      return Number((Math.min(100, Math.max(0, vals.reduce((a, b) => a + b, 0) / vals.length))).toFixed(2));
     });
   }
 
@@ -11765,10 +12268,10 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
     if (!filteredRows.length) {
       if (apiKpis && apiKpis.rowCount > 0 && !filters?.machineType && !filters?.machine && !filters?.fromDate && !filters?.toDate) {
         return [
-          { label: "Avg OEE", value: `${Math.round(Number(apiKpis.avgOee || 0))}%`, color: "#0ea5e9", icon: TrendingUp },
-          { label: "Availability", value: `${Math.round(Number(apiKpis.avgAvailability || 0))}%`, color: "#3b82f6", icon: Activity },
-          { label: "Performance", value: `${Math.round(Number(apiKpis.avgPerformance || 0))}%`, color: "#10b981", icon: Zap },
-          { label: "Quality", value: `${Math.round(Number(apiKpis.avgQuality || 0))}%`, color: "#f59e0b", icon: Target },
+          { label: "Avg OEE", value: `${Number(apiKpis.avgOee || 0).toFixed(2)}%`, color: "#0ea5e9", icon: TrendingUp },
+          { label: "Availability", value: `${Number(apiKpis.avgAvailability || 0).toFixed(2)}%`, color: "#3b82f6", icon: Activity },
+          { label: "Performance", value: `${Number(apiKpis.avgPerformance || 0).toFixed(2)}%`, color: "#10b981", icon: Zap },
+          { label: "Quality", value: `${Number(apiKpis.avgQuality || 0).toFixed(2)}%`, color: "#f59e0b", icon: Target },
         ];
       }
       return [
@@ -11780,11 +12283,61 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
     }
 
     const n = filteredRows.length;
-    const avgOee = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.overallOee || 0), 0) / n);
-    const avgAvail = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.availability || 0), 0) / n);
-    const avgPerf = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.performance || 0), 0) / n);
-    const avgQual = Math.round(filteredRows.reduce((acc, r) => acc + Number(r.quality || 0), 0) / n);
-    const metPct = avgOee >= targetVal ? 100 : 0;
+    const validOee = filteredRows.filter(r => r.overallOee != null);
+    const validAvail = filteredRows.filter(r => r.availability != null);
+    const validPerf = filteredRows.filter(r => r.performance != null);
+    const validQual = filteredRows.filter(r => r.quality != null);
+
+    const avgOee = machineSummaries.length
+      ? (machineSummaries.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / machineSummaries.length).toFixed(2)
+      : "0.00";
+      
+    const calcAvgOfAvgs = (rows, field) => {
+      const byMac = {};
+      rows.forEach(r => {
+        if (r[field] == null) return;
+        const key = r.machine;
+        const val = Number(r[field]);
+        if (isNaN(val)) return;
+        
+        if (!byMac[key]) byMac[key] = { dailySums: {}, dailyCounts: {}, monthlySums: {}, monthlyCounts: {} };
+        const g = byMac[key];
+        
+        if (r.month) {
+          g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + val;
+          g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
+        }
+        const d = (r.date || "").slice(0, 10);
+        if (d) {
+          g.dailySums[d] = (g.dailySums[d] || 0) + val;
+          g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
+        }
+      });
+      
+      const macs = Object.values(byMac);
+      if (!macs.length) return "0.00";
+      
+      const macAvgVals = macs.map(g => {
+        const daily = Object.keys(g.dailySums).map(d => Number((g.dailySums[d] / g.dailyCounts[d]).toFixed(2)));
+        const monthly = Object.keys(g.monthlySums).map(mo => Number((g.monthlySums[mo] / g.monthlyCounts[mo]).toFixed(2)));
+        
+        const activeDaily = daily.filter(v => v > 0);
+        const activeMonthly = monthly.filter(v => v > 0);
+        
+        return activeDaily.length 
+          ? Number((activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length).toFixed(2))
+          : activeMonthly.length
+            ? Number((activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length).toFixed(2))
+            : 0;
+      });
+      
+      return (macAvgVals.reduce((a, b) => a + b, 0) / macAvgVals.length).toFixed(2);
+    };
+
+    const avgAvail = calcAvgOfAvgs(validAvail, 'availability');
+    const avgPerf = calcAvgOfAvgs(validPerf, 'performance');
+    const avgQual = calcAvgOfAvgs(validQual, 'quality');
+    const metPct = Number(avgOee) >= targetVal ? 100 : 0;
 
     return [
       { label: "Avg OEE", value: `${avgOee}%`, color: "#0ea5e9", icon: TrendingUp },
@@ -11792,7 +12345,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       { label: "Performance", value: `${avgPerf}%`, color: "#10b981", icon: Zap },
       { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target },
     ];
-  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig]);
+  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig, machineSummaries]);
 
   const setupChart1 = React.useCallback((canvas) => {
     let minUtilization = 75;
@@ -12262,7 +12815,7 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
             count += 1;
           }
         });
-        overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
+        overallAvg.push(count ? `${(sum / count).toFixed(2)}%` : "—");
       }
       return [["Overall Average", ...overallAvg]];
     } else if (xAxisGroup === "Day Wise") {
@@ -12286,7 +12839,7 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
         list.push([
           String(idx + 1),
           dayLabel,
-          count ? `${Math.round(sum / count)}%` : "—"
+          count ? `${(sum / count).toFixed(2)}%` : "—"
         ]);
       }
       return list;
@@ -12294,11 +12847,11 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
       const list = processedData.map((m, idx) => [
         String(idx + 1),
         m.name,
-        `${m.avgVal}%`
+        `${Number(m.avgVal).toFixed(2)}%`
       ]);
 
       if (processedData.length > 0) {
-        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.avgVal, 0) / processedData.length);
+        const avgOee = (processedData.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / processedData.length).toFixed(2);
         list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
@@ -12309,12 +12862,12 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
         if (teamRows.length === 0) {
           return [String(idx + 1), team, "0%"];
         }
-        const teamOee = Math.round(teamRows.reduce((acc, r) => acc + r.avgVal, 0) / teamRows.length);
+        const teamOee = (teamRows.reduce((acc, r) => acc + Number(r.avgVal || 0), 0) / teamRows.length).toFixed(2);
         return [String(idx + 1), team, `${teamOee}%`];
       });
 
       if (processedData.length > 0) {
-        const avgOee = Math.round(processedData.reduce((acc, m) => acc + m.avgVal, 0) / processedData.length);
+        const avgOee = (processedData.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / processedData.length).toFixed(2);
         list.push(["-", "Overall Average", `${avgOee}%`]);
       }
       return list;
@@ -13705,33 +14258,58 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
 function filterRejRows(rows, filters, defaultFrom, defaultTo) {
   const source = Array.isArray(rows) ? rows : [];
-  const activeFrom = filters.fromDate || defaultFrom;
-  const activeTo = filters.toDate || defaultTo;
+  const f = filters || {};
+  const activeFrom = f.fromDate || defaultFrom;
+  const activeTo = f.toDate || defaultTo;
 
   return source.filter((r) => {
+    if (!r || typeof r !== "object") return false;
     const d = (r.date || "").slice(0, 10);
     if (!d || d < activeFrom || d > activeTo) return false;
     if (Number(r.rejQty || 0) <= 0) return false;
-    if (filters.customer) {
-      const selectedCustomers = filters.customer.split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
+    if (f.customer) {
+      const selectedCustomers = String(f.customer).split(",").map(c => c.trim().toLowerCase()).filter(Boolean);
       if (selectedCustomers.length > 0) {
         const custVal = String(r.customer || "").trim().toLowerCase();
         if (!selectedCustomers.includes(custVal)) return false;
       }
     }
-    if (filters.partNo && String(r.partNo || "") !== String(filters.partNo)) return false;
-    if (filters.rejType && String(r.rejType || "") !== String(filters.rejType)) return false;
-    if (filters.rejReason) {
+    if (f.partNo && String(r.partNo || "") !== String(f.partNo)) return false;
+    if (f.rejType) {
+      const reqType = String(f.rejType);
+      const rowType = String(r.rejType || r.rejCategory || r.type || "");
+      const rowReason = String(r.reason || "").toLowerCase();
+      if (reqType === "Mac Rej") {
+        const isMac = rowType === "Mac Rej" || rowType.toLowerCase().includes("mac") || rowType.toLowerCase().includes("machine") || rowReason.includes("mac") || rowReason.includes("machine");
+        if (!isMac && rowType !== reqType) return false;
+      } else if (reqType === "Mat Rej") {
+        const isMat = rowType === "Mat Rej" || rowType.toLowerCase().includes("mat") || rowType.toLowerCase().includes("material") || rowReason.includes("mat") || rowReason.includes("material");
+        if (!isMat && rowType !== reqType) return false;
+      } else if (rowType !== reqType) {
+        return false;
+      }
+    }
+    if (f.macMatRej) {
+      const reqCat = String(f.macMatRej);
+      const isMat = r.isMatRej === true || String(r.rejCategory || "") === "Mat Rej" || String(r.rejGroup || "") === "Mat Rej";
+      if (reqCat === "Mat Rej" && !isMat) return false;
+      if (reqCat === "Mac Rej" && isMat) return false;
+    }
+    if (f.rejReason) {
       const reason = String(r.reason || "").toLowerCase();
-      if (!reason.includes(String(filters.rejReason).toLowerCase())) return false;
+      if (!reason.includes(String(f.rejReason).toLowerCase())) return false;
     }
     return true;
   });
 }
 
-function resolveRejectionLimit(targetConfig, rejType) {
+function resolveRejectionLimit(targetConfig, rejType, macMatRej) {
   const cfg = targetConfig?.rejection || {};
+  if (macMatRej === "Mac Rej") return cfg.macLimit ?? cfg.inHouseLimit ?? 1.0;
+  if (macMatRej === "Mat Rej") return cfg.matLimit ?? cfg.inHouseLimit ?? 1.0;
   if (rejType === "In-house Rej") return cfg.inHouseLimit ?? 1.0;
+  if (rejType === "Mac Rej") return cfg.macLimit ?? cfg.inHouseLimit ?? 1.0;
+  if (rejType === "Mat Rej") return cfg.matLimit ?? cfg.inHouseLimit ?? 1.0;
   if (rejType === "Vendor Rej") return cfg.vendorLimit ?? 1.2;
   if (rejType === "Final Insp Rej") return cfg.finalInspLimit ?? 1.5;
   if (rejType === "Supplier Rej") return cfg.supplierLimit ?? 0.5;
@@ -13782,7 +14360,7 @@ function filterRewRows(rows, filters, defaultFrom, defaultTo, xAxisGroup) {
       }
     }
     if (filters.reworkReason) {
-      const reason = String(r.reason || "").toLowerCase();
+      const reason = String(r.reworkReason || "").toLowerCase();
       if (!reason.includes(String(filters.reworkReason).toLowerCase())) return false;
     }
     return true;
@@ -13821,8 +14399,36 @@ function buildRewChartData(filteredRows, monthLabels) {
   return { labels, rates, qtys };
 }
 
-function buildRejTablePayload(filteredRows, rejType) {
-  const type = rejType || "";
+function buildRejTablePayload(filteredRows, rejType, macMatRej) {
+  const type = macMatRej || rejType || "";
+  if (type === "Mac Rej") {
+    return {
+      title: "Machine Rejection Registry",
+      columns: ["Machine No / Process", "Month", "Operator", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        r.machine || r.macNo || r.process || "—",
+        r.month || "—",
+        r.operator || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
+  if (type === "Mat Rej") {
+    return {
+      title: "Material Rejection Registry",
+      columns: ["Material / Part Name", "Month", "Supplier / Source", "Rejection %", "Rejection Qty", "Rejection Value"],
+      rows: filteredRows.map((r) => [
+        r.material || r.partName || r.partNo || "—",
+        r.month || "—",
+        r.supplier || r.vendor || r.customer || "—",
+        `${Math.round(Number(r.rejPct || 0))}%`,
+        String(Math.round(Number(r.rejQty || 0))),
+        formatInrValue(r.rejValue),
+      ]),
+    };
+  }
   if (type === "In-house Rej") {
     return {
       title: "In-House Rejection Registry",
@@ -13928,7 +14534,7 @@ function buildRewTablePayload(filteredRows, xAxisGroup) {
       title: "Final Inspection Rework Registry",
       columns: ["Inspection Point", "Month", "Inspector", "Rework %", "Rework Qty", "Rework Value"],
       rows: filteredRows.map((r) => [
-        (r.reason || r.process || "—").split(",")[0].trim() || "—",
+        (r.reworkReason || r.process || "—").split(",")[0].trim() || "—",
         r.month || "—",
         r.inspector || "—",
         `${Math.round(Number(r.reworkPct || 0))}%`,
@@ -13967,6 +14573,7 @@ function buildRewTablePayload(filteredRows, xAxisGroup) {
 
 function RejectionReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, uid, onRejData }) {
   const [rejTypeOpen, setRejTypeOpen] = React.useState(false);
+  const [macMatOpen, setMacMatOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("combo");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [rejLive, setRejLive] = React.useState(null);
@@ -13975,12 +14582,16 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
   const rejSource = rejLive || data?.rejectionCompare;
 
   const rejTypeRef = React.useRef(null);
+  const macMatRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (rejTypeRef.current && !rejTypeRef.current.contains(event.target)) {
         setRejTypeOpen(false);
+      }
+      if (macMatRef.current && !macMatRef.current.contains(event.target)) {
+        setMacMatOpen(false);
       }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
@@ -14021,6 +14632,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
       customer: "",
       partNo: "",
       rejType: "",
+      macMatRej: "",
       rejReason: "",
     });
   };
@@ -14078,8 +14690,16 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
 
   const setupChart1 = React.useCallback((canvas) => {
     let rejectionLimit = targetConfig?.rejection?.rejectionLimit ?? 2.0;
-    if (filters?.rejType === "In-house Rej") {
+    if (filters?.macMatRej === "Mac Rej") {
+      rejectionLimit = targetConfig?.rejection?.macLimit ?? targetConfig?.rejection?.inHouseLimit ?? 1.0;
+    } else if (filters?.macMatRej === "Mat Rej") {
+      rejectionLimit = targetConfig?.rejection?.matLimit ?? targetConfig?.rejection?.inHouseLimit ?? 1.0;
+    } else if (filters?.rejType === "In-house Rej") {
       rejectionLimit = targetConfig?.rejection?.inHouseLimit ?? 1.0;
+    } else if (filters?.rejType === "Mac Rej") {
+      rejectionLimit = targetConfig?.rejection?.macLimit ?? targetConfig?.rejection?.inHouseLimit ?? 1.0;
+    } else if (filters?.rejType === "Mat Rej") {
+      rejectionLimit = targetConfig?.rejection?.matLimit ?? targetConfig?.rejection?.inHouseLimit ?? 1.0;
     } else if (filters?.rejType === "Vendor Rej") {
       rejectionLimit = targetConfig?.rejection?.vendorLimit ?? 1.2;
     } else if (filters?.rejType === "Final Insp Rej") {
@@ -14242,6 +14862,14 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 25,
+            bottom: 5,
+            left: 5,
+            right: 5
+          }
+        },
         interaction: {
           mode: "index",
           intersect: false
@@ -14280,6 +14908,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
           yRejRate: {
             type: "linear",
             position: "left",
+            grace: "25%",
             title: {
               display: true,
               text: "Rejection %",
@@ -14295,6 +14924,7 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
           yRejQty: {
             type: "linear",
             position: "right",
+            grace: "25%",
             title: {
               display: true,
               text: "Rejection Qty (pcs)",
@@ -14412,6 +15042,44 @@ function RejectionReportDashboardView({ data, loading, filters, onFilterChange, 
           </div>
         </div>
 
+        {/* Mac / Mat Rej Dropdown Filter (Positioned after Rej Type) */}
+        <div className="pp1-filter-group" ref={macMatRef}>
+          <label className="pp1-filter-label">Mac / Mat Rej</label>
+          <div className="pp1-custom-select-wrap">
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${macMatOpen ? "open" : ""}`}
+              onClick={() => setMacMatOpen(o => !o)}
+              style={{ minWidth: "120px" }}
+            >
+              <span>{filters?.macMatRej || "All (Mac/Mat)"}</span>
+              <ChevronDown size={12} className="pp1-custom-select-caret" />
+            </button>
+            {macMatOpen && (
+              <div className="pp1-custom-select-options">
+                <div
+                  className={`pp1-custom-select-option ${!filters?.macMatRej ? "selected" : ""}`}
+                  onClick={() => { handleInputChange("macMatRej", ""); setMacMatOpen(false); }}
+                >
+                  All (Mac/Mat)
+                </div>
+                <div
+                  className={`pp1-custom-select-option ${filters?.macMatRej === "Mac Rej" ? "selected" : ""}`}
+                  onClick={() => { handleInputChange("macMatRej", "Mac Rej"); setMacMatOpen(false); }}
+                >
+                  Mac Rej
+                </div>
+                <div
+                  className={`pp1-custom-select-option ${filters?.macMatRej === "Mat Rej" ? "selected" : ""}`}
+                  onClick={() => { handleInputChange("macMatRej", "Mat Rej"); setMacMatOpen(false); }}
+                >
+                  Mat Rej
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Chart Type Dropdown Filter */}
         <div className="pp1-filter-group" ref={chartTypeRef}>
           <label className="pp1-filter-label">Chart Type</label>
@@ -14505,8 +15173,8 @@ function RejectionReportBottomTable({ data, filters }) {
   );
 
   const { title, columns, rows } = React.useMemo(
-    () => buildRejTablePayload(filteredRows, filters?.rejType),
-    [filteredRows, filters?.rejType]
+    () => buildRejTablePayload(filteredRows, filters?.rejType, filters?.macMatRej),
+    [filteredRows, filters?.rejType, filters?.macMatRej]
   );
 
   const finalColumns = ["Sl.No", ...columns.slice(1)];
@@ -14786,6 +15454,14 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 25,
+            bottom: 5,
+            left: 5,
+            right: 5
+          }
+        },
         interaction: {
           mode: "index",
           intersect: false
@@ -14824,6 +15500,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
           yRewRate: {
             type: "linear",
             position: "left",
+            grace: "25%",
             title: {
               display: true,
               text: "Rework %",
@@ -14839,6 +15516,7 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
           yRewQty: {
             type: "linear",
             position: "right",
+            grace: "25%",
             title: {
               display: true,
               text: "Rework Qty (pcs)",
@@ -14859,19 +15537,52 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
     ? rewSource.filterOptions.customers
     : [...new Set(rewRows.map((r) => r.customer).filter((c) => c && c !== "—"))].sort();
 
+  const reasonsList = rewSource?.filterOptions?.reasons?.length
+    ? rewSource.filterOptions.reasons
+    : [...new Set(rewRows.flatMap((r) => (r.reworkReason || "").split(",")).map((s) => s.trim()).filter(Boolean))].sort();
+
   const computedKpis = React.useMemo(() => {
+    const calcTopValues = (rows) => {
+      const partnoSums = {};
+      const reasonSums = {};
+      for (const r of rows) {
+        if (r.partNo) {
+          partnoSums[r.partNo] = (partnoSums[r.partNo] || 0) + Number(r.reworkQty || 0);
+        }
+        if (r.reworkReason) {
+          const rList = r.reworkReason.split(",").map(x => x.trim()).filter(Boolean);
+          for (const rs of rList) {
+            reasonSums[rs] = (reasonSums[rs] || 0) + Number(r.reworkQty || 0);
+          }
+        }
+      }
+      let topPart = "—", topPartVal = 0;
+      for (const [p, v] of Object.entries(partnoSums)) {
+        if (v > topPartVal) { topPartVal = v; topPart = p; }
+      }
+      let topReason = "—", topReasonVal = 0;
+      for (const [r, v] of Object.entries(reasonSums)) {
+        if (v > topReasonVal) { topReasonVal = v; topReason = r; }
+      }
+      return { topPart, topPartVal, topReason, topReasonVal };
+    };
+
     if (!filteredRows.length) {
       const api = rewSource?.kpis;
       if (api?.rowCount > 0) {
+        const { topPart, topPartVal, topReason, topReasonVal } = calcTopValues(rewRows);
         return [
           { label: "Avg Rework", value: `${Number(api.avgReworkPct || 0).toFixed(1)}%`, color: "#a855f7", icon: PackageCheck },
           { label: "Rework Qty", value: String(Math.round(Number(api.totalReworkQty || 0))), color: "#3b82f6", icon: Package },
           { label: "Rework Value", value: formatInrValue(api.totalReworkValue), color: "#10b981", icon: TrendingUp },
           { label: "Records", value: String(api.rowCount || 0), color: "#f59e0b", icon: FileText },
+          { label: "Highest Rework PartNo", value: topPart !== "—" ? `${topPart} (${Math.round(topPartVal)})` : "—", color: "#ef4444", icon: Target },
+          { label: "Highest Rework Reason", value: topReason !== "—" ? `${topReason} (${Math.round(topReasonVal)})` : "—", color: "#f97316", icon: AlertCircle },
         ];
       }
       return null;
     }
+    const { topPart, topPartVal, topReason, topReasonVal } = calcTopValues(filteredRows);
     const totalRwk = filteredRows.reduce((acc, r) => acc + Number(r.reworkQty || 0), 0);
     const totalInsp = filteredRows.reduce((acc, r) => acc + Number(r.inspQty || 0), 0);
     const totalVal = filteredRows.reduce((acc, r) => acc + Number(r.reworkValue || 0), 0);
@@ -14881,8 +15592,10 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
       { label: "Rework Qty", value: String(Math.round(totalRwk)), color: "#3b82f6", icon: Package },
       { label: "Rework Value", value: formatInrValue(totalVal), color: "#10b981", icon: TrendingUp },
       { label: "Records", value: String(filteredRows.length), color: "#f59e0b", icon: FileText },
+      { label: "Highest Rework PartNo", value: topPart !== "—" ? `${topPart} (${Math.round(topPartVal)})` : "—", color: "#ef4444", icon: Target },
+      { label: "Highest Rework Reason", value: topReason !== "—" ? `${topReason} (${Math.round(topReasonVal)})` : "—", color: "#f97316", icon: AlertCircle },
     ];
-  }, [filteredRows, rewSource?.kpis]);
+  }, [filteredRows, rewSource?.kpis, rewRows]);
 
   const chartHeaderControls = (
     <div className="pp1-chart-xaxis">
@@ -14934,6 +15647,19 @@ function ReworkReportDashboardView({ data, loading, filters, onFilterChange, onC
             placeholder="Select customer..."
             allLabel="All Customers"
             searchPlaceholder="Search customer..."
+          />
+        </div>
+
+        {/* Reason Multi-Select */}
+        <div className="pp1-filter-group" style={{ minWidth: "180px" }}>
+          <label className="pp1-filter-label">Reason</label>
+          <Pp1SearchableMultiSelect
+            value={filters.reworkReason}
+            options={reasonsList}
+            onChange={(val) => handleInputChange("reworkReason", val)}
+            placeholder="Select reason..."
+            allLabel="All Reasons"
+            searchPlaceholder="Search reason..."
           />
         </div>
 
@@ -15045,8 +15771,8 @@ function buildStoreStockUrl(from, to, filters) {
   if (filters?.category && filters.category.length > 0) {
     url += `&category=${encodeURIComponent(filters.category.join(","))}`;
   }
-  if (filters?.itemCode) {
-    url += `&itemCode=${encodeURIComponent(filters.itemCode)}`;
+  if (filters?.itemCode && filters.itemCode.length > 0) {
+    url += `&itemCode=${encodeURIComponent(filters.itemCode.join(","))}`;
   }
   return url;
 }
@@ -15054,6 +15780,8 @@ function buildStoreStockUrl(from, to, filters) {
 function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onClose, targetConfig, onStockData }) {
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [itemCodeOpen, setItemCodeOpen] = React.useState(false);
+  const [groupSearch, setGroupSearch] = React.useState("");
+  const [itemCodeSearch, setItemCodeSearch] = React.useState("");
   const [stockLive, setStockLive] = React.useState(null);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
@@ -15116,6 +15844,11 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
     return Array.isArray(stockSource?.filterOptions?.groups) ? stockSource.filterOptions.groups : [];
   }, [stockSource?.filterOptions?.groups]);
 
+  const groupItemCodes = React.useMemo(() => {
+    return stockSource?.filterOptions?.groupItemCodes || {};
+  }, [stockSource?.filterOptions?.groupItemCodes]);
+
+  // Always show ALL item codes — group filter affects backend data, not the item code list
   const itemCodesList = React.useMemo(() => {
     return Array.isArray(stockSource?.filterOptions?.itemCodes) ? stockSource.filterOptions.itemCodes : [];
   }, [stockSource?.filterOptions?.itemCodes]);
@@ -15140,10 +15873,12 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       fromDate: "",
       toDate: "",
       category: [],
-      itemCode: "",
+      itemCode: [],
       status: "",
     });
     setChartType("bar");
+    setGroupSearch("");
+    setItemCodeSearch("");
   };
 
   React.useEffect(() => {
@@ -15162,6 +15897,21 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
       .catch(() => { });
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.category, filters.itemCode, onStockData]);
+
+  // When group filter changes, clear item codes that no longer belong to selected groups
+  React.useEffect(() => {
+    if (!filters.itemCode || filters.itemCode.length === 0) return;
+    const selectedGroups = filters.category || [];
+    if (selectedGroups.length === 0) return;
+    const allowedCodes = new Set();
+    selectedGroups.forEach(g => {
+      (groupItemCodes[g] || []).forEach(c => allowedCodes.add(c));
+    });
+    const validItems = filters.itemCode.filter(c => allowedCodes.has(c));
+    if (validItems.length !== filters.itemCode.length) {
+      onFilterChange(prev => ({ ...prev, itemCode: validItems }));
+    }
+  }, [filters.category, groupItemCodes]);
 
   const chartLabels = React.useMemo(() => {
     return Array.isArray(stockSource?.chart?.labels) ? stockSource.chart.labels : [];
@@ -15428,94 +16178,196 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
         </div>
 
         {/* Group Multi-Select Dropdown */}
-        <div className="pp1-filter-group" ref={categoryRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#059669' }}>
+        <div className="pp1-filter-group" ref={categoryRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#059669', overflow: 'visible', position: 'relative', zIndex: 200 }}>
           <label className="pp1-filter-label">Group</label>
-          <div className="pp1-multiselect-wrap">
+          <div className="pp1-multiselect-wrap" style={{ position: 'relative' }}>
             <div
               className={`pp1-multiselect-trigger ${(filters.category || []).length > 0 ? 'pp1-multiselect-trigger--active' : ''} ${categoryOpen ? 'pp1-multiselect-trigger--open' : ''}`}
-              onClick={() => setCategoryOpen(!categoryOpen)}
+              onClick={() => { setCategoryOpen(!categoryOpen); if (itemCodeOpen) setItemCodeOpen(false); }}
             >
               <div className="pp1-multiselect-value" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "calc(100% - 16px)", fontWeight: "500" }}>
                 {(filters.category || []).length === 0 ? (
                   <span className="pp1-multiselect-placeholder">All Groups</span>
+                ) : (filters.category || []).length === 1 ? (
+                  (filters.category || [])[0]
                 ) : (
-                  (filters.category || []).join(", ")
+                  <span>{(filters.category || []).length} selected</span>
                 )}
               </div>
               <ChevronDown size={11} className="pp1-dropdown-caret" style={{ transform: categoryOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
             </div>
 
             {categoryOpen && (
-              <div className="pp1-multiselect-menu">
-                {/* Select All Option */}
-                <div
-                  className={`pp1-multiselect-option pp1-multiselect-option--all ${isAllSelected ? 'pp1-multiselect-option--selected' : ''}`}
-                  onClick={toggleSelectAll}
-                >
-                  <div className="pp1-multiselect-checkbox-box">
-                    {isAllSelected && (
-                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
-                        <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
-                      </svg>
-                    )}
-                  </div>
-                  <span>Select All ({groupsList.length})</span>
+              <div className="pp1-multiselect-menu" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999, minWidth: '230px', marginTop: '4px' }}>
+                {/* Search Box */}
+                <div style={{ padding: "6px 8px", borderBottom: "1px solid rgba(226,232,240,0.7)", position: 'sticky', top: 0, background: 'rgba(255,255,255,0.98)', zIndex: 1, borderRadius: '10px 10px 0 0' }}>
+                  <input
+                    type="text"
+                    placeholder="Search group..."
+                    value={groupSearch}
+                    onChange={e => setGroupSearch(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      width: "100%",
+                      background: "#f1f5f9",
+                      border: "1px solid rgba(226,232,240,0.9)",
+                      borderRadius: "5px",
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                      color: "#334155",
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                  />
                 </div>
-
-                {/* Individual Options */}
-                {groupsList.map(g => {
-                  const isSelected = (filters.category || []).includes(g);
-                  return (
-                    <div
-                      key={g}
-                      className={`pp1-multiselect-option ${isSelected ? 'pp1-multiselect-option--selected' : ''}`}
-                      onClick={() => toggleGroup(g)}
-                    >
-                      <div className="pp1-multiselect-checkbox-box">
-                        {isSelected && (
-                          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
-                            <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
-                          </svg>
-                        )}
-                      </div>
-                      <span>{g}</span>
+                {/* Select All Option — only when not searching */}
+                {!groupSearch && (
+                  <div
+                    className={`pp1-multiselect-option pp1-multiselect-option--all ${isAllSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                    onClick={toggleSelectAll}
+                  >
+                    <div className="pp1-multiselect-checkbox-box">
+                      {isAllSelected && (
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                          <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                        </svg>
+                      )}
                     </div>
-                  );
-                })}
+                    <span>Select All ({groupsList.length})</span>
+                  </div>
+                )}
+
+                {/* Filtered Group Options */}
+                {groupsList
+                  .filter(g => !groupSearch || g.toLowerCase().includes(groupSearch.toLowerCase()))
+                  .map(g => {
+                    const isSelected = (filters.category || []).includes(g);
+                    return (
+                      <div
+                        key={g}
+                        className={`pp1-multiselect-option ${isSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                        onClick={() => toggleGroup(g)}
+                      >
+                        <div className="pp1-multiselect-checkbox-box">
+                          {isSelected && (
+                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                              <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                            </svg>
+                          )}
+                        </div>
+                        <span>{g}</span>
+                      </div>
+                    );
+                  })}
+                {groupsList.filter(g => !groupSearch || g.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
+                  <div style={{ padding: "8px", fontSize: "11px", color: "#94a3b8", textAlign: "center" }}>No matches</div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Item Code Dropdown */}
-        <div className="pp1-filter-group" ref={itemCodeRef}>
+        {/* Item Code Multi-Select Dropdown */}
+        <div className="pp1-filter-group" ref={itemCodeRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#059669', overflow: 'visible', position: 'relative', zIndex: 199 }}>
           <label className="pp1-filter-label">Item Code</label>
-          <div className="pp1-custom-select-wrap">
-            <button
-              type="button"
-              className={`pp1-custom-select-trigger ${itemCodeOpen ? "open" : ""}`}
-              onClick={() => setItemCodeOpen(o => !o)}
+          <div className="pp1-multiselect-wrap" style={{ position: 'relative' }}>
+            <div
+              className={`pp1-multiselect-trigger ${(filters.itemCode || []).length > 0 ? 'pp1-multiselect-trigger--active' : ''} ${itemCodeOpen ? 'pp1-multiselect-trigger--open' : ''}`}
+              onClick={() => { setItemCodeOpen(!itemCodeOpen); if (categoryOpen) setCategoryOpen(false); }}
             >
-              <span>{filters?.itemCode || "All Items"}</span>
-              <ChevronDown size={12} className="pp1-custom-select-caret" />
-            </button>
+              <div className="pp1-multiselect-value" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "calc(100% - 16px)", fontWeight: "500" }}>
+                {(filters.itemCode || []).length === 0 ? (
+                  <span className="pp1-multiselect-placeholder">All Items</span>
+                ) : (filters.itemCode || []).length === 1 ? (
+                  (filters.itemCode || [])[0]
+                ) : (
+                  <span>{(filters.itemCode || []).length} selected</span>
+                )}
+              </div>
+              <ChevronDown size={11} className="pp1-dropdown-caret" style={{ transform: itemCodeOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+            </div>
+
             {itemCodeOpen && (
-              <div className="pp1-custom-select-options" style={{ maxHeight: "250px", overflowY: "auto" }}>
-                <div
-                  className={`pp1-custom-select-option ${!filters?.itemCode ? "selected" : ""}`}
-                  onClick={() => { handleInputChange("itemCode", ""); setItemCodeOpen(false); }}
-                >
-                  All Items
+              <div className="pp1-multiselect-menu" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999, minWidth: '230px', marginTop: '4px' }}>
+                {/* Search Box */}
+                <div style={{ padding: "6px 8px", borderBottom: "1px solid rgba(226,232,240,0.7)", position: 'sticky', top: 0, background: 'rgba(255,255,255,0.98)', zIndex: 1, borderRadius: '10px 10px 0 0' }}>
+                  <input
+                    type="text"
+                    placeholder="Search item code..."
+                    value={itemCodeSearch}
+                    onChange={e => setItemCodeSearch(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      width: "100%",
+                      background: "#f1f5f9",
+                      border: "1px solid rgba(226,232,240,0.9)",
+                      borderRadius: "5px",
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                      color: "#334155",
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                  />
                 </div>
-                {itemCodesList.map(item => (
-                  <div
-                    key={item}
-                    className={`pp1-custom-select-option ${filters?.itemCode === item ? "selected" : ""}`}
-                    onClick={() => { handleInputChange("itemCode", item); setItemCodeOpen(false); }}
-                  >
-                    {item}
-                  </div>
-                ))}
+                {(() => {
+                  const filtered = itemCodesList.filter(c =>
+                    !itemCodeSearch || c.toLowerCase().includes(itemCodeSearch.toLowerCase())
+                  );
+                  const isAllItemsSelected = (filters.itemCode || []).length === itemCodesList.length && itemCodesList.length > 0;
+                  const toggleItemCode = (code) => {
+                    const current = filters.itemCode || [];
+                    const next = current.includes(code) ? current.filter(x => x !== code) : [...current, code];
+                    onFilterChange(prev => ({ ...prev, itemCode: next }));
+                  };
+                  const toggleSelectAllItems = () => {
+                    onFilterChange(prev => ({
+                      ...prev,
+                      itemCode: isAllItemsSelected ? [] : [...itemCodesList]
+                    }));
+                  };
+                  return (
+                    <>
+                      {!itemCodeSearch && (
+                        <div
+                          className={`pp1-multiselect-option pp1-multiselect-option--all ${isAllItemsSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                          onClick={toggleSelectAllItems}
+                        >
+                          <div className="pp1-multiselect-checkbox-box">
+                            {isAllItemsSelected && (
+                              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                                <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>All Items ({itemCodesList.length})</span>
+                        </div>
+                      )}
+                      {filtered.map(code => {
+                        const isSelected = (filters.itemCode || []).includes(code);
+                        return (
+                          <div
+                            key={code}
+                            className={`pp1-multiselect-option ${isSelected ? 'pp1-multiselect-option--selected' : ''}`}
+                            onClick={() => toggleItemCode(code)}
+                          >
+                            <div className="pp1-multiselect-checkbox-box">
+                              {isSelected && (
+                                <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pp1-multiselect-checkbox-icon">
+                                  <polyline points="1.5 5.5 3.5 7.5 8.5 2.5" />
+                                </svg>
+                              )}
+                            </div>
+                            <span>{code}</span>
+                          </div>
+                        );
+                      })}
+                      {filtered.length === 0 && (
+                        <div style={{ padding: "8px", fontSize: "11px", color: "#94a3b8", textAlign: "center" }}>No matches</div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -15604,8 +16456,8 @@ function StoreStockValueReportBottomTable({ data, filters }) {
     if (filters?.category && filters.category.length > 0) {
       list = list.filter(r => filters.category.includes(r.group));
     }
-    if (filters?.itemCode) {
-      list = list.filter(r => r.partNo === filters.itemCode);
+    if (filters?.itemCode && filters.itemCode.length > 0) {
+      list = list.filter(r => filters.itemCode.includes(r.partNo));
     }
 
     return list.map((r, idx) => [
@@ -15640,24 +16492,37 @@ function OtdReportBottomTable({ data, filters }) {
     "Req Dt",
     "Order Qty",
     "Delivery Qty",
+    "On Time Del Qty",
+    "Delayed Del Qty",
+    "OTD %",
     "Status",
     "Value"
   ];
 
   const rows = React.useMemo(
-    () => sourceRows.map((r, idx) => [
-      String(idx + 1),
-      r.customerName || "—",
-      r.poNumber || "—",
-      r.poRefNumber || "—",
-      r.partNumber || "—",
-      r.schdDate || "—",
-      r.reqDate || "—",
-      fmtNum(r.orderQty),
-      fmtNum(r.deliveryQty),
-      r.status || "—",
-      r.value != null ? `₹${Number(r.value).toLocaleString("en-IN")}` : "—",
-    ]),
+    () => sourceRows.map((r, idx) => {
+      const delQty = Number(r.deliveryQty || 0);
+      const onTimeDelQty = r.onTimeDelQty != null ? Number(r.onTimeDelQty) : (r.status === "On Time" ? delQty : 0);
+      const delayedDelQty = r.delayedDelQty != null ? Number(r.delayedDelQty) : (r.status === "Delayed" ? delQty : 0);
+      const otdPctVal = r.otdPct != null ? Number(r.otdPct) : (r.status === "On Time" ? 100 : (r.status === "Delayed" ? 85 : 0));
+
+      return [
+        String(idx + 1),
+        r.customerName || "—",
+        r.poNumber || "—",
+        r.poRefNumber || "—",
+        r.partNumber || "—",
+        r.schdDate || "—",
+        r.reqDate || "—",
+        fmtNum(r.orderQty),
+        fmtNum(r.deliveryQty),
+        fmtNum(onTimeDelQty),
+        fmtNum(delayedDelQty),
+        `${otdPctVal.toFixed(1)}%`,
+        r.status || "—",
+        r.value != null ? `₹${Number(r.value).toLocaleString("en-IN")}` : "—",
+      ];
+    }),
     [sourceRows]
   );
 
@@ -16978,11 +17843,35 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
     const uniqueCusts = new Set(filteredRows.map(r => r.customerName)).size;
     const totalQty = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspQty) || 0) + (Number(r.dcQty) || 0), 0);
 
+    // High FG Value Customer
+    const custMap = {};
+    filteredRows.forEach(r => {
+      const c = r.customerName || "—";
+      const v = (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
+      custMap[c] = (custMap[c] || 0) + v;
+    });
+    const topCustEntry = Object.entries(custMap).sort((a, b) => b[1] - a[1])[0];
+    const topCustName = topCustEntry ? topCustEntry[0] : "—";
+    const topCustVal = topCustEntry ? (topCustEntry[1] / 100000).toFixed(2) : "0.00";
+
+    // High FG Value Item
+    const itemMap = {};
+    filteredRows.forEach(r => {
+      const item = r.partNo || "—";
+      const v = (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
+      itemMap[item] = (itemMap[item] || 0) + v;
+    });
+    const topItemEntry = Object.entries(itemMap).sort((a, b) => b[1] - a[1])[0];
+    const topItemCode = topItemEntry ? topItemEntry[0] : "—";
+    const topItemVal = topItemEntry ? (topItemEntry[1] / 100000).toFixed(2) : "0.00";
+
     return [
       { label: "Total FG Value", value: `₹${totalValLakhs.toFixed(2)}L`, icon: Package, color: "#ec4899" },
       { label: "Available Items", value: String(uniqueItems), icon: ClipboardList, color: "#10b981" },
       { label: "FG Customers", value: String(uniqueCusts), icon: Users, color: "#3b82f6" },
-      { label: "Total Qty", value: totalQty.toLocaleString(), icon: ClipboardList, color: "#eab308" }
+      { label: "Total Qty", value: totalQty.toLocaleString(), icon: ClipboardList, color: "#eab308" },
+      { label: "High FG Value Customer", value: `${topCustName}\n₹${topCustVal}L`, icon: Trophy, color: "#f59e0b" },
+      { label: "High FG Value Item", value: `${topItemCode}\n₹${topItemVal}L`, icon: ShoppingCart, color: "#8b5cf6" }
     ];
   }, [filteredRows]);
 
@@ -16995,22 +17884,32 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
   }, []);
 
   const customerChartData = React.useMemo(() => {
-    const map = {};
-    filteredRows.forEach(r => {
-      const c = r.customerName || "—";
-      const val = (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
-      map[c] = (map[c] || 0) + val;
-    });
-    const entries = Object.entries(map).map(([cust, val]) => ({
-      customer: cust,
-      value: Number((val / 100000.0).toFixed(2))
-    })).sort((a, b) => b.value - a.value);
+    const isFiltered = filters?.customer && filters.customer.length > 0;
+    if (!isFiltered) {
+      const totalValRub = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0), 0);
+      const totalValLakhs = Number((totalValRub / 100000.0).toFixed(2));
+      return {
+        labels: ["Overall (All Customers)"],
+        data: [totalValLakhs]
+      };
+    } else {
+      const map = {};
+      filteredRows.forEach(r => {
+        const c = r.customerName || "—";
+        const val = (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
+        map[c] = (map[c] || 0) + val;
+      });
+      const entries = Object.entries(map).map(([cust, val]) => ({
+        customer: cust,
+        value: Number((val / 100000.0).toFixed(2))
+      })).sort((a, b) => b.value - a.value);
 
-    return {
-      labels: entries.map(e => e.customer),
-      data: entries.map(e => e.value)
-    };
-  }, [filteredRows]);
+      return {
+        labels: entries.map(e => e.customer),
+        data: entries.map(e => e.value)
+      };
+    }
+  }, [filteredRows, filters?.customer]);
 
   const setupChart = React.useCallback(
     (canvas) => {
@@ -17092,14 +17991,19 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
         };
         datasets.push(mainDataset);
       } else if (chartType === "polarArea") {
-        const opacities = [0.45, 0.53, 0.61, 0.69, 0.77, 0.85];
         mainDataset = {
           ...mainDataset,
           type: "polarArea",
-          backgroundColor: opacities.map((o, i) => `rgba(236, 72, 153, ${opacities[i % opacities.length]})`),
-          borderColor: "#ec4899",
-          borderWidth: 1.5,
-          hoverBackgroundColor: "#ec4899"
+          backgroundColor: [
+            "rgba(236, 72, 153, 0.8)",
+            "rgba(59, 130, 246, 0.8)",
+            "rgba(16, 185, 129, 0.8)",
+            "rgba(245, 158, 11, 0.8)",
+            "rgba(139, 92, 246, 0.8)",
+            "rgba(14, 165, 233, 0.8)",
+          ],
+          borderWidth: 2,
+          borderColor: "#ffffff"
         };
         datasets.push(mainDataset);
       } else if (chartType === "stepped") {
@@ -17123,13 +18027,14 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
         };
         datasets.push(mainDataset);
       } else {
+        // Line chart default
         mainDataset = {
           ...mainDataset,
           type: "line",
           borderColor: "#ec4899",
-          backgroundColor: "transparent",
-          borderWidth: 3,
-          tension: 0.4,
+          backgroundColor: "rgba(236, 72, 153, 0.1)",
+          borderWidth: 2.5,
+          tension: 0.35,
           fill: false,
           pointBackgroundColor: "#ec4899",
           pointBorderColor: "#ffffff",
@@ -17193,23 +18098,14 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
-              angleLines: {
-                display: chartType === "radar",
-                color: "rgba(226, 232, 240, 0.8)"
-              },
-              grid: {
-                circular: true,
-                color: "rgba(226, 232, 240, 0.6)"
-              },
+              beginAtZero: true,
+              grid: { color: "rgba(226, 232, 240, 0.8)" },
               ticks: {
                 display: true,
                 callback: (v) => `₹${v}L`,
                 font: { family: "Outfit, Inter, sans-serif", size: 9, weight: "500" },
-                color: "#64748b",
-                backdropColor: "transparent"
-              },
-              suggestedMin: 0,
-              suggestedMax: 80
+                color: "#64748b"
+              }
             }
           } : {
             x: {
@@ -17252,7 +18148,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
     setCustSearch("");
   };
 
-  const rebuildToken = `fg-value-chart|${targetConfig?.fg_value?.maxStockValueL ?? 60.0}|${JSON.stringify(customerChartData.data)}|${chartType}`;
+  const rebuildToken = `fg-value-chart|${targetConfig?.fg_value?.maxStockValueL ?? 60.0}|${JSON.stringify(customerChartData.data)}|${JSON.stringify(customerChartData.labels)}|${chartType}`;
 
   return (
     <PremiumDashboardView
@@ -17262,7 +18158,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint={`Customer Wise FG Stock Value — ${currentMonthName}`}
+      rangeHint={`${filters?.customer && filters.customer.length > 0 ? "Customer Wise" : "Overall"} FG Stock Value — ${currentMonthName}`}
       onClose={onClose}
       rebuildToken={rebuildToken}
       loading={loading || fgValueLoading}
@@ -17538,10 +18434,10 @@ function FgValueReportBottomTable({ data, filters }) {
     "Part Number",
     "Description",
     "Final Insp. Qty",
-    "Dispatch Qty",
+    "DC Qty",
     "Rate",
     "Final Insp. Value",
-    "Dispatch Value",
+    "DC Value",
     "Total Value"
   ];
 
@@ -17569,6 +18465,24 @@ function filterDailyProdRows(rows, filters, defaultFrom, defaultTo) {
     }
     return true;
   });
+}
+
+function formatDailyProdHours(v) {
+  if (v == null || Number.isNaN(Number(v))) return "";
+  const n = Number(v);
+  if (n <= 0) return "0 hrs";
+
+  const totalMinutes = Math.round(n * 60);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  if (hrs > 0 && mins > 0) {
+    return `${hrs} ${hrs === 1 ? "hr" : "hrs"} ${mins} ${mins === 1 ? "min" : "mins"}`;
+  } else if (hrs > 0) {
+    return `${hrs} ${hrs === 1 ? "hr" : "hrs"}`;
+  } else {
+    return `${mins} ${mins === 1 ? "min" : "mins"}`;
+  }
 }
 
 function DailyProductionDashboardView({ data, loading, filters, onFilterChange, onClose, targetConfig, uid, onDailyProdData }) {
@@ -17680,8 +18594,8 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
       return {
         machine: g.machine,
         rate: g.rateCount ? Math.round((g.rateSum / g.rateCount) * 10) / 10 : 0,
-        planned: Math.round(g.planned * 10) / 10,
-        balance: Math.round(g.balance * 10) / 10,
+        planned: g.planned,
+        balance: g.balance,
         loss: Math.round(g.loss),
       };
     });
@@ -17698,11 +18612,11 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
 
 
   const totalPlanned = React.useMemo(() => {
-    return Math.round(filteredData.reduce((acc, r) => acc + Number(r.planned || 0), 0) * 10) / 10;
+    return filteredData.reduce((acc, r) => acc + Number(r.planned || 0), 0);
   }, [filteredData]);
 
   const totalBalance = React.useMemo(() => {
-    return Math.round(filteredData.reduce((acc, r) => acc + Number(r.balance || 0), 0) * 10) / 10;
+    return filteredData.reduce((acc, r) => acc + Number(r.balance || 0), 0);
   }, [filteredData]);
 
   const totalLoss = React.useMemo(() => {
@@ -17715,21 +18629,34 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
     return (sum / filteredData.length).toFixed(1);
   }, [filteredData]);
 
-  const chartLabels = React.useMemo(() => filteredData.map(r => r.machine), [filteredData]);
-  const plannedData = React.useMemo(() => filteredData.map(r => Number(r.planned || 0)), [filteredData]);
-  const balanceData = React.useMemo(() => filteredData.map(r => Number(r.balance || 0)), [filteredData]);
-  const lossData = React.useMemo(() => filteredData.map(r => Number(r.loss || 0)), [filteredData]);
+  // Chart data: top 10 machines by planned hours when no specific machine filter is active.
+  // Users can select specific machines via the Machine No filter to see any set they want.
+  const chartData = React.useMemo(() => {
+    const machineFilterActive = !!(
+      filters?.machineNo &&
+      filters.machineNo.trim() &&
+      filters.machineNo.trim() !== "All Machines"
+    );
+    if (machineFilterActive) {
+      // User explicitly selected machines — show all of them in chart
+      return filteredData;
+    }
+    // Default: top 10 machines by planned hours to keep chart readable
+    return [...filteredData]
+      .sort((a, b) => Number(b.planned || 0) - Number(a.planned || 0))
+      .slice(0, 10);
+  }, [filteredData, filters?.machineNo]);
+
+  const chartLabels = React.useMemo(() => chartData.map(r => r.machine), [chartData]);
+  const plannedData = React.useMemo(() => chartData.map(r => Number(r.planned || 0)), [chartData]);
+  const balanceData = React.useMemo(() => chartData.map(r => Number(r.balance || 0)), [chartData]);
+  const lossData = React.useMemo(() => chartData.map(r => Number(r.loss || 0)), [chartData]);
 
   const setupChart = React.useCallback(
     (canvas) => {
       const targetVal = targetConfig?.daily_production?.maxBalanceHours ?? 4.0;
 
-      const fmtHrs = (v) => {
-        if (v == null || Number.isNaN(Number(v))) return "";
-        const n = Number(v);
-        if (n >= 1000) return `${(n / 1000).toFixed(1)}k h`;
-        return `${n % 1 === 0 ? n : n.toFixed(1)}h`;
-      };
+      const fmtHrs = (v) => formatDailyProdHours(v);
       const fmtLoss = (v) => {
         if (v == null || Number.isNaN(Number(v))) return "";
         const n = Number(v);
@@ -17990,13 +18917,13 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
   );
 
   const kpis = [
-    { label: "Planned Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `${totalPlanned} Hrs`, icon: ClipboardList, color: "#84cc16" },
-    { label: "Balance Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `${totalBalance} Hrs`, icon: Timer, color: "#f87171" },
+    { label: "Planned Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : formatDailyProdHours(totalPlanned), icon: ClipboardList, color: "#84cc16" },
+    { label: "Balance Hours", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : formatDailyProdHours(totalBalance), icon: Timer, color: "#f87171" },
     { label: "Total Loss Value", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `₹${totalLoss.toLocaleString()}`, icon: AlertTriangle, color: "#0ea5e9" },
     { label: "Avg Rate/Hr", value: (loading || dailyProdLoading) && !filteredData.length ? "…" : `₹${avgRate}`, icon: Activity, color: "#0f766e" }
   ];
 
-  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(filteredData)}|${filters.machineNo}|${filters.fromDate}|${filters.toDate}|${dailyProdLoading}|${chartType}`;
+  const rebuildToken = `daily-prod-chart|${targetConfig?.daily_production?.maxBalanceHours ?? 4.0}|${JSON.stringify(chartData)}|${filters.machineNo}|${filters.fromDate}|${filters.toDate}|${dailyProdLoading}|${chartType}`;
 
   return (
     <PremiumDashboardView
@@ -18006,7 +18933,9 @@ function DailyProductionDashboardView({ data, loading, filters, onFilterChange, 
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint="Machine Capacity Report - Hrs and Loss"
+      rangeHint={(!filters?.machineNo || !filters.machineNo.trim() || filters.machineNo.trim() === "All Machines")
+        ? `Machine Capacity Report – Top 10 Machines (by Planned Hrs) · Use Machine No filter to select specific machines`
+        : `Machine Capacity Report – Selected Machines`}
       onClose={onClose}
       rebuildToken={rebuildToken}
       noData={filteredRows.length === 0}
@@ -18167,8 +19096,8 @@ function DailyProductionBottomTable({ data, filters, targetConfig }) {
         row.date || "—",
         row.machine || "—",
         `₹${Number(row.rate || 0).toLocaleString()}`,
-        `${planned} Hrs`,
-        `${balance} Hrs`,
+        formatDailyProdHours(planned),
+        formatDailyProdHours(balance),
         `₹${Number(row.loss || 0).toLocaleString()}`,
         `${lossPct}%`
       ];
@@ -18278,11 +19207,12 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
   const totalPlan = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.planQty) || 0), 0), [filteredData]);
   const totalAvailable = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.availableQty) || 0), 0), [filteredData]);
   const totalReq = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.planReqQty) || 0), 0), [filteredData]);
+  const totalDispatch = React.useMemo(() => filteredData.reduce((acc, r) => acc + (Number(r.dispatchQty) || 0), 0), [filteredData]);
 
   const avgFulfillment = React.useMemo(() => {
     if (totalPlan === 0) return 0;
-    return ((totalAvailable / totalPlan) * 100).toFixed(1);
-  }, [totalPlan, totalAvailable]);
+    return ((totalDispatch / totalPlan) * 100).toFixed(1);
+  }, [totalPlan, totalDispatch]);
 
   // Aggregate by customer for the bar chart
   const customerChartData = React.useMemo(() => {
@@ -19653,6 +20583,11 @@ function filterCapaRows(rows, filters, defaultFrom, defaultTo) {
         if (!hasMatch) return false;
       }
     }
+    if (filters?.partNumber) {
+      const p = String(r.partNo || r.partNumber || r.itemCode || r.part_no || "").toLowerCase();
+      const searchPart = String(filters.partNumber).trim().toLowerCase();
+      if (searchPart && !p.includes(searchPart)) return false;
+    }
     if (filters?.status && String(r.status || "") !== String(filters.status)) return false;
     return true;
   });
@@ -19758,6 +20693,7 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
       fromDate: "",
       toDate: "",
       customer: "",
+      partNumber: "",
       status: ""
     });
   };
@@ -19801,6 +20737,7 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: "nearest", intersect: true },
           plugins: {
             legend: { display: true, position: "top", labels: { boxWidth: 12, font: { size: 10 } } }
           },
@@ -19938,6 +20875,19 @@ function CapaDashboardView({ data, loading, filters, onFilterChange, onClose, se
             allLabel="All Customers"
             searchPlaceholder="Search customer..."
             accentColor="#0891b2"
+          />
+        </div>
+
+        {/* Part Number Filter */}
+        <div className="pp1-filter-group" style={{ maxWidth: "160px" }}>
+          <label className="pp1-filter-label">Part Number</label>
+          <input
+            type="text"
+            className="pp1-filter-input"
+            placeholder="Part No..."
+            value={filters?.partNumber || ""}
+            onChange={e => handleInputChange("partNumber", e.target.value)}
+            style={{ height: "28px", fontSize: "11px" }}
           />
         </div>
 
@@ -20666,7 +21616,7 @@ function CenterTransitionWrapper({ uid, loading, children }) {
   return (
     <div className="pp1-ct-wrapper" style={{ position: "relative", width: "100%", minHeight: "380px" }}>
       {/* Main Content Pane */}
-      <div 
+      <div
         className="pp1-ct-reveal"
         style={{
           transition: "filter 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -20787,7 +21737,7 @@ function readPP1Session(key, defaults) {
   } catch { return defaults; }
 }
 function writePP1Session(key, data) {
-  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function PlantPerformance1() {
@@ -20834,6 +21784,7 @@ export default function PlantPerformance1() {
     poNumber: "",
     partNumber: "",
     category: "",
+    poType: "",
   });
   const [otdFilters, setOtdFilters] = useState(_saved.otdFilters || {
     fromDate: "",
@@ -20854,6 +21805,7 @@ export default function PlantPerformance1() {
   const [prodValuePanelData, setProdValuePanelData] = useState(null);
   const [fgValuePanelData, setFgValuePanelData] = useState(null);
   const [targetVsActualPanelData, setTargetVsActualPanelData] = useState(null);
+  const [idlePanelData, setIdlePanelData] = useState(null);
   const [srPanelData, setSrPanelData] = useState(null);
   const [vrPanelData, setVrPanelData] = useState(null);
   const [stockPanelData, setStockPanelData] = useState(null);
@@ -20928,6 +21880,7 @@ export default function PlantPerformance1() {
     fromDate: defaultFrom,
     toDate: defaultTo,
     team: "",
+    macGroup: "",
     machine: "",
     operator: "",
     customer: "",
@@ -21006,7 +21959,7 @@ export default function PlantPerformance1() {
     fromDate: defaultFrom,
     toDate: defaultTo,
     category: [],
-    itemCode: "",
+    itemCode: [],
   });
 
   // ✅ Persist filters and selections to sessionStorage on every change
@@ -21059,87 +22012,101 @@ export default function PlantPerformance1() {
   const fetchAbortRef = useRef(null);
 
   const [showTargetPopover, setShowTargetPopover] = useState(false);
-  const [targetConfig, setTargetConfig] = useState({
-    oee: 80,
-    availability: 85,
-    performance: 90,
-    quality: 95,
-    customer_po: {
-      salesTarget: 25,
-      orderValueAch: 85
-    },
-    store_stock_value: {
-      maxStockValueL: 50.0
-    },
-    production_analysis: {
-      minProductionValue: 12.0
-    },
-    grn_value: {
-      minGrnValueL: 100
-    },
-    sales_analysis: {
-      monthlyTarget: 150
-    },
-    idle_hours: {
-      maxIdleHours: 15,
-      reductionTarget: 10
-    },
-    idle_hours_non_accepted: {
-      maxNonAcceptedHours: 5,
-      unplannedLimit: 10
-    },
-    oee_comparison: {
-      minUtilization: 75,
-      monthWiseTarget: 75,
-      dayWiseTarget: 75,
-      macWiseTarget: 75,
-      teamWiseTarget: 75
-    },
-    rejection: {
-      rejectionLimit: 2.0,
-      inHouseLimit: 1.0,
-      vendorLimit: 1.2,
-      finalInspLimit: 1.5,
-      supplierLimit: 0.5
-    },
-    rework: {
-      reworkLimit: 1.5,
-      inHouseLimit: 1.0,
-      jobOrderLimit: 1.2,
-      finalInspLimit: 1.5,
-      customerReworkLimit: 0.5
-    },
-    efficiency: {
-      monthWiseTarget: 80,
-      dayWiseTarget: 80,
-      macWiseTarget: 80,
-      teamWiseTarget: 80
-    },
-    otd: {
-      targetPct: 90,
-      trendPct: 90
-    },
-    supplier_rating: {
-      minRating: 90
-    },
-    vendor_rating: {
-      minRating: 90
-    },
-    fg_value: {
-      maxStockValueL: 60.0
-    },
-    daily_production: {
-      maxBalanceHours: 4.0
-    },
-    target_vs_actual: {
-      minFulfillmentPct: 90.0
-    },
-    operator_efficiency: {
-      minEfficiencyPct: 90.0
-    },
-    purchase_value: {
-      minPurchaseValueL: 100
-    }
+  const [targetConfig, setTargetConfig] = useState(() => {
+    const defaults = {
+      oee: 80,
+      availability: 85,
+      performance: 90,
+      quality: 95,
+      customer_po: {
+        salesTarget: 25,
+        orderValueAch: 85
+      },
+      store_stock_value: {
+        maxStockValueL: 50.0
+      },
+      production_analysis: {
+        minProductionValue: 12.0
+      },
+      grn_value: {
+        minGrnValueL: 100
+      },
+      sales_analysis: {
+        monthlyTarget: 150
+      },
+      idle_hours: {
+        maxIdleHours: 15,
+        reductionTarget: 10
+      },
+      idle_hours_non_accepted: {
+        maxNonAcceptedHours: 5,
+        unplannedLimit: 10
+      },
+      oee_comparison: {
+        minUtilization: 75,
+        monthWiseTarget: 75,
+        dayWiseTarget: 75,
+        macWiseTarget: 75,
+        teamWiseTarget: 75
+      },
+      rejection: {
+        rejectionLimit: 2.0,
+        inHouseLimit: 1.0,
+        macLimit: 1.0,
+        matLimit: 1.0,
+        vendorLimit: 1.2,
+        finalInspLimit: 1.5,
+        supplierLimit: 0.5
+      },
+      rework: {
+        reworkLimit: 1.5,
+        inHouseLimit: 1.0,
+        jobOrderLimit: 1.2,
+        finalInspLimit: 1.5,
+        customerReworkLimit: 0.5
+      },
+      efficiency: {
+        monthWiseTarget: 80,
+        dayWiseTarget: 80,
+        macWiseTarget: 80,
+        teamWiseTarget: 80
+      },
+      otd: {
+        targetPct: 90,
+        trendPct: 90
+      },
+      supplier_rating: {
+        minRating: 90
+      },
+      vendor_rating: {
+        minRating: 90
+      },
+      fg_value: {
+        maxStockValueL: 60.0
+      },
+      daily_production: {
+        maxBalanceHours: 4.0
+      },
+      target_vs_actual: {
+        minFulfillmentPct: 90.0
+      },
+      operator_efficiency: {
+        minEfficiencyPct: 90.0
+      },
+      purchase_value: {
+        minPurchaseValueL: 100
+      }
+    };
+    try {
+      const saved = localStorage.getItem("ba_saved_target_criteria");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          return { ...defaults, ...parsed };
+        }
+      }
+    } catch { }
+    return defaults;
   });
 
   const [activeTargetTab, setActiveTargetTab] = useState("customer_po");
@@ -21262,14 +22229,70 @@ export default function PlantPerformance1() {
     }));
   };
 
+  // ── Fetch Target Criteria from Database (TargertCriteriaPlantPreform) on Mount ──
+  useEffect(() => {
+    const ac = new AbortController();
+    fetch(buildUrl("/api/plant-performance/target-criteria/"), { credentials: "include", signal: ac.signal })
+      .then(res => res.json())
+      .then(json => {
+        if (json?.targetConfig && typeof json.targetConfig === "object" && Object.keys(json.targetConfig).length > 0) {
+          setTargetConfig(prev => {
+            const merged = { ...prev, ...json.targetConfig };
+            try { localStorage.setItem("ba_saved_target_criteria", JSON.stringify(merged)); } catch { }
+            return merged;
+          });
+        }
+      })
+      .catch(err => {
+        if (err.name !== "AbortError") console.error("Error loading Target Criteria from database:", err);
+      });
+    return () => ac.abort();
+  }, []);
+
   const applyTargetChanges = () => {
-    setTargetConfig(tempConfig);
+    const sanitizeTargets = (obj) => {
+      if (obj === null || obj === undefined) return 0;
+      if (typeof obj === "object") {
+        const copy = Array.isArray(obj) ? [] : {};
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const val = obj[key];
+            if (typeof val === "object" && val !== null) {
+              copy[key] = sanitizeTargets(val);
+            } else if (val === "" || val === null || isNaN(val)) {
+              copy[key] = 0;
+            } else {
+              copy[key] = val;
+            }
+          }
+        }
+        return copy;
+      }
+      return obj;
+    };
+
+    const sanitized = sanitizeTargets(tempConfig);
+    setTargetConfig(sanitized);
+    try { localStorage.setItem("ba_saved_target_criteria", JSON.stringify(sanitized)); } catch { }
     setShowTargetPopover(false);
     setToast({
       title: "Targets Applied Successfully",
-      msg: "Dashboard charts and target lines have been updated.",
+      msg: "Dashboard charts and target lines have been updated and saved to database.",
       type: "success"
     });
+
+    // Save target criteria to database table TargertCriteriaPlantPreform
+    fetch(buildUrl("/api/plant-performance/target-criteria/"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ targetConfig: sanitized })
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json?.error) console.error("Error saving Target Criteria to database:", json.error);
+      })
+      .catch(err => console.error("Failed to save Target Criteria to database:", err));
   };
 
   const fetchAll = useCallback(async (from, to, signal) => {
@@ -21285,7 +22308,7 @@ export default function PlantPerformance1() {
       setData(json.data);
       try {
         sessionStorage.setItem("ba_cache_plantperformance", JSON.stringify(json.data));
-      } catch {}
+      } catch { }
       setRejPanelData(null);
       setRewPanelData(null);
       setCompPanelData(null);
@@ -21354,6 +22377,7 @@ export default function PlantPerformance1() {
   }, [dateRange]);
 
   const handleRangeChange = ({ from, to }) => {
+    if (!from || !to) return;
     setDateRange({ from, to });
     setLoading(true);
     fetchAbortRef.current?.abort();
@@ -21398,6 +22422,29 @@ export default function PlantPerformance1() {
     [selectionId, selectionPanel, data]
   );
 
+  useEffect(() => {
+    const fromStr = idleFilters.fromDate || defaultFrom;
+    const toStr = idleFilters.toDate || defaultTo;
+    if (!fromStr || !toStr) return;
+    const params = new URLSearchParams({
+      from: fromStr,
+      to: toStr,
+      machine: idleFilters.machine || "",
+      reason: idleFilters.idleReason || "",
+    });
+    const ctrl = new AbortController();
+    fetch(`/api/idle-time-report/?${params}`, {
+      credentials: "include",
+      signal: ctrl.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json) setIdlePanelData(json);
+      })
+      .catch(() => { });
+    return () => ctrl.abort();
+  }, [idleFilters.fromDate, idleFilters.toDate, idleFilters.machine, idleFilters.idleReason, defaultFrom, defaultTo]);
+
   // Compute live trend for every ACTION_CARD based on actual values vs targetConfig.
   // Returns a map: cardId -> { type: "up"|"down"|"average", value: string, message: string }
   const computedCardTrends = useMemo(() => {
@@ -21415,6 +22462,16 @@ export default function PlantPerformance1() {
       poCompareRows.forEach(r => {
         if (fromStr && r.date < fromStr) return;
         if (toStr && r.date > toStr) return;
+        if (poFilters.customer) {
+          const selectedCusts = poFilters.customer.split(",").map(c => c.trim()).filter(Boolean);
+          if (selectedCusts.length > 0 && !selectedCusts.includes(r.customer)) return;
+        }
+        if (poFilters.poNumber && (!r.poNumber || !String(r.poNumber).toLowerCase().includes(poFilters.poNumber.toLowerCase()))) return;
+        if (poFilters.partNumber && (!r.partNumber || !String(r.partNumber).toLowerCase().includes(poFilters.partNumber.toLowerCase()))) return;
+        if (poFilters.poType) {
+          const selectedTypes = poFilters.poType.split(",").map(t => t.trim()).filter(Boolean);
+          if (selectedTypes.length > 0 && (!r.poType || !selectedTypes.includes(r.poType))) return;
+        }
         salesVal += Number(r.salesValue || 0);
       });
     }
@@ -21430,151 +22487,138 @@ export default function PlantPerformance1() {
       priority: poOk ? "medium" : "high"
     };
 
-    // Sales Analysis — live monthly totals vs target
-    const salesMonthlyTotals = {};
+    // Sales Analysis — Total Sales vs Target (mirrors Customer PO logic exactly)
     const salesCompareRows = data?.salesAnalysisCompare?.rows;
+    const salesMonthlyTarget = targetConfig.sales_analysis?.monthlyTarget ?? 150;
+    let salesAnaTotal = 0;
     if (salesCompareRows && Array.isArray(salesCompareRows)) {
-      // Don't filter by date range for the sidebar trend card to ensure it shows by default
-      const filteredForTrend = salesCompareRows.filter(r => {
-        if (salesFilters.customer && r.customer !== salesFilters.customer) return false;
-        return true;
-      });
-      filteredForTrend.forEach((r) => {
-        if (!r.monthName) return;
-        salesMonthlyTotals[r.monthName] = (salesMonthlyTotals[r.monthName] || 0) + Number(r.salesValue || 0);
+      const salesFiltered = filterSalesRows(
+        salesCompareRows,
+        salesFilters,
+        defaultFrom,
+        defaultTo
+      );
+      salesFiltered.forEach((r) => {
+        salesAnaTotal += Number(r.salesValue || 0);
       });
     }
-    const salesMonthVals = Object.values(salesMonthlyTotals);
-    const salesMonthlyTarget = targetConfig.sales_analysis?.monthlyTarget ?? 150;
-    const salesMonthlyTotal = salesMonthVals.reduce((a, b) => a + b, 0);
-    const salesMonthlyAvg = salesMonthVals.length > 0 ? salesMonthlyTotal / salesMonthVals.length : 0;
-    const salesPeriodTarget = salesMonthVals.length > 0 ? salesMonthlyTarget * salesMonthVals.length : salesMonthlyTarget;
-    const salesAnaOk = salesMonthVals.length > 0 && salesMonthVals.every((v) => v >= salesMonthlyTarget);
-    const salesAnaDiff = salesPeriodTarget > 0
-      ? (((salesMonthlyTotal - salesPeriodTarget) / salesPeriodTarget) * 100).toFixed(1)
-      : "0.0";
-    if (salesMonthVals.length > 0) {
+    if (salesAnaTotal > 0 || (salesCompareRows && salesCompareRows.length > 0)) {
+      const salesAnaOk = salesAnaTotal >= salesMonthlyTarget;
+      const salesAnaDiff = salesMonthlyTarget > 0
+        ? (((salesAnaTotal - salesMonthlyTarget) / salesMonthlyTarget) * 100).toFixed(1)
+        : "0.0";
       map["sales_analysis_report_dashboard"] = {
         type: salesAnaOk ? "up" : "down",
         value: `${salesAnaOk ? "+" : ""}${salesAnaDiff}%`,
         message: salesAnaOk
-          ? `All monthly sales (total ₹${salesMonthlyTotal.toFixed(2)}L, avg ₹${salesMonthlyAvg.toFixed(2)}L/mo) meet target (₹${salesMonthlyTarget}L/month)`
-          : `Monthly sales (total ₹${salesMonthlyTotal.toFixed(2)}L, avg ₹${salesMonthlyAvg.toFixed(2)}L/mo) is below target (₹${salesMonthlyTarget}L/month)`,
+          ? `Total Sales (₹${salesAnaTotal.toFixed(2)}L) meets target (₹${salesMonthlyTarget}L)`
+          : `Total Sales (₹${salesAnaTotal.toFixed(2)}L) is below target (₹${salesMonthlyTarget}L)`,
         priority: salesAnaOk ? "medium" : "high"
       };
     }
 
-    // GRN Value trend — monthly totals vs per-month target
-    const grnMonthlyTotals = {};
+    // GRN Value trend — Total GRN vs Target (mirrors Customer PO logic exactly)
     const grnCompareRows = data?.grnValueCompare?.rows;
+    const grnTarget = targetConfig.grn_value?.minGrnValueL ?? 100;
+    let grnTotal = 0;
     if (grnCompareRows && Array.isArray(grnCompareRows)) {
-      // Don't filter by date range for the sidebar trend card to ensure it shows by default
-      const filteredForTrend = grnCompareRows.filter(r => {
-        if (purFilters.supplier && r.supplierName !== purFilters.supplier) return false;
-        if (purFilters.partNumber) {
-          const pno = String(r.partNo || "").toLowerCase();
-          if (!pno.includes(String(purFilters.partNumber).toLowerCase())) return false;
-        }
-        if (purFilters.category && (r.dtype || "") !== purFilters.category) return false;
-        return true;
-      });
-      filteredForTrend.forEach((r) => {
-        if (!r.month) return;
-        grnMonthlyTotals[r.month] = (grnMonthlyTotals[r.month] || 0) + Number(r.amount || 0);
+      const grnFiltered = filterGrnRows(
+        grnCompareRows,
+        purFilters,
+        defaultFrom,
+        defaultTo
+      );
+      grnFiltered.forEach((r) => {
+        grnTotal += Number(r.amount || 0);
       });
     }
-    const grnMonthVals = Object.values(grnMonthlyTotals);
-    const grnTarget = targetConfig.grn_value?.minGrnValueL ?? 100;
-    if (grnMonthVals.length > 0) {
-      const grnMinMonthly = Math.min(...grnMonthVals);
-      const grnOk = grnMonthVals.every(v => v >= grnTarget);
-      const grnDiff = grnTarget > 0 ? (((grnMinMonthly - grnTarget) / grnTarget) * 100).toFixed(1) : "0.0";
+    if (grnTotal > 0 || (grnCompareRows && grnCompareRows.length > 0)) {
+      const grnOk = grnTotal >= grnTarget;
+      const grnDiff = grnTarget > 0 ? (((grnTotal - grnTarget) / grnTarget) * 100).toFixed(1) : "0.0";
       map["purchase_report_dashboard"] = {
         type: grnOk ? "up" : "down",
         value: `${grnOk ? "+" : ""}${grnDiff}%`,
         message: grnOk
-          ? `All monthly GRN values meet target (₹${grnTarget}L/month)`
-          : `Monthly GRN value (₹${grnMinMonthly.toFixed(2)}L) is below target (₹${grnTarget}L/month)`,
+          ? `Total GRN Value (₹${grnTotal.toFixed(2)}L) meets target (₹${grnTarget}L)`
+          : `Total GRN Value (₹${grnTotal.toFixed(2)}L) is below target (₹${grnTarget}L)`,
         priority: grnOk ? "medium" : "high"
       };
     }
 
+    // Purchase Value trend — Total Purchase vs Target (mirrors Customer PO logic exactly)
     const pvTarget = targetConfig.purchase_value?.minPurchaseValueL ?? 100;
-    const pvMonthlyTotals = {};
     const pvCompareRows = data?.purchaseValueCompare?.rows;
+    let pvTotal = 0;
     if (pvCompareRows && Array.isArray(pvCompareRows)) {
-      const filteredForTrend = pvCompareRows.filter(r => {
-        if (purchaseValueFilters.supplier && r.supplierName !== purchaseValueFilters.supplier) return false;
-        if (purchaseValueFilters.partNumber) {
-          const pno = String(r.partNo || "").toLowerCase();
-          if (!pno.includes(String(purchaseValueFilters.partNumber).toLowerCase())) return false;
-        }
-        if (purchaseValueFilters.category && (r.category || "") !== purchaseValueFilters.category) return false;
-        return true;
-      });
-      filteredForTrend.forEach((r) => {
-        const mKey = r.monthName || r.month;
-        if (!mKey || mKey === "—") return;
-        pvMonthlyTotals[mKey] = (pvMonthlyTotals[mKey] || 0) + Number(r.amount || 0);
+      const pvFiltered = filterPurchaseRows(
+        pvCompareRows,
+        purchaseValueFilters,
+        defaultFrom,
+        defaultTo
+      );
+      pvFiltered.forEach((r) => {
+        pvTotal += Number(r.amount || 0);
       });
     }
-    const pvMonthVals = Object.values(pvMonthlyTotals);
-    if (pvMonthVals.length > 0) {
-      const pvMinMonthly = Math.min(...pvMonthVals);
-      const pvOk = pvMonthVals.every(v => v >= pvTarget);
-      const pvDiff = pvTarget > 0 ? (((pvMinMonthly - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
+    if (pvTotal > 0 || (pvCompareRows && pvCompareRows.length > 0)) {
+      const pvOk = pvTotal >= pvTarget;
+      const pvDiff = pvTarget > 0 ? (((pvTotal - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
       map["purchase_value_report_dashboard"] = {
         type: pvOk ? "up" : "down",
         value: `${pvOk ? "+" : ""}${pvDiff}%`,
         message: pvOk
-          ? `All monthly purchase values meet target (₹${pvTarget}L/month)`
-          : `Monthly purchase value (₹${pvMinMonthly.toFixed(2)}L) is below target (₹${pvTarget}L/month)`,
-        priority: pvOk ? "medium" : "high"
-      };
-    } else {
-      const pvActual = 0;
-      const pvOk = pvActual >= pvTarget;
-      const pvDiff = pvTarget > 0 ? (((pvActual - pvTarget) / pvTarget) * 100).toFixed(1) : "0.0";
-      map["purchase_value_report_dashboard"] = {
-        type: pvOk ? "up" : "down",
-        value: `${pvOk ? "+" : ""}${pvDiff}%`,
-        message: pvOk
-          ? `Purchase Value (₹${pvActual.toFixed(1)}L) meets target limit (₹${pvTarget}L)`
-          : `Purchase Value (₹${pvActual.toFixed(1)}L) is below target limit (₹${pvTarget}L)`,
+          ? `Total Purchase Value (₹${pvTotal.toFixed(2)}L) meets target (₹${pvTarget}L)`
+          : `Total Purchase Value (₹${pvTotal.toFixed(2)}L) is below target (₹${pvTarget}L)`,
         priority: pvOk ? "medium" : "high"
       };
     }
 
-    const totalIdle = 17.3;
+    // Idle Hours — live from idlePanelData (or fallback to data.idle.summary)
+    let idleRows = Array.isArray(idlePanelData?.rows) ? idlePanelData.rows : [];
+    if (idleFilters.operator) {
+      const opList = idleFilters.operator.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (opList.length > 0) {
+        idleRows = idleRows.filter(r => opList.includes((r.operator || "").toLowerCase()));
+      }
+    }
+    const idleSummary = data?.idle?.summary ?? {};
+    const totalIdle = (idlePanelData && Array.isArray(idlePanelData.rows))
+      ? idleRows.reduce((sum, r) => sum + (Number(r.total_idle_hours_decimal) || 0), 0)
+      : Number(idleSummary.total_idle_hours ?? 0);
     const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
-    const idleOk = totalIdle <= maxIdle;
-    const idleDiff = (((maxIdle - totalIdle) / maxIdle) * 100).toFixed(1);
-    map["idle_hours_report_dashboard"] = {
-      type: idleOk ? "up" : "down",
-      value: `${idleOk ? "+" : "-"}${Math.abs(Number(idleDiff))}%`,
-      message: idleOk
-        ? `Total Idle Hours (${totalIdle}h) is within target (${maxIdle}h)`
-        : `Total Idle Hours (${totalIdle}h) exceeds target (${maxIdle}h)`,
-      priority: "medium"
-    };
+    const idleOk = totalIdle > 0 ? totalIdle <= maxIdle : true;
+    const idleDiff = maxIdle > 0 ? (((maxIdle - totalIdle) / maxIdle) * 100).toFixed(1) : "0.0";
+    if (totalIdle > 0 || data?.idle || idlePanelData) {
+      map["idle_hours_report_dashboard"] = {
+        type: idleOk ? "up" : "down",
+        value: `${idleOk ? "+" : "-"}${Math.abs(Number(idleDiff))}%`,
+        message: idleOk
+          ? `Total Idle Hours (${totalIdle.toFixed(1)}h) is within limit (${maxIdle}h)`
+          : `Total Idle Hours (${totalIdle.toFixed(1)}h) exceeds limit (${maxIdle}h)`,
+        priority: idleOk ? "medium" : "high"
+      };
+    }
 
-    const nonAcceptedHrs = 4.8;
+    // Non-Accepted Idle — live from data.idle.summary
+    const nonAcceptedHrs = Number(idleSummary.non_accepted_hours ?? idleSummary.non_accepted ?? 0);
     const maxNonAccepted = targetConfig.idle_hours_non_accepted?.maxNonAcceptedHours ?? 5;
-    const totalIdleForNonAcc = 17.3;
+    const totalIdleForNonAcc = totalIdle > 0 ? totalIdle : 1;
     const unplannedLossPct = (nonAcceptedHrs / totalIdleForNonAcc) * 100;
     const unplannedLimit = targetConfig.idle_hours_non_accepted?.unplannedLimit ?? 10;
     const nonAccOk = nonAcceptedHrs <= maxNonAccepted && unplannedLossPct <= unplannedLimit;
-    const nonAccDiff = (((maxNonAccepted - nonAcceptedHrs) / maxNonAccepted) * 100).toFixed(1);
-    map["idle_hours_non_accepted_reason_production_loss_report"] = {
-      type: nonAccOk ? "up" : "down",
-      value: `${nonAccOk ? "+" : "-"}${Math.abs(Number(nonAccDiff))}%`,
-      message: nonAccOk
-        ? `Non-Accepted Hours (${nonAcceptedHrs}h) is within target (${maxNonAccepted}h)`
-        : nonAcceptedHrs > maxNonAccepted
-          ? `Non-Accepted Hours (${nonAcceptedHrs}h) exceeds target (${maxNonAccepted}h)`
-          : `Unplanned Loss (${unplannedLossPct.toFixed(1)}%) exceeds threshold (${unplannedLimit}%)`,
-      priority: "high"
-    };
+    const nonAccDiff = maxNonAccepted > 0 ? (((maxNonAccepted - nonAcceptedHrs) / maxNonAccepted) * 100).toFixed(1) : "0.0";
+    if (nonAcceptedHrs > 0 || data?.idle) {
+      map["idle_hours_non_accepted_reason_production_loss_report"] = {
+        type: nonAccOk ? "up" : "down",
+        value: `${nonAccOk ? "+" : "-"}${Math.abs(Number(nonAccDiff))}%`,
+        message: nonAccOk
+          ? `Non-Accepted Hours (${nonAcceptedHrs.toFixed(1)}h) is within limit (${maxNonAccepted}h)`
+          : nonAcceptedHrs > maxNonAccepted
+            ? `Non-Accepted Hours (${nonAcceptedHrs.toFixed(1)}h) exceeds limit (${maxNonAccepted}h)`
+            : `Unplanned Loss (${unplannedLossPct.toFixed(1)}%) exceeds threshold (${unplannedLimit}%)`,
+        priority: nonAccOk ? "medium" : "high"
+      };
+    }
 
     const rejLimit = resolveRejectionLimit(targetConfig, rejFilters.rejType);
     const rejSource = data?.rejectionCompare || rejPanelData;
@@ -21671,11 +22715,11 @@ export default function PlantPerformance1() {
       const oeeFiltered = filterOeeRows(oeeRowsForTrend, oeeCompFilters, activeFrom, activeTo);
       if (oeeFiltered.length) {
         const sum = oeeFiltered.reduce((acc, r) => acc + Number(r.overallOee || 0), 0);
-        currentOee = Math.round(sum / oeeFiltered.length);
+        currentOee = Number((sum / oeeFiltered.length).toFixed(2));
       }
     }
     if (currentOee == null && oeeSource?.kpis?.avgOee != null && !oeeCompFilters.machineType && !oeeCompFilters.machine) {
-      currentOee = Math.round(Number(oeeSource.kpis.avgOee));
+      currentOee = Number(Number(oeeSource.kpis.avgOee).toFixed(2));
     }
     if (currentOee != null && Number(currentOee) >= 0) {
       const oeeOk = currentOee >= oeeMinUtilization;
@@ -21732,6 +22776,14 @@ export default function PlantPerformance1() {
     if (prodFilters.team) {
       const teamMacs = new Set(pvFilteredDetail.filter((r) => r.team === prodFilters.team).map((r) => r.machine));
       pvScopedMachines = pvScopedMachines.filter((r) => teamMacs.has(r.machine));
+    }
+    if (prodFilters.macGroup) {
+      const selectedGroups = prodFilters.macGroup.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (selectedGroups.length > 0) {
+        pvScopedMachines = pvScopedMachines.filter((r) =>
+          selectedGroups.includes(String(r.macGroup || "").toLowerCase())
+        );
+      }
     }
     if (prodFilters.machine) {
       pvScopedMachines = pvScopedMachines.filter(
@@ -21830,19 +22882,28 @@ export default function PlantPerformance1() {
       priority: vendorOk ? "medium" : "high"
     };
 
-    // FG Value trend calculation (UI alone)
-    const fgVal = 48.5; // Lakhs
+    // FG Value — live from data.fgValueCompare.rows
     const fgLimit = targetConfig.fg_value?.maxStockValueL ?? 60.0;
-    const fgOk = fgVal <= fgLimit;
-    const fgDiff = fgLimit > 0 ? (((fgLimit - fgVal) / fgLimit) * 100).toFixed(1) : "0.0";
-    map["fg_value_report_dashboard"] = {
-      type: fgOk ? "up" : "down",
-      value: `${fgOk ? "+" : "-"}${Math.abs(Number(fgDiff))}%`,
-      message: fgOk
-        ? `FG Value (₹${fgVal}L) is within target limit (₹${fgLimit}L)`
-        : `FG Value (₹${fgVal}L) exceeds target limit (₹${fgLimit}L)`,
-      priority: fgOk ? "medium" : "high"
-    };
+    const fgRows = Array.isArray(data?.fgValueCompare?.rows) ? data.fgValueCompare.rows : [];
+    let fgTotalRaw = 0;
+    fgRows.forEach((r) => {
+      if (fgFilters.customer?.length > 0 && !fgFilters.customer.includes(r.customerName)) return;
+      if (fgFilters.itemCode && r.partNo !== fgFilters.itemCode) return;
+      fgTotalRaw += (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0);
+    });
+    const fgVal = fgTotalRaw / 100000; // convert to Lakhs
+    if (fgRows.length > 0 || data?.fgValueCompare) {
+      const fgOk = fgVal <= fgLimit;
+      const fgDiff = fgLimit > 0 ? (((fgLimit - fgVal) / fgLimit) * 100).toFixed(1) : "0.0";
+      map["fg_value_report_dashboard"] = {
+        type: fgOk ? "up" : "down",
+        value: `${fgOk ? "+" : "-"}${Math.abs(Number(fgDiff))}%`,
+        message: fgOk
+          ? `FG Value (₹${fgVal.toFixed(2)}L) is within limit (₹${fgLimit}L)`
+          : `FG Value (₹${fgVal.toFixed(2)}L) exceeds limit (₹${fgLimit}L)`,
+        priority: fgOk ? "medium" : "high"
+      };
+    }
 
     // Daily Production trend — machines exceeding balance hours limit
     const dpSource = data?.dailyProductionCompare || dailyProdPanelData;
@@ -21874,18 +22935,33 @@ export default function PlantPerformance1() {
       };
     }
 
-    // Target Vs Actual trend calculation (UI alone)
-    const tvaFulfillment = 82.7; // Percent
+    // Target Vs Actual — live avg fulfillment % from data.targetVsActualCompare.rows
     const tvaLimit = targetConfig.target_vs_actual?.minFulfillmentPct ?? 90.0;
-    const tvaOk = tvaFulfillment >= tvaLimit;
-    map["target_vs_actual_report_dashboard"] = {
-      type: tvaOk ? "up" : "down",
-      value: tvaOk ? "+2.4%" : "-7.3%",
-      message: tvaOk
-        ? `Fulfillment rate (${tvaFulfillment}%) meets minimum target (${tvaLimit}%)`
-        : `Fulfillment rate (${tvaFulfillment}%) is below minimum target (${tvaLimit}%)`,
-      priority: tvaOk ? "medium" : "high"
-    };
+    const tvaSource = targetVsActualPanelData || data?.targetVsActualCompare;
+    const tvaRows = Array.isArray(tvaSource?.rows) ? tvaSource.rows : [];
+    let tvaFilteredRows = tvaRows;
+    if (targetVsActualFilters.customer) {
+      const custList = String(targetVsActualFilters.customer).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (custList.length > 0) tvaFilteredRows = tvaFilteredRows.filter(r => custList.includes((r.customerName || "").toLowerCase()));
+    }
+    if (targetVsActualFilters.fromDate) tvaFilteredRows = tvaFilteredRows.filter(r => r.date >= targetVsActualFilters.fromDate);
+    if (targetVsActualFilters.toDate) tvaFilteredRows = tvaFilteredRows.filter(r => r.date <= targetVsActualFilters.toDate);
+    const tvaUseRows = tvaFilteredRows.length ? tvaFilteredRows : tvaRows;
+    if (tvaUseRows.length > 0 || tvaSource) {
+      const tvaTotalPlan = tvaUseRows.reduce((acc, r) => acc + (Number(r.planQty) || 0), 0);
+      const tvaTotalDispatch = tvaUseRows.reduce((acc, r) => acc + (Number(r.dispatchQty) || 0), 0);
+      const tvaFulfillment = tvaTotalPlan > 0 ? Number(((tvaTotalDispatch / tvaTotalPlan) * 100).toFixed(1)) : 0;
+      const tvaOk = tvaTotalPlan > 0 && tvaFulfillment >= tvaLimit;
+      const tvaDiff = tvaLimit > 0 ? (((tvaFulfillment - tvaLimit) / tvaLimit) * 100).toFixed(1) : "0.0";
+      map["target_vs_actual_report_dashboard"] = {
+        type: tvaOk ? "up" : "down",
+        value: `${tvaOk ? "+" : ""}${tvaDiff}%`,
+        message: tvaOk
+          ? `Fulfillment rate (${tvaFulfillment}%) meets target (${tvaLimit}%)`
+          : `Fulfillment rate (${tvaFulfillment}%) is below target (${tvaLimit}%)`,
+        priority: tvaOk ? "medium" : "high"
+      };
+    }
 
     // Operator Efficiency trend — avg OPREFF from live data
     const opEffSource = data?.operatorEfficiencyCompare || opEffPanelData;
@@ -21924,18 +23000,33 @@ export default function PlantPerformance1() {
       }
     }
 
-    // Machine Efficiency trend calculation (UI alone)
-    const meVal = 88.0; // Percent
+    // Machine Efficiency — live avg machinePct from data.machineEfficiencyCompare
     const meLimit = targetConfig.machine_efficiency?.minEfficiencyPct ?? 90.0;
-    const meOk = meVal >= meLimit;
-    map["machine_efficiency_report_dashboard"] = {
-      type: meOk ? "up" : "down",
-      value: meOk ? "+1.5%" : "-2.0%",
-      message: meOk
-        ? `Avg Machine Efficiency (${meVal}%) meets target (${meLimit}%)`
-        : `Avg Machine Efficiency (${meVal}%) is below target (${meLimit}%)`,
-      priority: meOk ? "medium" : "high"
-    };
+    const meSource = machEffPanelData || data?.machineEfficiencyCompare;
+    const meAllRows = Array.isArray(meSource?.detailRows) && meSource.detailRows.length
+      ? meSource.detailRows
+      : Array.isArray(meSource?.machineRows) && meSource.machineRows.length
+        ? meSource.machineRows
+        : Array.isArray(meSource?.rows) ? meSource.rows : [];
+    let meRows = meAllRows;
+    if (machineEfficiencyFilters.machine) {
+      meRows = meRows.filter(r => String(r.machine || "").toLowerCase().includes(machineEfficiencyFilters.machine.toLowerCase()));
+    }
+    if (meRows.length > 0 || meSource) {
+      const meVal = meRows.length > 0
+        ? Number((meRows.reduce((acc, r) => acc + Number(r.machinePct || r.availabilityPercent || 0), 0) / meRows.length).toFixed(1))
+        : 0;
+      const meOk = meRows.length > 0 && meVal >= meLimit;
+      const meDiff = meLimit > 0 ? (((meVal - meLimit) / meLimit) * 100).toFixed(1) : "0.0";
+      map["machine_efficiency_report_dashboard"] = {
+        type: meOk ? "up" : "down",
+        value: `${meOk ? "+" : ""}${meDiff}%`,
+        message: meOk
+          ? `Avg Machine Efficiency (${meVal}%) meets target (${meLimit}%)`
+          : `Avg Machine Efficiency (${meVal}%) is below target (${meLimit}%)`,
+        priority: meOk ? "medium" : "high"
+      };
+    }
 
     // Customer Complaint trend — active open complaints
     const compSource = data?.complaintCompare || compPanelData;
@@ -21989,7 +23080,7 @@ export default function PlantPerformance1() {
     }
 
     return map;
-  }, [targetConfig, data, dateRange, otdPanelData, effPanelData, oeePanelData, rejPanelData, rewPanelData, compPanelData, capaPanelData, opEffPanelData, dailyProdPanelData, prodValuePanelData, vrPanelData, poFilters, purFilters, salesFilters, purchaseValueFilters, effFilters, oeeCompFilters, rejFilters, rewFilters, compFilters, capaFilters, operatorEfficiencyFilters, dailyProductionFilters, prodFilters, vendorFilters, reworkXAxisGroup, defaultFrom, defaultTo]);
+  }, [targetConfig, data, dateRange, otdPanelData, effPanelData, oeePanelData, rejPanelData, rewPanelData, compPanelData, capaPanelData, opEffPanelData, dailyProdPanelData, prodValuePanelData, vrPanelData, machEffPanelData, fgValuePanelData, targetVsActualPanelData, idlePanelData, poFilters, purFilters, salesFilters, purchaseValueFilters, effFilters, oeeCompFilters, rejFilters, rewFilters, compFilters, capaFilters, operatorEfficiencyFilters, dailyProductionFilters, prodFilters, vendorFilters, fgFilters, targetVsActualFilters, machineEfficiencyFilters, idleFilters, reworkXAxisGroup, defaultFrom, defaultTo]);
 
   // actionItems = only cards whose computed trend is "down" (needs action)
   const actionItems = useMemo(() => {
@@ -22217,6 +23308,7 @@ export default function PlantPerformance1() {
           from={dateRange.from}
           to={dateRange.to}
           onChange={handleRangeChange}
+          disabled={loading}
         />
 
         {activeActionCard && isHeaderScrolled && (
@@ -22324,7 +23416,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="1" min="1"
                                 value={tempConfig.customer_po.salesTarget}
-                                onChange={(e) => handleNestedTempConfigChange("customer_po", "salesTarget", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("customer_po", "salesTarget", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Lakhs</span>
@@ -22349,7 +23441,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="1" min="0"
                                 value={tempConfig.grn_value.minGrnValueL}
-                                onChange={(e) => handleNestedTempConfigChange("grn_value", "minGrnValueL", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("grn_value", "minGrnValueL", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Lakhs</span>
@@ -22372,7 +23464,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="1" min="0"
                                 value={tempConfig.purchase_value.minPurchaseValueL}
-                                onChange={(e) => handleNestedTempConfigChange("purchase_value", "minPurchaseValueL", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("purchase_value", "minPurchaseValueL", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Lakhs</span>
@@ -22395,7 +23487,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="5" min="0"
                                 value={tempConfig.sales_analysis?.monthlyTarget ?? 150}
-                                onChange={(e) => handleNestedTempConfigChange("sales_analysis", "monthlyTarget", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("sales_analysis", "monthlyTarget", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">L / month</span>
@@ -22417,7 +23509,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.5" min="0"
                                 value={tempConfig.idle_hours.maxIdleHours}
-                                onChange={(e) => handleNestedTempConfigChange("idle_hours", "maxIdleHours", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("idle_hours", "maxIdleHours", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">hrs</span>
@@ -22512,8 +23604,8 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.1" min="0" max="100"
-                                value={tempConfig.rejection.rejectionLimit}
-                                onChange={(e) => handleNestedTempConfigChange("rejection", "rejectionLimit", parseFloat(e.target.value) || 0)}
+                                value={tempConfig?.rejection?.rejectionLimit ?? 2.0}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "rejectionLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22527,8 +23619,38 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.1" min="0" max="100"
-                                value={tempConfig.rejection.inHouseLimit ?? 1.0}
-                                onChange={(e) => handleNestedTempConfigChange("rejection", "inHouseLimit", parseFloat(e.target.value) || 0)}
+                                value={tempConfig?.rejection?.inHouseLimit ?? 1.0}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "inHouseLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">%</span>
+                            </div>
+                          </div>
+
+                          <div className="pp1-target-field" style={{ marginBottom: "12px" }}>
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Mac Rejection %</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.1" min="0" max="100"
+                                value={tempConfig?.rejection?.macLimit ?? 1.0}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "macLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
+                                className="pp1-target-input"
+                              />
+                              <span className="pp1-target-input-unit">%</span>
+                            </div>
+                          </div>
+
+                          <div className="pp1-target-field" style={{ marginBottom: "12px" }}>
+                            <div className="pp1-target-field__label-row">
+                              <span className="pp1-target-field__name">Mat Rejection %</span>
+                            </div>
+                            <div className="pp1-target-input-container">
+                              <input
+                                type="number" step="0.1" min="0" max="100"
+                                value={tempConfig?.rejection?.matLimit ?? 1.0}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "matLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22542,8 +23664,8 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.1" min="0" max="100"
-                                value={tempConfig.rejection.vendorLimit ?? 1.2}
-                                onChange={(e) => handleNestedTempConfigChange("rejection", "vendorLimit", parseFloat(e.target.value) || 0)}
+                                value={tempConfig?.rejection?.vendorLimit ?? 1.2}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "vendorLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22557,8 +23679,8 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.1" min="0" max="100"
-                                value={tempConfig.rejection.finalInspLimit ?? 1.5}
-                                onChange={(e) => handleNestedTempConfigChange("rejection", "finalInspLimit", parseFloat(e.target.value) || 0)}
+                                value={tempConfig?.rejection?.finalInspLimit ?? 1.5}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "finalInspLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22572,8 +23694,8 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.1" min="0" max="100"
-                                value={tempConfig.rejection.supplierLimit ?? 0.5}
-                                onChange={(e) => handleNestedTempConfigChange("rejection", "supplierLimit", parseFloat(e.target.value) || 0)}
+                                value={tempConfig?.rejection?.supplierLimit ?? 0.5}
+                                onChange={(e) => handleNestedTempConfigChange("rejection", "supplierLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22595,7 +23717,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.rework.reworkLimit}
-                                onChange={(e) => handleNestedTempConfigChange("rework", "reworkLimit", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "reworkLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22610,7 +23732,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.rework.inHouseLimit ?? 1.0}
-                                onChange={(e) => handleNestedTempConfigChange("rework", "inHouseLimit", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "inHouseLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22625,7 +23747,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.rework.jobOrderLimit ?? 1.2}
-                                onChange={(e) => handleNestedTempConfigChange("rework", "jobOrderLimit", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "jobOrderLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22640,7 +23762,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.rework.finalInspLimit ?? 1.5}
-                                onChange={(e) => handleNestedTempConfigChange("rework", "finalInspLimit", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "finalInspLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22655,7 +23777,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.rework.customerReworkLimit ?? 0.5}
-                                onChange={(e) => handleNestedTempConfigChange("rework", "customerReworkLimit", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("rework", "customerReworkLimit", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22736,7 +23858,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="1000"
                                 value={tempConfig.production_analysis?.minProductionValue ?? 12.0}
-                                onChange={(e) => handleNestedTempConfigChange("production_analysis", "minProductionValue", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("production_analysis", "minProductionValue", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Lakhs</span>
@@ -22758,7 +23880,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="1000"
                                 value={tempConfig.store_stock_value?.maxStockValueL ?? 50.0}
-                                onChange={(e) => handleNestedTempConfigChange("store_stock_value", "maxStockValueL", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("store_stock_value", "maxStockValueL", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Lakhs</span>
@@ -22780,7 +23902,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.otd?.targetPct ?? 90}
-                                onChange={(e) => handleNestedTempConfigChange("otd", "targetPct", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("otd", "targetPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22795,7 +23917,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.otd?.trendPct ?? 90}
-                                onChange={(e) => handleNestedTempConfigChange("otd", "trendPct", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("otd", "trendPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22817,7 +23939,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.supplier_rating?.minRating ?? 90}
-                                onChange={(e) => handleNestedTempConfigChange("supplier_rating", "minRating", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("supplier_rating", "minRating", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22839,7 +23961,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0" max="100"
                                 value={tempConfig.vendor_rating?.minRating ?? 90}
-                                onChange={(e) => handleNestedTempConfigChange("vendor_rating", "minRating", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("vendor_rating", "minRating", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22861,7 +23983,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0"
                                 value={tempConfig.fg_value?.maxStockValueL ?? 60.0}
-                                onChange={(e) => handleNestedTempConfigChange("fg_value", "maxStockValueL", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("fg_value", "maxStockValueL", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">L</span>
@@ -22883,7 +24005,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.1" min="0"
                                 value={tempConfig.daily_production?.maxBalanceHours ?? 4.0}
-                                onChange={(e) => handleNestedTempConfigChange("daily_production", "maxBalanceHours", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("daily_production", "maxBalanceHours", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">Hrs</span>
@@ -22905,7 +24027,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.5" min="0" max="100"
                                 value={tempConfig.target_vs_actual?.minFulfillmentPct ?? 90.0}
-                                onChange={(e) => handleNestedTempConfigChange("target_vs_actual", "minFulfillmentPct", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("target_vs_actual", "minFulfillmentPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22927,7 +24049,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.5" min="0" max="100"
                                 value={tempConfig.operator_efficiency?.minEfficiencyPct ?? 90.0}
-                                onChange={(e) => handleNestedTempConfigChange("operator_efficiency", "minEfficiencyPct", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("operator_efficiency", "minEfficiencyPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22949,7 +24071,7 @@ export default function PlantPerformance1() {
                               <input
                                 type="number" step="0.5" min="0" max="100"
                                 value={tempConfig.machine_efficiency?.minEfficiencyPct ?? 90.0}
-                                onChange={(e) => handleNestedTempConfigChange("machine_efficiency", "minEfficiencyPct", parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleNestedTempConfigChange("machine_efficiency", "minEfficiencyPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
                               <span className="pp1-target-input-unit">%</span>
@@ -22987,7 +24109,7 @@ export default function PlantPerformance1() {
       <div className="pp1-main">
         {isStackedLayout && (
           <div className="pp1-mob-tabs">
-            <button 
+            <button
               className={`pp1-mob-tab ${mobileActiveTab === "left" ? "pp1-mob-tab--active" : ""}`}
               onClick={() => setMobileActiveTab("left")}
               type="button"
@@ -22995,7 +24117,7 @@ export default function PlantPerformance1() {
               <ClipboardList size={14} />
               <span>Status ({ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).length})</span>
             </button>
-            <button 
+            <button
               className={`pp1-mob-tab ${mobileActiveTab === "center" ? "pp1-mob-tab--active" : ""}`}
               onClick={() => setMobileActiveTab("center")}
               type="button"
@@ -23003,7 +24125,7 @@ export default function PlantPerformance1() {
               <Activity size={14} />
               <span>Analysis</span>
             </button>
-            <button 
+            <button
               className={`pp1-mob-tab ${mobileActiveTab === "right" ? "pp1-mob-tab--active" : ""}`}
               onClick={() => setMobileActiveTab("right")}
               type="button"
@@ -23019,448 +24141,448 @@ export default function PlantPerformance1() {
         >
           {(!isStackedLayout || mobileActiveTab === "left") && (
             <section className={`pp1-panel pp1-panel--left${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
-            {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
-            {panelsCollapsed && (
-              <div className="pp1-dl-rail pp1-dl-rail--left">
-                {/* Individual card icons stacked — DashboardLayout sidebar style */}
-                <div className="pp1-dl-rail__items">
-                  {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).map((a) => {
-                    const Ic = a.icon;
-                    const active = selAction === a.id;
-                    return (
-                      <div
-                        key={a.id}
-                        className={`pp1-dl-rail__item${active ? " pp1-dl-rail__item--active" : ""}`}
-                        style={{ "--rc": a.color }}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => { handleActionClick(a.id); }}
-                        onKeyDown={e => e.key === "Enter" && handleActionClick(a.id)}
-                        onMouseEnter={e => setRailHover({ id: a.id, title: a.title, Icon: a.icon, color: a.color, rect: e.currentTarget.getBoundingClientRect(), side: "left" })}
-                        onMouseLeave={() => setRailHover(null)}
-                      >
-                        <Ic size={16} />
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  className="pp1-dl-rail__expand-btn pp1-dl-rail__expand-btn--blue"
-                  onClick={() => setPanelsCollapsed(false)}
-                  title="Expand panels"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            )}
-            {/* ── Expanded state ── */}
-            {!panelsCollapsed && (
-              <>
-                <div className="pp1-panel__head">
-                  <div className="pp1-panel__header">
-                    <ClipboardList size={16} style={{ color: "var(--pp1-blue)", flexShrink: 0 }} />
-                    <h2 className="pp1-panel__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      Current Status
-                      <span style={{
-                        fontSize: "11px",
-                        fontWeight: 800,
-                        color: "#2563eb",
-                        background: "rgba(37, 99, 235, 0.08)",
-                        border: "1px solid rgba(37, 99, 235, 0.16)",
-                        padding: "1px 6px",
-                        borderRadius: "10px",
-                        lineHeight: 1.2
-                      }}>
-                        {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).length}
-                      </span>
-                    </h2>
-                    <button
-                      className="pp1-panels-collapse-btn"
-                      onClick={() => setPanelsCollapsed(true)}
-                      title="Collapse both panels"
-                    >
-                      <PanelLeftClose size={14} />
-                    </button>
-                  </div>
-                  <p className="pp1-panel__hint">Click a card to explore details</p>
-                </div>
-                <div className="pp1-kpi-list">
-                  {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).map((a, i) => {
-                    const active = selAction === a.id;
-                    return (
-                      <div
-                        key={a.id}
-                        role="button"
-                        tabIndex={0}
-                        title={computedCardTrends[a.id]?.message || ""}
-                        className={`pp1-ac-card pp1-ac-card--left ${active ? "pp1-ac-card--active" : ""}`}
-                        style={{
-                          "--kc": a.color,
-                          "--kl": a.color + "14",
-                          "--kh": a.color + "08",
-                          "--ko": a.color + "14",
-                          "--ka": a.color + "22",
-                          "--kb": a.color + "40",
-                          "--kib": a.color + "14",
-                          "--kia": a.color + "2b",
-                          "--kr": a.color + "33",
-                          "--ai": i
-                        }}
-                        onClick={(e) => {
-                          const el = e.currentTarget;
-                          const rect = el.getBoundingClientRect();
-                          const size = Math.max(rect.width, rect.height) * 2;
-                          const x = (e.clientX - rect.left) - size / 2;
-                          const y = (e.clientY - rect.top) - size / 2;
-                          const rip = document.createElement("span");
-                          rip.className = "pp1-ripple";
-                          rip.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
-                          el.appendChild(rip);
-                          rip.addEventListener("animationend", () => rip.remove(), { once: true });
-                          handleActionClick(a.id);
-                        }}
-                        onKeyDown={(e) => e.key === "Enter" && handleActionClick(a.id)}
-                      >
-                        <div className="pp1-ac-card__shimmer" />
-                        <div className="pp1-ac-icon">
-                          {typeof a.icon === "string" ? a.icon : React.createElement(a.icon, { size: 16 })}
-                        </div>
-                        <div className="pp1-ac-body" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
-                          <span className="pp1-ac-title">{a.title}</span>
-                          {(() => {
-                            const targetLabel = getCardTargetLabel(a.id);
-                            return targetLabel ? (
-                              <span style={{ fontSize: "10px", color: "var(--pp1-text-3, #64748b)", fontWeight: 500, lineHeight: 1.25 }}>
-                                {targetLabel}
-                              </span>
-                            ) : null;
-                          })()}
-                        </div>
-                        {(() => {
-                          const ct = computedCardTrends[a.id];
-                          return ct ? (
-                            <span style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              color: ct.type === "up" ? "#10b981" : ct.type === "down" ? "#ef4444" : "#f59e0b",
-                              background: ct.type === "up" ? "rgba(16, 185, 129, 0.12)" : ct.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
-                              padding: "2px 8px",
-                              borderRadius: "9999px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "3px",
-                              marginRight: "6px",
-                              whiteSpace: "nowrap"
-                            }}>
-                              {ct.type === "up" ? "▲" : ct.type === "down" ? "▼" : "●"} {ct.value}
-                            </span>
-                          ) : null;
-                        })()}
-                        <span className="pp1-ac-arrow">{active ? "▼" : "›"}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-              </>
-            )}
-          </section>
-          )}
-
-          {(!isStackedLayout || mobileActiveTab === "center") && (
-            <section className="pp1-center" ref={centerRef}>
-            <div className="pp1-center__glow" />
-            <div className="pp1-center__scroll">
-              <CenterTransitionWrapper uid={centerKey} loading={loading}>
-                <DashboardErrorBoundary>
-                  {selectionId === "customer_po_vs_sales_analysis" ? (
-                    <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
-                  ) : selectionId === "purchase_report_dashboard" ? (
-                    <PurchaseReportDashboardView data={data} loading={loading} filters={purFilters} onFilterChange={setPurFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["purchase_report_dashboard"]} />
-                  ) : selectionId === "purchase_value_report_dashboard" ? (
-                    <PurchaseValueDashboardView data={data} filters={purchaseValueFilters} onFilterChange={setPurchaseValueFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
-                  ) : selectionId === "sales_analysis_report_dashboard" ? (
-                    <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
-                  ) : selectionId === "production_analysis_report_dashboard" ? (
-                    <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
-                  ) : selectionId === "supplier_rating_report_dashboard" ? (
-                    <SupplierRatingReportDashboardView data={data} filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setSrPanelData(null); }} targetConfig={targetConfig} onSrData={setSrPanelData} />
-                  ) : selectionId === "idle_hours_report_dashboard" ? (
-                    <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
-                  ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-                    <IdleHoursNonAcceptedReasonLossReportView filters={nonAccFilters} onFilterChange={setNonAccFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
-                  ) : selectionId === "oee_comparison_report_dashboard" ? (
-                    <OeeComparisonReportDashboardView data={data} loading={loading} filters={oeeCompFilters} onFilterChange={setOeeCompFilters} activeTab={oeeCompActiveTab} onActiveTabChange={setOeeCompActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOeePanelData(null); }} targetConfig={targetConfig} xAxisGroup={oeeCompXAxisGroup} setXAxisGroup={setOeeCompXAxisGroup} uid={centerKey} onOeeData={setOeePanelData} />
-                  ) : selectionId === "efficiency_eff_report_dashboard" ? (
-                    <EfficiencyEffReportDashboardView data={data} loading={loading} filters={effFilters} onFilterChange={setEffFilters} xAxisGroup={effXAxisGroup} setXAxisGroup={setEffXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onEffData={setEffPanelData} />
-                  ) : selectionId === "rejection_report_dashboard" ? (
-                    <RejectionReportDashboardView data={data} loading={loading} filters={rejFilters} onFilterChange={setRejFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRejPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onRejData={setRejPanelData} />
-                  ) : selectionId === "rework_report_dashboard" ? (
-                    <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
-                  ) : selectionId === "store_stock_value_report_dashboard" ? (
-                    <StoreStockValueReportDashboardView data={data} filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setStockPanelData(null); }} targetConfig={targetConfig} onStockData={setStockPanelData} />
-                  ) : selectionId === "otd_report_dashboard" ? (
-                    <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
-                  ) : selectionId === "vendor_rating_report_dashboard" ? (
-                    <VendorRatingReportDashboardView data={data} filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setVrPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onVrData={setVrPanelData} />
-                  ) : selectionId === "fg_value_report_dashboard" ? (
-                    <FgValueReportDashboardView data={data} loading={loading} filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setFgValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onFgValueData={setFgValuePanelData} />
-                  ) : selectionId === "daily_production_report_dashboard" ? (
-                    <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
-                  ) : selectionId === "target_vs_actual_report_dashboard" ? (
-                    <TargetVsActualDashboardView data={data} loading={loading} filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setTargetVsActualPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onTargetVsActualData={setTargetVsActualPanelData} />
-                  ) : selectionId === "operator_efficiency_report_dashboard" ? (
-                    <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
-                  ) : selectionId === "machine_efficiency_report_dashboard" ? (
-                    <MachineEfficiencyDashboardView data={data} loading={loading} filters={machineEfficiencyFilters} onFilterChange={setMachineEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setMachEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onMachEffData={setMachEffPanelData} />
-                  ) : selectionId === "capa_report_dashboard" ? (
-                    <CapaDashboardView data={data} loading={loading} filters={capaFilters} onFilterChange={setCapaFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCapaPanelData(null); }} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} uid={centerKey} onCapaData={setCapaPanelData} />
-                  ) : selectionId === "customer_complaint_report_dashboard" ? (
-                    <CustomerComplaintReportDashboardView data={data} loading={loading} filters={compFilters} onFilterChange={setCompFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCompPanelData(null); }} uid={centerKey} onCompData={setCompPanelData} />
-                  ) : (
-
-                    <div className="pp1-placeholder-container" style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minHeight: "420px",
-                      padding: "40px",
-                      textAlign: "center",
-                      background: "rgba(255, 255, 255, 0.45)",
-                      backdropFilter: "blur(20px)",
-                      borderRadius: "16px",
-                      border: "1px solid rgba(255, 255, 255, 0.6)",
-                      boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.04)"
-                    }}>
-                      <div style={{
-                        width: "56px",
-                        height: "56px",
-                        borderRadius: "16px",
-                        background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginBottom: "16px",
-                        boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.15)",
-                        border: "1px solid rgba(59, 130, 246, 0.1)"
-                      }}>
-                        <BarChart2 size={28} style={{ color: "#3b82f6" }} />
-                      </div>
-                      <h3 style={{
-                        fontSize: "14.5px",
-                        fontWeight: 800,
-                        color: "#1e3a8a",
-                        margin: "0 0 6px 0",
-                        letterSpacing: "-0.2px"
-                      }}>
-                        Plant Performance Analyzer
-                      </h3>
-                      <p style={{
-                        fontSize: "11.5px",
-                        color: "#64748b",
-                        maxWidth: "320px",
-                        margin: "0 0 20px 0",
-                        lineHeight: "1.6",
-                        fontWeight: 500
-                      }}>
-                        Select any status card on the left panel or action item on the right to load live metrics, trend analysis, and charts.
-                      </p>
-                      <div style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "5px 12px",
-                        borderRadius: "20px",
-                        background: "#eff6ff",
-                        border: "1px solid #bfdbfe",
-                        fontSize: "10.5px",
-                        fontWeight: 600,
-                        color: "#1e40af"
-                      }}>
-                        <span className="pp1-pulse" style={{
-                          width: "6px",
-                          height: "6px",
-                          borderRadius: "50%",
-                          background: "#2563eb",
-                          display: "inline-block"
-                        }} />
-                        System Operational & Ready
-                      </div>
-                    </div>
-
-                  )}
-                </DashboardErrorBoundary>
-              </CenterTransitionWrapper>
-            </div>
-          </section>
-          )}
-
-          {(!isStackedLayout || mobileActiveTab === "right") && (
-            <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
-            {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
-            {panelsCollapsed && (
-              <div className="pp1-dl-rail pp1-dl-rail--right">
-                {/* Individual action item icons stacked — DashboardLayout sidebar style */}
-                <div className="pp1-dl-rail__items">
-                  {actionItems.map((item, idx) => {
-                    const active = selAction === item.id;
-                    return (
-                      <div
-                        key={item.id}
-                        className={`pp1-dl-rail__item pp1-dl-rail__item--right${active ? " pp1-dl-rail__item--active" : ""}`}
-                        style={{ "--rc": item.color }}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleActionClick(item.id)}
-                        onKeyDown={e => e.key === "Enter" && handleActionClick(item.id)}
-                        onMouseEnter={e => setRailHover({ id: item.id, title: item.title, Icon: AlertTriangle, color: item.color, rect: e.currentTarget.getBoundingClientRect(), side: "right" })}
-                        onMouseLeave={() => setRailHover(null)}
-                      >
-                        <AlertTriangle size={16} />
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  className="pp1-dl-rail__expand-btn pp1-dl-rail__expand-btn--amber"
-                  onClick={() => setPanelsCollapsed(false)}
-                  title="Expand panels"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-              </div>
-            )}
-            {/* ── Expanded state ── */}
-            {!panelsCollapsed && (
-              <>
-                <div className="pp1-panel__head">
-                  <div className="pp1-panel__header">
-                    <ListTodo size={16} style={{ color: "var(--pp1-amber)", flexShrink: 0 }} />
-                    <h2 className="pp1-panel__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      Action to be Taken
-                      <span style={{
-                        fontSize: "11px",
-                        fontWeight: 800,
-                        color: "#ef4444",
-                        background: "rgba(239, 68, 68, 0.08)",
-                        border: "1px solid rgba(239, 68, 68, 0.16)",
-                        padding: "1px 6px",
-                        borderRadius: "10px",
-                        lineHeight: 1.2
-                      }}>
-                        {actionItems.length}
-                      </span>
-                    </h2>
-                    <button
-                      className="pp1-panels-collapse-btn"
-                      onClick={() => setPanelsCollapsed(true)}
-                      title="Collapse both panels"
-                    >
-                      <PanelRightClose size={14} />
-                    </button>
-                  </div>
-                  <p className="pp1-panel__hint">List of pending actions</p>
-                </div>
-                <div className="pp1-action-list">
-                  {actionItems.length === 0 ? (
-                    <div className="pp1-ac-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "20px", textAlign: "center", color: "var(--pp1-text-4)" }}>
-                      <CheckCircle2 size={32} style={{ color: "var(--pp1-green)", marginBottom: "8px" }} />
-                      <p style={{ fontSize: "11.5px", margin: 0, fontWeight: 500 }}>No actions pending. All parameters operational.</p>
-                    </div>
-                  ) : (
-                    actionItems.map((item, idx) => {
-                      const active = selAction === item.id;
+              {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
+              {panelsCollapsed && (
+                <div className="pp1-dl-rail pp1-dl-rail--left">
+                  {/* Individual card icons stacked — DashboardLayout sidebar style */}
+                  <div className="pp1-dl-rail__items">
+                    {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).map((a) => {
+                      const Ic = a.icon;
+                      const active = selAction === a.id;
                       return (
                         <div
-                          key={item.id}
+                          key={a.id}
+                          className={`pp1-dl-rail__item${active ? " pp1-dl-rail__item--active" : ""}`}
+                          style={{ "--rc": a.color }}
                           role="button"
                           tabIndex={0}
-                          title={item.message || ""}
-                          className={`pp1-ac-card pp1-ac-card--right ${active ? "pp1-ac-card--active" : ""}`}
+                          onClick={() => { handleActionClick(a.id); }}
+                          onKeyDown={e => e.key === "Enter" && handleActionClick(a.id)}
+                          onMouseEnter={e => setRailHover({ id: a.id, title: a.title, Icon: a.icon, color: a.color, rect: e.currentTarget.getBoundingClientRect(), side: "left" })}
+                          onMouseLeave={() => setRailHover(null)}
+                        >
+                          <Ic size={16} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="pp1-dl-rail__expand-btn pp1-dl-rail__expand-btn--blue"
+                    onClick={(e) => { e.stopPropagation(); setPanelsCollapsed(false); }}
+                    title="Expand panels"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
+              {/* ── Expanded state ── */}
+              {!panelsCollapsed && (
+                <>
+                  <div className="pp1-panel__head">
+                    <div className="pp1-panel__header">
+                      <ClipboardList size={16} style={{ color: "var(--pp1-blue)", flexShrink: 0 }} />
+                      <h2 className="pp1-panel__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        Current Status
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          color: "#2563eb",
+                          background: "rgba(37, 99, 235, 0.08)",
+                          border: "1px solid rgba(37, 99, 235, 0.16)",
+                          padding: "1px 6px",
+                          borderRadius: "10px",
+                          lineHeight: 1.2
+                        }}>
+                          {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).length}
+                        </span>
+                      </h2>
+                      <button
+                        className="pp1-panels-collapse-btn"
+                        onClick={(e) => { e.stopPropagation(); setPanelsCollapsed(true); }}
+                        title="Collapse both panels"
+                      >
+                        <PanelLeftClose size={14} />
+                      </button>
+                    </div>
+                    <p className="pp1-panel__hint">Click a card to explore details</p>
+                  </div>
+                  <div className="pp1-kpi-list">
+                    {ACTION_CARDS.filter(a => !getCardStatus(a.id).belowTarget).map((a, i) => {
+                      const active = selAction === a.id;
+                      return (
+                        <div
+                          key={a.id}
+                          role="button"
+                          tabIndex={0}
+                          title={computedCardTrends[a.id]?.message || ""}
+                          className={`pp1-ac-card pp1-ac-card--left ${active ? "pp1-ac-card--active" : ""}`}
                           style={{
-                            "--kc": item.color,
-                            "--kl": item.color + "14",
-                            "--kh": item.color + "08",
-                            "--ko": item.color + "14",
-                            "--ka": item.color + "22",
-                            "--kb": item.color + "40",
-                            "--kib": item.color + "14",
-                            "--kia": item.color + "2b",
-                            "--kr": item.color + "33",
-                            "--ai": idx
+                            "--kc": a.color,
+                            "--kl": a.color + "14",
+                            "--kh": a.color + "08",
+                            "--ko": a.color + "14",
+                            "--ka": a.color + "22",
+                            "--kb": a.color + "40",
+                            "--kib": a.color + "14",
+                            "--kia": a.color + "2b",
+                            "--kr": a.color + "33",
+                            "--ai": i
                           }}
-                          onClick={() => handleActionClick(item.id)}
-                          onKeyDown={(e) => e.key === "Enter" && handleActionClick(item.id)}
+                          onClick={(e) => {
+                            const el = e.currentTarget;
+                            const rect = el.getBoundingClientRect();
+                            const size = Math.max(rect.width, rect.height) * 2;
+                            const x = (e.clientX - rect.left) - size / 2;
+                            const y = (e.clientY - rect.top) - size / 2;
+                            const rip = document.createElement("span");
+                            rip.className = "pp1-ripple";
+                            rip.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
+                            el.appendChild(rip);
+                            rip.addEventListener("animationend", () => rip.remove(), { once: true });
+                            handleActionClick(a.id);
+                          }}
+                          onKeyDown={(e) => e.key === "Enter" && handleActionClick(a.id)}
                         >
                           <div className="pp1-ac-card__shimmer" />
-                          <div className="pp1-ac-icon" style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.08)" }}>
-                            <AlertTriangle size={15} />
+                          <div className="pp1-ac-icon">
+                            {typeof a.icon === "string" ? a.icon : React.createElement(a.icon, { size: 16 })}
                           </div>
                           <div className="pp1-ac-body" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
-                            <span className="pp1-ac-title" style={{ fontWeight: 700, fontSize: "11.5px", color: "var(--pp1-navy)" }}>{item.title}</span>
+                            <span className="pp1-ac-title">{a.title}</span>
                             {(() => {
-                              const targetLabel = getCardTargetLabel(item.id);
+                              const targetLabel = getCardTargetLabel(a.id);
                               return targetLabel ? (
-                                <span style={{ fontSize: "10px", color: "var(--pp1-text-3, #64748b)", fontWeight: 500, lineHeight: 1.25, marginBottom: "2px" }}>
+                                <span style={{ fontSize: "10px", color: "var(--pp1-text-3, #64748b)", fontWeight: 500, lineHeight: 1.25 }}>
                                   {targetLabel}
                                 </span>
                               ) : null;
                             })()}
-                            <span style={{ fontSize: "10px", color: "var(--pp1-text-3)", lineHeight: "1.3" }}>
-                              {item.message}
-                            </span>
                           </div>
-                          <div className="pp1-ac-badge-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
-                            {item.trend && (
+                          {(() => {
+                            const ct = computedCardTrends[a.id];
+                            return ct ? (
                               <span style={{
                                 fontSize: "11px",
                                 fontWeight: 700,
-                                color: item.trend.type === "up" ? "#10b981" : item.trend.type === "down" ? "#ef4444" : "#f59e0b",
-                                background: item.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : item.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                                color: ct.type === "up" ? "#10b981" : ct.type === "down" ? "#ef4444" : "#f59e0b",
+                                background: ct.type === "up" ? "rgba(16, 185, 129, 0.12)" : ct.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
                                 padding: "2px 8px",
                                 borderRadius: "9999px",
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "3px",
+                                marginRight: "6px",
                                 whiteSpace: "nowrap"
                               }}>
-                                {item.trend.type === "up" ? "▲" : item.trend.type === "down" ? "▼" : "●"} {item.trend.value}
+                                {ct.type === "up" ? "▲" : ct.type === "down" ? "▼" : "●"} {ct.value}
                               </span>
-                            )}
-                            <span style={{
-                              fontSize: "8.5px",
-                              fontWeight: 800,
-                              color: item.priority === "high" ? "#ef4444" : "#f59e0b",
-                              background: item.priority === "high" ? "rgba(239, 68, 68, 0.08)" : "rgba(245, 158, 11, 0.08)",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.2px"
-                            }}>
-                              {item.priority}
-                            </span>
-                          </div>
+                            ) : null;
+                          })()}
+                          <span className="pp1-ac-arrow">{active ? "▼" : "›"}</span>
                         </div>
                       );
-                    })
-                  )}
-                </div>
-                <div className="pp1-summary-row">
-                  {[
-                    { label: "High", n: actionSummary.high, cls: "red" },
-                    { label: "Medium", n: actionSummary.medium, cls: "amber" },
-                    { label: "Low", n: actionSummary.low, cls: "green" },
-                  ].map((c) => (
-                    <div key={c.label} className={`pp1-sum-chip pp1-sum-chip--${c.cls}`}>
-                      <strong>{c.n}</strong> {c.label}
-                    </div>
-                  ))}
-                </div>
+                    })}
+                  </div>
 
-              </>
-            )}
-          </section>
+                </>
+              )}
+            </section>
+          )}
+
+          {(!isStackedLayout || mobileActiveTab === "center") && (
+            <section className="pp1-center" ref={centerRef}>
+              <div className="pp1-center__glow" />
+              <div className="pp1-center__scroll">
+                <CenterTransitionWrapper uid={centerKey} loading={loading}>
+                  <DashboardErrorBoundary>
+                    {selectionId === "customer_po_vs_sales_analysis" ? (
+                      <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
+                    ) : selectionId === "purchase_report_dashboard" ? (
+                      <PurchaseReportDashboardView data={data} loading={loading} filters={purFilters} onFilterChange={setPurFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["purchase_report_dashboard"]} />
+                    ) : selectionId === "purchase_value_report_dashboard" ? (
+                      <PurchaseValueDashboardView data={data} filters={purchaseValueFilters} onFilterChange={setPurchaseValueFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    ) : selectionId === "sales_analysis_report_dashboard" ? (
+                      <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
+                    ) : selectionId === "production_analysis_report_dashboard" ? (
+                      <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
+                    ) : selectionId === "supplier_rating_report_dashboard" ? (
+                      <SupplierRatingReportDashboardView data={data} filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setSrPanelData(null); }} targetConfig={targetConfig} onSrData={setSrPanelData} />
+                    ) : selectionId === "idle_hours_report_dashboard" ? (
+                      <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setIdlePanelData(null); }} targetConfig={targetConfig} onIdleData={setIdlePanelData} />
+                    ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
+                      <IdleHoursNonAcceptedReasonLossReportView filters={nonAccFilters} onFilterChange={setNonAccFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                    ) : selectionId === "oee_comparison_report_dashboard" ? (
+                      <OeeComparisonReportDashboardView data={data} loading={loading} filters={oeeCompFilters} onFilterChange={setOeeCompFilters} activeTab={oeeCompActiveTab} onActiveTabChange={setOeeCompActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOeePanelData(null); }} targetConfig={targetConfig} xAxisGroup={oeeCompXAxisGroup} setXAxisGroup={setOeeCompXAxisGroup} uid={centerKey} onOeeData={setOeePanelData} />
+                    ) : selectionId === "efficiency_eff_report_dashboard" ? (
+                      <EfficiencyEffReportDashboardView data={data} loading={loading} filters={effFilters} onFilterChange={setEffFilters} xAxisGroup={effXAxisGroup} setXAxisGroup={setEffXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onEffData={setEffPanelData} />
+                    ) : selectionId === "rejection_report_dashboard" ? (
+                      <RejectionReportDashboardView data={data} loading={loading} filters={rejFilters} onFilterChange={setRejFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRejPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onRejData={setRejPanelData} />
+                    ) : selectionId === "rework_report_dashboard" ? (
+                      <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
+                    ) : selectionId === "store_stock_value_report_dashboard" ? (
+                      <StoreStockValueReportDashboardView data={data} filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setStockPanelData(null); }} targetConfig={targetConfig} onStockData={setStockPanelData} />
+                    ) : selectionId === "otd_report_dashboard" ? (
+                      <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
+                    ) : selectionId === "vendor_rating_report_dashboard" ? (
+                      <VendorRatingReportDashboardView data={data} filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setVrPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onVrData={setVrPanelData} />
+                    ) : selectionId === "fg_value_report_dashboard" ? (
+                      <FgValueReportDashboardView data={data} loading={loading} filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setFgValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onFgValueData={setFgValuePanelData} />
+                    ) : selectionId === "daily_production_report_dashboard" ? (
+                      <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
+                    ) : selectionId === "target_vs_actual_report_dashboard" ? (
+                      <TargetVsActualDashboardView data={data} loading={loading} filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setTargetVsActualPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onTargetVsActualData={setTargetVsActualPanelData} />
+                    ) : selectionId === "operator_efficiency_report_dashboard" ? (
+                      <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
+                    ) : selectionId === "machine_efficiency_report_dashboard" ? (
+                      <MachineEfficiencyDashboardView data={data} loading={loading} filters={machineEfficiencyFilters} onFilterChange={setMachineEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setMachEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onMachEffData={setMachEffPanelData} />
+                    ) : selectionId === "capa_report_dashboard" ? (
+                      <CapaDashboardView data={data} loading={loading} filters={capaFilters} onFilterChange={setCapaFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCapaPanelData(null); }} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} uid={centerKey} onCapaData={setCapaPanelData} />
+                    ) : selectionId === "customer_complaint_report_dashboard" ? (
+                      <CustomerComplaintReportDashboardView data={data} loading={loading} filters={compFilters} onFilterChange={setCompFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCompPanelData(null); }} uid={centerKey} onCompData={setCompPanelData} />
+                    ) : (
+
+                      <div className="pp1-placeholder-container" style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: "420px",
+                        padding: "40px",
+                        textAlign: "center",
+                        background: "rgba(255, 255, 255, 0.45)",
+                        backdropFilter: "blur(20px)",
+                        borderRadius: "16px",
+                        border: "1px solid rgba(255, 255, 255, 0.6)",
+                        boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.04)"
+                      }}>
+                        <div style={{
+                          width: "56px",
+                          height: "56px",
+                          borderRadius: "16px",
+                          background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: "16px",
+                          boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.15)",
+                          border: "1px solid rgba(59, 130, 246, 0.1)"
+                        }}>
+                          <BarChart2 size={28} style={{ color: "#3b82f6" }} />
+                        </div>
+                        <h3 style={{
+                          fontSize: "14.5px",
+                          fontWeight: 800,
+                          color: "#1e3a8a",
+                          margin: "0 0 6px 0",
+                          letterSpacing: "-0.2px"
+                        }}>
+                          Plant Performance Analyzer
+                        </h3>
+                        <p style={{
+                          fontSize: "11.5px",
+                          color: "#64748b",
+                          maxWidth: "320px",
+                          margin: "0 0 20px 0",
+                          lineHeight: "1.6",
+                          fontWeight: 500
+                        }}>
+                          Select any status card on the left panel or action item on the right to load live metrics, trend analysis, and charts.
+                        </p>
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "5px 12px",
+                          borderRadius: "20px",
+                          background: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          fontSize: "10.5px",
+                          fontWeight: 600,
+                          color: "#1e40af"
+                        }}>
+                          <span className="pp1-pulse" style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            background: "#2563eb",
+                            display: "inline-block"
+                          }} />
+                          System Operational & Ready
+                        </div>
+                      </div>
+
+                    )}
+                  </DashboardErrorBoundary>
+                </CenterTransitionWrapper>
+              </div>
+            </section>
+          )}
+
+          {(!isStackedLayout || mobileActiveTab === "right") && (
+            <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
+              {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
+              {panelsCollapsed && (
+                <div className="pp1-dl-rail pp1-dl-rail--right">
+                  {/* Individual action item icons stacked — DashboardLayout sidebar style */}
+                  <div className="pp1-dl-rail__items">
+                    {actionItems.map((item, idx) => {
+                      const active = selAction === item.id;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`pp1-dl-rail__item pp1-dl-rail__item--right${active ? " pp1-dl-rail__item--active" : ""}`}
+                          style={{ "--rc": item.color }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleActionClick(item.id)}
+                          onKeyDown={e => e.key === "Enter" && handleActionClick(item.id)}
+                          onMouseEnter={e => setRailHover({ id: item.id, title: item.title, Icon: AlertTriangle, color: item.color, rect: e.currentTarget.getBoundingClientRect(), side: "right" })}
+                          onMouseLeave={() => setRailHover(null)}
+                        >
+                          <AlertTriangle size={16} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="pp1-dl-rail__expand-btn pp1-dl-rail__expand-btn--amber"
+                    onClick={(e) => { e.stopPropagation(); setPanelsCollapsed(false); }}
+                    title="Expand panels"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                </div>
+              )}
+              {/* ── Expanded state ── */}
+              {!panelsCollapsed && (
+                <>
+                  <div className="pp1-panel__head">
+                    <div className="pp1-panel__header">
+                      <ListTodo size={16} style={{ color: "var(--pp1-amber)", flexShrink: 0 }} />
+                      <h2 className="pp1-panel__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        Action to be Taken
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          color: "#ef4444",
+                          background: "rgba(239, 68, 68, 0.08)",
+                          border: "1px solid rgba(239, 68, 68, 0.16)",
+                          padding: "1px 6px",
+                          borderRadius: "10px",
+                          lineHeight: 1.2
+                        }}>
+                          {actionItems.length}
+                        </span>
+                      </h2>
+                      <button
+                        className="pp1-panels-collapse-btn"
+                        onClick={(e) => { e.stopPropagation(); setPanelsCollapsed(true); }}
+                        title="Collapse both panels"
+                      >
+                        <PanelRightClose size={14} />
+                      </button>
+                    </div>
+                    <p className="pp1-panel__hint">List of pending actions</p>
+                  </div>
+                  <div className="pp1-action-list">
+                    {actionItems.length === 0 ? (
+                      <div className="pp1-ac-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "20px", textAlign: "center", color: "var(--pp1-text-4)" }}>
+                        <CheckCircle2 size={32} style={{ color: "var(--pp1-green)", marginBottom: "8px" }} />
+                        <p style={{ fontSize: "11.5px", margin: 0, fontWeight: 500 }}>No actions pending. All parameters operational.</p>
+                      </div>
+                    ) : (
+                      actionItems.map((item, idx) => {
+                        const active = selAction === item.id;
+                        return (
+                          <div
+                            key={item.id}
+                            role="button"
+                            tabIndex={0}
+                            title={item.message || ""}
+                            className={`pp1-ac-card pp1-ac-card--right ${active ? "pp1-ac-card--active" : ""}`}
+                            style={{
+                              "--kc": item.color,
+                              "--kl": item.color + "14",
+                              "--kh": item.color + "08",
+                              "--ko": item.color + "14",
+                              "--ka": item.color + "22",
+                              "--kb": item.color + "40",
+                              "--kib": item.color + "14",
+                              "--kia": item.color + "2b",
+                              "--kr": item.color + "33",
+                              "--ai": idx
+                            }}
+                            onClick={() => handleActionClick(item.id)}
+                            onKeyDown={(e) => e.key === "Enter" && handleActionClick(item.id)}
+                          >
+                            <div className="pp1-ac-card__shimmer" />
+                            <div className="pp1-ac-icon" style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.08)" }}>
+                              <AlertTriangle size={15} />
+                            </div>
+                            <div className="pp1-ac-body" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <span className="pp1-ac-title" style={{ fontWeight: 700, fontSize: "11.5px", color: "var(--pp1-navy)" }}>{item.title}</span>
+                              {(() => {
+                                const targetLabel = getCardTargetLabel(item.id);
+                                return targetLabel ? (
+                                  <span style={{ fontSize: "10px", color: "var(--pp1-text-3, #64748b)", fontWeight: 500, lineHeight: 1.25, marginBottom: "2px" }}>
+                                    {targetLabel}
+                                  </span>
+                                ) : null;
+                              })()}
+                              <span style={{ fontSize: "10px", color: "var(--pp1-text-3)", lineHeight: "1.3" }}>
+                                {item.message}
+                              </span>
+                            </div>
+                            <div className="pp1-ac-badge-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "6px", flexShrink: 0 }}>
+                              {item.trend && (
+                                <span style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  color: item.trend.type === "up" ? "#10b981" : item.trend.type === "down" ? "#ef4444" : "#f59e0b",
+                                  background: item.trend.type === "up" ? "rgba(16, 185, 129, 0.12)" : item.trend.type === "down" ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                                  padding: "2px 8px",
+                                  borderRadius: "9999px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                  whiteSpace: "nowrap"
+                                }}>
+                                  {item.trend.type === "up" ? "▲" : item.trend.type === "down" ? "▼" : "●"} {item.trend.value}
+                                </span>
+                              )}
+                              <span style={{
+                                fontSize: "8.5px",
+                                fontWeight: 800,
+                                color: item.priority === "high" ? "#ef4444" : "#f59e0b",
+                                background: item.priority === "high" ? "rgba(239, 68, 68, 0.08)" : "rgba(245, 158, 11, 0.08)",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.2px"
+                              }}>
+                                {item.priority}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="pp1-summary-row">
+                    {[
+                      { label: "High", n: actionSummary.high, cls: "red" },
+                      { label: "Medium", n: actionSummary.medium, cls: "amber" },
+                      { label: "Low", n: actionSummary.low, cls: "green" },
+                    ].map((c) => (
+                      <div key={c.label} className={`pp1-sum-chip pp1-sum-chip--${c.cls}`}>
+                        <strong>{c.n}</strong> {c.label}
+                      </div>
+                    ))}
+                  </div>
+
+                </>
+              )}
+            </section>
           )}
         </div>
 

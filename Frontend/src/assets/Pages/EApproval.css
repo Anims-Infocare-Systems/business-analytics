@@ -570,6 +570,7 @@
 /* Portal wrapper — positioning set inline via JS */
 .eap-type-dd__panel-portal {
     display: block;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 /* Floating panel */
@@ -584,6 +585,7 @@
     padding: .4rem;
     animation: eap-dd-pop .2s cubic-bezier(.23, 1, .32, 1) both;
     overflow: hidden;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .eap-type-dd__header {
@@ -593,6 +595,7 @@
     color: #94a3b8;
     text-transform: uppercase;
     letter-spacing: .07em;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .eap-type-dd__divider {
@@ -612,7 +615,7 @@
     background: transparent;
     border-radius: 9px;
     cursor: pointer;
-    font-family: inherit;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     font-size: .82rem;
     font-weight: 500;
     color: #374151;
@@ -640,6 +643,7 @@
 .eap-type-dd__item-label {
     flex: 1;
     font-weight: 600;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .eap-type-dd__item-badge {
@@ -656,6 +660,7 @@
     font-weight: 700;
     margin-left: auto;
     transition: background .17s, color .17s;
+    font-family: 'DM Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 .eap-type-dd__item-check {
@@ -708,6 +713,32 @@
 
 .eap-type-dd__item--store-material.eap-type-dd__item--active .eap-type-dd__item-check {
     color: #0d9488;
+}
+
+.eap-type-dd__item--po-amendment:hover {
+    background: #fdf2f8;
+    color: #db2777;
+}
+
+.eap-type-dd__item--po-amendment:hover .eap-type-dd__item-icon {
+    color: #db2777;
+}
+
+.eap-type-dd__item--po-amendment.eap-type-dd__item--active {
+    background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+    color: #db2777;
+}
+
+.eap-type-dd__item--po-amendment.eap-type-dd__item--active .eap-type-dd__item-badge {
+    background: #db2777;
+}
+
+.eap-type-dd__item--po-amendment.eap-type-dd__item--active .eap-type-dd__item-icon {
+    color: #db2777;
+}
+
+.eap-type-dd__item--po-amendment.eap-type-dd__item--active .eap-type-dd__item-check {
+    color: #db2777;
 }
 
 .eap-type-dd__item--service-po:hover {

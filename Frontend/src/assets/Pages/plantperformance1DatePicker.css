@@ -75,6 +75,15 @@
     box-shadow: 0 0 0 3px var(--pp1dp-focus-ring);
     background: var(--pp1dp-surface);
 }
+.pp1dp-trigger--disabled,
+.pp1dp-trigger:disabled {
+    opacity: 0.65 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+}
 .pp1dp-trigger__icon  { color: var(--pp1dp-accent); flex-shrink: 0; }
 .pp1dp-trigger__label { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--pp1dp-text); font-weight: 600; font-size: .83rem; }
 .pp1dp-trigger__caret { flex-shrink: 0; color: var(--pp1dp-muted); transition: transform var(--pp1dp-tr); }

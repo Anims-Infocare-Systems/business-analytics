@@ -121,7 +121,7 @@ const MODULES = [
 
 const SUB_MENUS = {
     Dashboard: ["Top Management Dashboard", "Plant Performance Dashboard"],
-    Approvals: ["E-Approval", "T-Approval"],
+    Approvals: ["E-Approval", "T-Approval", "M-Approval"],
     Reports: [
         "Sales Analysis",
         "Purchase Analysis",
@@ -328,6 +328,21 @@ export default function UserRights() {
     const [subModal, setSubModal] = useState(null); // { userIdx, module, rights }
 
     const [showAddModal, setShowAddModal] = useState(false);
+    const activeModules = useMemo(() => {
+        try {
+            const user = JSON.parse(localStorage.getItem("user") || "{}");
+            const lic = user.license || {};
+            return MODULES.filter(m => {
+                const keyLower = m.key.toLowerCase();
+                if (lic[keyLower] !== undefined) {
+                    return !!lic[keyLower];
+                }
+                return true;
+            });
+        } catch {
+            return MODULES;
+        }
+    }, []);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [addForm, setAddForm] = useState({
         userName: "",
@@ -557,13 +572,13 @@ export default function UserRights() {
     const handleGrantAll = (userIdx) => {
         setUsers(prev => prev.map((u, i) => {
             if (i !== userIdx) return u;
-            const allowedModules = MODULES.filter(m => u.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
+            const allowedModules = activeModules.filter(m => u.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
             const allOn = allowedModules.every(m => u.rights[m.key]);
             
             const nextVal = !allOn;
             const nextRights = { ...u.rights };
             
-            MODULES.forEach(m => {
+            activeModules.forEach(m => {
                 const isAdminOnly = ADMIN_ONLY_MODULES.includes(m.key);
                 if (u.isSuperAdmin || !isAdminOnly) {
                     nextRights[m.key] = nextVal;
@@ -773,7 +788,7 @@ export default function UserRights() {
                             <thead>
                                 <tr>
                                     <th className="ur-th ur-th--user"><span>User</span></th>
-                                    {MODULES.map(m => {
+                                    {activeModules.map(m => {
                                         const Icon = m.icon;
                                         return (
                                             <th key={m.key} className="ur-th ur-th--compact" title={m.label}>
@@ -791,8 +806,8 @@ export default function UserRights() {
                             </thead>
                             <tbody>
                                 {filtered.length > 0 ? filtered.map((user, rowIdx) => {
-                                    const allowedModules = MODULES.filter(m => user.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
-                                    const onCount = MODULES.filter(m => user.rights[m.key]).length;
+                                    const allowedModules = activeModules.filter(m => user.isSuperAdmin || !ADMIN_ONLY_MODULES.includes(m.key));
+                                    const onCount = activeModules.filter(m => user.rights[m.key]).length;
                                     const allOn = allowedModules.every(m => user.rights[m.key]);
                                     const hasAccess = onCount > 0;
 
@@ -813,15 +828,15 @@ export default function UserRights() {
                                                         <span className="ur-user__role">{user.role}</span>
                                                     </div>
                                                     <div className="ur-user__pill" style={{
-                                                        background: `hsl(${Math.round((onCount / MODULES.length) * 120)}, 70%, 94%)`,
-                                                        color: `hsl(${Math.round((onCount / MODULES.length) * 120)}, 60%, 38%)`,
+                                                        background: `hsl(${Math.round((onCount / activeModules.length) * 120)}, 70%, 94%)`,
+                                                        color: `hsl(${Math.round((onCount / activeModules.length) * 120)}, 60%, 38%)`,
                                                     }}>
-                                                        {onCount}/{MODULES.length}
+                                                        {onCount}/{activeModules.length}
                                                     </div>
                                                 </div>
                                             </td>
 
-                                            {MODULES.map(m => {
+                                            {activeModules.map(m => {
                                                 const hasSub = !!SUB_MENUS[m.key];
                                                 const isOn = !!user.rights[m.key];
                                                 const isAdminOnly = ADMIN_ONLY_MODULES.includes(m.key);

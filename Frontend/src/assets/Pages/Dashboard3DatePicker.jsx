@@ -77,6 +77,7 @@ export default function Dashboard3DatePicker({
   activePeriod = "today",
   onPeriodChange,
   onRangeChange,
+  disabled = false,
 }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -93,6 +94,12 @@ export default function Dashboard3DatePicker({
 
   const rootRef = useRef(null);
 
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
+
   // ── Close on outside click
   useEffect(() => {
     const fn = (e) => {
@@ -106,6 +113,7 @@ export default function Dashboard3DatePicker({
 
   // ── Popup helpers
   const openPopup = () => {
+    if (disabled) return;
     setOpen(true);
     setPopAnim("in");
   };
@@ -116,6 +124,7 @@ export default function Dashboard3DatePicker({
 
   // ── Period pill click
   const selectPeriod = (key) => {
+    if (disabled) return;
     onPeriodChange?.(key);
     if (key === "custom") {
       openPopup();

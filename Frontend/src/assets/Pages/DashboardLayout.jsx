@@ -23,6 +23,7 @@ import PlantPerformance1 from "./plantperformance1";
 import Charts from "./Charts";
 import EApproval from "./EApproval";
 import TApproval from "./TApproval";
+import MApproval from "./MApproval";
 import EfficiencyReport from "./EfficiencyReport";
 import IdleTimeReport from "./IdleTimeReport";
 import SalesAnalysis from "./SalesAnalysis";
@@ -66,7 +67,7 @@ const MENU_ITEMS = [
     {
         key: "Approvals",
         icon: Icons.Approvals,
-        children: ["E-Approval", "T-Approval"],
+        children: ["E-Approval", "T-Approval", "M-Approval"],
     },
     {
         key: "Reports",
@@ -102,6 +103,7 @@ const HEADING_MAP = {
     "Plant Performance Dashboard": "Plant Performance Dashboard",
     "E-Approval": "E-Approval Workflow",
     "T-Approval": "T-Approval Workflow",
+    "M-Approval": "M-Approval Workflow",
     "Sales Analysis": "Reports — Sales Analysis",
     "Purchase Analysis": "Reports — Purchase Analysis",
     "Quality Analysis": "Reports — Quality Analysis",
@@ -120,6 +122,7 @@ const SUB_ITEM_META = {
     "Plant Performance Dashboard": { tone: "cyan", desc: "Shop-floor efficiency, shifts & production metrics" },
     "E-Approval": { tone: "emerald", desc: "Electronic approval workflows & sign-offs" },
     "T-Approval": { tone: "indigo", desc: "Technical approval workflows & escalations" },
+    "M-Approval": { tone: "rose", desc: "Material & maintenance approval workflows" },
     "Sales Analysis": { tone: "amber", desc: "Revenue trends, targets & customer insights" },
     "Purchase Analysis": { tone: "violet", desc: "Procurement analytics & vendor performance" },
     "Quality Analysis": { tone: "rose", desc: "Defect tracking & quality control metrics" },
@@ -228,6 +231,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     else if (si === "Plant Performance Dashboard") node = <PlantPerformance1 />;
     else if (si === "E-Approval") node = <EApproval />;
     else if (si === "T-Approval") node = <TApproval />;
+    else if (si === "M-Approval") node = <MApproval />;
     else if (si === "Sales Analysis") node = <SalesAnalysis />;
     else if (si === "Purchase Analysis") node = <PurchaseAnalysis />;
     else if (si === "Quality Analysis") node = <QualityAnalysis />;
@@ -461,13 +465,41 @@ export default function DashboardLayout() {
     });
     const [planId, setPlanId] = useState(() => (user.plan_id || "free").toLowerCase().trim());
 
-    // ✅ Filter menu items based on cached user rights & plan restrictions
-    const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
-    const userRights = rightsCache.rights || {};
-    const isSuperAdmin = !!rightsCache.isSuperAdmin;
+    // ✅ Filter menu items based on cached user rights, plan restrictions & tenant module license
+    // ✅ Filter menu items based on cached user rights, plan restrictions & tenant module license
+    const [userRights, setUserRights] = useState(() => {
+        const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
+        return rightsCache.rights || {};
+    });
+    const [isSuperAdmin, setIsSuperAdmin] = useState(() => {
+        const rightsCache = JSON.parse(localStorage.getItem("ba_user_rights") || "{}");
+        return !!rightsCache.isSuperAdmin;
+    });
+
+    const tenantLicense = user.license || {};
+    const isModuleLicensed = (itemKey) => {
+        if (!itemKey) return true;
+        const keyLower = itemKey.toLowerCase();
+        if (tenantLicense[keyLower] !== undefined) {
+            return !!tenantLicense[keyLower];
+        }
+        return true;
+    };
 
     const allowedMenuItems = MENU_ITEMS.map(item => {
-        let filteredChildren = item.children.filter(sub => isSuperAdmin || userRights[sub]);
+        if (!isModuleLicensed(item.key)) {
+            return {
+                ...item,
+                children: []
+            };
+        }
+        let filteredChildren = item.children.filter(sub => {
+            if (sub === "M-Approval") {
+                return !!userRights["M-Approval"];
+            }
+            if (isSuperAdmin) return true;
+            return !!userRights[sub];
+        });
         if (planId === "pro") {
             if (item.key === "Dashboard") {
                 filteredChildren = filteredChildren.filter(sub => sub === "Top Management Dashboard");
@@ -482,6 +514,9 @@ export default function DashboardLayout() {
             children: filteredChildren
         };
     }).filter(item => {
+        if (!isModuleLicensed(item.key)) {
+            return false;
+        }
         if (planId === "pro" && !["Dashboard", "Approvals", "Utility"].includes(item.key)) {
             return false;
         }
@@ -590,6 +625,18 @@ export default function DashboardLayout() {
                     setIsExpired(!!data.isExpired);
                     const newPlan = (data.license?.plan_id || "free").toLowerCase().trim();
                     setPlanId(newPlan);
+                    
+                    if (data.rights) {
+                        setUserRights(data.rights);
+                        setIsSuperAdmin(!!data.isSuperAdmin);
+                        localStorage.setItem("ba_user_rights", JSON.stringify({
+                            companyCode: data.companyCode,
+                            username: data.username,
+                            rights: data.rights,
+                            isSuperAdmin: !!data.isSuperAdmin
+                        }));
+                    }
+
                     // Sync designation and expiry status with localStorage cache
                     const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
                     if (data.designation) cachedUser.designation = data.designation;
@@ -741,8 +788,12 @@ export default function DashboardLayout() {
 
     /* responsive resize handler */
     useEffect(() => {
+        let lastWidth = window.innerWidth;
         const onResize = () => {
             const w = window.innerWidth;
+            if (w === lastWidth) return;
+            lastWidth = w;
+            
             setScreenWidth(w);
             if (w >= BP_TABLET) { setExpanded(true); setDrawerOpen(false); }
             else if (w >= BP_MOBILE) { setExpanded(false); setDrawerOpen(false); }

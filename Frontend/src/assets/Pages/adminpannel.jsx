@@ -377,6 +377,14 @@ export default function AdminPanel() {
     const [endDate, setEndDate] = useState("");
     const [city, setCity] = useState("");
     const [state, setState] = useState("");
+    const [modulesState, setModulesState] = useState({
+        dashboard: true,
+        approvals: true,
+        charts: true,
+        reports: true,
+        mis: true,
+        utility: true,
+    });
     
     // DB credentials
     const [erpServer, setErpServer] = useState("");
@@ -499,18 +507,18 @@ export default function AdminPanel() {
                 credentials: "include"
             });
             const data = await res.json();
-            if (res.ok) {
-                setAdminToken(data.admin_token || "");
+            if (res.ok && data.success) {
+                if (data.admin_token) setAdminToken(data.admin_token);
                 setIsAuthenticated(true);
                 fetchTenants();
-                showAdminToast("success", "Authenticated", "Welcome back. Admin session is active.");
+                showAdminToast("success", "Welcome Admin", "Signed in successfully.");
             } else {
                 const msg = data.error || "Invalid credentials.";
                 setLoginError(msg);
                 showAdminToast("error", "Login Failed", msg);
             }
         } catch {
-            const msg = "Network connection failed.";
+            const msg = "Network error.";
             setLoginError(msg);
             showAdminToast("error", "Network Error", msg);
         } finally {
@@ -519,22 +527,22 @@ export default function AdminPanel() {
     };
 
     // Logout Admin
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        try {
+            await adminFetch(`${API}/admin/logout/`, { method: "POST" });
+        } catch {
+            /* ignore */
+        }
         setAdminToken("");
         setIsAuthenticated(false);
         setTenants([]);
-        setLoginUsername("");
-        setLoginPassword("");
-
-        adminFetch(`${API}/admin/logout/`, {
-            method: "POST",
-        }).catch(() => {});
+        showAdminToast("success", "Logged Out", "You have signed out of Admin Panel.");
     };
 
     // Toggle Active Status of Tenant
     const handleToggleStatus = async (tenant, currentVal) => {
-        const newVal = !currentVal;
         const tid = tenant.tenant_id;
+        const newVal = currentVal ? 0 : 1;
 
         setTenants((prev) =>
             prev.map((t) =>
@@ -606,6 +614,14 @@ export default function AdminPanel() {
         setEndDate("");
         setCity("");
         setState("");
+        setModulesState({
+            dashboard: true,
+            approvals: true,
+            charts: true,
+            reports: true,
+            mis: true,
+            utility: true,
+        });
         setErpServer("");
         setErpDatabase("");
         setErpUser("");
@@ -633,6 +649,14 @@ export default function AdminPanel() {
         setEndDate(t.end_date || "");
         setCity(t.city || "");
         setState(t.state || "");
+        setModulesState(t.modules ? { ...t.modules } : {
+            dashboard: true,
+            approvals: true,
+            charts: true,
+            reports: true,
+            mis: true,
+            utility: true,
+        });
         setErpServer(t.erp_server || "");
         setErpDatabase(t.erp_database || "");
         setErpUser(t.erp_user || "");
@@ -671,6 +695,7 @@ export default function AdminPanel() {
                     end_date: endDate,
                     city: city,
                     state: state,
+                    modules: modulesState,
                     erp_server: erpServer,
                     erp_database: erpDatabase,
                     erp_user: erpUser,
@@ -726,6 +751,7 @@ export default function AdminPanel() {
                     active_status: editTenant.active_status,
                     city: city,
                     state: state,
+                    modules: modulesState,
                     erp_server: erpServer,
                     erp_database: erpDatabase,
                     erp_user: erpUser,
@@ -1476,6 +1502,35 @@ export default function AdminPanel() {
                                                 />
                                             </div>
 
+                                            <div className="ap-form-subtitle ap-form-full">Licensed Modules Config</div>
+                                            <div className="ap-modules-grid">
+                                                {[
+                                                    { key: "dashboard", label: "Dashboard", desc: "Top & Plant Metrics" },
+                                                    { key: "approvals", label: "Approvals", desc: "E & T Approvals" },
+                                                    { key: "charts", label: "Charts", desc: "Trend Visuals" },
+                                                    { key: "reports", label: "Reports", desc: "Sales, Purchase, Quality" },
+                                                    { key: "mis", label: "MIS", desc: "Idle & Efficiency" },
+                                                    { key: "utility", label: "Utility", desc: "User Rights Config" },
+                                                ].map(mod => {
+                                                    const isChecked = !!modulesState[mod.key];
+                                                    return (
+                                                        <div 
+                                                            key={mod.key} 
+                                                            className={`ap-module-card ${isChecked ? "ap-module-card--active" : "ap-module-card--disabled"}`}
+                                                            onClick={() => setModulesState(prev => ({ ...prev, [mod.key]: !prev[mod.key] }))}
+                                                        >
+                                                            <div className="ap-module-card__top">
+                                                                <span className="ap-module-card__name">{mod.label}</span>
+                                                                <span className={`ap-module-card__badge ${isChecked ? "ap-module-card__badge--on" : "ap-module-card__badge--off"}`}>
+                                                                    {isChecked ? "✓ Active" : "✕ Disabled"}
+                                                                </span>
+                                                            </div>
+                                                            <span className="ap-module-card__sub">{mod.desc}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
                                             <div className="ap-form-subtitle">Database ERP Server Details</div>
 
                                             <div className="ap-field ap-form-full">
@@ -1722,6 +1777,35 @@ export default function AdminPanel() {
                                                     value={endDate}
                                                     onChange={setEndDate}
                                                 />
+                                            </div>
+
+                                            <div className="ap-form-subtitle ap-form-full">Licensed Modules Config</div>
+                                            <div className="ap-modules-grid">
+                                                {[
+                                                    { key: "dashboard", label: "Dashboard", desc: "Top & Plant Metrics" },
+                                                    { key: "approvals", label: "Approvals", desc: "E & T Approvals" },
+                                                    { key: "charts", label: "Charts", desc: "Trend Visuals" },
+                                                    { key: "reports", label: "Reports", desc: "Sales, Purchase, Quality" },
+                                                    { key: "mis", label: "MIS", desc: "Idle & Efficiency" },
+                                                    { key: "utility", label: "Utility", desc: "User Rights Config" },
+                                                ].map(mod => {
+                                                    const isChecked = !!modulesState[mod.key];
+                                                    return (
+                                                        <div 
+                                                            key={mod.key} 
+                                                            className={`ap-module-card ${isChecked ? "ap-module-card--active" : "ap-module-card--disabled"}`}
+                                                            onClick={() => setModulesState(prev => ({ ...prev, [mod.key]: !prev[mod.key] }))}
+                                                        >
+                                                            <div className="ap-module-card__top">
+                                                                <span className="ap-module-card__name">{mod.label}</span>
+                                                                <span className={`ap-module-card__badge ${isChecked ? "ap-module-card__badge--on" : "ap-module-card__badge--off"}`}>
+                                                                    {isChecked ? "✓ Active" : "✕ Disabled"}
+                                                                </span>
+                                                            </div>
+                                                            <span className="ap-module-card__sub">{mod.desc}</span>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
 
                                             <div className="ap-form-subtitle">Database ERP Server Details</div>

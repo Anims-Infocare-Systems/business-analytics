@@ -413,10 +413,9 @@ def tapproval_list(request):
             total_count = int(rec.get("_total") or 0)
         status = "Approved" if rec.get("is_approved") else "Pending"
         doc_kind = (rec.get("doc_kind") or "invoice").strip().lower()
-
         appr_info = approvals_map.get(str(rec["doc_no"]))
         approved_by = appr_info.approvedby if appr_info else None
-        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if (appr_info and appr_info.datetime) else None
+        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if (appr_info and appr_info.datetime) else None
 
         cards.append({
             "id": f"{doc_kind}:{rec['doc_no']}",
@@ -875,7 +874,7 @@ def tapproval_detail(request):
         if appr_info:
             approved_by = appr_info.approvedby
             from django.utils import timezone
-            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if appr_info.datetime else None
+            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if appr_info.datetime else None
     except Exception:
         pass
 

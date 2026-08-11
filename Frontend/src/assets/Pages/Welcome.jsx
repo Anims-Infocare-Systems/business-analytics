@@ -38,7 +38,7 @@ const SHORTCUTS = [
     {
         id: "approvals",
         title: "Approvals",
-        desc: "E-Approval & T-Approval workflows",
+        desc: "E-Approval, T-Approval & M-Approval workflows",
         target: "E-Approval",
         icon: ClipboardCheck,
         tone: "emerald",
@@ -135,6 +135,15 @@ export default function Welcome({
         return () => clearInterval(id);
     }, []);
 
+    const tenantLicense = useMemo(() => {
+        try {
+            const user = JSON.parse(localStorage.getItem("user") || "{}");
+            return user.license || {};
+        } catch {
+            return {};
+        }
+    }, []);
+
     const planId = useMemo(() => {
         try {
             const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -144,8 +153,19 @@ export default function Welcome({
         }
     }, []);
 
+    const isModuleLicensed = (key) => {
+        if (!key) return true;
+        const k = key.toLowerCase();
+        if (tenantLicense[k] !== undefined) {
+            return !!tenantLicense[k];
+        }
+        return true;
+    };
+
     const hasAccess = (item) => {
         if (item.always) return true;
+        if (item.rightKey && !isModuleLicensed(item.rightKey)) return false;
+        if (item.fallbackKey && !isModuleLicensed(item.fallbackKey)) return false;
         if (item.proBlocked && planId === "pro") return false;
         if (isSuperAdmin) return true;
         if (item.rightKey && userRights?.[item.rightKey]) return true;
@@ -155,12 +175,12 @@ export default function Welcome({
 
     const shortcuts = useMemo(
         () => SHORTCUTS.filter(hasAccess),
-        [userRights, isSuperAdmin, planId],
+        [userRights, isSuperAdmin, planId, tenantLicense],
     );
 
     const moduleCount = useMemo(() => {
         const keys = Object.keys(userRights || {}).filter((k) => userRights[k]);
-        return isSuperAdmin ? keys.length || shortcuts.length : keys.length;
+        return isSuperAdmin ? shortcuts.length : keys.length;
     }, [userRights, isSuperAdmin, shortcuts.length]);
 
     const initials = (userName?.slice(0, 2) || "US").toUpperCase();

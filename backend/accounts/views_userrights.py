@@ -19,6 +19,7 @@ FORM_RIGHTS_KEYS = (
     "Approvals",
     "E-Approval",
     "T-Approval",
+    "M-Approval",
     "Reports",
     "Sales Analysis",
     "Purchase Analysis",
@@ -219,6 +220,9 @@ def user_rights_list(request):
         else:
             for key in FORM_RIGHTS_KEYS:
                 u_rights[key] = rights_map[uname.lower()].get(key, False)  # lowercase lookup
+            if not u_rights.get("M-Approval"):
+                if u_rights.get("Approvals") or u_rights.get("E-Approval") or u_rights.get("T-Approval"):
+                    u_rights["M-Approval"] = True
 
         avatar = (uname[:2] or "??").upper()
         has_access = is_super_admin or any(u_rights.values())
@@ -295,15 +299,53 @@ def user_rights_me(request):
                     "SELECT form_name, access FROM tenants_usersrights WHERE company_code = %s AND username = %s",
                     [company, username]
                 )
+                fetched_keys = set()
                 for r_row in cursor.fetchall():
                     f_name, acc = r_row[0], bool(r_row[1])
                     if f_name in rights:
                         rights[f_name] = acc
+                        fetched_keys.add(f_name)
+                if not rights.get("M-Approval"):
+                    if rights.get("Approvals") or rights.get("E-Approval") or rights.get("T-Approval") or is_super_admin:
+                        rights["M-Approval"] = True
+
+                # Auto-sync M-Approval = 1 into tenants_usersrights table if missing or 0
+                if rights.get("M-Approval") and company and username:
+                    try:
+                        cursor.execute(
+                            """
+                            IF NOT EXISTS (
+                                SELECT 1 FROM tenants_usersrights 
+                                WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND form_name = 'M-Approval'
+                            )
+                            BEGIN
+                                INSERT INTO tenants_usersrights (tenant_id, company_code, username, form_name, access)
+                                VALUES (%s, %s, %s, 'M-Approval', 1)
+                            END
+                            ELSE
+                            BEGIN
+                                UPDATE tenants_usersrights SET access = 1
+                                WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND form_name = 'M-Approval' AND access = 0
+                            END
+                            """,
+                            [company, username, user_id or 0, company, username, company, username]
+                        )
+                    except Exception as db_err:
+                        print("[USER-RIGHTS] Auto-sync M-Approval warning:", db_err)
         except Exception:
             pass
-    from .views import is_plan_expired, get_tenant_license
+    from .views import is_plan_expired, get_tenant_license, apply_license_restrictions_to_rights
     is_expired = is_plan_expired(company)
     license_info = get_tenant_license(company)
+    rights = apply_license_restrictions_to_rights(rights, license_info)
+
+    if rights.get("M-Approval"):
+        try:
+            from accounts.utils.mapproval_settings import check_mapproval_settings
+            if not check_mapproval_settings(tenant):
+                rights["M-Approval"] = False
+        except Exception as e:
+            print("[USER-RIGHTS] Warning checking M-Approval settings:", e)
 
     return Response({
         "success": True,

@@ -41,11 +41,11 @@ const API_BASE = resolveApiBase();
 //  Premium "No Data Found" Empty State
 // ─────────────────────────────────────────────
 const PARTICLES = [
-    { style: { top: "18%", left: "12%",  "--dx": "30px",  "--dy": "-40px", animationDelay: "0s",    animationDuration: "3.5s" } },
-    { style: { top: "70%", left: "8%",   "--dx": "45px",  "--dy": "-20px", animationDelay: "0.6s",  animationDuration: "4.1s" } },
-    { style: { top: "25%", right: "10%", "--dx": "-38px", "--dy": "-35px", animationDelay: "1.1s",  animationDuration: "3.8s" } },
-    { style: { top: "75%", right: "14%", "--dx": "-30px", "--dy": "-50px", animationDelay: "1.8s",  animationDuration: "4.5s" } },
-    { style: { top: "50%", left: "50%",  "--dx": "20px",  "--dy": "-60px", animationDelay: "2.3s",  animationDuration: "3.2s" } },
+    { style: { top: "18%", left: "12%", "--dx": "30px", "--dy": "-40px", animationDelay: "0s", animationDuration: "3.5s" } },
+    { style: { top: "70%", left: "8%", "--dx": "45px", "--dy": "-20px", animationDelay: "0.6s", animationDuration: "4.1s" } },
+    { style: { top: "25%", right: "10%", "--dx": "-38px", "--dy": "-35px", animationDelay: "1.1s", animationDuration: "3.8s" } },
+    { style: { top: "75%", right: "14%", "--dx": "-30px", "--dy": "-50px", animationDelay: "1.8s", animationDuration: "4.5s" } },
+    { style: { top: "50%", left: "50%", "--dx": "20px", "--dy": "-60px", animationDelay: "2.3s", animationDuration: "3.2s" } },
 ];
 
 function PaNoData({ icon, message = "No data found on this period", compact = false }) {
@@ -244,6 +244,15 @@ export default function PurchaseAnalysis() {
     const [poTypes, setPoTypes] = useState(["All Types"]);
     const [poRows, setPoRows] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [poTableSearchQuery, setPoTableSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery.trim());
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
     const [poSummary, setPoSummary] = useState(null);
     const [poLoading, setPoLoading] = useState(false);
     const [amendedPoRows, setAmendedPoRows] = useState([]);
@@ -293,13 +302,25 @@ export default function PurchaseAnalysis() {
 
     const filteredPoRows = useMemo(() => {
         return poRows.filter(r => {
-            const q = searchQuery.toLowerCase().trim();
-            if (q) {
-                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
-                    (r.po_type && r.po_type.toLowerCase().includes(q)) ||
-                    (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
-                    (r.material_code && r.material_code.toLowerCase().includes(q)) ||
-                    (r.material && r.material.toLowerCase().includes(q));
+            const tableQ = poTableSearchQuery.toLowerCase().trim();
+            if (tableQ) {
+                const match = (r.po_number && r.po_number.toLowerCase().includes(tableQ)) ||
+                    (r.po_type && r.po_type.toLowerCase().includes(tableQ)) ||
+                    (r.vendor_name && r.vendor_name.toLowerCase().includes(tableQ)) ||
+                    (r.material_code && r.material_code.toLowerCase().includes(tableQ)) ||
+                    (r.material && r.material.toLowerCase().includes(tableQ)) ||
+                    (r.po_date && r.po_date.toLowerCase().includes(tableQ)) ||
+                    (r.grn_no && r.grn_no.toLowerCase().includes(tableQ)) ||
+                    (r.grn_date && r.grn_date.toLowerCase().includes(tableQ));
+                if (!match) return false;
+            }
+            const globalQ = searchQuery.toLowerCase().trim();
+            if (globalQ) {
+                const match = (r.po_number && r.po_number.toLowerCase().includes(globalQ)) ||
+                    (r.po_type && r.po_type.toLowerCase().includes(globalQ)) ||
+                    (r.vendor_name && r.vendor_name.toLowerCase().includes(globalQ)) ||
+                    (r.material_code && r.material_code.toLowerCase().includes(globalQ)) ||
+                    (r.material && r.material.toLowerCase().includes(globalQ));
                 if (!match) return false;
             }
             if (filters.supplier && filters.supplier.length > 0 && !filters.supplier.includes("All Suppliers")) {
@@ -316,7 +337,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [poRows, searchQuery, filters.supplier, filters.department, filters.status]);
+    }, [poRows, poTableSearchQuery, searchQuery, filters.supplier, filters.department, filters.status]);
 
     const sortedFilteredPoRows = useMemo(() => {
         const sorted = [...filteredPoRows];
@@ -477,18 +498,18 @@ export default function PurchaseAnalysis() {
 
     const filteredTraceData = useMemo(() => {
         return traceRows.filter(row => {
-            if (!traceSearch) return true;
-            const q = traceSearch.toLowerCase();
+            const q = (searchQuery || traceSearch || "").toLowerCase().trim();
+            if (!q) return true;
             return (
                 (row.supplierName || "").toLowerCase().includes(q) ||
-                (row.indNo       || "").toLowerCase().includes(q) ||
-                (row.indPoNo     || "").toLowerCase().includes(q) ||
-                (row.material    || "").toLowerCase().includes(q) ||
-                (row.grnNo       || "").toLowerCase().includes(q) ||
-                (row.poType      || "").toLowerCase().includes(q)
+                (row.indNo || "").toLowerCase().includes(q) ||
+                (row.indPoNo || "").toLowerCase().includes(q) ||
+                (row.material || "").toLowerCase().includes(q) ||
+                (row.grnNo || "").toLowerCase().includes(q) ||
+                (row.poType || "").toLowerCase().includes(q)
             );
         });
-    }, [traceRows, traceSearch]);
+    }, [traceRows, traceSearch, searchQuery]);
 
     const [summaryData, setSummaryData] = useState(null);
     const [supplierRatingData, setSupplierRatingData] = useState(null);
@@ -624,6 +645,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setPoLoading(true);
         fetch(`${API_BASE}/purchase-analysis/po-table/?${params}`, {
@@ -640,7 +664,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch Amended PO table rows ──────────────────────
     useEffect(() => {
@@ -661,6 +685,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setAmendedPoLoading(true);
         fetch(`${API_BASE}/purchase-analysis/amended-po-table/?${params}`, {
@@ -676,7 +703,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAmendedPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch Short Close table rows ──────────────────────
     useEffect(() => {
@@ -697,6 +724,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setShortCloseLoading(true);
         fetch(`${API_BASE}/purchase-analysis/short-close-table/?${params}`, {
@@ -711,7 +741,7 @@ export default function PurchaseAnalysis() {
             .catch(err => {
                 if (err.name !== "AbortError") setShortCloseLoading(false);
             });
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch Price Trend table rows ──────────────────────
     useEffect(() => {
@@ -732,6 +762,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setPriceTrendLoading(true);
         fetch(`${API_BASE}/purchase-analysis/price-trend/?${params}`, {
@@ -747,7 +780,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPriceTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch management alerts ──────────────────────
     useEffect(() => {
@@ -768,6 +801,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setAlertsLoading(true);
         fetch(`${API_BASE}/purchase-analysis/management-alerts/?${params}`, {
@@ -783,7 +819,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAlertsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch Traceability Table data ────────────────────────────
     useEffect(() => {
@@ -804,6 +840,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setTraceLoading(true);
         fetch(`${API_BASE}/purchase-analysis/traceability-table/?${params}`, {
@@ -819,7 +858,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setTraceLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch charts data (donuts + supplier ranking) ─────────────
     const [chartsData, setChartsData] = useState(null);
@@ -841,6 +880,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setChartsLoading(true);
         fetch(`${API_BASE}/purchase-analysis/charts/?${params}`, {
@@ -856,7 +898,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setChartsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Redraw donut charts (supplier + category) ─────────────────
     useEffect(() => {
@@ -934,7 +976,7 @@ export default function PurchaseAnalysis() {
                         anchor: "end",
                         align: "right",
                         offset: 4,
-                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(2)}L` : ""),
                         font: { size: 9.5, weight: "700", family: "Poppins" },
                         color: "#1e293b"
                     }
@@ -996,6 +1038,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setTrendLoading(true);
         fetch(`${API_BASE}/purchase-analysis/weekly-trend/?${params}`, {
@@ -1010,7 +1055,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch summary metrics (KPI cards & strip) ────────────────
     useEffect(() => {
@@ -1026,6 +1071,9 @@ export default function PurchaseAnalysis() {
         if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
             params.set("supplier", filters.supplier.join(","));
         }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setSummaryLoading(true);
         fetch(`${API_BASE}/purchase-analysis/summary/?${params}`, {
@@ -1040,7 +1088,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setSummaryLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier]);
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
 
     // ── Fetch Supplier Rating ───────────────────
     useEffect(() => {
@@ -1052,6 +1100,9 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
         const ctrl = new AbortController();
         setSupplierRatingLoading(true);
         fetch(`${API_BASE}/purchase/supplier-rating/?${params}`, {
@@ -1066,7 +1117,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setSupplierRatingLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to]);
+    }, [dateRange.from, dateRange.to, debouncedSearchQuery]);
 
     // ── Redraw Supplier Rating chart whenever supplierRatingData changes ──
     useEffect(() => {
@@ -1929,6 +1980,7 @@ export default function PurchaseAnalysis() {
         const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         setDateRange({ from: startOfMonth, to: endOfMonth });
         setSearchQuery("");
+        setPoTableSearchQuery("");
         setFilters({
             fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
             poType: "All Types", supplier: ["All Suppliers"],
@@ -2006,7 +2058,7 @@ export default function PurchaseAnalysis() {
                             <input
                                 type="text"
                                 className="pa2-search-input"
-                                placeholder="Search PO, Vendor, Material..."
+                                placeholder="Search RM Name"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 style={{ paddingRight: searchQuery ? "2rem" : "0.85rem" }}
@@ -2765,14 +2817,14 @@ export default function PurchaseAnalysis() {
                                 type="text"
                                 className="pa2-premium-search-input"
                                 placeholder="Search table..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                value={poTableSearchQuery}
+                                onChange={(e) => setPoTableSearchQuery(e.target.value)}
                             />
-                            {searchQuery && (
+                            {poTableSearchQuery && (
                                 <button
                                     type="button"
                                     className="pa2-premium-search-clear"
-                                    onClick={() => setSearchQuery("")}
+                                    onClick={() => setPoTableSearchQuery("")}
                                 >
                                     <X size={10} />
                                 </button>
@@ -2787,14 +2839,15 @@ export default function PurchaseAnalysis() {
                     <table className="pa2-po-tbl">
                         <thead>
                             <tr>
+                                {renderSortableTh("SL. NO.", "sno")}
                                 {renderSortableTh("PO NUMBER", "po_number")}
+                                {renderSortableTh("PO DATE", "po_date")}
                                 {renderSortableTh("PO TYPE", "po_type")}
-                                {renderSortableTh("VENDOR / SUPPLIER", "vendor_name")}
+                                {renderSortableTh("SUPPLIER", "vendor_name")}
                                 {renderSortableTh("MATERIAL", "material", false, true)}
                                 {renderSortableTh("QTY", "po_qty", true)}
                                 {renderSortableTh("RATE", "rate", true)}
                                 {renderSortableTh("VALUE", "value", true)}
-                                {renderSortableTh("PO DATE", "po_date")}
                                 {renderSortableTh("GRN NO", "grn_no")}
                                 {renderSortableTh("GRN DATE", "grn_date")}
                                 {renderSortableTh("AMND", "amnd")}
@@ -2804,14 +2857,15 @@ export default function PurchaseAnalysis() {
                             {poLoading && (
                                 [1, 2, 3, 4, 5].map(i => (
                                     <tr key={i} className="pa2-po-tr pa2-pulse-loader">
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "30px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "180px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "50px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td" style={{ textAlign: "center" }}><div className="pa2-skeleton pa2-shimmer" style={{ width: "25px", height: "13px", margin: "0 auto" }} /></td>
@@ -2819,11 +2873,15 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!poLoading && sortedFilteredPoRows.length === 0 && (
-                                <tr><td colSpan={11} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
+                                <tr><td colSpan={12} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
                             )}
                             {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
+                                    <td className="pa2-po-td" style={{ fontWeight: "600", color: "#64748b", width: "50px" }}>{i + 1}</td>
                                     <td className="pa2-po-td pa2-po-link">{r.po_number}</td>
+                                    <td className="pa2-po-td pa2-po-date">
+                                        {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
+                                    </td>
                                     <td className="pa2-po-td">
                                         {r.po_type
                                             ? <span className="pa2-po-type-badge">{r.po_type}</span>
@@ -2841,9 +2899,6 @@ export default function PurchaseAnalysis() {
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">
                                         ₹{r.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                    </td>
-                                    <td className="pa2-po-td pa2-po-date">
-                                        {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
                                     </td>
                                     <td className="pa2-po-td">
                                         {r.grn_no

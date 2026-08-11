@@ -1,17 +1,26 @@
 # React / Vite
-Frontend/node_modules/
-Frontend/dist/
+**/node_modules/
+**/dist/
+**/dev-dist/
 
-# Django
-backend/__pycache__/
-backend/*.pyc
+# Django / Python
+**/__pycache__/
+*.pyc
 backend/db.sqlite3
+backend/accounts.zip
 
 # Environment files
 .env
+.env.local
+.env.*.local
 
-# VS Code
+# VS Code / Editor config
 .vscode/
+.idea/
 
 # OS files
 .DS_Store
+
+# Temp / Diff files
+git_diff_plant.txt
+git_diff_plant_utf8.txt
