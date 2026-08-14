@@ -160,7 +160,7 @@ function PopupPortal({ anchorRef, theme, children }) {
 }
 
 /* ── Main component ───────────────────────────────────────── */
-export default function DateRangePicker({ from, to, onChange, theme = "indigo", maxDate = null }) {
+export default function DateRangePicker({ from, to, onChange, theme = "indigo", maxDate = null, disabled = false }) {
     const today        = new Date();
     const [open,       setOpen]     = useState(false);
     const [leftMonth,  setLeft]     = useState(from ? new Date(from.getFullYear(), from.getMonth(), 1) : addMonths(today, -1));
@@ -271,8 +271,9 @@ export default function DateRangePicker({ from, to, onChange, theme = "indigo", 
             {/* ── Trigger button ── */}
             <button
                 ref={triggerRef}
-                className={`drp-trigger ${open ? "drp-trigger--open" : ""}`}
-                onClick={() => setOpen(o => !o)}
+                className={`drp-trigger ${open ? "drp-trigger--open" : ""} ${disabled ? "drp-trigger--disabled" : ""}`}
+                onClick={() => !disabled && setOpen(o => !o)}
+                disabled={disabled}
                 type="button"
             >
                 <svg className="drp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

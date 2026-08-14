@@ -96,8 +96,8 @@ const BadgePlantIcon = () => (
    ================================================================ */
 const PLAN_META = {
     free: { name: "Free Plan", detail: "₹0 · up to 5 users", maxUsers: 5 },
-    pro: { name: "Pro Plan", detail: "₹500 / user / month · billed annually", maxUsers: 9999 },
-    max: { name: "Max Plan", detail: "₹2,000 / user / month · billed annually", maxUsers: 9999 },
+    pro: { name: "Pro Plan", detail: "₹1,500 / user / month · billed annually", maxUsers: 9999 },
+    max: { name: "Max Plan", detail: "₹2,500 / user / month (Min. 2 users) · billed annually", maxUsers: 9999 },
 };
 
 const PLANS = [
@@ -129,7 +129,7 @@ const PLANS = [
         id: "pro",
         name: "Pro",
         tagline: "Advanced data reporting & operations analytics",
-        price: { yearly: "₹500", monthly: "₹2,499" },
+        price: { yearly: "₹1,500", monthly: "₹2,499" },
         priceUnit: "/ user / month",
         priceSub: { yearly: "billed annually", monthly: "billed monthly" },
         pricePrefix: "",
@@ -151,9 +151,9 @@ const PLANS = [
         id: "max",
         name: "Max",
         tagline: "Full enterprise integrations & multi-plant operation tracking",
-        price: { yearly: "₹2,000", monthly: "₹8,999" },
+        price: { yearly: "₹2,500", monthly: "₹8,999" },
         priceUnit: "/ user / month",
-        priceSub: { yearly: "billed annually", monthly: "billed monthly" },
+        priceSub: { yearly: "billed annually (Min. 2 users)", monthly: "billed monthly (Min. 2 users)" },
         pricePrefix: "",
         ctaLabel: "Get Max plan",
         ctaStyle: "dark",
@@ -212,7 +212,7 @@ function PlanCard({ plan, billing, onBillingChange, onSelect }) {
                         plan.id === "max" ? <IconMax /> :
                             <IconFree />}
                 </div>
-                {plan.id === "pro" && (
+                {(plan.id === "pro" || plan.id === "max") && (
                     <div className="sg-billing-badge">
                         <span>Yearly</span>
                         <span className="sg-save-badge" id="save-badge">Save 17%</span>
@@ -232,7 +232,12 @@ function PlanCard({ plan, billing, onBillingChange, onSelect }) {
                         {priceSub && (
                             <span className="sg-price-sub"
                                 id={plan.id === "pro" ? "pro-billing-note" : undefined}>
-                                {priceSub}
+                                {priceSub.includes("(Min. 2 users)") ? (
+                                    <>
+                                        {priceSub.replace("(Min. 2 users)", "")}
+                                        <strong style={{ fontWeight: "700", color: "#2563eb" }}>(Min. 2 users)</strong>
+                                    </>
+                                ) : priceSub}
                             </span>
                         )}
                     </div>
@@ -376,9 +381,10 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
     }, [currentCode]);
 
     const maxUsers = PLAN_META[selectedPlan.id].maxUsers;
+    const minLimit = selectedPlan.id === "max" ? 2 : 1;
     const usersHint = selectedPlan.id === "free"
         ? `(max 5)`
-        : "";
+        : (selectedPlan.id === "max" ? `(min 2)` : "");
 
     const handleField = (key, val) => {
         setForm(f => ({ ...f, [key]: val }));
@@ -403,7 +409,12 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
         if (!form.employees) errs.employees = "Please select employee count.";
         const u = parseInt(form.users) || 0;
         const limit = selectedPlan.id === "free" ? 5 : 9999;
-        if (u < 1 || u > limit) errs.users = "Please enter a valid user count.";
+        const minLimit = selectedPlan.id === "max" ? 2 : 1;
+        if (u < minLimit || u > limit) {
+            errs.users = selectedPlan.id === "max"
+                ? "Max plan requires a minimum of 2 users."
+                : "Please enter a valid user count.";
+        }
         return errs;
     };
 
@@ -422,7 +433,7 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
         if (selectedPlan.id === "free") return "₹0 · up to 5 users";
         const userCount = parseInt(form.users) || 1;
         const months = selectedBilling === "6month" ? 6 : 12;
-        const rate = selectedPlan.id === "pro" ? 500 : 2000;
+        const rate = selectedPlan.id === "pro" ? 1500 : 2500;
         const calculatedPrice = rate * months * userCount;
         const periodText = selectedBilling === "6month" ? "6 months" : "year";
         const billedText = selectedBilling === "6month" ? "billed every 6 months" : "billed annually";
@@ -777,11 +788,11 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                         type="button"
                                         className="sg-stepper-btn sg-stepper-btn--sub"
                                         onClick={() => {
-                                            const currentVal = parseInt(form.users, 10) || 1;
-                                            const clamped = Math.max(1, currentVal - 1);
+                                            const currentVal = parseInt(form.users, 10) || minLimit;
+                                            const clamped = Math.max(minLimit, currentVal - 1);
                                             handleField("users", String(clamped));
                                         }}
-                                        disabled={parseInt(form.users, 10) <= 1}
+                                        disabled={parseInt(form.users, 10) <= minLimit}
                                     >
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
                                             <line x1="5" y1="12" x2="19" y2="12" />
@@ -797,7 +808,7 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                             const num = parseInt(val, 10);
                                             if (!isNaN(num)) {
                                                 const limit = selectedPlan.id === "free" ? 5 : 9999;
-                                                const clamped = Math.max(1, Math.min(num, limit));
+                                                const clamped = Math.max(minLimit, Math.min(num, limit));
                                                 handleField("users", String(clamped));
                                             }
                                         }} />
@@ -805,7 +816,7 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                         type="button"
                                         className="sg-stepper-btn sg-stepper-btn--add"
                                         onClick={() => {
-                                            const currentVal = parseInt(form.users, 10) || 1;
+                                            const currentVal = parseInt(form.users, 10) || minLimit;
                                             const limit = selectedPlan.id === "free" ? 5 : 9999;
                                             const clamped = Math.min(limit, currentVal + 1);
                                             handleField("users", String(clamped));
@@ -1202,16 +1213,17 @@ function SuccessScreen({ companyCode, adminUsername, onGoToLogin }) {
    MODAL — BILLING PERIOD SELECTION
    ================================================================ */
 function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue }) {
-    const rate = plan.id === "pro" ? 500 : 2000;
+    const rate = plan.id === "pro" ? 1500 : 2500;
+    const minUsers = plan.id === "max" ? 2 : 1;
     const price6Mo = rate * 6;
     const priceYear = rate * 12;
 
-    const [users, setUsers] = useState("1");
+    const [users, setUsers] = useState(plan.id === "max" ? "2" : "1");
 
-    const userCount = Math.max(1, parseInt(users) || 1);
+    const userCount = Math.max(minUsers, parseInt(users) || minUsers);
     const subtotal = (selectedCycle === "6month" ? price6Mo : priceYear) * userCount;
-    const tax = 0;
-    const total = subtotal;
+    const tax = subtotal * 0.18;
+    const total = subtotal + tax;
 
     return (
         <div className="sg-modal sg-modal--open" id="modal-billing-period" role="dialog" aria-modal="true" onClick={onClose}>
@@ -1264,7 +1276,8 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                             <button
                                 type="button"
                                 className="sg-billing-users-btn"
-                                onClick={() => setUsers(prev => String(Math.max(1, (parseInt(prev) || 1) - 1)))}
+                                onClick={() => setUsers(prev => String(Math.max(minUsers, (parseInt(prev) || minUsers) - 1)))}
+                                disabled={(parseInt(users) || minUsers) <= minUsers}
                             >
                                 −
                             </button>
@@ -1272,22 +1285,22 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                                 id="billing-users"
                                 className="sg-billing-users-input"
                                 type="number"
-                                min="1"
+                                min={String(minUsers)}
                                 value={users}
                                 onChange={e => {
                                     const val = e.target.value;
                                     if (val === "") {
                                         setUsers("");
                                     } else {
-                                        const num = parseInt(val) || 1;
-                                        setUsers(String(Math.max(1, num)));
+                                        const num = parseInt(val) || minUsers;
+                                        setUsers(String(Math.max(minUsers, num)));
                                     }
                                 }}
                             />
                             <button
                                 type="button"
                                 className="sg-billing-users-btn"
-                                onClick={() => setUsers(prev => String((parseInt(prev) || 1) + 1))}
+                                onClick={() => setUsers(prev => String((parseInt(prev) || minUsers) + 1))}
                             >
                                 +
                             </button>
@@ -1303,8 +1316,8 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                             <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                         </div>
                         <div className="sg-breakdown-row">
-                            <span>Tax (0%)</span>
-                            <span>₹0.00</span>
+                            <span>Tax (18%)</span>
+                            <span>₹{tax.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="sg-breakdown-divider" />
                         <div className="sg-breakdown-row sg-breakdown-row--total">
@@ -1316,7 +1329,7 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
 
                 <div className="sg-modal__foot">
                     <button type="button" className="sg-btn-cancel" onClick={onClose}>Cancel</button>
-                    <button type="button" className="sg-btn-continue-billing" onClick={() => onContinue(String(userCount))}>
+                    <button type="button" className="sg-btn-continue-billing" onClick={() => onContinue(String(userCount))} disabled={plan.id === "pro" || plan.id === "max"}>
                         <span>Continue</span>
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 6 }}>
                             <path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

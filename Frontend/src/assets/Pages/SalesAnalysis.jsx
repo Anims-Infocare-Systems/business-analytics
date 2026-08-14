@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
@@ -971,9 +971,20 @@ export default function SalesAnalysis() {
   const [poPage, setPoPage] = useState(1);
   const [poPendingOnly, setPoPendingOnly] = useState(false);
   const [performanceChartType, setPerformanceChartType] = useState("bar");
+  const [projChartType, setProjChartType] = useState("combo");
   const [weeklyChartType, setWeeklyChartType] = useState("combo");
   const [customerSearch, setCustomerSearch] = useState("");
   const [planSearchQuery, setPlanSearchQuery] = useState("");
+
+  const [despatchCustFilter, setDespatchCustFilter] = useState([]);
+  const [despatchPartFilter, setDespatchPartFilter] = useState([]);
+  const [despatchCustDropdownOpen, setDespatchCustDropdownOpen] = useState(false);
+  const [despatchPartDropdownOpen, setDespatchPartDropdownOpen] = useState(false);
+  const [despatchCustSearch, setDespatchCustSearch] = useState("");
+  const [despatchPartSearch, setDespatchPartSearch] = useState("");
+  const [despatchDateRange, setDespatchDateRange] = useState({ from: null, to: null });
+  const despatchCustRef = useRef(null);
+  const despatchPartRef = useRef(null);
 
   const customerOptions = useMemo(() => {
     const customers = new Set();
@@ -1176,11 +1187,46 @@ export default function SalesAnalysis() {
       ...rows.map(e => e.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(","))
     ].join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", "po_ledger_export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDespatchExport = () => {
+    const headers = [
+      "#", "Customer", "Part No", "Description", "Pending Planned Qty", "Planned Qty",
+      "Available Qty", "Despatch Qty", "Inv No", "Inv Dt", "Inv Value"
+    ];
+
+    const rows = filteredDespatchPlan.map((row, idx) => [
+      idx + 1,
+      row.customer,
+      row.partNo,
+      row.description,
+      row.pendingPlannedQty,
+      row.plannedQty,
+      row.availableQty,
+      row.despatchQty,
+      row.invNo === "—" ? "" : row.invNo,
+      row.invDate === "—" ? "" : row.invDate,
+      row.invValue || 0
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(e => e.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "despatch_plan_pending_export.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1215,8 +1261,57 @@ export default function SalesAnalysis() {
     });
   }, [dateRange, planSearchQuery, planVsActual, selectedCustomers]);
 
+  const { uniqueDespatchCustomers, uniqueDespatchParts } = useMemo(() => {
+    const custSet = new Set();
+    const partSet = new Set();
+    (filteredPlanVsActual || []).forEach(row => {
+      if (row.customer) custSet.add(row.customer);
+      
+      const matchesCustomer = despatchCustFilter.length === 0 || despatchCustFilter.includes(row.customer);
+      if (matchesCustomer) {
+        const parts = (row.partNoDesc || "").split(" - ");
+        const partNo = row.partNo || (parts.length > 1 ? parts[0] : row.partNoDesc || "—");
+        if (partNo && partNo !== "—") partSet.add(partNo);
+      }
+    });
+    return {
+      uniqueDespatchCustomers: Array.from(custSet).sort(),
+      uniqueDespatchParts: Array.from(partSet).sort()
+    };
+  }, [filteredPlanVsActual, despatchCustFilter]);
+
+  // Clean invalid part number selections when active customers change
+  useEffect(() => {
+    if (despatchCustFilter.length > 0 && despatchPartFilter.length > 0) {
+      const validParts = new Set();
+      (filteredPlanVsActual || []).forEach(row => {
+        if (despatchCustFilter.includes(row.customer)) {
+          const parts = (row.partNoDesc || "").split(" - ");
+          const partNo = row.partNo || (parts.length > 1 ? parts[0] : row.partNoDesc || "—");
+          if (partNo && partNo !== "—") validParts.add(partNo);
+        }
+      });
+      const newPartFilter = despatchPartFilter.filter(p => validParts.has(p));
+      if (newPartFilter.length !== despatchPartFilter.length) {
+        setDespatchPartFilter(newPartFilter);
+      }
+    }
+  }, [despatchCustFilter, filteredPlanVsActual, despatchPartFilter]);
+
+  const filteredUniqueCustomers = useMemo(() => {
+    const q = despatchCustSearch.toLowerCase().trim();
+    if (!q) return uniqueDespatchCustomers;
+    return uniqueDespatchCustomers.filter(c => c.toLowerCase().includes(q));
+  }, [uniqueDespatchCustomers, despatchCustSearch]);
+
+  const filteredUniqueParts = useMemo(() => {
+    const q = despatchPartSearch.toLowerCase().trim();
+    if (!q) return uniqueDespatchParts;
+    return uniqueDespatchParts.filter(p => p.toLowerCase().includes(q));
+  }, [uniqueDespatchParts, despatchPartSearch]);
+
   const filteredDespatchPlan = useMemo(() => {
-    return (filteredPlanVsActual || []).map((row) => {
+    let list = (filteredPlanVsActual || []).map((row) => {
       const parts = (row.partNoDesc || "").split(" - ");
       const partNo = row.partNo || (parts.length > 1 ? parts[0] : row.partNoDesc || "—");
       const description = row.description || (parts.length > 1 ? parts.slice(1).join(" - ") : row.partNoDesc || "—");
@@ -1225,7 +1320,9 @@ export default function SalesAnalysis() {
       const availableQty = Number(row.availableQty || 0);
       const pendingPlannedQty = Math.max(0, plannedQty - despatchQty);
       const cancel = Number(row.cancel || row.shortCloseQty || 0);
-      const invNo = row.invNo || row.invNoDt || "—";
+      const invNo = row.invNo || "—";
+      const invDate = row.invDate || "—";
+      const invValue = Number(row.invValue || 0);
 
       return {
         ...row,
@@ -1236,11 +1333,47 @@ export default function SalesAnalysis() {
         plannedQty,
         availableQty,
         despatchQty,
-        cancel,
-        invNo
+        invNo,
+        invDate,
+        invValue
       };
     });
-  }, [filteredPlanVsActual]);
+
+    if (despatchDateRange.from || despatchDateRange.to) {
+      list = list.filter(row => {
+        if (!row.date) return false;
+        const rowDate = new Date(row.date);
+        if (despatchDateRange.from && rowDate < despatchDateRange.from) return false;
+        if (despatchDateRange.to && rowDate > despatchDateRange.to) return false;
+        return true;
+      });
+    }
+
+    if (despatchCustFilter && despatchCustFilter.length > 0) {
+      list = list.filter(row => despatchCustFilter.includes(row.customer));
+    }
+    if (despatchPartFilter && despatchPartFilter.length > 0) {
+      list = list.filter(row => despatchPartFilter.includes(row.partNo));
+    }
+
+    return list;
+  }, [filteredPlanVsActual, despatchCustFilter, despatchPartFilter, despatchDateRange]);
+
+  const groupedDespatchPlan = useMemo(() => {
+    const groups = {};
+    (filteredDespatchPlan || []).forEach(row => {
+      const cust = row.customer || "—";
+      if (!groups[cust]) {
+        groups[cust] = [];
+      }
+      groups[cust].push(row);
+    });
+    return groups;
+  }, [filteredDespatchPlan]);
+
+  const despatchTotalInvValue = useMemo(() => {
+    return (filteredDespatchPlan || []).reduce((sum, row) => sum + (row.invValue || 0), 0);
+  }, [filteredDespatchPlan]);
 
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
@@ -1368,12 +1501,30 @@ export default function SalesAnalysis() {
   }, [customerDropdownOpen]);
 
   useEffect(() => {
+    if (!despatchCustDropdownOpen) {
+      setDespatchCustSearch("");
+    }
+  }, [despatchCustDropdownOpen]);
+
+  useEffect(() => {
+    if (!despatchPartDropdownOpen) {
+      setDespatchPartSearch("");
+    }
+  }, [despatchPartDropdownOpen]);
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (invoiceDropdownRef.current && !invoiceDropdownRef.current.contains(event.target)) {
         setInvoiceDropdownOpen(false);
       }
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target)) {
         setCustomerDropdownOpen(false);
+      }
+      if (despatchCustRef.current && !despatchCustRef.current.contains(event.target)) {
+        setDespatchCustDropdownOpen(false);
+      }
+      if (despatchPartRef.current && !despatchPartRef.current.contains(event.target)) {
+        setDespatchPartDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -3260,6 +3411,14 @@ export default function SalesAnalysis() {
       gradPend.addColorStop(0, "rgba(249, 115, 22, 0.85)");
       gradPend.addColorStop(1, "rgba(249, 115, 22, 0.15)");
 
+      const gradVal = ctx.createLinearGradient(0, 0, 0, 240);
+      gradVal.addColorStop(0, "rgba(79, 70, 229, 0.85)");
+      gradVal.addColorStop(1, "rgba(79, 70, 229, 0.15)");
+
+      const gradPendVal = ctx.createLinearGradient(0, 0, 0, 240);
+      gradPendVal.addColorStop(0, "rgba(239, 68, 68, 0.85)");
+      gradPendVal.addColorStop(1, "rgba(239, 68, 68, 0.15)");
+
       try {
         projChart.current = new Chart(ctx, {
           type: "bar",
@@ -3267,66 +3426,20 @@ export default function SalesAnalysis() {
             labels: labels,
             datasets: [
               {
-                type: "bar",
-                label: "Dispatched Qty (Units)",
-                data: dispatchedQty,
-                backgroundColor: gradDisp,
-                borderColor: "rgba(16, 185, 129, 1)",
-                borderWidth: 1.5,
-                borderRadius: 4,
-                yAxisID: "yQty",
-                datalabels: {
-                  display: true,
-                  align: "top",
-                  anchor: "end",
-                  offset: 2,
-                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  borderWidth: 1,
-                  borderRadius: 4,
-                  padding: { top: 2, bottom: 2, left: 4, right: 4 },
-                  borderColor: "rgba(16, 185, 129, 0.4)",
-                  color: "#10b981",
-                  formatter: (v) => formatQty(v)
-                }
-              },
-              {
-                type: "bar",
-                label: "Pending Qty (Units)",
-                data: pendingQty,
-                backgroundColor: gradPend,
-                borderColor: "rgba(249, 115, 22, 1)",
-                borderWidth: 1.5,
-                borderRadius: 4,
-                yAxisID: "yQty",
-                datalabels: {
-                  display: true,
-                  align: "top",
-                  anchor: "end",
-                  offset: 2,
-                  font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  borderWidth: 1,
-                  borderRadius: 4,
-                  padding: { top: 2, bottom: 2, left: 4, right: 4 },
-                  borderColor: "rgba(249, 115, 22, 0.4)",
-                  color: "#ea580c",
-                  formatter: (v) => formatQty(v)
-                }
-              },
-              {
-                type: "line",
+                type: projChartType === "bar" ? "bar" : "line",
                 label: "Total Order Value (Lakhs)",
                 data: totalAmtLakhs,
+                backgroundColor: projChartType === "bar" ? gradVal : "rgba(79, 70, 229, 0.05)",
                 borderColor: "rgba(79, 70, 229, 1)",
                 borderWidth: 2.5,
                 tension: 0.4,
                 fill: false,
-                pointRadius: 4,
-                pointHoverRadius: 6,
+                pointRadius: projChartType === "bar" ? 0 : 4,
+                pointHoverRadius: projChartType === "bar" ? 0 : 6,
                 pointBackgroundColor: "#ffffff",
                 pointBorderColor: "rgba(79, 70, 229, 1)",
                 pointBorderWidth: 2,
+                borderRadius: projChartType === "bar" ? 4 : 0,
                 yAxisID: "yValue",
                 datalabels: {
                   display: true,
@@ -3344,18 +3457,20 @@ export default function SalesAnalysis() {
                 }
               },
               {
-                type: "line",
+                type: projChartType === "line" ? "line" : "bar",
                 label: "Pending Value (Lakhs)",
                 data: pendingValLakhs,
+                backgroundColor: projChartType === "line" ? "rgba(239, 68, 68, 0.05)" : gradPendVal,
                 borderColor: "rgba(239, 68, 68, 1)",
                 borderWidth: 2.5,
                 tension: 0.4,
                 fill: false,
-                pointRadius: 4,
-                pointHoverRadius: 6,
+                pointRadius: projChartType === "line" ? 4 : 0,
+                pointHoverRadius: projChartType === "line" ? 6 : 0,
                 pointBackgroundColor: "#ffffff",
                 pointBorderColor: "rgba(239, 68, 68, 1)",
                 pointBorderWidth: 2,
+                borderRadius: projChartType === "line" ? 0 : 4,
                 yAxisID: "yValue",
                 datalabels: {
                   display: true,
@@ -3399,37 +3514,22 @@ export default function SalesAnalysis() {
                     const monthData = sortedMonths[ctx.dataIndex];
                     const val = Number(ctx.parsed.y) || 0;
                     const lbl = ctx.dataset?.label || "";
-                    if (ctx.dataset.type === "bar") {
-                      return `${lbl}: ${formatQty(val)} units (${monthData?.monthLabel || '—'})`;
-                    } else {
-                      return `${lbl}: ₹${safeToFixed(val, 2)} Lakhs (${monthData?.monthLabel || '—'})`;
-                    }
+                    return `${lbl}: ₹${safeToFixed(val, 2)} Lakhs (${monthData?.monthLabel || '—'})`;
                   }
                 }
               }
             },
             scales: {
-              yQty: {
+              yValue: {
                 type: "linear",
                 position: "left",
                 grid: { color: "rgba(99, 102, 241, 0.05)" },
                 ticks: {
                   font: { family: 'Plus Jakarta Sans', size: 9 },
-                  color: '#312e81',
-                  callback: (v) => `${v} units`
-                },
-                title: { display: true, text: "Order Quantity", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#312e81' }
-              },
-              yValue: {
-                type: "linear",
-                position: "right",
-                grid: { drawOnChartArea: false },
-                ticks: {
-                  font: { family: 'Plus Jakarta Sans', size: 9 },
                   color: '#4f46e5',
                   callback: (v) => `₹${v}L`
                 },
-                title: { display: true, text: "Order Book Value", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
+                title: { display: true, text: "Order Book Value (Lakhs)", font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' }, color: '#4f46e5' }
               },
               x: {
                 grid: { display: false },
@@ -3447,7 +3547,7 @@ export default function SalesAnalysis() {
       clearTimeout(timer);
       projChart.current?.destroy();
     };
-  }, [monthlyProjectionsChartData, loading]);
+  }, [monthlyProjectionsChartData, loading, projChartType]);
 
   useEffect(() => {
     let fromDate = dateRange.from;
@@ -3805,7 +3905,7 @@ export default function SalesAnalysis() {
           <Filter size={14} strokeWidth={2.5} />
           Report Filters
         </div>
-        <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 4px' }} />
+        <div className="sa-filter-divider" style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 4px' }} />
 
         {/* Date Range */}
         <div className="sa-filter-item">
@@ -4316,67 +4416,464 @@ export default function SalesAnalysis() {
           )}
         </div>
 
-        {/* Despatch Plan Pending Result Table Card */}
-        <div className="sa-card sa-card--table sa-card--despatch-plan">
+        {/* Product Revenue Card */}
+        <div className="sa-card sa-card--chart sa-card--donut">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <FileText size={16} style={{ color: "#2d6de8" }} /> Despatch Plan Pending Result
+              <Package size={16} style={{ color: "#06b6d4" }} /> Revenue by Product
             </span>
           </div>
-          <div className="sa-table-scroll sa-despatch-table-wrap">
-            <table className="sa-table sa-despatch-table">
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Part No</th>
-                  <th>Description</th>
-                  <th className="sa-num">Pending Planned Qty</th>
-                  <th className="sa-num">Planned Qty</th>
-                  <th className="sa-num">Available Qty</th>
-                  <th className="sa-num">Despatch Qty</th>
-                  <th className="sa-num">Cancel</th>
-                  <th>Inv No</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  [...Array(5)].map((_, idx) => (
-                    <tr key={idx}>
-                      <td><div className="sa-skeleton" style={{ width: '120px', height: '12px' }} /></td>
-                      <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                      <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
-                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
-                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
-                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
-                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
-                      <td className="sa-num"><div className="sa-skeleton" style={{ width: '20px', height: '12px', marginLeft: 'auto' }} /></td>
-                      <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
-                    </tr>
-                  ))
-                ) : filteredDespatchPlan.length === 0 ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                      No pending despatch plan records found
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDespatchPlan.map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600, color: "#1e293b" }} title={row.customer}>{row.customer}</td>
-                      <td><span className="sa-trace-code">{row.partNo}</span></td>
-                      <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
-                      <td className="sa-num" style={{ fontWeight: 700, color: "#d97706" }}>{formatQty(row.pendingPlannedQty)}</td>
-                      <td className="sa-num">{formatQty(row.plannedQty)}</td>
-                      <td className="sa-num">{formatQty(row.availableQty)}</td>
-                      <td className="sa-num" style={{ fontWeight: 600, color: "#16a34a" }}>{formatQty(row.despatchQty)}</td>
-                      <td className="sa-num">{row.cancel}</td>
-                      <td><span className="sa-inv-no">{row.invNo}</span></td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          {loading ? (
+            <div className="sa-chart-skeleton"><div className="sa-skeleton" /></div>
+          ) : (
+            <div className="sa-donut-layout">
+              <div className="sa-donut-chart-container">
+                <canvas ref={prodRef} />
+                <div className="sa-donut-center-info">
+                  <span className="sa-center-val" style={{ fontSize: '0.85rem' }}>
+                    {derivedSummary?.total_qty_sold ? derivedSummary.total_qty_sold.toLocaleString("en-IN") : 0}
+                  </span>
+                  <span className="sa-center-lbl">Total Qty</span>
+                  <span className="sa-center-sub">
+                    {prodLabels.length} Products
+                  </span>
+                </div>
+              </div>
+              <div className="sa-donut-legend">
+                {prodLabels.map((lbl, idx) => (
+                  <div
+                    key={lbl}
+                    className={`sa-legend-item ${hoveredProdIndex === idx ? 'active' : ''}`}
+                    onMouseEnter={() => handleProdLegendHover(idx)}
+                    onMouseLeave={handleProdLegendLeave}
+                    title={lbl}
+                  >
+                    <div className="sa-legend-item-header">
+                      <div
+                        className="sa-legend-bullet"
+                        style={{
+                          background: `linear-gradient(135deg, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].start}, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].end})`
+                        }}
+                      />
+                      <span className="sa-legend-name">{lbl}</span>
+                      <span className="sa-legend-pct">{prodPercentages[idx]?.toFixed(1)}%</span>
+                    </div>
+                    <div className="sa-legend-value-row">
+                      <span className="sa-legend-val">{getProdQty(prodPercentages[idx])}</span>
+                    </div>
+                    <div className="sa-legend-progress-bar">
+                      <div
+                        className="sa-legend-progress-fill"
+                        style={{
+                          width: `${prodPercentages[idx]}%`,
+                          background: `linear-gradient(90deg, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].start}, ${GRADIENTS_PRODUCT[idx % GRADIENTS_PRODUCT.length].end})`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Despatch Planning Status Table Card */}
+      <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate" style={{ marginBottom: "1.4rem" }}>
+        <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={16} style={{ color: "#2d6de8" }} /> Despatch Planning Status
+            </span>
+            <div className="sa-despatch-kpi-badge" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'linear-gradient(135deg, rgba(45, 109, 232, 0.06), rgba(6, 182, 212, 0.06))',
+              border: '1px solid rgba(45, 109, 232, 0.15)',
+              borderRadius: '10px',
+              padding: '6px 14px',
+              marginLeft: '16px',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+              boxShadow: '0 2px 8px rgba(45, 109, 232, 0.04)'
+            }}>
+              <span style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Total Inv Value:</span>
+              <span style={{ color: '#2d6de8', fontWeight: '700', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                ₹{despatchTotalInvValue >= 100_000 ? `${(despatchTotalInvValue / 100_000).toFixed(2)}L` : formatRupees(despatchTotalInvValue)}
+              </span>
+              {despatchTotalInvValue >= 100_000 && (
+                <span style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: '500', marginLeft: '4px' }}>
+                  (₹{formatRupees(despatchTotalInvValue)})
+                </span>
+              )}
+            </div>
           </div>
+          <div className="sa-despatch-filters" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ transform: 'scale(0.9)', transformOrigin: 'right center', margin: '0 -10px 0 0' }}>
+              <SalesAnalysisDatePicker
+                from={despatchDateRange.from}
+                to={despatchDateRange.to}
+                onChange={({ from, to }) => setDespatchDateRange({ from, to })}
+                size="small"
+              />
+            </div>
+            {/* Customer filter */}
+            <div className={`sa-custom-select sa-custom-select--despatch-cust${despatchCustDropdownOpen ? " sa-active" : ""}`} ref={despatchCustRef}>
+              <button
+                type="button"
+                className="sa-custom-select-trigger"
+                onClick={() => {
+                  setDespatchCustDropdownOpen(prev => !prev);
+                  setDespatchPartDropdownOpen(false);
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {despatchCustFilter.length === 0
+                      ? "All Customers"
+                      : despatchCustFilter.length === 1
+                        ? despatchCustFilter[0]
+                        : `${despatchCustFilter.length} Customers`}
+                  </span>
+                  {despatchCustFilter.length > 1 && (
+                    <span style={{
+                      background: "#2d6de8",
+                      color: "#fff",
+                      borderRadius: "50%",
+                      minWidth: "16px",
+                      height: "16px",
+                      fontSize: "0.62rem",
+                      fontWeight: "700",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "6px",
+                      padding: "0 4px",
+                      flexShrink: 0
+                    }}>
+                      {despatchCustFilter.length}
+                    </span>
+                  )}
+                </span>
+                <span className="sa-custom-select-arrow">
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+              {despatchCustDropdownOpen && (
+                <div className="sa-custom-select-dropdown-container" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  width: '320px',
+                  background: '#fff',
+                  border: '1px solid rgba(45, 109, 232, 0.15)',
+                  borderRadius: '8px',
+                  marginTop: '4px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                  zIndex: 100,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
+                    <div className="sa-dropdown-search-wrapper">
+                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        className="sa-dropdown-search-input"
+                        placeholder="Search customer..."
+                        value={despatchCustSearch}
+                        onChange={(e) => setDespatchCustSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {despatchCustSearch && (
+                        <button
+                          type="button"
+                          className="sa-search-clear-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDespatchCustSearch("");
+                          }}
+                          title="Clear search"
+                        >
+                          <X size={10} strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
+                    <li
+                      className={`sa-custom-select-option${despatchCustFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                      onClick={() => {
+                        setDespatchCustFilter([]);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center' }}
+                    >
+                      <span className={`sa-checkbox-box${despatchCustFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                        {despatchCustFilter.length === 0 && (
+                          <Check size={10} strokeWidth={3} />
+                        )}
+                      </span>
+                      All Customers
+                    </li>
+                    {filteredUniqueCustomers.map(cust => {
+                      const isSelected = despatchCustFilter.includes(cust);
+                      return (
+                        <li
+                          key={cust}
+                          className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setDespatchCustFilter(despatchCustFilter.filter(c => c !== cust));
+                            } else {
+                              setDespatchCustFilter([...despatchCustFilter, cust]);
+                            }
+                          }}
+                          style={{ display: 'flex', alignItems: 'center' }}
+                        >
+                          <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                            {isSelected && (
+                              <Check size={10} strokeWidth={3} />
+                            )}
+                          </span>
+                          {cust}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Part No filter */}
+            <div className={`sa-custom-select sa-custom-select--despatch-part${despatchPartDropdownOpen ? " sa-active" : ""}`} ref={despatchPartRef}>
+              <button
+                type="button"
+                className="sa-custom-select-trigger"
+                onClick={() => {
+                  setDespatchPartDropdownOpen(prev => !prev);
+                  setDespatchCustDropdownOpen(false);
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {despatchPartFilter.length === 0
+                      ? "All Part Numbers"
+                      : despatchPartFilter.length === 1
+                        ? despatchPartFilter[0]
+                        : `${despatchPartFilter.length} Parts`}
+                  </span>
+                  {despatchPartFilter.length > 1 && (
+                    <span style={{
+                      background: "#2d6de8",
+                      color: "#fff",
+                      borderRadius: "50%",
+                      minWidth: "16px",
+                      height: "16px",
+                      fontSize: "0.62rem",
+                      fontWeight: "700",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "6px",
+                      padding: "0 4px",
+                      flexShrink: 0
+                    }}>
+                      {despatchPartFilter.length}
+                    </span>
+                  )}
+                </span>
+                <span className="sa-custom-select-arrow">
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+              {despatchPartDropdownOpen && (
+                <div className="sa-custom-select-dropdown-container" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  width: '240px',
+                  background: '#fff',
+                  border: '1px solid rgba(45, 109, 232, 0.15)',
+                  borderRadius: '8px',
+                  marginTop: '4px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                  zIndex: 100,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
+                    <div className="sa-dropdown-search-wrapper">
+                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        className="sa-dropdown-search-input"
+                        placeholder="Search part no..."
+                        value={despatchPartSearch}
+                        onChange={(e) => setDespatchPartSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {despatchPartSearch && (
+                        <button
+                          type="button"
+                          className="sa-search-clear-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDespatchPartSearch("");
+                          }}
+                          title="Clear search"
+                        >
+                          <X size={10} strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
+                    <li
+                      className={`sa-custom-select-option${despatchPartFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                      onClick={() => {
+                        setDespatchPartFilter([]);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center' }}
+                    >
+                      <span className={`sa-checkbox-box${despatchPartFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                        {despatchPartFilter.length === 0 && (
+                          <Check size={10} strokeWidth={3} />
+                        )}
+                      </span>
+                      All Part Numbers
+                    </li>
+                    {filteredUniqueParts.map(part => {
+                      const isSelected = despatchPartFilter.includes(part);
+                      return (
+                        <li
+                          key={part}
+                          className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setDespatchPartFilter(despatchPartFilter.filter(p => p !== part));
+                            } else {
+                              setDespatchPartFilter([...despatchPartFilter, part]);
+                            }
+                          }}
+                          style={{ display: 'flex', alignItems: 'center' }}
+                        >
+                          <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                            {isSelected && (
+                              <Check size={10} strokeWidth={3} />
+                            )}
+                          </span>
+                          {part}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+            
+            <button
+              onClick={handleDespatchExport}
+              className="sa-btn sa-btn--primary sa-po-export-btn"
+              title="Export Despatch Plan to CSV"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
+        </div>
+        <div className="sa-table-scroll sa-despatch-table-wrap">
+          <table className="sa-table sa-despatch-table">
+            <thead>
+              <tr>
+                <th>Part No</th>
+                <th>Description</th>
+                <th className="sa-num">Pending Planned Qty</th>
+                <th className="sa-num">Planned Qty</th>
+                <th className="sa-num">Available Qty</th>
+                <th className="sa-num">Despatch Qty</th>
+                <th>Inv No</th>
+                <th>Inv Dt</th>
+                <th className="sa-num">Inv Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(5)].map((_, idx) => (
+                  <tr key={idx}>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '70px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td className="sa-num"><div className="sa-skeleton" style={{ width: '60px', height: '12px', marginLeft: 'auto' }} /></td>
+                  </tr>
+                ))
+              ) : filteredDespatchPlan.length === 0 ? (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                    No pending despatch plan records found
+                  </td>
+                </tr>
+              ) : (
+                Object.entries(groupedDespatchPlan).map(([customerName, rows]) => (
+                  <Fragment key={customerName}>
+                    <tr className="sa-table-group-header">
+                      <td colSpan="9" className="sa-despatch-group-title">
+                        <div className="sa-despatch-group-title-content">
+                          <Building2 size={14} className="sa-despatch-group-icon" />
+                          <span className="sa-despatch-group-name">{customerName}</span>
+                          <span className="sa-despatch-group-count-badge">
+                            {rows.length} {rows.length === 1 ? "item" : "items"}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {rows.map((row, rowIdx) => (
+                      <tr key={`${customerName}-${rowIdx}`} style={{ animationDelay: `${rowIdx * 35}ms` }}>
+                        <td><span className="sa-part-no-tag">{row.partNo}</span></td>
+                        <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
+                        <td className="sa-num">
+                          <span className={Number(row.pendingPlannedQty) > 0 ? "sa-pending-qty-badge" : "sa-pending-qty-badge sa-pending-qty-badge--zero"}>
+                            {formatQty(row.pendingPlannedQty)}
+                          </span>
+                        </td>
+                        <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.plannedQty)}</td>
+                        <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.availableQty)}</td>
+                        <td className="sa-num">
+                          <span className={Number(row.despatchQty) > 0 ? "sa-despatch-qty-badge" : "sa-despatch-qty-badge sa-despatch-qty-badge--zero"}>
+                            {formatQty(row.despatchQty)}
+                          </span>
+                        </td>
+                        <td>
+                          {row.invNo && row.invNo !== "-" ? (
+                            <span className="sa-inv-tag">{row.invNo}</span>
+                          ) : (
+                            <span className="sa-inv-tag--none">-</span>
+                          )}
+                        </td>
+                        <td>
+                          {row.invDate && row.invDate !== "—" ? (
+                            <span className="sa-inv-date-tag">{row.invDate}</span>
+                          ) : (
+                            <span className="sa-inv-tag--none">-</span>
+                          )}
+                        </td>
+                        <td className="sa-num" style={{ fontWeight: 500 }}>
+                          {row.invValue ? `₹${formatRupees(row.invValue)}` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -4607,7 +5104,7 @@ export default function SalesAnalysis() {
                   className={`sa-inv-status__box sa-inv-status__box--group sa-inv-status__box--${group.key}`}
                 >
                   <div className="sa-inv-status__box-header">
-                    <div className="sa-inv-status__box-lbl">{group.label}</div>
+                    <div className="sa-inv-status__box-lbl" style={{ color: '#475569', fontWeight: 600 }}>Total</div>
                     <div className="sa-inv-status__box-val">{group.total}</div>
                   </div>
                   <div className="sa-inv-status__items">
@@ -4622,10 +5119,12 @@ export default function SalesAnalysis() {
               ))}
               {!loading && !derivedMonthSummary?.invoice_status?.length && (
                 <>
-                  {["With Material", "Labour Charges", "Export Only"].map((label) => (
-                    <div key={label} className="sa-inv-status__box" style={{ background: "#f1f5f9" }}>
-                      <div className="sa-inv-status__box-lbl" style={{ color: "#64748b" }}>{label}</div>
-                      <div className="sa-inv-status__box-val" style={{ color: "#475569" }}>—</div>
+                  {[1, 2, 3].map((idx) => (
+                    <div key={idx} className="sa-inv-status__box" style={{ background: "#f1f5f9" }}>
+                      <div className="sa-inv-status__box-header">
+                        <div className="sa-inv-status__box-lbl" style={{ color: '#64748b', fontWeight: 600 }}>Total</div>
+                        <div className="sa-inv-status__box-val" style={{ color: "#475569" }}>—</div>
+                      </div>
                     </div>
                   ))}
                 </>
@@ -4720,7 +5219,27 @@ export default function SalesAnalysis() {
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div className="sa-proj-head-actions">
+            <div className="sa-chart-type-toggle sa-chart-type-toggle--proj" style={{ margin: 0 }}>
+              <button
+                className={`sa-toggle-btn ${projChartType === "combo" ? "active" : ""}`}
+                onClick={() => setProjChartType("combo")}
+              >
+                Combo
+              </button>
+              <button
+                className={`sa-toggle-btn ${projChartType === "bar" ? "active" : ""}`}
+                onClick={() => setProjChartType("bar")}
+              >
+                Bar View
+              </button>
+              <button
+                className={`sa-toggle-btn ${projChartType === "line" ? "active" : ""}`}
+                onClick={() => setProjChartType("line")}
+              >
+                Line View
+              </button>
+            </div>
             <span className="sa-badge sa-badge--purple">{new Set(filteredProjections.map((r) => r.customer)).size} Active Customers</span>
             <span className="sa-badge sa-badge--blue" style={{ background: 'rgba(45, 109, 232, 0.08)', color: '#2d6de8', border: '1px solid rgba(45, 109, 232, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Total Amt: ₹{formatRupees(projectionTotals.totAmt)}</span>
             <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
@@ -4991,40 +5510,40 @@ export default function SalesAnalysis() {
             <thead>
               <tr>
                 <th style={{ textAlign: "center" }}>#</th>
-                <th style={{ textAlign: "center" }}>CUSTOMER NAME</th>
-                <th style={{ textAlign: "center" }}>INVOICE NO</th>
-                <th style={{ textAlign: "center" }}>INVOICE DATE</th>
-                <th style={{ textAlign: "center" }}>DC NO</th>
-                <th style={{ textAlign: "center" }}>DC DATE</th>
-                <th style={{ textAlign: "center" }}>GRN/PO DET</th>
-                <th style={{ textAlign: "center" }}>ROUTECARD NO</th>
+                <th>CUSTOMER NAME</th>
+                <th>INVOICE NO</th>
+                <th>INVOICE DATE</th>
+                <th>DC NO</th>
+                <th>DC DATE</th>
+                <th>GRN/PO DET</th>
+                <th>ROUTECARD NO</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 [...Array(5)].map((_, idx) => (
                   <tr key={idx}>
-                    <td><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
-                    <td style={{ textAlign: "left" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                    <td style={{ textAlign: "left" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                   </tr>
                 ))
               ) : (
                 filteredTraceability.map((row, i) => (
                   <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
-                    <td>{i + 1}</td>
+                    <td style={{ textAlign: "center" }}>{i + 1}</td>
                     <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
                     <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
                     <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
                     <td>{row.dcNo}</td>
                     <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
-                    <td style={{ textAlign: "left" }}><span className="sa-trace-po">{row.grnPo}</span></td>
-                    <td style={{ textAlign: "left" }}><span className="sa-trace-code">{row.rcNo}</span></td>
+                    <td><span className="sa-trace-po">{row.grnPo}</span></td>
+                    <td><span className="sa-trace-code">{row.rcNo}</span></td>
                   </tr>
                 ))
               )}

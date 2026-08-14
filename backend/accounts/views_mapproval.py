@@ -771,9 +771,9 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
             appr_dt_str = None
             if is_appr:
                 appr_info = approvals_map.get(cmno)
-                if appr_info:
-                    appr_by_str = appr_info["approvedby"]
-                    appr_dt_str = appr_info["datetime"]
+                if isinstance(appr_info, dict):
+                    appr_by_str = appr_info.get("approvedby")
+                    appr_dt_str = appr_info.get("datetime")
                 if not appr_by_str:
                     appr_by_str = "Manager"
 
@@ -1817,7 +1817,9 @@ def mapproval_detail(request):
 
             # Map schedules
             mapped_schedules = []
-            for shd in shd_rows:
+            for shd in (shd_rows or []):
+                if not isinstance(shd, dict):
+                    continue
                 shd_dt = shd.get("shddate")
                 shd_dt_str = shd_dt.strftime("%d/%m/%Y") if hasattr(shd_dt, "strftime") else str(shd_dt or "")
                 
@@ -2527,19 +2529,16 @@ def mapproval_modify(request):
         except Exception as e:
             print(f"[M-APPROVAL] Fallback DB modify error for {rc_type}:", e)
 
-    # 3) Remove from tenants_approvals cloud DB table in background thread
+    # 3) Remove from tenants_approvals cloud DB table synchronously
     if tenant_id and company_code:
         log_rc = part_no if (is_vendor_rate and part_no) else clean_rc
-        threading.Thread(
-            target=_log_reversion_bg,
-            args=(
-                tenant_id,
-                company_code,
-                "Mapproval",
-                log_rc,
-                rc_date,
-                rc_type
-            )
-        ).start()
+        _log_reversion_bg(
+            tenant_id,
+            company_code,
+            "Mapproval",
+            log_rc,
+            rc_date,
+            rc_type
+        )
 
     return Response({"success": True, "message": f"{rc_type} {clean_rc} moved to pending (IsApproved = False) successfully"})

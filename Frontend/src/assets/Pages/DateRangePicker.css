@@ -105,6 +105,19 @@
 .drp-trigger__caret { flex-shrink: 0; color: var(--drp-muted); transition: transform var(--drp-tr); }
 .drp-trigger__caret--up { transform: rotate(180deg); }
 
+.drp-trigger--disabled,
+.drp-trigger--disabled:hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+}
+.drp-trigger--disabled .drp-trigger__icon,
+.drp-trigger--disabled .drp-trigger__label,
+.drp-trigger--disabled .drp-trigger__caret {
+    color: #94a3b8 !important;
+}
+
 /* ── Popup ────────────────────────────────────────────────── */
 .drp-popup {
     background: #ffffff;

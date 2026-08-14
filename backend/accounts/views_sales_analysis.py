@@ -2115,10 +2115,19 @@ DISPATCH_DATA AS
         DM.CID,
         DD.PartNo,
         CAST(DM.dcdate AS DATE) AS DcDate,
-        SUM(ISNULL(DD.okqty,0)) AS DispatchQty
+        SUM(ISNULL(DD.okqty,0)) AS DispatchQty,
+        STRING_AGG(CAST(BM.invno AS VARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY BM.invno) AS InvNo,
+        STRING_AGG(CAST(CONVERT(VARCHAR(10), CAST(BM.invdt AS DATE), 103) AS VARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY BM.invno) AS InvDate,
+        SUM(ISNULL(BD.[{bd_amt_col}], 0)) AS InvValue
     FROM DC_Det DD
     INNER JOIN DC_Mas DM
         ON DM.dcno = DD.dcno
+    LEFT JOIN Bill_DcOrdDet BDO
+        ON BDO.dcno = DD.dcno AND BDO.deleted = 0
+    LEFT JOIN Bill_Mas BM
+        ON BM.invno = BDO.invno AND BM.deleted = 0
+    LEFT JOIN Bill_Det BD
+        ON BD.invno = BM.invno AND BD.[{bd_partno_col}] = DD.PartNo AND BD.deleted = 0
     WHERE
         DM.deleted = 0
         AND DD.deleted = 0
@@ -2150,7 +2159,10 @@ SELECT
         WHEN SUM(ISNULL(D.DispatchQty,0)) >= SUM(ISNULL(P.PlanQty,0)) AND SUM(ISNULL(P.PlanQty,0)) > 0 THEN 'Completed'
         WHEN SUM(ISNULL(D.DispatchQty,0)) > 0 THEN 'Partial'
         ELSE 'Pending'
-    END AS DispatchStatus
+    END AS DispatchStatus,
+    MAX(D.InvNo) AS InvNo,
+    MAX(D.InvDate) AS InvDate,
+    SUM(ISNULL(D.InvValue, 0)) AS InvValue
 
 FROM UNIQUE_COMBINATIONS UC
 
@@ -2225,6 +2237,20 @@ ORDER BY
     cursor = None
     try:
         cursor = conn.cursor()
+
+        # Resolve Bill_Det column names dynamically
+        bd_partno_col = find_column_ci(
+            cursor, "dbo", "Bill_Det",
+            ["PrINTPartNO", "PRINTPARTNO", "partno", "PartNo", "PARTNO", "Part_No"]
+        ) or "PrINTPartNO"
+        bd_amt_col = find_column_ci(
+            cursor, "dbo", "Bill_Det",
+            ["amt", "Amt", "AMT"]
+        ) or "amt"
+
+        sql = sql.replace("{bd_partno_col}", bd_partno_col)
+        sql = sql.replace("{bd_amt_col}", bd_amt_col)
+
         if search_q:
             # Parameter order matches CTE placeholders:
             # UNIQUE_COMBINATIONS plan branch:  start_date, end_date, like_val
@@ -2253,6 +2279,9 @@ ORDER BY
             plan_qty = float(row[5] or 0)
             avail_qty = float(row[6] or 0)
             dispatch_qty = float(row[8] or 0)
+            inv_no = str(row[11]) if row[11] else "—"
+            inv_date = str(row[12]) if row[12] else "—"
+            inv_value = float(row[13] or 0)
 
             rows.append({
                 "date": plan_date,
@@ -2261,6 +2290,9 @@ ORDER BY
                 "planQty": plan_qty,
                 "availableQty": avail_qty,
                 "dispatchQty": dispatch_qty,
+                "invNo": inv_no,
+                "invDate": inv_date,
+                "invValue": inv_value,
             })
     except Exception as e:
         if cursor: cursor.close()

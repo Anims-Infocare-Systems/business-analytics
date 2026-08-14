@@ -181,8 +181,8 @@ def signup_view(request):
             cursor.execute(
                 """
                 INSERT INTO tenants_users (
-                    tenant_id, company_code, username, designation, password, created_at, issuperadmin, deleted
-                ) VALUES (%s, %s, %s, %s, %s, GETDATE(), 1, 0)
+                    tenant_id, company_code, username, designation, password, created_at, issuperadmin, deleted, password_updated_at
+                ) VALUES (%s, %s, %s, %s, %s, GETDATE(), 1, 0, GETDATE())
                 """,
                 [
                     tenant_id, company_code, admin_username, admin_designation, encrypted_pw

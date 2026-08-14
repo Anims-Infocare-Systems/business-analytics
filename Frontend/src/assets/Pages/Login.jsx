@@ -359,6 +359,8 @@ export default function LoginPage() {
                     username: data.username,
                     designation: data.designation,
                     isExpired: !!data.isExpired,
+                    passwordExpired: !!data.passwordExpired,
+                    passwordAgeDays: data.passwordAgeDays || 0,
                     plan_id: data.license?.plan_id || "free",
                     license: data.license || {
                         dashboard: true,
@@ -381,6 +383,12 @@ export default function LoginPage() {
                 window.location.replace("/AnimsBusinessAnalytics");
             } else if (res.status === 403 && data.code === "account_inactive") {
                 showAccountInactiveToast();
+            } else if (res.status === 503 && data.code === "db_unavailable") {
+                showLoginToast(
+                    "error",
+                    "Database Unavailable",
+                    data.error || "Cloud DB Server is currently unavailable. Please try again later.",
+                );
             } else if (res.status === 503 && data.code === "erp_unavailable") {
                 showLoginToast(
                     "error",

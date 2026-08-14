@@ -22,6 +22,19 @@
   }
 }
 
+@keyframes sa-fade-in-blur {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
 @keyframes sa-slide-right {
   from {
     transform: scaleX(0);
@@ -2136,6 +2149,46 @@
     width: 100%;
   }
 
+  .sa-custom-select.sa-custom-select--customer {
+    width: 100% !important;
+  }
+
+  .sa-filter-divider {
+    display: none !important;
+  }
+
+  .sa-despatch-filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .sa-despatch-filters .sa-custom-select,
+  .sa-despatch-filters .sa-btn {
+    width: 100% !important;
+  }
+
+  .sa-despatch-filters .sa-custom-select-trigger {
+    width: 100% !important;
+  }
+
+  .sa-despatch-filters .sa-custom-select-dropdown-container {
+    width: 100% !important;
+  }
+
+  .sa-custom-select--despatch-cust,
+  .sa-custom-select--despatch-part {
+    width: 100% !important;
+  }
+
+  .sa-proj-head-actions {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-top: 8px !important;
+    justify-content: flex-start !important;
+  }
+
   .sa-btn-reset {
     width: 100%;
     justify-content: center;
@@ -2262,7 +2315,7 @@
 /* ── Dual column layout for Customer donut and Despatch table ── */
 .sa-donuts-row {
   display: grid;
-  grid-template-columns: 44% 56%;
+  grid-template-columns: 1fr 1fr;
   gap: 1.1rem;
   margin-bottom: 1.4rem;
 }
@@ -3301,7 +3354,7 @@
 }
 
 /* ──────────────────────────────────────────
-   DESPATCH PLAN PENDING RESULT TABLE CARD
+   DESPATCH PLANNING STATUS TABLE CARD
 ────────────────────────────────────────── */
 .sa-card--despatch-plan {
   background: #ffffff;
@@ -3313,13 +3366,32 @@
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sa-card--despatch-plan::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2d6de8, #06b6d4, #10b981);
+  z-index: 2;
+}
+
+.sa-card--despatch-plan:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(45, 109, 232, 0.12);
 }
 
 .sa-despatch-table-wrap {
   flex: 1;
   width: 100%;
   min-height: 260px;
-  max-height: 320px;
+  max-height: 480px;
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid rgba(45, 109, 232, 0.08);
@@ -3340,7 +3412,7 @@
 
 .sa-despatch-table {
   width: 100%;
-  min-width: 860px;
+  min-width: 1150px;
 }
 
 /* Global Top Progress Bar (YouTube Style) */
@@ -3377,4 +3449,375 @@
         width: 100%;
         left: 0;
     }
+}
+
+/* Custom premium styles for Despatch Planning Status Table */
+.sa-despatch-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
+  background: #ffffff;
+  overflow-x: auto;
+  overflow-y: auto;
+  min-height: 260px;
+  max-height: 420px;
+}
+
+.sa-despatch-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* Header styling */
+.sa-despatch-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 14px 18px;
+  border-bottom: 1.5px solid #e2e8f0;
+  border-top: none;
+  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* Align first and last columns nicely */
+.sa-despatch-table thead th:first-child,
+.sa-despatch-table tbody td:first-child {
+  padding-left: 24px;
+}
+
+.sa-despatch-table thead th:last-child,
+.sa-despatch-table tbody td:last-child {
+  padding-right: 24px;
+}
+
+/* Row styling */
+.sa-despatch-table tbody tr {
+  animation: sa-fade-in-blur 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: background-color 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sa-despatch-table tbody tr:nth-child(even) {
+  background-color: #ffffff;
+}
+
+.sa-despatch-table tbody tr:nth-child(odd) {
+  background-color: #f8fafc;
+}
+
+.sa-despatch-table tbody td {
+  padding: 14px 18px;
+  font-size: 0.8rem;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  vertical-align: middle;
+}
+
+.sa-despatch-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Hover styles */
+.sa-despatch-table tbody tr:not(.sa-table-group-header):hover td {
+  background-color: rgba(45, 109, 232, 0.04) !important;
+  color: #2d6de8;
+}
+
+.sa-despatch-table tbody tr:not(.sa-table-group-header):hover {
+  transform: translateX(4px);
+}
+
+/* Custom premium status pills & badges */
+.sa-despatch-qty-badge {
+  background: #f0fdf4;
+  color: #15803d;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: 600;
+  display: inline-block;
+  font-size: 0.75rem;
+  border: 1px solid #bbf7d0;
+}
+
+.sa-despatch-qty-badge--zero {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.sa-pending-qty-badge {
+  background: #fffbeb;
+  color: #b45309;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: 600;
+  display: inline-block;
+  font-size: 0.75rem;
+  border: 1px solid #fde68a;
+}
+
+.sa-pending-qty-badge--zero {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+/* Part Number tag */
+.sa-part-no-tag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* Invoice tag */
+.sa-inv-tag {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.sa-inv-tag--none {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  font-weight: 400;
+}
+
+.sa-inv-date-tag {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* Explicit column widths & alignments for Despatch Planning Status Table */
+.sa-despatch-table th:nth-child(1),
+.sa-despatch-table td:nth-child(1) {
+  width: 12%;
+  text-align: left;
+}
+
+.sa-despatch-table tbody td:first-child {
+  white-space: nowrap;
+}
+
+.sa-despatch-table th:nth-child(2),
+.sa-despatch-table td:nth-child(2) {
+  width: 26%;
+  text-align: left;
+}
+
+.sa-despatch-table th:nth-child(3),
+.sa-despatch-table td:nth-child(3) {
+  width: 12%;
+  text-align: center;
+}
+
+.sa-despatch-table th:nth-child(4),
+.sa-despatch-table td:nth-child(4) {
+  width: 9%;
+  text-align: right;
+}
+
+.sa-despatch-table th:nth-child(5),
+.sa-despatch-table td:nth-child(5) {
+  width: 9%;
+  text-align: right;
+}
+
+.sa-despatch-table th:nth-child(6),
+.sa-despatch-table td:nth-child(6) {
+  width: 9%;
+  text-align: center;
+}
+
+.sa-despatch-table th:nth-child(7),
+.sa-despatch-table td:nth-child(7) {
+  width: 8%;
+  text-align: center;
+}
+
+.sa-despatch-table th:nth-child(8),
+.sa-despatch-table td:nth-child(8) {
+  width: 8%;
+  text-align: center;
+}
+
+.sa-despatch-table th:nth-child(9),
+.sa-despatch-table td:nth-child(9) {
+  width: 7%;
+  text-align: right;
+}
+
+/* Explicit column widths & alignments for End-to-End Order Traceability Ledger */
+.sa-trace-table th:nth-child(1),
+.sa-trace-table td:nth-child(1) {
+  width: 4%;
+  text-align: center;
+}
+
+.sa-trace-table th:nth-child(2),
+.sa-trace-table td:nth-child(2) {
+  width: 25%;
+  text-align: left;
+}
+
+.sa-trace-table tbody td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.sa-trace-table th:nth-child(3),
+.sa-trace-table td:nth-child(3) {
+  width: 11%;
+  text-align: left;
+}
+
+.sa-trace-table th:nth-child(4),
+.sa-trace-table td:nth-child(4) {
+  width: 11%;
+  text-align: left;
+}
+
+.sa-trace-table th:nth-child(5),
+.sa-trace-table td:nth-child(5) {
+  width: 11%;
+  text-align: left;
+}
+
+.sa-trace-table th:nth-child(6),
+.sa-trace-table td:nth-child(6) {
+  width: 11%;
+  text-align: left;
+}
+
+.sa-trace-table th:nth-child(7),
+.sa-trace-table td:nth-child(7) {
+  width: 11%;
+  text-align: left;
+}
+
+.sa-trace-table th:nth-child(8),
+.sa-trace-table td:nth-child(8) {
+  width: 16%;
+  text-align: left;
+}
+
+.sa-trace-table tbody td:nth-child(8) {
+  white-space: nowrap;
+}
+
+/* Width overrides for despatch plan filters */
+.sa-custom-select--despatch-cust {
+  width: 220px;
+}
+
+.sa-custom-select--despatch-part {
+  width: 180px;
+}
+
+.sa-custom-select--despatch-cust .sa-custom-select-trigger span,
+.sa-custom-select--despatch-part .sa-custom-select-trigger span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  display: block;
+}
+
+.sa-despatch-kpi-badge {
+  margin-left: 16px;
+}
+
+@media (max-width: 600px) {
+  .sa-despatch-kpi-badge {
+    margin-left: 0;
+    margin-top: 4px;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Grouped table subheader styling */
+.sa-despatch-group-title {
+  background: rgba(45, 109, 232, 0.04) !important;
+  padding: 10px 14px !important;
+  border-bottom: 1.5px solid rgba(45, 109, 232, 0.1) !important;
+  text-align: left !important;
+}
+
+.sa-despatch-group-title-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sa-despatch-group-icon {
+  color: #2d6de8;
+}
+
+.sa-despatch-group-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.sa-despatch-group-count-badge {
+  background: rgba(45, 109, 232, 0.09);
+  color: #2d6de8;
+  border-radius: 12px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+/* Custom premium purple chart toggle for Future Projections */
+.sa-chart-type-toggle--proj {
+  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+}
+
+.sa-chart-type-toggle--proj .sa-toggle-btn {
+  color: #8b5cf6;
+}
+
+.sa-chart-type-toggle--proj .sa-toggle-btn:hover {
+  background: rgba(139, 92, 246, 0.08);
+  color: #7c3aed;
+}
+
+.sa-chart-type-toggle--proj .sa-toggle-btn.active {
+  background: #8b5cf6;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+}
+
+/* Desktop row alignment for Future Projections actions & badges */
+.sa-proj-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }

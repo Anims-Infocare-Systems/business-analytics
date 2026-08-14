@@ -318,174 +318,150 @@ def _aggregate_sql(union_sql, group_by_machine, dept_join=None):
     """
 
 
-def _fetch_efficiency_rows(cursor, start_date, end_date, include_cnc, include_conv, group_by_machine=False):
-    branches = []
-    params = []
+def _oaeff_combined_cte_sql(include_cnc=True, include_conv=True):
+    """
+    Combined OAEFF CTE matching Plant Performance OAEFF Calculation logic:
+    1. Production table rows determine the OAEFF record count.
+    2. Employee / Department tables are ONLY lookup information.
+    3. OUTER APPLY (TOP 1) guarantees zero row duplication.
+    4. ONLY OAEFF is taken from all three production tables.
+    """
+    sub_ctes = []
+    select_parts = []
 
     if include_cnc:
-        branches.append("""
-            SELECT
-                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
-                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
-                CAST(OAEFF AS FLOAT) AS OAEFF,
-                CAST(OPREFF AS FLOAT) AS OPREFF,
-                CAST((ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0)) / 3600.0 AS FLOAT) AS IdleHrs
-            FROM ProductionEntry
-            WHERE CAST(proddate AS DATE) BETWEEN ? AND ? 
-              AND ISNULL(CAST(deleted AS INT), 0) = 0
-              AND (OAEFF IS NOT NULL OR OPREFF IS NOT NULL)
-        """)
-        params.extend([start_date, end_date])
+        sub_ctes.append("""
+BasePE AS (
+    SELECT
+        LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS OperatorName,
+        LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
+        CAST(proddate AS DATE) AS EntryDate,
+        CAST(OAEFF AS FLOAT) AS OAEFF,
+        N'CNC' AS MachineType,
+        N'ProductionEntry' AS SourceTable
+    FROM ProductionEntry
+    WHERE deleted = 0
+      AND CAST(proddate AS DATE) BETWEEN ? AND ?
+      AND macno IS NOT NULL
+      AND LTRIM(RTRIM(macno)) <> N''
+      AND OAEFF IS NOT NULL
+),
+PE_WithDept AS (
+    SELECT
+        PE.OperatorName,
+        ELookup.Department,
+        PE.MachineNo,
+        PE.EntryDate,
+        PE.OAEFF,
+        PE.MachineType,
+        PE.SourceTable
+    FROM BasePE PE
+    OUTER APPLY (
+        SELECT TOP 1 DM.Department
+        FROM empmaster E
+        LEFT JOIN DepartmentMast DM
+            ON DM.DeptCode = E.deptcode
+           AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
+        WHERE ISNULL(CAST(E.deleted AS INT), 0) = 0
+          AND LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = PE.OperatorName
+        ORDER BY E.deptcode
+    ) ELookup
+)""")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM PE_WithDept")
 
     if include_conv:
-        branches.append("""
-            SELECT
-                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
-                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
-                CAST(OAEFF AS FLOAT) AS OAEFF,
-                CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
-                CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', IdleTime) / 3600.0 AS FLOAT) AS IdleHrs
-            FROM ConvProductionEntry
-            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? 
-              AND ISNULL(CAST(deleted AS INT), 0) = 0
-              AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
-        """)
-        params.extend([start_date, end_date])
+        sub_ctes.append("""
+BaseCPE AS (
+    SELECT
+        LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS OperatorName,
+        LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
+        CAST(entrydate AS DATE) AS EntryDate,
+        CAST(OAEFF AS FLOAT) AS OAEFF,
+        N'Conventional' AS MachineType,
+        N'ConvProductionEntry' AS SourceTable
+    FROM ConvProductionEntry
+    WHERE deleted = 0
+      AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+      AND macno IS NOT NULL
+      AND LTRIM(RTRIM(macno)) <> N''
+      AND OAEFF IS NOT NULL
+),
+CPE_WithDept AS (
+    SELECT
+        CPE.OperatorName,
+        ELookup.Department,
+        CPE.MachineNo,
+        CPE.EntryDate,
+        CPE.OAEFF,
+        CPE.MachineType,
+        CPE.SourceTable
+    FROM BaseCPE CPE
+    OUTER APPLY (
+        SELECT TOP 1 DM.Department
+        FROM empmaster E
+        LEFT JOIN DepartmentMast DM
+            ON DM.DeptCode = E.deptcode
+           AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
+        WHERE ISNULL(CAST(E.deleted AS INT), 0) = 0
+          AND LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = CPE.OperatorName
+        ORDER BY E.deptcode
+    ) ELookup
+)""")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM CPE_WithDept")
 
-        branches.append("""
-            SELECT
-                LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS Operator,
-                LTRIM(RTRIM(CAST(macno AS NVARCHAR(128)))) AS MacNo,
-                CAST(OAEFF AS FLOAT) AS OAEFF,
-                CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
-                CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', IdleTime) / 3600.0 AS FLOAT) AS IdleHrs
-            FROM ConvProductionEntryRod
-            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? 
-              AND ISNULL(CAST(deleted AS INT), 0) = 0
-              AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
-        """)
-        params.extend([start_date, end_date])
+        sub_ctes.append("""
+BaseCPR AS (
+    SELECT
+        LTRIM(RTRIM(CAST(ISNULL(oprname, N'') AS NVARCHAR(512)))) AS OperatorName,
+        LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
+        CAST(entrydate AS DATE) AS EntryDate,
+        CAST(OAEFF AS FLOAT) AS OAEFF,
+        N'Conventional' AS MachineType,
+        N'ConvProductionEntryRod' AS SourceTable
+    FROM ConvProductionEntryRod
+    WHERE deleted = 0
+      AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+      AND macno IS NOT NULL
+      AND LTRIM(RTRIM(macno)) <> N''
+      AND OAEFF IS NOT NULL
+),
+CPR_WithDept AS (
+    SELECT
+        CPR.OperatorName,
+        ELookup.Department,
+        CPR.MachineNo,
+        CPR.EntryDate,
+        CPR.OAEFF,
+        CPR.MachineType,
+        CPR.SourceTable
+    FROM BaseCPR CPR
+    OUTER APPLY (
+        SELECT TOP 1 DM.Department
+        FROM empmaster E
+        LEFT JOIN DepartmentMast DM
+            ON DM.DeptCode = E.deptcode
+           AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
+        WHERE ISNULL(CAST(E.deleted AS INT), 0) = 0
+          AND LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = CPR.OperatorName
+        ORDER BY E.deptcode
+    ) ELookup
+)""")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM CPR_WithDept")
 
-    if not branches:
-        return []
+    if not sub_ctes:
+        return "", 0
 
-    union_sql = " UNION ALL ".join(branches)
-
-    if group_by_machine:
-        group_by_clause = "GROUP BY MacNo"
-        order_by_clause = "ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, MacNo ASC"
-        select_op = "LTRIM(RTRIM(ISNULL(MAX(Operator), N''))) AS Operator"
-        where_extra = ""
-    else:
-        group_by_clause = "GROUP BY Operator, MacNo"
-        order_by_clause = "ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, Operator ASC, MacNo ASC"
-        select_op = "Operator"
-        where_extra = "AND Operator IS NOT NULL AND LTRIM(RTRIM(Operator)) <> N''"
-
-    sql = f"""
-        WITH AllProduction AS (
-            {union_sql}
-        ),
-        DetailWithDept AS (
-            SELECT
-                AR.Operator,
-                LTRIM(RTRIM(CAST(ISNULL(DM.Department, N'') AS NVARCHAR(256)))) AS Dept,
-                AR.MacNo,
-                AR.OAEFF,
-                AR.OPREFF,
-                AR.IdleHrs
-            FROM AllProduction AS AR
-            LEFT JOIN empmaster AS E
-                ON LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = LTRIM(RTRIM(AR.Operator))
-                AND ISNULL(CAST(E.deleted AS INT), 0) = 0
-            LEFT JOIN DepartmentMast AS DM
-                ON E.deptcode = DM.DeptCode
-                AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
-        )
-        SELECT
-            {select_op},
-            LTRIM(RTRIM(ISNULL(MAX(Dept), N''))) AS Dept,
-            MacNo,
-            ROUND(AVG(COALESCE(OAEFF, 0)), 2) AS AvgOAEFF,
-            ROUND(AVG(COALESCE(OPREFF, 0)), 2) AS AvgOPREFF,
-            CAST(100 AS FLOAT) AS AvgQFEFF,
-            ROUND(SUM(IdleHrs), 2) AS IdleTime,
-            CAST(0 AS FLOAT) AS RejPct
-        FROM DetailWithDept
-        WHERE MacNo IS NOT NULL AND LTRIM(RTRIM(MacNo)) <> N''
-          {where_extra}
-        {group_by_clause}
-        {order_by_clause};
-    """
-
-    try:
-        cursor.execute(sql, params)
-        return cursor.fetchall() or []
-    except Exception:
-        dept_join = _resolve_department_join(cursor) or _legacy_department_join()
-        b, p = _build_union_branches(cursor, start_date, end_date, include_cnc, include_conv)
-        if b:
-            u_sql = " UNION ALL ".join(b)
-            a_sql = _aggregate_sql(u_sql, group_by_machine, dept_join)
-            cursor.execute(a_sql, p)
-            return cursor.fetchall() or []
-        return []
+    union_all = "\n    UNION ALL\n    ".join(select_parts)
+    cte_sql = "WITH " + ",\n".join(sub_ctes) + f",\nCombinedOaeffEntries AS (\n    {union_all}\n)"
+    param_table_count = (1 if include_cnc else 0) + (2 if include_conv else 0)
+    return cte_sql, param_table_count
 
 
-def _rows_to_table_arrays(rows, group_by_machine=False):
-    """Map SQL aggregates to EfficiencyReport.jsx row shape: [op, dept, mac, oaeff, opreff, qfeff, idle, rej, rank]."""
-    out = []
-    for rank, row in enumerate(rows, start=1):
-        operator, dept, mac, oaeff, opreff, qfeff, idle, rej = row
-        record = [
-            str(operator or "").strip(),
-            str(dept or "").strip(),
-            str(mac or "").strip(),
-            round(float(oaeff or 0), 2),
-            round(float(opreff or 0), 2),
-            round(float(qfeff or 0), 2),
-            round(float(idle or 0), 2),
-            round(float(rej or 0), 2),
-            rank,
-        ]
-        out.append(record)
-    return out
-
-
-def _overall_efficiency_monthwise(cursor, start_date, end_date):
-    """Same logic as charts operations/overall-efficiency/."""
-    sql = """
-        SELECT MONTH(dt) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF
-        FROM (
-            SELECT proddate AS dt, OAEFF FROM ProductionEntry
-            WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
-            UNION ALL
-            SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry
-            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
-            UNION ALL
-            SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod
-            WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
-        ) AS X
-        GROUP BY MONTH(dt)
-        ORDER BY MONTH(dt)
-    """
-    params = [start_date, end_date, start_date, end_date, start_date, end_date]
-    cursor.execute(sql, params)
-    rows = cursor.fetchall() or []
-    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
-    labels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]
-    eff_map = {m: 0.0 for m in month_order}
-    for month_num, avg_eff in rows:
-        mk = month_key_from_db(month_num)
-        if mk in eff_map:
-            eff_map[mk] = round(float(avg_eff or 0), 2)
-    return {"labels": labels, "data": [eff_map[m] for m in month_order]}
-
-
-_MONTH_ABB_EFF = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-]
+def _mac_type_expr():
+    return (
+        "CASE WHEN ED.SourceTable = N'ProductionEntry' "
+        "THEN N'CNC' ELSE N'Conventional' END"
+    )
 
 
 def _efficiency_data_cte_branches(include_cnc=True, include_conv=True):
@@ -596,104 +572,125 @@ def _efficiency_data_cte_branches(include_cnc=True, include_conv=True):
     return branches
 
 
-def _efficiency_data_cte_sql(include_cnc=True, include_conv=True):
-    branches = _efficiency_data_cte_branches(include_cnc, include_conv)
-    if not branches:
-        return None
-    return "WITH EFFICIENCY_DATA AS (\n" + "\n    UNION ALL\n".join(branches) + "\n)"
+def _fetch_efficiency_rows(cursor, start_date, end_date, include_cnc, include_conv, group_by_machine=False):
+    cte_sql, count = _oaeff_combined_cte_sql(include_cnc, include_conv)
+    if not cte_sql:
+        return []
+    params = [start_date, end_date] * count
+
+    if group_by_machine:
+        sql = f"""
+            {cte_sql}
+            SELECT
+                LTRIM(RTRIM(ISNULL(MAX(OperatorName), N''))) AS Operator,
+                LTRIM(RTRIM(ISNULL(MAX(Department), N''))) AS Dept,
+                MachineNo AS MacNo,
+                ROUND(AVG(OAEFF), 2) AS AvgOAEFF,
+                ROUND(AVG(OAEFF), 2) AS AvgOPREFF,
+                CAST(100 AS FLOAT) AS AvgQFEFF,
+                CAST(0 AS FLOAT) AS IdleHrs,
+                CAST(0 AS FLOAT) AS RejPct
+            FROM CombinedOaeffEntries
+            WHERE MachineNo IS NOT NULL AND LTRIM(RTRIM(MachineNo)) <> N''
+            GROUP BY MachineNo
+            ORDER BY AVG(OAEFF) DESC, MachineNo ASC;
+        """
+    else:
+        sql = f"""
+            {cte_sql}
+            SELECT
+                CASE WHEN OperatorName IS NULL OR LTRIM(RTRIM(OperatorName)) = '' THEN 'Unassigned' ELSE OperatorName END AS Operator,
+                LTRIM(RTRIM(ISNULL(MAX(Department), N''))) AS Dept,
+                MachineNo AS MacNo,
+                ROUND(AVG(OAEFF), 2) AS AvgOAEFF,
+                ROUND(AVG(OAEFF), 2) AS AvgOPREFF,
+                CAST(100 AS FLOAT) AS AvgQFEFF,
+                CAST(0 AS FLOAT) AS IdleHrs,
+                CAST(0 AS FLOAT) AS RejPct
+            FROM CombinedOaeffEntries
+            WHERE MachineNo IS NOT NULL AND LTRIM(RTRIM(MachineNo)) <> N''
+            GROUP BY CASE WHEN OperatorName IS NULL OR LTRIM(RTRIM(OperatorName)) = '' THEN 'Unassigned' ELSE OperatorName END, MachineNo
+            ORDER BY AVG(OAEFF) DESC, Operator ASC, MachineNo ASC;
+        """
+    cursor.execute(sql, params)
+    return cursor.fetchall() or []
 
 
-def _mac_type_expr():
-    return (
-        "CASE WHEN ED.SourceTable = N'ProductionEntry' "
-        "THEN N'CNC' ELSE N'Conventional' END"
-    )
+def _rows_to_table_arrays(rows, group_by_machine=False):
+    """Map SQL aggregates to EfficiencyReport.jsx row shape: [op, dept, mac, oaeff, opreff, qfeff, idle, rej, rank]."""
+    out = []
+    for rank, row in enumerate(rows, start=1):
+        operator, dept, mac, oaeff, opreff, qfeff, idle, rej = row
+        record = [
+            str(operator or "").strip(),
+            str(dept or "").strip(),
+            str(mac or "").strip(),
+            round(float(oaeff or 0), 2),
+            round(float(opreff or 0), 2),
+            round(float(qfeff or 0), 2),
+            round(float(idle or 0), 2),
+            round(float(rej or 0), 2),
+            rank,
+        ]
+        out.append(record)
+    return out
+
+
+def _overall_efficiency_monthwise(cursor, start_date, end_date):
+    """Same logic as charts operations/overall-efficiency/."""
+    return _combined_efficiency_monthwise(cursor, start_date, end_date, True, True)
+
+
+_MONTH_ABB_EFF = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
 
 
 def _fetch_combined_efficiency_rows(
     cursor, start_date, end_date, include_cnc=True, include_conv=True
 ):
     """
-    Combined EFFICIENCY_DATA rows with department (team) via empmaster → DepartmentMast.
+    Combined OAEFF entry rows with Department lookup via OUTER APPLY (TOP 1).
     Returns tuples: (operator, dept, macno, entry_date, oaeff, opreff, mac_type, source_table)
     """
-    cte = _efficiency_data_cte_sql(include_cnc, include_conv)
-    if not cte:
+    cte_sql, count = _oaeff_combined_cte_sql(include_cnc, include_conv)
+    if not cte_sql:
         return []
-
-    dept_join = _resolve_department_join(cursor) or _legacy_department_join()
-    opr_expr = "LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512))))"
-    joins = dept_join["joins"].replace("AR.Operator", opr_expr)
+    params = [start_date, end_date] * count
     sql = f"""
-        {cte}
+        {cte_sql}
         SELECT
-            {opr_expr} AS Operator,
-            {dept_join['dept_expr']} AS Dept,
-            LTRIM(RTRIM(CAST(ISNULL(ED.macno, N'') AS NVARCHAR(128)))) AS MacNo,
-            ED.EntryDate,
-            CAST(ED.OAEFF AS FLOAT) AS OAEFF,
-            CAST(ED.OPREFF AS FLOAT) AS OPREFF,
-            {_mac_type_expr()} AS MacType,
-            ED.SourceTable
-        FROM EFFICIENCY_DATA AS ED
-        {joins}
-        WHERE ED.EntryDate BETWEEN ? AND ?
-          AND ED.macno IS NOT NULL AND LTRIM(RTRIM(ED.macno)) <> N''
-          AND (ED.OAEFF IS NOT NULL OR ED.OPREFF IS NOT NULL)
-        ORDER BY ED.EntryDate, ED.macno, ED.shift, ED.SourceTable
-    """
-    params = [start_date, end_date]
-    try:
-        cursor.execute(sql, params)
-        return cursor.fetchall() or []
-    except Exception:
-        return _fetch_combined_efficiency_rows_legacy(
-            cursor, start_date, end_date, include_cnc, include_conv
-        )
-
-
-def _fetch_combined_efficiency_rows_legacy(
-    cursor, start_date, end_date, include_cnc=True, include_conv=True
-):
-    """Fallback using simplified union when full combined CTE fails."""
-    dept_join = _legacy_department_join()
-    branches = _legacy_union_branches(include_cnc, include_conv, include_prod_date=True)
-    if not branches:
-        return []
-    params = []
-    for _ in branches:
-        params.extend([start_date, end_date])
-    union_sql = " UNION ALL ".join(branches)
-    detail_sql = _detail_with_department_dated_sql(union_sql, dept_join)
-    sql = f"""
-        SELECT Operator, Dept, MacNo, ProdDate, OAEFF, OPREFF, MacType, N'' AS SourceTable
-        FROM ({detail_sql}) AS DetailRows
-        WHERE ProdDate IS NOT NULL
-          AND MacNo IS NOT NULL AND LTRIM(RTRIM(MacNo)) <> N''
+            OperatorName AS Operator,
+            Department AS Dept,
+            MachineNo AS MacNo,
+            EntryDate,
+            OAEFF,
+            OAEFF AS OPREFF,
+            MachineType AS MacType,
+            SourceTable
+        FROM CombinedOaeffEntries
+        ORDER BY EntryDate, MachineNo, SourceTable
     """
     cursor.execute(sql, params)
     return cursor.fetchall() or []
 
 
 def _combined_efficiency_monthwise(cursor, start_date, end_date, include_cnc=True, include_conv=True):
-    """Month-wise average OAEFF from combined EFFICIENCY_DATA CTE."""
-    cte = _efficiency_data_cte_sql(include_cnc, include_conv)
-    if not cte:
+    """Month-wise average OAEFF from CombinedOaeffEntries."""
+    cte_sql, count = _oaeff_combined_cte_sql(include_cnc, include_conv)
+    if not cte_sql:
         return {"labels": [], "data": []}
+    params = [start_date, end_date] * count
     sql = f"""
-        {cte}
-        SELECT MONTH(EntryDate) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF
-        FROM EFFICIENCY_DATA
-        WHERE EntryDate BETWEEN ? AND ?
-          AND OAEFF IS NOT NULL
+        {cte_sql}
+        SELECT MONTH(EntryDate) AS MonthNum, AVG(OAEFF) AS Avg_OAEFF
+        FROM CombinedOaeffEntries
         GROUP BY MONTH(EntryDate)
         ORDER BY MONTH(EntryDate)
     """
-    try:
-        cursor.execute(sql, [start_date, end_date])
-        rows = cursor.fetchall() or []
-    except Exception:
-        return _overall_efficiency_monthwise(cursor, start_date, end_date)
+    cursor.execute(sql, params)
+    rows = cursor.fetchall() or []
 
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     labels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]
@@ -878,37 +875,19 @@ def _entries_from_aggregate_fallback(
 def build_efficiency_compare_payload(
     cursor, start_date, end_date, include_cnc=True, include_conv=True, load_full_fy=True
 ):
-    """Structured payload for Plant Performance Efficiency (EFF) panel."""
+    """
+    Structured payload for Plant Performance Efficiency (EFF) panel.
+    SQL query always uses the exact requested start_date / end_date — matching
+    the reference OAEFF SQL exactly (no FY expansion on the query itself).
+    """
     from datetime import datetime
 
-    if load_full_fy:
-        query_start, query_end = _efficiency_query_date_range(True, start_date, end_date)
-    else:
-        query_start, query_end = start_date, end_date
+    # Always query the exact requested range (matches reference SQL logic)
+    query_start, query_end = start_date, end_date
 
     raw_rows = _fetch_efficiency_entry_rows(
         cursor, query_start, query_end, include_cnc, include_conv
     )
-    if not raw_rows:
-        raw_rows = _entries_from_aggregate_fallback(
-            cursor, query_start, query_end, include_cnc, include_conv
-        )
-    # Still empty — retry previous financial year only
-    if not raw_rows and load_full_fy:
-        from datetime import date
-        from .views import current_financial_year
-        fy_start, _fy_end = current_financial_year()
-        prev_start = date(fy_start.year - 1, 4, 1)
-        prev_end = date(fy_start.year, 3, 31)
-        raw_rows = _fetch_efficiency_entry_rows(
-            cursor, prev_start, prev_end, include_cnc, include_conv
-        )
-        if not raw_rows:
-            raw_rows = _entries_from_aggregate_fallback(
-                cursor, prev_start, prev_end, include_cnc, include_conv
-            )
-        if raw_rows:
-            query_start, query_end = prev_start, prev_end
 
     rows = []
     teams_set, machines_set, operators_set = set(), set(), set()
@@ -920,10 +899,10 @@ def build_efficiency_compare_payload(
             operator, dept, mac, prod_date, oaeff, opreff, mac_type = row[:7]
         operator_s = str(operator or "").strip()
         if not operator_s:
-            operator_s = str(mac or "").strip() or "Unknown"
-        if operator_s in ("—",):
-            continue
+            operator_s = "Unassigned"
         dept_s = str(dept or "").strip()
+        if not dept_s:
+            dept_s = "Unassigned"
         mac_s = str(mac or "").strip()
         mac_type_s = str(mac_type or "").strip() or "CNC"
         if not mac_s:
@@ -952,7 +931,7 @@ def build_efficiency_compare_payload(
 
         rows.append({
             "operator": operator_s,
-            "team": dept_s or "—",
+            "team": dept_s,
             "machineType": mac_type_s,
             "machine": mac_s,
             "date": date_str,
@@ -960,8 +939,7 @@ def build_efficiency_compare_payload(
             "year": year_val,
             "oaeff": round(float(eff_val), 2),
         })
-        if dept_s:
-            teams_set.add(dept_s)
+        teams_set.add(dept_s)
         machines_set.add(mac_s)
         operators_set.add(operator_s)
 

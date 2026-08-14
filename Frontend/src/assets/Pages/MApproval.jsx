@@ -1649,7 +1649,7 @@ export default function MApproval() {
         detailCache.current = {};
         setIsLoading(true);
         try {
-            const qsList = new URLSearchParams({ from, to, from_date: from, to_date: to, search, page: "1", page_size: "2000" });
+            const qsList = new URLSearchParams({ from, to, from_date: from, to_date: to, page: "1", page_size: "2000" });
             const resList = await fetch(`${API}/mapproval/list/?${qsList}`, { credentials: "include" });
             let fetchedCards = [];
             if (resList.ok) {
@@ -1666,9 +1666,17 @@ export default function MApproval() {
         } finally {
             setIsLoading(false);
         }
-    }, [dateRange.from, dateRange.to, search]);
+    }, [dateRange.from, dateRange.to]);
 
     useEffect(() => { refreshBoard(); }, [refreshBoard]);
+
+    const handleResetFilters = useCallback(() => {
+        const today = new Date();
+        setDateRange({ from: today, to: today });
+        setSearch("");
+        setTypeFilter(null);
+        writeFilterSession("ba_filter_mapproval", { from: today, to: today, search: "" });
+    }, []);
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
@@ -1894,6 +1902,7 @@ export default function MApproval() {
                     to={dateRange.to}
                     onChange={r => { setDateRange(r); setTypeFilter(null); }}
                     theme="rose"
+                    disabled={isLoading}
                 />
                 <div className="map-filter__search-wrap">
                     <svg className="map-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -1905,8 +1914,9 @@ export default function MApproval() {
                         placeholder="Search material documents…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
+                        disabled={isLoading}
                     />
-                    {search && (
+                    {search && !isLoading && (
                         <button
                             type="button"
                             className="map-filter__clear-btn"
@@ -1923,7 +1933,8 @@ export default function MApproval() {
                         ref={typeTriggerRef}
                         type="button"
                         className={`map-type-dd__trigger ${typeFilter ? "map-type-dd__trigger--active" : ""} ${typeDropOpen ? "map-type-dd__trigger--open" : ""}`}
-                        onClick={() => setTypeDropOpen(o => !o)}
+                        onClick={() => !isLoading && setTypeDropOpen(o => !o)}
+                        disabled={isLoading}
                     >
                         <span className="map-type-dd__trigger-icon">
                             {typeFilter ? TYPE_ICONS[typeFilter] : (
@@ -1995,20 +2006,26 @@ export default function MApproval() {
                     )}
                 </div>
 
-                <button type="button" className="map-filter__btn" onClick={() => refreshBoard()}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    Search
-                </button>
+                <div className="map-filter__actions-wrap">
+                    <button type="button" className="map-filter__btn" onClick={() => !isLoading && refreshBoard()} disabled={isLoading}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        Search
+                    </button>
+                    <button type="button" className="map-filter__reset-btn" onClick={() => !isLoading && handleResetFilters()} disabled={isLoading}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                            <path d="M21 3v5h-5"/>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                            <path d="M3 21v-5h5"/>
+                        </svg>
+                        Reset
+                    </button>
+                </div>
             </div>
 
-            {isLoading && cards.length > 0 && (
-                <div className="map-refresh-bar">
-                    <div className="map-refresh-bar__fill" />
-                </div>
-            )}
-            {isLoading && cards.length === 0 ? (
+            {isLoading ? (
                 <div className="map-loader">
                     <div className="map-loader__bar">
                         <div className="map-loader__bar-track">

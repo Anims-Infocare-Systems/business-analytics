@@ -236,7 +236,7 @@ def production_analysis_report(request):
         oee_query = """
         SELECT CAST(AVG(CAST(OEE AS FLOAT)) AS DECIMAL(18,2)) AS Overall_OEE
         FROM (
-            SELECT CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN CASE WHEN (OAEFF * QFNEW) > 100 THEN (OAEFF * QFNEW) / 100.0 ELSE OAEFF * QFNEW END ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
+            SELECT CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
             UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
             UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
         ) A
@@ -359,7 +359,7 @@ def production_analysis_report(request):
                 AVG(CAST(OEE AS FLOAT)) AS AvgOEE,
                 AVG(CAST(OperEff AS FLOAT)) AS AvgEff
             FROM (
-                SELECT macno, CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN CASE WHEN (OAEFF * QFNEW) > 100 THEN (OAEFF * QFNEW) / 100.0 ELSE OAEFF * QFNEW END ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE, OPREFF AS OperEff FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE)
+                SELECT macno, CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE, OPREFF AS OperEff FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE)
                 UNION ALL
                 SELECT macno, COALESCE(OAEFF, OEENEW, 0) AS OEE, eff AS OperEff FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
                 UNION ALL
@@ -619,7 +619,7 @@ def production_analysis_report(request):
                DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth,
                AVG(CAST(A.OEENEW AS FLOAT)) AS AvgOEE
         FROM (
-            SELECT proddate AS entrydate, CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN CASE WHEN (OAEFF * QFNEW) > 100 THEN (OAEFF * QFNEW) / 100.0 ELSE OAEFF * QFNEW END ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEENEW FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
+            SELECT proddate AS entrydate, CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEENEW FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
             UNION ALL SELECT entrydate, OEENEW FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND OEENEW IS NOT NULL
             UNION ALL SELECT entrydate, OEENEW FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND OEENEW IS NOT NULL
         ) A
@@ -1296,7 +1296,7 @@ ProductionEntryData AS
 
         ISNULL(PE.okqty,0) AS OKQty,
         ISNULL(PE.OPREFF,0) AS EffPct,
-        ISNULL(CASE WHEN PE.OAEFF IS NOT NULL AND PE.QFNEW IS NOT NULL THEN CASE WHEN (PE.OAEFF * PE.QFNEW) > 100 THEN (PE.OAEFF * PE.QFNEW) / 100.0 ELSE PE.OAEFF * PE.QFNEW END ELSE COALESCE(PE.OEENEW, PE.OAEFF, 0) END, 0) AS OEEPct,
+        ISNULL(CASE WHEN PE.OAEFF IS NOT NULL AND PE.QFNEW IS NOT NULL THEN (PE.OAEFF * PE.QFNEW) ELSE COALESCE(PE.OEENEW, PE.OAEFF, 0) END, 0) AS OEEPct,
         CAST(
             CASE 
                 WHEN PE.setfrom IS NOT NULL AND PE.setto IS NOT NULL
@@ -1599,7 +1599,7 @@ def machine_card_data(request, macno):
                 CASE WHEN PE.runto < PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) ELSE DATEDIFF(SECOND, PE.runfrom, PE.runto) END AS RunTimeSecs,
                 CASE WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) END AS IdleTimeSecs,
                 COALESCE(NULLIF(PE.shifttimesecs, 0), 28800)                    AS ShiftTimeSecs,
-                COALESCE(CASE WHEN PE.OAEFF IS NOT NULL AND PE.QFNEW IS NOT NULL THEN CASE WHEN (PE.OAEFF * PE.QFNEW) > 100 THEN (PE.OAEFF * PE.QFNEW) / 100.0 ELSE PE.OAEFF * PE.QFNEW END ELSE PE.OEENEW END, PE.OAEFF, 0) AS OEE,
+                COALESCE(CASE WHEN PE.OAEFF IS NOT NULL AND PE.QFNEW IS NOT NULL THEN (PE.OAEFF * PE.QFNEW) ELSE PE.OEENEW END, PE.OAEFF, 0) AS OEE,
                 PE.OPREFF                                                      AS OperEff
             FROM ProductionEntry PE
             INNER JOIN LatestProgram PN

@@ -719,6 +719,14 @@ export default function EApproval() {
 
     useEffect(() => { refreshBoard(); }, [refreshBoard]);
 
+    const handleResetFilters = useCallback(() => {
+        const today = new Date();
+        setDateRange({ from: today, to: today });
+        setSearch("");
+        setTypeFilter(null);
+        writeFilterSession("ba_filter_eapproval", { from: today, to: today, search: "" });
+    }, []);
+
     // Only text-search + type filter — API already scopes by date range
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
@@ -808,9 +816,11 @@ export default function EApproval() {
             if (!res.ok) { addToast(`Failed: ${data.error || res.statusText}`, "error"); return; }
             const cacheKey = card.id || `${card.docKind || 'po'}:${pono}:${card.amdNo || ''}`;
             delete detailCache.current[cacheKey]; // invalidate cached detail
+            const updatedBy = data.approvedBy || "Manager";
+            const updatedDt = data.approvedDateTime || "Just now";
             setApproved(prev => (prev.includes(card.id) ? prev : [...prev, card.id]));
             setCards(prev => prev.map(c =>
-                c.id === card.id ? { ...c, status: "Approved" } : c
+                c.id === card.id ? { ...c, status: "Approved", approvedBy: updatedBy, approvedDateTime: updatedDt } : c
             ));
             setSelected(null);
             addToast(`PO ${pono} approved successfully`, "success-approve");
@@ -839,7 +849,7 @@ export default function EApproval() {
             delete detailCache.current[cacheKey]; // invalidate cached detail
             setApproved(prev => prev.filter(id => id !== card.id));
             setCards(prev => prev.map(c =>
-                c.id === card.id ? { ...c, status: "Pending" } : c
+                c.id === card.id ? { ...c, status: "Pending", approvedBy: null, approvedDateTime: null } : c
             ));
             setSelected(null);
             addToast(`PO ${pono} moved back to Pending`, "success-modify");
@@ -872,6 +882,7 @@ export default function EApproval() {
                     to={dateRange.to}
                     onChange={r => { setDateRange(r); setTypeFilter(null); }}
                     theme="indigo"
+                    disabled={isLoading}
                 />
                 <div className="eap-filter__search-wrap">
                     <svg className="eap-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -883,8 +894,9 @@ export default function EApproval() {
                         placeholder="Search vendor, PO…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
+                        disabled={isLoading}
                     />
-                    {search && (
+                    {search && !isLoading && (
                         <button
                             type="button"
                             className="eap-filter__clear-btn"
@@ -902,7 +914,8 @@ export default function EApproval() {
                         ref={typeTriggerRef}
                         type="button"
                         className={`eap-type-dd__trigger ${typeFilter ? "eap-type-dd__trigger--active" : ""} ${typeDropOpen ? "eap-type-dd__trigger--open" : ""}`}
-                        onClick={() => setTypeDropOpen(o => !o)}
+                        onClick={() => !isLoading && setTypeDropOpen(o => !o)}
+                        disabled={isLoading}
                     >
                         <span className="eap-type-dd__trigger-icon">
                             {typeFilter ? TYPE_ICONS[typeFilter] : (
@@ -983,12 +996,23 @@ export default function EApproval() {
                     )}
                 </div>
 
-                <button type="button" className="eap-filter__btn" onClick={() => refreshBoard()}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                    Search
-                </button>
+                <div className="eap-filter__actions-wrap">
+                    <button type="button" className="eap-filter__btn" onClick={() => !isLoading && refreshBoard()} disabled={isLoading}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        Search
+                    </button>
+                    <button type="button" className="eap-filter__reset-btn" onClick={() => !isLoading && handleResetFilters()} disabled={isLoading}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                            <path d="M21 3v5h-5"/>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                            <path d="M3 21v-5h5"/>
+                        </svg>
+                        Reset
+                    </button>
+                </div>
             </div>
 
             {/* ── Grouped Sections / Loader ── */}

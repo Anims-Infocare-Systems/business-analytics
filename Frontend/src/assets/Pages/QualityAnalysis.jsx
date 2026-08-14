@@ -134,6 +134,8 @@ const getColStyle = (h) => {
         case "Type": return { width: "130px" };
         case "Insp No": return { width: "100px" };
         case "Insp Date": return { width: "100px" };
+        case "Part No": return { width: "140px", whiteSpace: "nowrap" };
+        case "Description": return { minWidth: "180px", maxWidth: "280px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Part No – Description": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Process": return { width: "110px" };
         case "Insp Qty":
@@ -150,6 +152,8 @@ const getRejColStyle = (h) => {
     switch (h) {
         case "Insp No": return { width: "110px" };
         case "Insp Type": return { width: "150px" };
+        case "Part No": return { width: "140px", whiteSpace: "nowrap" };
+        case "Description": return { minWidth: "180px", maxWidth: "280px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Product": return { minWidth: "220px", maxWidth: "320px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Reason": return { minWidth: "200px", maxWidth: "300px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Qty": return { width: "80px", textAlign: "right" };
@@ -166,6 +170,8 @@ const getTraceColStyle = (h) => {
         case "Insp Date": return { width: "95px" };
         case "Machine No": return { width: "95px" };
         case "Shift": return { width: "70px" };
+        case "Part No": return { width: "130px", whiteSpace: "nowrap" };
+        case "Description": return { minWidth: "160px", maxWidth: "250px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Partno-Description": return { minWidth: "180px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word" };
         case "Process": return { width: "100px" };
         case "Operator Name / Vendor Name":
@@ -1984,10 +1990,41 @@ export default function QualityAnalysis() {
     }, [insightsData, hasNoData]);
 
 
+    const activeSummaryStrip = useMemo(() => {
+        const totalInsp = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalMatRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalMacRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalRej = totalMatRej + totalMacRej;
+        const totalRwk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0), 0);
+        const pendingCount = searchFilteredInspectionRows.filter(r => r.result === "PENDING" || (r.id || "").toLowerCase().includes("pending")).length;
+
+        if (searchQuery) {
+            return {
+                period: summaryData?.period ?? "Jul 2026",
+                totalInspected: totalInsp.toLocaleString("en-IN"),
+                passRate: totalInsp > 0 ? `${((totalOk / totalInsp) * 100).toFixed(1)}%` : "0.0%",
+                totalRejected: totalRej.toLocaleString("en-IN"),
+                rework: totalRwk.toLocaleString("en-IN"),
+                pending: pendingCount.toString(),
+            };
+        }
+
+        return {
+            period: summaryData?.period ?? "Jul 2026",
+            totalInspected: summaryData?.total_inspected ?? totalInsp.toLocaleString("en-IN"),
+            passRate: summaryData?.pass_rate ?? (totalInsp > 0 ? `${((totalOk / totalInsp) * 100).toFixed(1)}%` : "0.0%"),
+            totalRejected: summaryData?.total_rejected ?? totalRej.toLocaleString("en-IN"),
+            rework: summaryData?.rework ?? totalRwk.toLocaleString("en-IN"),
+            pending: summaryData?.pending_inspection ?? pendingCount.toString(),
+        };
+    }, [searchQuery, summaryData, searchFilteredInspectionRows]);
+
     const activeKpiCards = useMemo(() => {
         if (hasNoData) return EMPTY_KPI_CARDS;
 
         const totalInspected = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
         const totalMaterialRej = searchFilteredInspectionRows.reduce((sum, r) => {
             return sum + (parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
         }, 0);
@@ -1997,6 +2034,7 @@ export default function QualityAnalysis() {
         const totalReworkQty = searchFilteredInspectionRows.reduce((sum, r) => {
             return sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0);
         }, 0);
+        const pendingCount = searchFilteredInspectionRows.filter(r => r.result === "PENDING" || (r.id || "").toLowerCase().includes("pending")).length;
         const complaintsCount = activeCustomerComplaints.length;
         const ppm = totalInspected > 0 ? Math.round(((totalMaterialRej + totalMachineRej) / totalInspected) * 1000000) : 0;
         const fpy = totalInspected > 0
@@ -2004,11 +2042,21 @@ export default function QualityAnalysis() {
             : 0;
         const fpyVal = totalInspected > 0 ? `${fpy.toFixed(1)}%` : "0.0%";
 
-        const insQty = summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN");
-        const passRate = summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalInspected - (totalMaterialRej + totalMachineRej)) / totalInspected * 100).toFixed(1)}%` : "0.0%");
-        const rejRate = summaryData?.kpis?.rejection_rate_card?.value || (totalInspected > 0 ? `${(((totalMaterialRej + totalMachineRej) / totalInspected) * 100).toFixed(1)}%` : "0.0%");
-        const reworkRate = summaryData?.kpis?.rework_rate_card?.value || (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%");
-        const pendingInsp = summaryData?.kpis?.pending_insp_card?.value || "0";
+        const insQty = searchQuery
+            ? totalInspected.toLocaleString("en-IN")
+            : (summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN"));
+        const passRate = searchQuery
+            ? (totalInspected > 0 ? `${((totalOk / totalInspected) * 100).toFixed(1)}%` : "0.0%")
+            : (summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalOk / totalInspected) * 100).toFixed(1)}%` : "0.0%"));
+        const rejRate = searchQuery
+            ? (totalInspected > 0 ? `${(((totalMaterialRej + totalMachineRej) / totalInspected) * 100).toFixed(1)}%` : "0.0%")
+            : (summaryData?.kpis?.rejection_rate_card?.value || (totalInspected > 0 ? `${(((totalMaterialRej + totalMachineRej) / totalInspected) * 100).toFixed(1)}%` : "0.0%"));
+        const reworkRate = searchQuery
+            ? (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%")
+            : (summaryData?.kpis?.rework_rate_card?.value || (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%"));
+        const pendingInsp = searchQuery
+            ? pendingCount.toString()
+            : (summaryData?.kpis?.pending_insp_card?.value || "0");
         const qualityVal = summaryData?.kpis?.quality_value_card?.value || "₹0";
 
         return [
@@ -2026,7 +2074,7 @@ export default function QualityAnalysis() {
             { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" },
             { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: calibrationAlertCount.toString(), sub: "Gauges & Instruments", trend: calibrationAlertCount > 0 ? `${calibrationAlertCount} alerts pending` : "All calibrated", cls: calibrationAlertCount > 0 ? "qa2-t-down" : "qa2-t-up" }
         ];
-    }, [summaryData, hasNoData, searchFilteredInspectionRows, activeCustomerComplaints, calibrationAlertCount]);
+    }, [summaryData, hasNoData, searchQuery, searchFilteredInspectionRows, activeCustomerComplaints, calibrationAlertCount]);
 
     const handleTypeBadgeClick = (label) => {
         const l = String(label).toLowerCase();
@@ -2129,12 +2177,12 @@ export default function QualityAnalysis() {
             ) : (
                 <div className="qa2-summary-strip qa2-animate qa2-d2">
                     {[
-                        { lbl: "Period", val: summaryData?.period ?? "Jan–Feb 2026", cls: "" },
-                        { lbl: "Total Inspected", val: summaryData?.total_inspected ?? "—", cls: "qa2-blue" },
-                        { lbl: "Pass Rate", val: summaryData?.pass_rate ?? "—", cls: "qa2-green" },
-                        { lbl: "Total Rejected", val: summaryData?.total_rejected ?? "—", cls: "qa2-red" },
-                        { lbl: "Rework", val: summaryData?.rework ?? "—", cls: "qa2-orange" },
-                        { lbl: "Final Insp. Pending", val: summaryData?.pending_inspection ?? "—", cls: "qa2-yellow" },
+                        { lbl: "Period", val: activeSummaryStrip.period, cls: "" },
+                        { lbl: "Total Inspected", val: activeSummaryStrip.totalInspected, cls: "qa2-blue" },
+                        { lbl: "Pass Rate", val: activeSummaryStrip.passRate, cls: "qa2-green" },
+                        { lbl: "Total Rejected", val: activeSummaryStrip.totalRejected, cls: "qa2-red" },
+                        { lbl: "Rework", val: activeSummaryStrip.rework, cls: "qa2-orange" },
+                        { lbl: "Final Insp. Pending", val: activeSummaryStrip.pending, cls: "qa2-yellow" },
                     ].map((s, i) => (
                         <div className="qa2-strip-item" key={i}>
                             <div className="qa2-strip-lbl">{s.lbl}</div>
@@ -2256,7 +2304,7 @@ export default function QualityAnalysis() {
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
                             <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
                         </div>
-                    ) : (hasNoData || !chartsData?.defect_donut) ? (
+                    ) : (hasNoData || !chartsData?.defect_donut || !chartsData?.defect_donut?.datasets?.[0]?.data?.some(v => Number(v) > 0)) ? (
                         <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={defectRef} /></div>
@@ -2308,7 +2356,7 @@ export default function QualityAnalysis() {
                                 ))}
                             </div>
                         </div>
-                    ) : (hasNoData || !chartsData?.pareto) ? (
+                    ) : (hasNoData || !chartsData?.pareto || !chartsData?.pareto?.labels?.length || !chartsData?.pareto?.datasets?.[0]?.data?.some(v => Number(v) > 0)) ? (
                         <QualityEmptyState message="No Data found on this period" height="192px" />
                     ) : (
                         <div className="qa2-chart-wrap"><canvas ref={paretoRef} /></div>
@@ -2787,7 +2835,7 @@ export default function QualityAnalysis() {
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Type", "Insp No", "Insp Date", "Part No – Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rework Qty", "Insp By"].map(h => (
+                                    {["Type", "Insp No", "Insp Date", "Part No", "Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rework Qty", "Insp By"].map(h => (
                                         <th key={h} className={h.includes("Qty") ? "qa2-td-r" : ""}>{h}</th>
                                     ))}
                                 </tr>
@@ -2799,7 +2847,8 @@ export default function QualityAnalysis() {
                                         const typeCls = r.typeCls || "qa2-tag-teal";
                                         const inspNo = r.id;
                                         const inspDate = r.date;
-                                        const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
+                                        const partNo = r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : (r.partNoDesc || "—"));
+                                        const description = r.description || r.product || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ").slice(1).join(" - ") : "—");
                                         const process = r.process !== undefined ? r.process : "";
                                         const inspQty = r.qty;
                                         const okQty = r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : "0"));
@@ -2821,7 +2870,8 @@ export default function QualityAnalysis() {
                                                 </td>
                                                 <td style={getColStyle("Insp No")}><span className="qa2-insp-id">{inspNo}</span></td>
                                                 <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp Date")}>{inspDate}</td>
-                                                <td className="qa2-mono qa2-muted" style={getColStyle("Part No – Description")}>{partNoDesc}</td>
+                                                <td className="qa2-mono qa2-muted" style={getColStyle("Part No")}>{partNo}</td>
+                                                <td style={getColStyle("Description")}>{description}</td>
                                                 <td style={getColStyle("Process")}>
                                                     {process ? (
                                                         <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{process}</span>
@@ -2838,7 +2888,7 @@ export default function QualityAnalysis() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="11" style={{ padding: 0 }}>
+                                        <td colSpan="12" style={{ padding: 0 }}>
                                             <QualityEmptyState message="No Data found on this period" height="240px" />
                                         </td>
                                     </tr>
@@ -2846,7 +2896,7 @@ export default function QualityAnalysis() {
                             </tbody>
                             <tfoot>
                                 <tr className="qa2-total-row">
-                                    <td colSpan="5" className="qa2-total-label">Total</td>
+                                    <td colSpan="6" className="qa2-total-label">Total</td>
                                     <td className="qa2-td-r" style={getColStyle("Insp Qty")}><span className="qa2-total-badge qa2-total-badge-blue">{activeInspectionRowsTotals.insp.toLocaleString()}</span></td>
                                     <td className="qa2-td-r" style={getColStyle("OK Qty")}><span className="qa2-total-badge qa2-total-badge-green">{activeInspectionRowsTotals.ok.toLocaleString()}</span></td>
                                     <td className="qa2-td-r" style={getColStyle("Mat Rej Qty")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.matRej.toLocaleString()}</span></td>
@@ -3047,7 +3097,7 @@ export default function QualityAnalysis() {
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Insp No", "Insp Type", "Product", "Reason", "Qty", "Disposition", "Date"].map(h => (
+                                    {["Insp No", "Insp Type", "Part No", "Description", "Reason", "Qty", "Disposition", "Date"].map(h => (
                                         <th key={h} style={getRejColStyle(h)} className={h === "Qty" ? "qa2-th-r" : ""}>{h}</th>
                                     ))}
                                 </tr>
@@ -3057,6 +3107,8 @@ export default function QualityAnalysis() {
                                     activeRejectionRows.map((r, i) => {
                                         const type = r.inspType || "Job Order";
                                         const typeCls = type.includes("Job") ? "qa2-tag-teal" : "qa2-tag-blue";
+                                        const partNo = r.partNo || (r.product && r.product.includes(" - ") ? r.product.split(" - ")[0] : (r.product || "—"));
+                                        const description = r.description || (r.product && r.product.includes(" - ") ? r.product.split(" - ").slice(1).join(" - ") : (r.product !== partNo ? r.product : "—"));
                                         return (
                                             <tr key={i} className="qa2-tr">
                                                 <td style={getRejColStyle("Insp No")}><span className="qa2-rej-id">{r.id}</span></td>
@@ -3065,7 +3117,8 @@ export default function QualityAnalysis() {
                                                         {type}
                                                     </span>
                                                 </td>
-                                                <td style={getRejColStyle("Product")}>{r.product}</td>
+                                                <td className="qa2-mono qa2-muted" style={getRejColStyle("Part No")}>{partNo}</td>
+                                                <td style={getRejColStyle("Description")}>{description}</td>
                                                 <td style={getRejColStyle("Reason")}>{r.reason}</td>
                                                 <td className="qa2-td-r" style={getRejColStyle("Qty")}>{r.qty}</td>
                                                 <td style={getRejColStyle("Disposition")}>
@@ -3083,7 +3136,7 @@ export default function QualityAnalysis() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="7" style={{ padding: 0 }}>
+                                        <td colSpan="8" style={{ padding: 0 }}>
                                             <QualityEmptyState message="No Data found on this period" height="200px" />
                                         </td>
                                     </tr>
@@ -3094,7 +3147,8 @@ export default function QualityAnalysis() {
                                     <tr className="qa2-total-row">
                                         <td style={getRejColStyle("Insp No")} className="qa2-total-label">Total</td>
                                         <td style={getRejColStyle("Insp Type")}></td>
-                                        <td style={getRejColStyle("Product")}></td>
+                                        <td style={getRejColStyle("Part No")}></td>
+                                        <td style={getRejColStyle("Description")}></td>
                                         <td style={getRejColStyle("Reason")}></td>
                                         <td className="qa2-td-r" style={getRejColStyle("Qty")}>
                                             <span className="qa2-total-badge qa2-total-badge-red" style={{ fontWeight: 700 }}>
@@ -3531,7 +3585,7 @@ export default function QualityAnalysis() {
                     <table className="qa2-table">
                         <thead>
                             <tr>
-                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Partno-Description", "Process", "Operator Name / Vendor Name", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
+                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Part No", "Description", "Process", "Operator Name / Vendor Name", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
                                     <th key={h} style={getTraceColStyle(h)} className={["Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
                                 ))}
                             </tr>
@@ -3543,6 +3597,8 @@ export default function QualityAnalysis() {
                                     const displayName = isJobOrder
                                         ? (r.cname || r.partyName || r.vendor || getPartyName(r.id, r.product || r.partNoDesc) || "—")
                                         : (r.operatorName || "—");
+                                    const partNo = r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : (r.partNoDesc || "—"));
+                                    const description = r.description || r.product || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ").slice(1).join(" - ") : "—");
                                     const okQty = parseFloat(r.okQty || (r.result === "PASS" ? r.qty : 0)) || 0;
                                     const matRej = parseFloat(r.matRejQty || 0) || 0;
                                     const macRej = parseFloat(r.macRejQty || 0) || 0;
@@ -3564,7 +3620,8 @@ export default function QualityAnalysis() {
                                                     <span className="qa2-badge qa2-tag-teal" style={{ background: "rgba(204,251,241,0.6)", color: "#0f766e" }}>{r.shift}</span>
                                                 ) : "—"}
                                             </td>
-                                            <td style={getTraceColStyle("Partno-Description")} className="qa2-mono qa2-muted">{r.partNoDesc}</td>
+                                            <td style={getTraceColStyle("Part No")} className="qa2-mono qa2-muted">{partNo}</td>
+                                            <td style={getTraceColStyle("Description")}>{description}</td>
                                             <td style={getTraceColStyle("Process")}>
                                                 {r.process ? (
                                                     <span className="qa2-badge qa2-tag-blue" style={{ background: "rgba(224,242,254,0.6)", color: "#0369a1" }}>{r.process}</span>
@@ -3583,7 +3640,7 @@ export default function QualityAnalysis() {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan="15" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+                                    <td colSpan="16" style={{ textAlign: "center", padding: "3rem", color: "#9ca3af", fontSize: "0.9rem" }}>
                                         No traceability records found for the selected period
                                     </td>
                                 </tr>

@@ -448,9 +448,10 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
     if (!isOpen && !isClosing) return null;
 
     const currentUsersCount = activeUsers > 0 ? activeUsers : 1;
-    const confirmSubtotal = selectedPlan === "Free" ? 0 : (selectedPlan === "Pro" ? (enteredUsersCount * 500 * (confirmBillingCycle === "6month" ? 6 : 12)) : (enteredUsersCount * 2000 * (confirmBillingCycle === "6month" ? 6 : 12)));
-    const confirmTax = 0;
-    const confirmTotal = confirmSubtotal;
+    const minUsersRequired = selectedPlan === "Max" ? Math.max(2, activeUsers) : Math.max(1, activeUsers);
+    const confirmSubtotal = selectedPlan === "Free" ? 0 : (selectedPlan === "Pro" ? (enteredUsersCount * 1500 * (confirmBillingCycle === "6month" ? 6 : 12)) : (enteredUsersCount * 2500 * (confirmBillingCycle === "6month" ? 6 : 12)));
+    const confirmTax = confirmSubtotal * 0.18;
+    const confirmTotal = confirmSubtotal + confirmTax;
     const formatCurrency = (val) => {
         return "₹" + val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
@@ -901,144 +902,174 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
             {/* ── UPGRADE PLAN MODAL ── */}
             {showUpgradeModal && (
                 <div className="st-upgrade-overlay" onClick={() => !upgradeBusy && setShowUpgradeModal(false)}>
-                    <div className="st-upgrade-container st-upgrade-container--new" onClick={(e) => e.stopPropagation()}>
+                    <div className="st-upgrade-container" onClick={(e) => e.stopPropagation()}>
                         <button className="st-upgrade-close-btn" onClick={() => !upgradeBusy && setShowUpgradeModal(false)} aria-label="Close modal">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                         </button>
 
-                        <div className="st-upgrade-header-centered">
-                            <h2 className="st-upgrade-main-title">Plans that grow with you</h2>
-                            <p className="st-upgrade-main-subtitle">Choose the plan that fits your business. Upgrade or downgrade at any time.</p>
-                            <div className="st-upgrade-pill-badge">Team and Enterprise</div>
+                        {/* Header */}
+                        <div className="st-upg-header">
+                            <div className="st-upg-badge">✦ Flexible Plans</div>
+                            <h2 className="st-upg-title">Plans that grow with you</h2>
+                            <p className="st-upg-subtitle">Choose the plan that fits your business. Upgrade or downgrade at any time.</p>
+
+                            {/* Billing cycle toggle */}
+                            <div className="st-upg-cycle-toggle">
+                                <button
+                                    className={`st-upg-cycle-btn ${confirmBillingCycle === "6month" ? "st-upg-cycle-btn--active" : ""}`}
+                                    onClick={() => setConfirmBillingCycle("6month")}
+                                >
+                                    6 Months
+                                </button>
+                                <button
+                                    className={`st-upg-cycle-btn ${confirmBillingCycle === "yearly" ? "st-upg-cycle-btn--active" : ""}`}
+                                    onClick={() => setConfirmBillingCycle("yearly")}
+                                >
+                                    Yearly
+                                    <span className="st-upg-cycle-save">Save 17%</span>
+                                </button>
+                            </div>
                         </div>
 
                         {upgradeErr && <div className="st-upgrade-msg st-upgrade-msg--error">{upgradeErr}</div>}
                         {upgradeOk && <div className="st-upgrade-msg st-upgrade-msg--success">{upgradeOk}</div>}
 
+                        {/* Plan Cards */}
                         <div className="st-upgrade-plans-grid">
-                            {/* Free Plan */}
-                            <div className={`st-upgrade-plan-card st-upgrade-plan-card--free ${isFree ? 'st-upgrade-plan-card--active' : ''}`}>
-                                <div className="st-upgrade-plan-card__icon-wrap">
-                                    <Icons.Branch />
-                                </div>
-                                <h3 className="st-upgrade-plan-card__title">Free</h3>
-                                <p className="st-upgrade-plan-card__desc">Try Anims Business Analytics</p>
-                                <div className="st-upgrade-plan-card__price-area">
-                                    <span className="st-upgrade-plan-card__price">₹0</span>
-                                </div>
 
+                            {/* ── FREE ── */}
+                            <div className={`st-upg-card st-upg-card--free ${isFree ? "st-upg-card--current" : ""}`}>
+                                <div className="st-upg-card__header">
+                                    <div className="st-upg-card__icon st-upg-card__icon--free">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="st-upg-card__name">Free</h3>
+                                        <p className="st-upg-card__desc">Try Anims Business Analytics</p>
+                                    </div>
+                                </div>
+                                <div className="st-upg-card__price-row">
+                                    <span className="st-upg-card__price">₹0</span>
+                                </div>
                                 <button
-                                    className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--free-outline"
+                                    className="st-upg-card__cta st-upg-card__cta--outline"
                                     disabled={upgradeBusy || (isFree && !isExpiredMode) || !isFree}
-                                    onClick={() => {
-                                        if (isFree && isExpiredMode) {
-                                            setSelectedPlan("Free");
-                                            setConfirmBillingCycle("6month");
-                                            setShowConfirmModal(true);
-                                        }
-                                    }}
+                                    onClick={() => { if (isFree && isExpiredMode) { setSelectedPlan("Free"); setConfirmBillingCycle("6month"); setShowConfirmModal(true); } }}
                                 >
-                                    {isFree ? (isExpiredMode ? "Renewal" : "Current Plan") : "Use for free"}
+                                    {isFree ? (isExpiredMode ? "Renew Free" : "Current Plan") : "Use for free"}
                                 </button>
-
-                                <ul className="st-upgrade-plan-card__features-list">
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Access to dashboards</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Basic Reports</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> 6 months free from registration</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Upto 5 user access</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Standard support</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> MIS Reports</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Email Notifications</li>
-                                </ul>
+                                <div className="st-upg-card__features">
+                                    <div className="st-upg-card__feat-title">Includes:</div>
+                                    {["Access to dashboards","Basic Reports","6 months free from registration","Upto 5 user access","Standard support","E-Approval & T-Approval workflows","MIS Reports","Email Notifications"].map(f => (
+                                        <div key={f} className="st-upg-feat-row">
+                                            <span className="st-upg-feat-icon"><Icons.Check /></span>
+                                            <span>{f}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
-                            {/* Pro Plan */}
-                            <div className={`st-upgrade-plan-card st-upgrade-plan-card--pro st-upgrade-plan-card--featured ${isPro ? 'st-upgrade-plan-card--active' : ''}`}>
-                                <div className="st-upgrade-plan-card__promo-badge">
-                                    <span className="st-upgrade-plan-card__promo-label">Yearly</span>
-                                    <span className="st-upgrade-plan-card__promo-save">Save 17%</span>
+                            {/* ── PRO ── */}
+                            <div className={`st-upg-card st-upg-card--pro ${isPro ? "st-upg-card--current" : ""}`}>
+                                <div className="st-upg-card__header">
+                                    <div className="st-upg-card__icon st-upg-card__icon--pro">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="st-upg-card__name">Pro</h3>
+                                        <p className="st-upg-card__desc">Advanced data reporting &amp; analytics</p>
+                                    </div>
                                 </div>
-                                <div className="st-upgrade-plan-card__icon-wrap">
-                                    <Icons.Branch />
+                                <div className="st-upg-card__price-row">
+                                    <span className="st-upg-card__price">₹1,500</span>
+                                    <span className="st-upg-card__per">/user/mo</span>
                                 </div>
-                                <h3 className="st-upgrade-plan-card__title">Pro</h3>
-                                <p className="st-upgrade-plan-card__desc">Advanced data reporting & operations analytics</p>
-                                <div className="st-upgrade-plan-card__price-area">
-                                    <span className="st-upgrade-plan-card__price">₹500</span>
-                                    <span className="st-upgrade-plan-card__period">/ user / month</span>
+                                <div className="st-upg-card__billing-note">
+                                    {confirmBillingCycle === "yearly"
+                                        ? `₹${(currentUsersCount * 1500 * 12).toLocaleString("en-IN")}/yr for ${currentUsersCount} users`
+                                        : `₹${(currentUsersCount * 1500 * 6).toLocaleString("en-IN")}/6mo for ${currentUsersCount} users`
+                                    }
                                 </div>
-                                <div className="st-upgrade-plan-card__billing-cycle">
-                                    {`billed annually (₹${(currentUsersCount * 500 * 12).toLocaleString("en-IN")}/yr for ${currentUsersCount} users)`}
-                                </div>
-
                                 <button
-                                    className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--white"
+                                    className="st-upg-card__cta st-upg-card__cta--solid"
                                     disabled={true}
-                                    onClick={() => { setSelectedPlan("Pro"); setConfirmBillingCycle("yearly"); setShowConfirmModal(true); }}
+                                    onClick={() => { setSelectedPlan("Pro"); setEnteredUsersCount(Math.max(1, activeUsers)); setShowConfirmModal(true); }}
                                 >
-                                    {isPro ? (isExpiredMode ? 'Renewal' : 'Current Plan') : (upgradeBusy ? 'Upgrading...' : 'Get Pro plan')}
+                                    {isPro ? (isExpiredMode ? "Renew Pro" : "Current Plan") : (upgradeBusy ? "Upgrading…" : "Get Pro Plan")}
                                 </button>
-
-                                <div className="st-upgrade-plan-card__features-header">Pro has:</div>
-                                <ul className="st-upgrade-plan-card__features-list">
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Top Management dashboards</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Standard support</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Email Notifications</li>
-                                </ul>
+                                <div className="st-upg-card__features">
+                                    <div className="st-upg-card__feat-title">Everything in Free, plus:</div>
+                                    {["Top Management dashboards","E-Approval & T-Approval workflows","Standard support","Email Notifications"].map(f => (
+                                        <div key={f} className="st-upg-feat-row">
+                                            <span className="st-upg-feat-icon"><Icons.Check /></span>
+                                            <span>{f}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
-                            {/* Max Plan */}
-                            <div className={`st-upgrade-plan-card st-upgrade-plan-card--max ${isMax ? 'st-upgrade-plan-card--active' : ''}`}>
-                                <div className="st-upgrade-plan-card__icon-wrap">
-                                    <Icons.Branch />
+                            {/* ── MAX ── */}
+                            <div className={`st-upg-card st-upg-card--max st-upg-card--featured ${isMax ? "st-upg-card--current" : ""}`}>
+                                <div className="st-upg-card__popular-badge">🏆 Most Popular</div>
+                                <div className="st-upg-card__header">
+                                    <div className="st-upg-card__icon st-upg-card__icon--max">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="st-upg-card__name">Max</h3>
+                                        <p className="st-upg-card__desc">Full enterprise & multi-plant operations</p>
+                                    </div>
                                 </div>
-                                <h3 className="st-upgrade-plan-card__title">Max</h3>
-                                <p className="st-upgrade-plan-card__desc">Full enterprise integrations & multi-plant operation tracking</p>
-                                <div className="st-upgrade-plan-card__price-area">
-                                    <span className="st-upgrade-plan-card__price">₹2,000</span>
-                                    <span className="st-upgrade-plan-card__period">/ user / month</span>
+                                <div className="st-upg-card__price-row">
+                                    <span className="st-upg-card__price">₹2,500</span>
+                                    <span className="st-upg-card__per">/user/mo</span>
                                 </div>
-                                <div className="st-upgrade-plan-card__billing-cycle">
-                                    {`billed annually (₹${(currentUsersCount * 2000 * 12).toLocaleString("en-IN")}/yr for ${currentUsersCount} users)`}
+                                <div className="st-upg-card__billing-note">
+                                    Min. 2 users &nbsp;·&nbsp;
+                                    {confirmBillingCycle === "yearly"
+                                        ? `₹${(Math.max(2,currentUsersCount)*2500*12).toLocaleString("en-IN")}/yr`
+                                        : `₹${(Math.max(2,currentUsersCount)*2500*6).toLocaleString("en-IN")}/6mo`
+                                    }
                                 </div>
-
                                 <button
-                                    className="st-upgrade-plan-card__btn st-upgrade-plan-card__btn--blue"
+                                    className="st-upg-card__cta st-upg-card__cta--white"
                                     disabled={true}
-                                    onClick={() => { setSelectedPlan("Max"); setConfirmBillingCycle("yearly"); setShowConfirmModal(true); }}
+                                    onClick={() => { setSelectedPlan("Max"); setEnteredUsersCount(Math.max(2, activeUsers)); setShowConfirmModal(true); }}
                                 >
-                                    {isMax ? (isExpiredMode ? 'Renewal' : 'Current Plan') : (upgradeBusy ? 'Upgrading...' : 'Get Max plan')}
+                                    {isMax ? (isExpiredMode ? "Renew Max" : "Current Plan") : (upgradeBusy ? "Upgrading…" : "Get Max Plan")}
                                 </button>
-
-                                <div className="st-upgrade-plan-card__features-header">Everything in Pro, plus:</div>
-                                <ul className="st-upgrade-plan-card__features-list">
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Unlimited Dashboard</li>
-                                    {/* <li><span className="st-feature-check"><Icons.Check /></span> Dedicated account manager</li> */}
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Advanced Analytics Charts</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Full MIS & Reports</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> E-Approval & T-Approval workflows</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Priority email support</li>
-                                    <li><span className="st-feature-check"><Icons.Check /></span> Email Notifications</li>
-                                </ul>
+                                <div className="st-upg-card__features">
+                                    <div className="st-upg-card__feat-title">Everything in Pro, plus:</div>
+                                    {["Unlimited Dashboards","Advanced Analytics Charts","Full MIS & Reports","E-Approval & T-Approval workflows","Priority email support","Email Notifications"].map(f => (
+                                        <div key={f} className="st-upg-feat-row">
+                                            <span className="st-upg-feat-icon"><Icons.Check /></span>
+                                            <span>{f}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
+
                         </div>
 
-                        <div className="st-upgrade-disclaimer">
-                            * Usage limits apply. Prices and plans are subject to change at Anims Infocare's discretion.
-                        </div>
-
-                        <div className="st-upgrade-modal-footer">
-                            <span className="st-upgrade-footer-copyright">© 2026 Anims Infocare Systems</span>
-                            <div className="st-upgrade-footer-links">
+                        {/* Footer */}
+                        <div className="st-upg-footer">
+                            <span className="st-upg-footer__copy">© 2026 Anims Infocare Systems</span>
+                            <div className="st-upg-footer__links">
                                 <a href="https://animse.com/#/anims/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
-                                <span className="st-footer-bullet">•</span>
+                                <span>·</span>
                                 <a href="https://animse.com/#/Anims/Terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-                                <span className="st-footer-bullet">•</span>
+                                <span>·</span>
                                 <a href="https://animse.com/#/Contact" target="_blank" rel="noopener noreferrer">Contact Support</a>
                             </div>
                         </div>
+
+                        <p className="st-upg-disclaimer">* Prices subject to change. Usage limits apply.</p>
                     </div>
                 </div>
             )}
@@ -1058,133 +1089,53 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                         {/* Billing cycle selector */}
                         {selectedPlan !== "Free" && (
-                            <div className="st-confirm-cycle-selector" style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+                            <div className="st-confirm-cycle-row">
                                 <button
                                     type="button"
-                                    className={`st-confirm-cycle-btn ${confirmBillingCycle === "6month" ? "st-confirm-cycle-btn--active" : ""}`}
+                                    className={`st-confirm-cycle-tab ${confirmBillingCycle === "6month" ? "st-confirm-cycle-tab--active" : ""}`}
                                     onClick={() => setConfirmBillingCycle("6month")}
-                                    style={{
-                                        flex: 1,
-                                        padding: "10px",
-                                        borderRadius: "8px",
-                                        border: "1.5px solid",
-                                        borderColor: confirmBillingCycle === "6month" ? "#2d6de8" : "rgba(255,255,255,0.08)",
-                                        background: confirmBillingCycle === "6month" ? "rgba(45,109,232,0.05)" : "rgba(255,255,255,0.02)",
-                                        color: confirmBillingCycle === "6month" ? "#ffffff" : "rgba(255,255,255,0.6)",
-                                        fontWeight: "600",
-                                        fontSize: "13px",
-                                        cursor: "pointer",
-                                        transition: "all 0.2s ease"
-                                    }}
                                 >
                                     6 Months
                                 </button>
                                 <button
                                     type="button"
-                                    className={`st-confirm-cycle-btn ${confirmBillingCycle === "yearly" ? "st-confirm-cycle-btn--active" : ""}`}
+                                    className={`st-confirm-cycle-tab ${confirmBillingCycle === "yearly" ? "st-confirm-cycle-tab--active" : ""}`}
                                     onClick={() => setConfirmBillingCycle("yearly")}
-                                    style={{
-                                        flex: 1,
-                                        padding: "10px",
-                                        borderRadius: "8px",
-                                        border: "1.5px solid",
-                                        borderColor: confirmBillingCycle === "yearly" ? "#2d6de8" : "rgba(255,255,255,0.08)",
-                                        background: confirmBillingCycle === "yearly" ? "rgba(45,109,232,0.05)" : "rgba(255,255,255,0.02)",
-                                        color: confirmBillingCycle === "yearly" ? "#ffffff" : "rgba(255,255,255,0.6)",
-                                        fontWeight: "600",
-                                        fontSize: "13px",
-                                        cursor: "pointer",
-                                        transition: "all 0.2s ease"
-                                    }}
                                 >
-                                    Yearly (12 Months)
+                                    Yearly
+                                    <span className="st-confirm-cycle-save">−17%</span>
                                 </button>
                             </div>
                         )}
 
                         {/* User count selector */}
                         {selectedPlan !== "Free" && (
-                            <div className="st-confirm-users-selector" style={{ marginBottom: "16px" }}>
-                                <label style={{ display: "block", color: "rgba(255,255,255,0.6)", fontSize: "12.5px", fontWeight: "600", marginBottom: "8px" }}>
-                                    No. of Users
-                                </label>
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div className="st-confirm-users-row">
+                                <label className="st-confirm-users-label">No. of Users</label>
+                                <div className="st-confirm-users-ctrl">
                                     <button
                                         type="button"
-                                        className="st-user-count-btn"
-                                        onClick={() => setEnteredUsersCount(prev => Math.max(activeUsers, prev - 1))}
-                                        style={{
-                                            width: "36px",
-                                            height: "36px",
-                                            borderRadius: "8px",
-                                            border: "1.5px solid rgba(255,255,255,0.1)",
-                                            background: "rgba(255,255,255,0.03)",
-                                            color: "#fff",
-                                            fontSize: "16px",
-                                            fontWeight: "600",
-                                            cursor: "pointer",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            transition: "all 0.2s ease"
-                                        }}
-                                        onMouseEnter={(e) => { e.target.style.background = "rgba(255,255,255,0.08)"; e.target.style.borderColor = "rgba(255,255,255,0.2)"; }}
-                                        onMouseLeave={(e) => { e.target.style.background = "rgba(255,255,255,0.03)"; e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
-                                    >
-                                        —
-                                    </button>
+                                        className="st-confirm-user-btn"
+                                        onClick={() => setEnteredUsersCount(prev => Math.max(minUsersRequired, prev - 1))}
+                                        disabled={enteredUsersCount <= minUsersRequired}
+                                    >−</button>
                                     <input
                                         type="number"
-                                        min={activeUsers}
+                                        min={minUsersRequired}
                                         value={enteredUsersCount}
                                         onChange={(e) => {
-                                            const val = parseInt(e.target.value) || activeUsers;
-                                            setEnteredUsersCount(Math.max(activeUsers, val));
+                                            const val = parseInt(e.target.value) || minUsersRequired;
+                                            setEnteredUsersCount(Math.max(minUsersRequired, val));
                                         }}
-                                        style={{
-                                            flex: 1,
-                                            height: "36px",
-                                            borderRadius: "8px",
-                                            border: "1.5px solid rgba(255,255,255,0.1)",
-                                            background: "rgba(0,0,0,0.15)",
-                                            color: "#fff",
-                                            textAlign: "center",
-                                            fontSize: "14px",
-                                            fontWeight: "600",
-                                            outline: "none",
-                                            transition: "all 0.2s ease"
-                                        }}
-                                        onFocus={(e) => e.target.style.borderColor = "#2d6de8"}
-                                        onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
+                                        className="st-confirm-user-input"
                                     />
                                     <button
                                         type="button"
-                                        className="st-user-count-btn"
+                                        className="st-confirm-user-btn"
                                         onClick={() => setEnteredUsersCount(prev => prev + 1)}
-                                        style={{
-                                            width: "36px",
-                                            height: "36px",
-                                            borderRadius: "8px",
-                                            border: "1.5px solid rgba(255,255,255,0.1)",
-                                            background: "rgba(255,255,255,0.03)",
-                                            color: "#fff",
-                                            fontSize: "16px",
-                                            fontWeight: "600",
-                                            cursor: "pointer",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            transition: "all 0.2s ease"
-                                        }}
-                                        onMouseEnter={(e) => { e.target.style.background = "rgba(255,255,255,0.08)"; e.target.style.borderColor = "rgba(255,255,255,0.2)"; }}
-                                        onMouseLeave={(e) => { e.target.style.background = "rgba(255,255,255,0.03)"; e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
-                                    >
-                                        +
-                                    </button>
+                                    >+</button>
                                 </div>
-                                <span style={{ display: "block", fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "6px" }}>
-                                    Minimum required: {activeUsers} (currently registered active users)
-                                </span>
+                                <span className="st-confirm-users-hint">Minimum: {activeUsers} registered active users</span>
                             </div>
                         )}
 
@@ -1210,25 +1161,19 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
 
                             <div className="st-confirm-price-row">
                                 <span className="st-confirm-price-label">Subtotal</span>
-                                <span className="st-confirm-price-val">
-                                    {formatCurrency(confirmSubtotal)}
-                                </span>
+                                <span className="st-confirm-price-val">{formatCurrency(confirmSubtotal)}</span>
                             </div>
 
                             <div className="st-confirm-price-row">
-                                <span className="st-confirm-price-label">Tax 0%</span>
-                                <span className="st-confirm-price-val">
-                                    {formatCurrency(confirmTax)}
-                                </span>
+                                <span className="st-confirm-price-label">Tax 18%</span>
+                                <span className="st-confirm-price-val">{formatCurrency(confirmTax)}</span>
                             </div>
 
                             <div className="st-confirm-divider" />
 
                             <div className="st-confirm-price-row st-confirm-price-row--total">
                                 <span className="st-confirm-price-label">Total due</span>
-                                <span className="st-confirm-price-val">
-                                    {formatCurrency(confirmTotal)}
-                                </span>
+                                <span className="st-confirm-price-val">{formatCurrency(confirmTotal)}</span>
                             </div>
                         </div>
 

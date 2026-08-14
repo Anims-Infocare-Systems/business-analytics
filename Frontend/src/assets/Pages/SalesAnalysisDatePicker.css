@@ -563,3 +563,37 @@
         transform: none;
     }
 }
+
+/* Small & Tiny Date Picker overrides */
+.sadp-wrap--small {
+    max-width: 240px !important;
+}
+
+.sadp-wrap--small .sadp-trigger--small {
+    padding: 6px 10px !important;
+    font-size: 0.76rem !important;
+    border-radius: 8px !important;
+    gap: 0.38rem !important;
+    border-width: 1px !important;
+    height: 34px !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+.sadp-wrap--small .sadp-trigger__icon {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+.sadp-wrap--small .sadp-trigger__label {
+    font-size: 0.75rem !important;
+}
+
+/* Scaled down popup styling for small datepickers */
+.sadp-portal-wrap--small .sadp-popup {
+    transform: scale(0.83) !important;
+    transform-origin: top left !important;
+    min-width: 0 !important;
+    width: 680px !important;
+}

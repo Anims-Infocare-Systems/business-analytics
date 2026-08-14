@@ -378,8 +378,14 @@
     color: var(--tap-teal);
 }
 
-.tap-filter__btn {
+.tap-filter__actions-wrap {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.tap-filter__btn {
     display: flex;
     align-items: center;
     gap: .4rem;
@@ -404,6 +410,56 @@
 
 .tap-filter__btn:active {
     transform: translateY(0);
+}
+
+.tap-filter__reset-btn {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .52rem 1.15rem;
+    background: rgba(20, 184, 166, 0.05);
+    color: var(--tap-teal);
+    border: 1px solid rgba(20, 184, 166, 0.25);
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: .82rem;
+    font-family: inherit;
+    transition: all var(--tap-tr);
+    white-space: nowrap;
+}
+
+.tap-filter__reset-btn:hover {
+    background: rgba(20, 184, 166, 0.12);
+    border-color: rgba(20, 184, 166, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(20, 184, 166, 0.12);
+}
+
+.tap-filter__reset-btn:active {
+    transform: translateY(0);
+}
+
+/* Disabled states for filter */
+.tap-filter__search:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+}
+.tap-type-dd__trigger[disabled] {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+    opacity: 0.8;
+}
+.tap-filter__btn:disabled,
+.tap-filter__reset-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 /* ── Type Dropdown (Teal theme) ─────────────────────────────── */

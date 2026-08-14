@@ -21,15 +21,25 @@ from .views_efficiency_report import (
 
 def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, include_conv=True):
     """
-    OEE detail rows — one row per entry.
-    ProductionEntry : OverallOEE = OAEFF * QFNEW  (matches SQL AVG(OAEFF*QFNEW))
-    Conv tables     : OverallOEE = existing OEENEW column (unchanged logic)
-    Queries each table independently so a missing column in one table
-    does not break the other tables.
+    OEE detail rows — one row per production entry.
+    Uses OUTER APPLY (SELECT TOP 1 ...) for Employee/Department lookup
+    so that duplicate employee master rows NEVER duplicate production entry rows (guarantees 1 entry = 1 OEE row).
+    ProductionEntry : OverallOEE = OAEFF * QFNEW
+    Conv tables     : OverallOEE = OEENEW
     """
-    dept_join  = _resolve_department_join(cursor) or _legacy_department_join()
-    opr_expr   = "LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512))))"
-    joins_raw  = dept_join["joins"].replace("AR.Operator", opr_expr)
+    outer_apply_lookup = """
+        OUTER APPLY (
+            SELECT TOP 1
+                LTRIM(RTRIM(CAST(ISNULL(DM.Department, N'') AS NVARCHAR(256)))) AS Department
+            FROM empmaster E
+            LEFT JOIN DepartmentMast DM
+                ON DM.DeptCode = E.deptcode
+               AND ISNULL(CAST(DM.Deleted AS INT), 0) = 0
+            WHERE ISNULL(CAST(E.deleted AS INT), 0) = 0
+              AND LTRIM(RTRIM(CAST(E.empname AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512))))
+            ORDER BY E.deptcode
+        ) ELookup
+    """
 
     all_rows = []
 
@@ -37,8 +47,8 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
     if include_cnc:
         pe_sql = f"""
             SELECT
-                {opr_expr} AS Operator,
-                {dept_join['dept_expr']} AS Dept,
+                LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                ISNULL(ELookup.Department, N'Unassigned') AS Dept,
                 LTRIM(RTRIM(CAST(ISNULL(ED.macno, N'') AS NVARCHAR(128)))) AS MacNo,
                 CAST(ED.proddate AS DATE) AS EntryDate,
                 CAST(ED.OAEFF AS FLOAT) AS Availability,
@@ -48,7 +58,7 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
                 N'CNC' AS MacType,
                 N'ProductionEntry' AS SourceTable
             FROM ProductionEntry AS ED
-            {joins_raw}
+            {outer_apply_lookup}
             WHERE ED.deleted = 0
               AND CAST(ED.proddate AS DATE) BETWEEN ? AND ?
               AND ED.macno IS NOT NULL AND LTRIM(RTRIM(ED.macno)) <> N''
@@ -64,8 +74,8 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
     if include_conv:
         cpe_sql = f"""
             SELECT
-                {opr_expr} AS Operator,
-                {dept_join['dept_expr']} AS Dept,
+                LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                ISNULL(ELookup.Department, N'Unassigned') AS Dept,
                 LTRIM(RTRIM(CAST(ISNULL(ED.macno, N'') AS NVARCHAR(128)))) AS MacNo,
                 CAST(ED.entrydate AS DATE) AS EntryDate,
                 CAST(ED.OAEFF AS FLOAT) AS Availability,
@@ -75,7 +85,7 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
                 N'Conventional' AS MacType,
                 N'ConvProductionEntry' AS SourceTable
             FROM ConvProductionEntry AS ED
-            {joins_raw}
+            {outer_apply_lookup}
             WHERE ED.deleted = 0
               AND CAST(ED.entrydate AS DATE) BETWEEN ? AND ?
               AND ED.macno IS NOT NULL AND LTRIM(RTRIM(ED.macno)) <> N''
@@ -89,8 +99,8 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
 
         cpr_sql = f"""
             SELECT
-                {opr_expr} AS Operator,
-                {dept_join['dept_expr']} AS Dept,
+                LTRIM(RTRIM(CAST(ISNULL(ED.oprname, N'') AS NVARCHAR(512)))) AS Operator,
+                ISNULL(ELookup.Department, N'Unassigned') AS Dept,
                 LTRIM(RTRIM(CAST(ISNULL(ED.macno, N'') AS NVARCHAR(128)))) AS MacNo,
                 CAST(ED.entrydate AS DATE) AS EntryDate,
                 CAST(ED.OAEFF AS FLOAT) AS Availability,
@@ -100,7 +110,7 @@ def _fetch_combined_oee_rows(cursor, start_date, end_date, include_cnc=True, inc
                 N'Conventional' AS MacType,
                 N'ConvProductionEntryRod' AS SourceTable
             FROM ConvProductionEntryRod AS ED
-            {joins_raw}
+            {outer_apply_lookup}
             WHERE ED.deleted = 0
               AND CAST(ED.entrydate AS DATE) BETWEEN ? AND ?
               AND ED.macno IS NOT NULL AND LTRIM(RTRIM(ED.macno)) <> N''
@@ -220,7 +230,9 @@ def build_oee_compare_payload(
     from datetime import datetime, date
     from .views import current_financial_year
 
-    if load_full_fy:
+    if start_date and end_date:
+        query_start, query_end = start_date, end_date
+    elif load_full_fy:
         query_start, query_end = _efficiency_query_date_range(True, start_date, end_date)
     else:
         query_start, query_end = start_date, end_date
@@ -228,7 +240,7 @@ def build_oee_compare_payload(
     raw_rows = _fetch_combined_oee_rows(
         cursor, query_start, query_end, include_cnc, include_conv
     )
-    if not raw_rows and load_full_fy:
+    if not raw_rows and load_full_fy and not (start_date and end_date):
         fy_start, _fy_end = current_financial_year()
         prev_start = date(fy_start.year - 1, 4, 1)
         prev_end   = date(fy_start.year, 3, 31)

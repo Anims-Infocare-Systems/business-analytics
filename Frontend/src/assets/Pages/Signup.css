@@ -516,6 +516,12 @@ img {
     color: #ffffff;
 }
 
+.sg-card:not(.sg-card--hl) .sg-billing-badge {
+    background: rgba(17, 24, 39, 0.08);
+    border: 1px solid rgba(17, 24, 39, 0.15);
+    color: #111827;
+}
+
 .sg-save-badge {
     background: rgba(255, 200, 60, .9);
     color: #1a2a5e;
@@ -1854,6 +1860,15 @@ img {
 
 .sg-btn-continue-billing:active {
     transform: scale(.97);
+}
+
+.sg-btn-continue-billing:disabled {
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    pointer-events: none !important;
 }
 
 /* ── Billing Modal Users Input Fields ── */

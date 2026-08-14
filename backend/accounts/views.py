@@ -368,10 +368,19 @@ def login_view(request):
         else:
             os_name = 'Browser Client'
         system_name = os_name
+    from django.db import Error as DatabaseError
     try:
         tenant = Tenant.objects.get(company_code__iexact=company_code)
     except Tenant.DoesNotExist:  # type: ignore
         return Response({"error": "Invalid company code."}, status=400)
+    except DatabaseError as db_exc:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Master Database connection failed during login: {db_exc}")
+        return Response({
+            "error": "Cloud DB Server Unavailable. Please try again later or contact support.",
+            "code": "db_unavailable"
+        }, status=503)
 
     if not tenant.status:
         return Response({
@@ -382,12 +391,18 @@ def login_view(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT id, tenant_id, company_code, username, designation, issuperadmin FROM tenants_users WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND password = %s AND deleted = 0",
+                "SELECT id, tenant_id, company_code, username, designation, issuperadmin, password_updated_at, created_at FROM tenants_users WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND password = %s AND deleted = 0",
                 [company_code, username, encrypt_password(password)]
             )
             user_row = cursor.fetchone()
-    except Exception as e:
-        return Response({"error": f"Database error: {str(e)}"}, status=500)
+    except DatabaseError as db_exc:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Database error during user query: {db_exc}")
+        return Response({
+            "error": "Cloud DB Server Unavailable. Please try again later or contact support.",
+            "code": "db_unavailable"
+        }, status=503)
     if not user_row:
         return Response({"error": "Invalid username or password."}, status=401)
 
@@ -396,6 +411,26 @@ def login_view(request):
 
     designation = str(user_row[4] or "").strip()
     is_super_admin = (designation.lower() == "admin" or bool(user_row[5]))
+
+    # Calculate password age in days
+    ref_date = user_row[6] or user_row[7]
+    password_age_days = 0
+    import datetime
+    if ref_date:
+        if isinstance(ref_date, datetime.datetime):
+            ref_date = ref_date.date()
+        elif isinstance(ref_date, datetime.date):
+            pass
+        else:
+            try:
+                ref_date = datetime.datetime.strptime(str(ref_date).split()[0], "%Y-%m-%d").date()
+            except ValueError:
+                ref_date = None
+        
+        if ref_date:
+            password_age_days = (datetime.date.today() - ref_date).days
+
+    password_expired = (password_age_days >= 60)
 
     from .views_userrights import FORM_RIGHTS_KEYS
     rights = {key: False for key in FORM_RIGHTS_KEYS}
@@ -518,7 +553,9 @@ def login_view(request):
         "rights": rights,
         "hasAccess": has_access,
         "isExpired": is_expired,
-        "license": license_info
+        "license": license_info,
+        "passwordExpired": password_expired,
+        "passwordAgeDays": password_age_days
     })
 
 
@@ -1005,31 +1042,6 @@ def mac_rejection_ppm(request):
         "labels": labels,
         "data": [ppm_map[b] for b in buckets]
     })
-
-@api_view(['GET'])
-def otd_report(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
-    start_date, end_date = parse_date_range(request)
-    fy_label = get_fy_label(start_date, end_date)
-    buckets, labels = generate_month_buckets(start_date, end_date)
-    try:
-        cursor = conn.cursor()
-        sql = """
-        WITH AllSchedules AS (SELECT s.Apono, s.itcode AS partno, s.poslno, s.reqdate, s.shddate, COALESCE(TRY_CONVERT(DATE, s.shddate, 105), TRY_CONVERT(DATE, s.shddate, 103), TRY_CONVERT(DATE, s.shddate, 120), NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'), TRY_CONVERT(DATE, s.reqdate, 105), TRY_CONVERT(DATE, s.reqdate, 103), TRY_CONVERT(DATE, s.reqdate, 120), NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'), CAST(p.podt AS DATE)) AS targetdate, s.shdQty, YEAR(p.podt) as PoYear, MONTH(p.podt) as PoMonth FROM In_PoDet_ShdQty s INNER JOIN In_PoMas p ON s.Apono = p.Apono WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?),
-        AllDeliveries AS (SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty FROM DcInSubDetAssmPoDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0 UNION ALL SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty FROM DcInSubDet d INNER JOIN DC_Mas m ON d.dcno = m.dcno WHERE d.deleted = 0),
-        ScheduleWithDeliveries AS (SELECT sch.Apono, sch.partno, sch.poslno, sch.reqdate, sch.shddate, sch.targetdate, sch.shdQty, sch.PoYear, sch.PoMonth, del.dcdate, del.okqty FROM AllSchedules sch LEFT JOIN AllDeliveries del ON sch.Apono = del.Apono AND sch.partno = del.partno AND sch.poslno = del.poslno),
-        CumulativeDeliveries AS (SELECT Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth, dcdate, okqty, SUM(okqty) OVER (PARTITION BY Apono, partno, poslno, targetdate ORDER BY dcdate) as CumQty FROM ScheduleWithDeliveries WHERE dcdate IS NOT NULL),
-        Completion AS (SELECT Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth, MIN(dcdate) as CompletionDate FROM CumulativeDeliveries WHERE CumQty >= shdQty GROUP BY Apono, partno, poslno, reqdate, shddate, targetdate, shdQty, PoYear, PoMonth),
-        OTDCalc AS (SELECT comp.PoYear, comp.PoMonth, CASE WHEN comp.CompletionDate <= comp.targetdate THEN 100.0 ELSE ISNULL(r.RatingFor, 0.0) END as OTDScore FROM Completion comp LEFT JOIN CustPoOTDRating r ON DATEDIFF(DAY, comp.targetdate, comp.CompletionDate) BETWEEN r.RatingFrom AND r.RatingTo)
-        SELECT PoYear, PoMonth, AVG(OTDScore) as AvgOTD, COUNT(*) as CompletedSchedules FROM OTDCalc GROUP BY PoYear, PoMonth ORDER BY PoYear, PoMonth"""
-        cursor.execute(sql, [start_date, end_date]); rows = cursor.fetchall(); cursor.close(); conn.close()
-    except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
-    otd_map = {b: 0.0 for b in buckets}
-    for yr, month_num, avg_otd, completed in rows:
-        k = (int(yr or 0), int(month_num or 0))
-        if k in otd_map: otd_map[k] = round(float(avg_otd or 0), 2)
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [otd_map[b] for b in buckets]})
 
 # ─────────────────────────────────────────────────────────────
 #  PURCHASE - MONTHWISE TYPE REPORT & SUPPLIER RATING
@@ -2500,6 +2512,69 @@ def dashboard2_otd(request):
     sh_itcode = find_first_column(cursor, tbl_shd, ["itcode", "ItCode", "ITCODE", "PartNo", "partno", "Part_No"])
     sh_req = find_first_column(cursor, tbl_shd, ["reqdate", "ReqDate", "REQDATE", "Req_Dt", "req_dt"])
     sh_deleted = find_first_column(cursor, tbl_shd, ["deleted", "Deleted", "is_deleted"])
+    dcno_m = find_first_column(cursor, tbl_dc_mas, ["dcno", "DcNo", "DCNO", "DC_No"])
+    dc_dt = find_first_column(cursor, tbl_dc_mas, ["dcdate", "DcDate", "DCDT", "DC_DT", "dcdt", "date", "Date"])
+    dc_m_deleted = find_first_column(cursor, tbl_dc_mas, ["deleted", "Deleted", "is_deleted"])
+    dc_m_company = find_first_column(cursor, tbl_dc_mas, ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"])
+    def dc_cols(tbl): return {"apono": find_first_column(cursor, tbl, ["apono", "APono", "APNO", "PONo", "pono"]), "partno": find_first_column(cursor, tbl, ["partno", "PartNo", "PARTNO", "itcode", "ItCode"]), "dcno": find_first_column(cursor, tbl, ["dcno", "DcNo", "DCNO"]), "ok": find_first_column(cursor, tbl, ["okqty", "OkQty", "OKQty"]), "matrej": find_first_column(cursor, tbl, ["matrej", "MatRej", "MATREJ"]), "macrej": find_first_column(cursor, tbl, ["macrej", "MacRej", "MACREJ"]), "uncomp": find_first_column(cursor, tbl, ["uncompqty", "UncompQty", "UNCOMPQTY", "uncomp_qty"]), "deleted": find_first_column(cursor, tbl, ["deleted", "Deleted", "is_deleted"])}
+    c1 = dc_cols(tbl_dc_det); c2 = dc_cols(tbl_dc_assm)
+    required = [(f"{tbl_po_mas}.apono", po_apono), (f"{tbl_shd}.apono", sh_apono), (f"{tbl_shd}.itcode", sh_itcode), (f"{tbl_shd}.reqdate", sh_req), (f"{tbl_dc_mas}.dcno", dcno_m), (f"{tbl_dc_mas}.dcdate", dc_dt), (f"{tbl_dc_det}.apono", c1["apono"]), (f"{tbl_dc_det}.partno", c1["partno"]), (f"{tbl_dc_det}.dcno", c1["dcno"]), (f"{tbl_dc_assm}.apono", c2["apono"]), (f"{tbl_dc_assm}.partno", c2["partno"]), (f"{tbl_dc_assm}.dcno", c2["dcno"])]
+    for label, col in required:
+        if not col: cursor.close(); conn.close(); return Response({"error": f"OTD: could not resolve column for {label}"}, status=422)
+    qty_expr_det = " + ".join([f"COALESCE(CAST(d.[{c}] AS FLOAT), 0)" for c in [c1["ok"], c1["matrej"], c1["macrej"], c1["uncomp"]] if c]) or "0"
+    qty_expr_assm = " + ".join([f"COALESCE(CAST(a.[{c}] AS FLOAT), 0)" for c in [c2["ok"], c2["matrej"], c2["macrej"], c2["uncomp"]] if c]) or "0"
+    def filt_po(alias):
+        parts = [f"[{alias}].[{po_deleted}] = 0"] if po_deleted else []
+        if po_company and company_code: parts.append(f"[{alias}].[{po_company}] = ?")
+        return " AND " + " AND ".join(parts) if parts else ""
+    def filt_dc_mas(alias):
+        parts = [f"CAST([{alias}].[{dc_dt}] AS DATE) BETWEEN ? AND ?"]
+        if dc_m_deleted: parts.append(f"[{alias}].[{dc_m_deleted}] = 0")
+        if dc_m_company and company_code: parts.append(f"[{alias}].[{dc_m_company}] = ?")
+        return " AND ".join(parts)
+    sh_where = f"[{sh_deleted}] = 0" if sh_deleted else "1=1"
+    d_del = f"d.[{c1['deleted']}] = 0" if c1["deleted"] else "1=1"
+    a_del = f"a.[{c2['deleted']}] = 0" if c2["deleted"] else "1=1"
+    join_po = f"INNER JOIN [{tbl_po_mas}] p ON p.[{po_apono}] = d.[{c1['apono']}]{filt_po('p')}"
+    union_sql = f"""SELECT d.[{c1['dcno']}] AS dcno, LTRIM(RTRIM(CAST(d.[{c1['apono']}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST(d.[{c1['partno']}] AS NVARCHAR(128)))) AS partno, CAST(m.[{dc_dt}] AS DATE) AS dc_date, ({qty_expr_det}) AS del_qty FROM [{tbl_dc_det}] d INNER JOIN [{tbl_dc_mas}] m ON m.[{dcno_m}] = d.[{c1['dcno']}] {join_po} WHERE {d_del} AND {filt_dc_mas('m')} UNION ALL SELECT a.[{c2['dcno']}] AS dcno, LTRIM(RTRIM(CAST(a.[{c2['apono']}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST(a.[{c2['partno']}] AS NVARCHAR(128)))) AS partno, CAST(m2.[{dc_dt}] AS DATE) AS dc_date, ({qty_expr_assm}) AS del_qty FROM [{tbl_dc_assm}] a INNER JOIN [{tbl_dc_mas}] m2 ON m2.[{dcno_m}] = a.[{c2['dcno']}] INNER JOIN [{tbl_po_mas}] p2 ON p2.[{po_apono}] = a.[{c2['apono']}]{filt_po('p2')} WHERE {a_del} AND {filt_dc_mas('m2')}"""
+    rf = rt = rfor = None
+    if tbl_rating:
+        rf = find_first_column(cursor, tbl_rating, ["RatingFrom", "ratingfrom", "RATINGFROM"])
+        rt = find_first_column(cursor, tbl_rating, ["RatingTo", "ratingto", "RATINGTO"])
+        rfor = find_first_column(cursor, tbl_rating, ["RatingFor", "ratingfor", "RATINGFOR"])
+    rating_join = ""; rating_expr = "CAST(0 AS FLOAT)"
+    if tbl_rating and rf and rt and rfor:
+        rating_join = f"LEFT JOIN [{tbl_rating}] r ON j.days_late >= r.[{rf}] AND j.days_late <= r.[{rt}]"; rating_expr = f"COALESCE(CAST(r.[{rfor}] AS FLOAT), 0)"
+    def append_po_params():
+        pl = []
+        if po_company and company_code: pl.append(company_code)
+        return pl
+    def append_dc_params():
+        pl = [start_date, end_date]
+        if dc_m_company and company_code: pl.append(company_code)
+        return pl
+    union_params = append_po_params() + append_dc_params() + append_po_params() + append_dc_params()
+    main_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate, CASE WHEN del.dc_date <= sch.reqdate THEN 0 ELSE DATEDIFF(DAY, sch.reqdate, del.dc_date) END AS days_late FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty, COALESCE(SUM(CASE WHEN j.dc_date > j.reqdate THEN 1 ELSE 0 END), 0) AS delayed_lines, COALESCE(SUM(CAST(j.del_qty AS FLOAT) * ({rating_expr})), 0) AS rating_num FROM joined j {rating_join}"""
+    trend_sql = f"""WITH sch AS (SELECT LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))) AS apono, LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128)))) AS itcode, MIN(CAST([{sh_req}] AS DATE)) AS reqdate FROM [{tbl_shd}] WHERE {sh_where} GROUP BY LTRIM(RTRIM(CAST([{sh_apono}] AS NVARCHAR(64)))), LTRIM(RTRIM(CAST([{sh_itcode}] AS NVARCHAR(128))))), del AS ({union_sql}), joined AS (SELECT del.dc_date, del.del_qty, sch.reqdate FROM del INNER JOIN sch ON sch.apono = del.apono AND sch.itcode = del.partno) SELECT YEAR(j.dc_date) AS y, MONTH(j.dc_date) AS m, COALESCE(SUM(CASE WHEN j.dc_date <= j.reqdate THEN j.del_qty ELSE 0 END), 0) AS on_time_qty, COALESCE(SUM(j.del_qty), 0) AS total_qty FROM joined j GROUP BY YEAR(j.dc_date), MONTH(j.dc_date) ORDER BY YEAR(j.dc_date), MONTH(j.dc_date)"""
+    try:
+        cursor.execute(main_sql, union_params); row = cursor.fetchone()
+        if not row:
+            row = (0, 0, 0, 0)
+        on_time_qty = float(row[0] or 0); total_qty = float(row[1] or 0); delayed_lines = int(row[2] or 0); rating_num = float(row[3] or 0)
+        cursor.execute(trend_sql, union_params); trend_rows = cursor.fetchall()
+    except Exception as e: cursor.close(); conn.close(); return Response({"error": f"Database error: {str(e)}"}, status=500)
+    cursor.close(); conn.close()
+    otd_pct = round((on_time_qty / total_qty) * 100, 2) if total_qty > 0 else None
+    rating_weighted_pct = round((rating_num / total_qty), 2) if total_qty > 0 else None
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    trend = []
+    for tr in trend_rows or []:
+        y, m, otq, tq = int(tr[0]), int(tr[1]), float(tr[2] or 0), float(tr[3] or 0)
+        pct = round((otq / tq) * 100, 2) if tq > 0 else None
+        trend.append({"year": y, "month": m, "label": f"{month_names[m - 1]} {y}", "on_time_delivery_pct": pct, "total_qty": round(tq, 2)})
+    schedule_adherence_pct = rating_weighted_pct if rating_weighted_pct is not None else otd_pct
+    return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"on_time_delivery_pct": otd_pct, "rating_weighted_pct": rating_weighted_pct, "schedule_adherence_pct": schedule_adherence_pct, "delayed_lines": delayed_lines, "on_time_qty": round(on_time_qty, 2), "total_del_qty": round(total_qty, 2)}, "trend": trend})
+
 @api_view(['GET'])
 def otd_report(request):
     try:

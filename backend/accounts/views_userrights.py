@@ -482,8 +482,8 @@ def user_rights_add_user(request):
                 # Insert new user
                 cursor.execute(
                     """
-                    INSERT INTO tenants_users (tenant_id, company_code, username, designation, password, created_at, issuperadmin, deleted)
-                    VALUES (%s, %s, %s, %s, %s, GETDATE(), 0, 0)
+                    INSERT INTO tenants_users (tenant_id, company_code, username, designation, password, created_at, issuperadmin, deleted, password_updated_at)
+                    VALUES (%s, %s, %s, %s, %s, GETDATE(), 0, 0, GETDATE())
                     """,
                     [tenant_id, company, user_name, designation, encrypted_pw]
                 )

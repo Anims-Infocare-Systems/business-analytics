@@ -415,7 +415,7 @@ def tapproval_list(request):
         doc_kind = (rec.get("doc_kind") or "invoice").strip().lower()
         appr_info = approvals_map.get(str(rec["doc_no"]))
         approved_by = appr_info.approvedby if appr_info else None
-        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if (appr_info and appr_info.datetime) else None
+        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if (appr_info and appr_info.datetime) else None
 
         cards.append({
             "id": f"{doc_kind}:{rec['doc_no']}",
@@ -874,7 +874,7 @@ def tapproval_detail(request):
         if appr_info:
             approved_by = appr_info.approvedby
             from django.utils import timezone
-            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if appr_info.datetime else None
+            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if appr_info.datetime else None
     except Exception:
         pass
 
@@ -987,11 +987,8 @@ def tapproval_approve(request):
             conn.commit()
             approved_in_erp = True
             message = f"{doc_label} {doc_no} approved successfully in ERP."
-            
-            # Save to tenants_approvals table in background thread for ultra fast response
-            threading.Thread(
-                target=_log_approval_bg,
-                args=(
+            try:
+                _log_approval_bg(
                     tenant.get("tenant_id"),
                     tenant.get("company_code"),
                     "Tapproval",
@@ -1000,7 +997,8 @@ def tapproval_approve(request):
                     doc_type,
                     tenant.get("username") or "Admin"
                 )
-            ).start()
+            except Exception as log_err:
+                print("TApproval log write error:", log_err)
         except Exception:
             try:
                 conn.rollback()
@@ -1008,6 +1006,9 @@ def tapproval_approve(request):
                 pass
             approved_in_erp = False
             message = f"{doc_label} {doc_no} acknowledged (UI only) — could not commit IsApproved."
+        approved_by = tenant.get("username") or "Admin"
+        from django.utils import timezone
+        approved_dt = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %I:%M %p")
         cursor.close()
         conn.close()
     except Exception as e:
@@ -1021,6 +1022,8 @@ def tapproval_approve(request):
         "doc_kind": doc_kind,
         "approved_in_erp": approved_in_erp,
         "message": message,
+        "approvedBy": approved_by,
+        "approvedDateTime": approved_dt
     })
 
 
@@ -1075,16 +1078,12 @@ def tapproval_modify(request):
             modified_in_erp = True
             message = f"{doc_label} {doc_no} moved back to Pending in ERP."
             
-            # Delete from tenants_approvals table in background thread for ultra fast response
-            threading.Thread(
-                target=_log_reversion_bg,
-                args=(
-                    tenant.get("tenant_id"),
-                    tenant.get("company_code"),
-                    "Tapproval",
-                    doc_no
-                )
-            ).start()
+            _log_reversion_bg(
+                tenant.get("tenant_id"),
+                tenant.get("company_code"),
+                "Tapproval",
+                doc_no
+            )
         except Exception:
             try:
                 conn.rollback()

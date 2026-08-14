@@ -128,15 +128,19 @@ def dashboard2_kpis(request):
             production_output += float((row[0] if row else 0) or 0)
         rejection_qty, rework_grand_total = inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_date)
         total_oaeff_sum = 0.0; total_oaeff_rows = 0
+        mac_col_candidates = ["macno", "MacNo", "MACNO", "machine_no", "MachineNo"]
         for table_name, date_prefs in oaeff_table_specs:
             if not table_exists(cursor, table_name): continue
             oaeff_col = find_first_column(cursor, table_name, oaeff_col_candidates)
             if not oaeff_col: continue
             date_col = find_first_column(cursor, table_name, date_prefs)
             if not date_col: continue
+            mac_col = find_first_column(cursor, table_name, mac_col_candidates)
             company_col = find_first_column(cursor, table_name, company_candidates)
             deleted_col = find_first_column(cursor, table_name, deleted_candidates)
-            sql = f"SELECT COALESCE(SUM(COALESCE(CAST([{oaeff_col}] AS FLOAT), 0)), 0), COUNT(*) FROM [{table_name}] WHERE CAST([{date_col}] AS date) BETWEEN ? AND ?"
+            sql = f"SELECT COALESCE(SUM(CAST([{oaeff_col}] AS FLOAT)), 0), COUNT(*) FROM [{table_name}] WHERE CAST([{date_col}] AS date) BETWEEN ? AND ? AND [{oaeff_col}] IS NOT NULL"
+            if mac_col:
+                sql += f" AND [{mac_col}] IS NOT NULL AND LTRIM(RTRIM(CAST([{mac_col}] AS NVARCHAR(128)))) <> ''"
             params = [start_date, end_date]
             if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
             if deleted_col: sql += f" AND [{deleted_col}] = 0"

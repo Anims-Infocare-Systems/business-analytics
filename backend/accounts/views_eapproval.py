@@ -306,7 +306,7 @@ def eapproval_list(request):
         lookup_key = str(rec.get("amd_no")) if (rec.get("doc_kind") == "po_amnd" and rec.get("amd_no")) else str(rec["po_no"])
         appr_info = approvals_map.get(lookup_key)
         approved_by = appr_info.approvedby if appr_info else None
-        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if (appr_info and appr_info.datetime) else None
+        approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if (appr_info and appr_info.datetime) else None
 
         card_id = f"po_amnd:{rec['po_no']}:{rec.get('amd_no', '')}" if rec.get("doc_kind") == "po_amnd" else str(rec["po_no"])
         cards.append({
@@ -739,7 +739,7 @@ def eapproval_detail(request):
         if appr_info:
             approved_by = appr_info.approvedby
             from django.utils import timezone
-            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y") if appr_info.datetime else None
+            approved_dt = timezone.localtime(appr_info.datetime).strftime("%d/%m/%Y %I:%M %p") if appr_info.datetime else None
     except Exception:
         pass
 
@@ -877,10 +877,8 @@ def eapproval_approve(request):
             conn.commit()
             approved_in_erp = True
             message = f"PO {pono} approved successfully in ERP."
-            
-            threading.Thread(
-                target=_log_approval_bg,
-                args=(
+            try:
+                _log_approval_bg(
                     tenant.get("tenant_id"),
                     tenant.get("company_code"),
                     "Eapproval",
@@ -889,7 +887,8 @@ def eapproval_approve(request):
                     po_type,
                     tenant.get("username") or "Admin"
                 )
-            ).start()
+            except Exception as log_err:
+                print("EApproval log write error:", log_err)
         except Exception:
             try:
                 conn.rollback()
@@ -897,12 +896,22 @@ def eapproval_approve(request):
                 pass
             approved_in_erp = False
             message = f"PO {pono} acknowledged (UI only) — could not commit IsApprovePo."
+        approved_by = tenant.get("username") or "Admin"
+        from django.utils import timezone
+        approved_dt = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %I:%M %p")
         cursor.close()
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    return Response({"success": True, "pono": pono, "approved_in_erp": approved_in_erp, "message": message})
+    return Response({
+        "success": True,
+        "pono": pono,
+        "approved_in_erp": approved_in_erp,
+        "message": message,
+        "approvedBy": approved_by,
+        "approvedDateTime": approved_dt
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -969,15 +978,12 @@ def eapproval_modify(request):
             modified_in_erp = True
             message = f"PO {pono} moved back to Pending in ERP."
             
-            threading.Thread(
-                target=_log_reversion_bg,
-                args=(
-                    tenant.get("tenant_id"),
-                    tenant.get("company_code"),
-                    "Eapproval",
-                    transaction_no
-                )
-            ).start()
+            _log_reversion_bg(
+                tenant.get("tenant_id"),
+                tenant.get("company_code"),
+                "Eapproval",
+                transaction_no
+            )
         except Exception:
             try:
                 conn.rollback()

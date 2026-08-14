@@ -286,8 +286,14 @@
     color: #6366f1;
 }
 
-.eap-filter__btn {
+.eap-filter__actions-wrap {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.eap-filter__btn {
     display: flex;
     align-items: center;
     gap: .4rem;
@@ -312,6 +318,56 @@
 
 .eap-filter__btn:active {
     transform: translateY(0);
+}
+
+.eap-filter__reset-btn {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .52rem 1.15rem;
+    background: rgba(99, 102, 241, 0.05);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: .82rem;
+    font-family: inherit;
+    transition: all var(--eap-tr);
+    white-space: nowrap;
+}
+
+.eap-filter__reset-btn:hover {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+}
+
+.eap-filter__reset-btn:active {
+    transform: translateY(0);
+}
+
+/* Disabled states for filter */
+.eap-filter__search:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+}
+.eap-type-dd__trigger[disabled] {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+    opacity: 0.8;
+}
+.eap-filter__btn:disabled,
+.eap-filter__reset-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 /* ── Type filter bar ───────────────────────────────────────── */

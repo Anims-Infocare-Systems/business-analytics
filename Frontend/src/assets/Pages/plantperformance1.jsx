@@ -632,7 +632,7 @@ function pp1FormatChartValue(v, ctx, valueMode = "auto") {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   if (valueMode === "hours" || yAxis.includes("idle") || yAxis.includes("hour") || /\bhour/i.test(label)) {
-    return `${n.toFixed(1)}h`;
+    return fmtHours(n);
   }
   if (
     valueMode === "percent"
@@ -871,8 +871,9 @@ function buildOtdUrl(from, to, filters) {
 
 function buildEffUrl(from, to, filters) {
   const fy = currentFinancialYearRange();
-  let url = buildUrl("/api/plant-performance/efficiency/", from || fy.from, to || fy.to);
-  url += "&full_fy=1";
+  const reqFrom = filters?.fromDate || from || fy.from;
+  const reqTo = filters?.toDate || to || fy.to;
+  let url = buildUrl("/api/plant-performance/efficiency/", reqFrom, reqTo);
   const cnc = filters?.machineType !== "Conventional";
   const conv = filters?.machineType !== "CNC";
   url += `&cnc=${cnc ? "1" : "0"}&conv=${conv ? "1" : "0"}`;
@@ -881,8 +882,12 @@ function buildEffUrl(from, to, filters) {
 
 function buildOeeUrl(from, to, filters) {
   const fy = currentFinancialYearRange();
-  let url = buildUrl("/api/plant-performance/oee/", from || fy.from, to || fy.to);
-  url += "&full_fy=1";
+  const reqFrom = filters?.fromDate || from || fy.from;
+  const reqTo = filters?.toDate || to || fy.to;
+  let url = buildUrl("/api/plant-performance/oee/", reqFrom, reqTo);
+  if (!filters?.fromDate && !filters?.toDate) {
+    url += "&full_fy=1";
+  }
   const cnc = filters?.machineType !== "Conventional";
   const conv = filters?.machineType !== "CNC";
   url += `&cnc=${cnc ? "1" : "0"}&conv=${conv ? "1" : "0"}`;
@@ -9962,7 +9967,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         return `${monthNames[mo] || mo} ${shortYear}`;
       });
 
-      const idleHours = sortedKeys.map(k => Number(groups[k].idleHours.toFixed(1)));
+      const idleHours = sortedKeys.map(k => groups[k].idleHours);
       const loss = sortedKeys.map(k => Number(groups[k].loss.toFixed(3)));
 
       return { labels, idleHours, loss };
@@ -9988,7 +9993,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       }
 
       const labels = sortedKeys;
-      const idleHours = sortedKeys.map(k => Number(groups[k].idleHours.toFixed(1)));
+      const idleHours = sortedKeys.map(k => groups[k].idleHours);
       const loss = sortedKeys.map(k => Number(groups[k].loss.toFixed(3)));
 
       return { labels, idleHours, loss };
@@ -12007,18 +12012,24 @@ function buildOeeMachineSummaries(filteredRows, monthLabels) {
         monthlyCounts: {},
         dailySums: {},
         dailyCounts: {},
+        totalOeeSum: 0,
+        totalOeeCount: 0,
       };
     }
     const g = byKey[key];
-    const oee = r.overallOee != null ? Number(r.overallOee) : null;
-    if (r.month && oee != null) {
-      g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + oee;
-      g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
-    }
-    const d = (r.date || "").slice(0, 10);
-    if (d && oee != null) {
-      g.dailySums[d] = (g.dailySums[d] || 0) + oee;
-      g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
+    const oee = r.overallOee != null && !isNaN(Number(r.overallOee)) ? Number(r.overallOee) : null;
+    if (oee != null) {
+      g.totalOeeSum += oee;
+      g.totalOeeCount += 1;
+      if (r.month) {
+        g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + oee;
+        g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
+      }
+      const d = (r.date || "").slice(0, 10);
+      if (d) {
+        g.dailySums[d] = (g.dailySums[d] || 0) + oee;
+        g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
+      }
     }
   });
 
@@ -12033,13 +12044,7 @@ function buildOeeMachineSummaries(filteredRows, monthLabels) {
       const c = g.dailyCounts[d] || 0;
       return c ? Number((g.dailySums[d] / c).toFixed(2)) : 0;
     });
-    const activeDaily = daily.filter((v) => v > 0);
-    const activeMonthly = monthly.filter((v) => v > 0);
-    const avgVal = activeDaily.length
-      ? Number((activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length).toFixed(2))
-      : activeMonthly.length
-        ? Number((activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length).toFixed(2))
-        : 0;
+    const avgVal = g.totalOeeCount ? Number((g.totalOeeSum / g.totalOeeCount).toFixed(2)) : 0;
     return {
       name: g.name,
       team: g.team,
@@ -12061,8 +12066,8 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
     borderRadius: 5,
   };
 
-  let summaries = machineSummaries;
-  if (!summaries.length) {
+  const rows = Array.isArray(rawRows) ? rawRows : [];
+  if (!rows.length) {
     return { labels: [], datasets: [] };
   }
 
@@ -12071,55 +12076,49 @@ function buildOeeChartData(machineSummaries, xAxisGroup, monthLabels, rawRows) {
 
   if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
     labels = monthLabels;
-    avgData = monthLabels.map((_, idx) => {
-      let sum = 0;
-      let count = 0;
-      summaries.forEach((m) => {
-        const v = m.monthly[idx];
-        if (v > 0) {
-          sum += v;
-          count += 1;
-        }
-      });
-      return count ? Number((Math.min(100, Math.max(0, sum / count))).toFixed(2)) : 0;
+    avgData = monthLabels.map((mo) => {
+      const rowsInMo = rows.filter(r => r.month === mo && r.overallOee != null && !isNaN(Number(r.overallOee)));
+      if (!rowsInMo.length) return 0;
+      const sum = rowsInMo.reduce((acc, r) => acc + Number(r.overallOee), 0);
+      return Number((Math.min(100, Math.max(0, sum / rowsInMo.length))).toFixed(2));
     });
   } else if (xAxisGroup === "Day Wise") {
-    const dayDates = summaries[0]?.dayDates || [];
+    const dayDates = machineSummaries[0]?.dayDates || [...new Set(rows.map(r => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
     labels = dayDates.length
       ? dayDates.map((d) => {
         const p = d.split("-");
         return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
       })
       : [];
-    avgData = dayDates.map((_, idx) => {
-      let sum = 0;
-      let count = 0;
-      summaries.forEach((m) => {
-        const v = m.daily[idx];
-        if (v > 0) {
-          sum += v;
-          count += 1;
-        }
-      });
-      return count ? Number((Math.min(100, Math.max(0, sum / count))).toFixed(2)) : 0;
+    avgData = dayDates.map((d) => {
+      const rowsOnDate = rows.filter(r => (r.date || "").slice(0, 10) === d && r.overallOee != null && !isNaN(Number(r.overallOee)));
+      if (!rowsOnDate.length) return 0;
+      const sum = rowsOnDate.reduce((acc, r) => acc + Number(r.overallOee), 0);
+      return Number((Math.min(100, Math.max(0, sum / rowsOnDate.length))).toFixed(2));
     });
   } else if (xAxisGroup === "Mac Wise") {
-    labels = summaries.map((m) => m.name).sort();
-    avgData = labels.map((name) => {
-      const row = summaries.find((m) => m.name === name);
-      return row ? Math.min(100, Math.max(0, row.avgVal)) : 0;
+    const sortedSummaries = [...machineSummaries].sort((a, b) => a.name.localeCompare(b.name));
+    labels = sortedSummaries.map((m) => m.name);
+    avgData = sortedSummaries.map((m) => {
+      const rowsForMac = rows.filter(r => r.machine === m.name && r.overallOee != null && !isNaN(Number(r.overallOee)));
+      if (!rowsForMac.length) return Math.min(100, Math.max(0, m.avgVal));
+      const sum = rowsForMac.reduce((acc, r) => acc + Number(r.overallOee), 0);
+      return Number((Math.min(100, Math.max(0, sum / rowsForMac.length))).toFixed(2));
     });
   } else if (xAxisGroup === "Team Wise") {
     const teamMap = {};
-    summaries.forEach((m) => {
-      const team = m.team || "—";
-      if (!teamMap[team]) teamMap[team] = [];
-      teamMap[team].push(m.avgVal);
+    rows.forEach((r) => {
+      if (r.overallOee == null || isNaN(Number(r.overallOee))) return;
+      const team = r.team || "—";
+      if (!teamMap[team]) teamMap[team] = { sum: 0, count: 0 };
+      teamMap[team].sum += Number(r.overallOee);
+      teamMap[team].count += 1;
     });
     labels = Object.keys(teamMap).sort();
     avgData = labels.map((t) => {
-      const vals = teamMap[t];
-      return Number((Math.min(100, Math.max(0, vals.reduce((a, b) => a + b, 0) / vals.length))).toFixed(2));
+      const item = teamMap[t];
+      if (!item || !item.count) return 0;
+      return Number((Math.min(100, Math.max(0, item.sum / item.count))).toFixed(2));
     });
   }
 
@@ -12197,7 +12196,9 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
     const ctrl = new AbortController();
     setOeeLoading(true);
     const fy = currentFinancialYearRange();
-    fetch(buildOeeUrl(fy.from, fy.to, filters), {
+    const activeFrom = filters.fromDate || fy.from;
+    const activeTo = filters.toDate || fy.to;
+    fetch(buildOeeUrl(activeFrom, activeTo, filters), {
       credentials: "include",
       signal: ctrl.signal,
     })
@@ -12216,7 +12217,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       })
       .finally(() => setOeeLoading(false));
     return () => ctrl.abort();
-  }, [filters.machineType, uid, onOeeData, data?.oeeCompare]);
+  }, [filters.fromDate, filters.toDate, filters.machineType, filters.machine, uid, onOeeData, data?.oeeCompare]);
 
   const oeeRows = React.useMemo(
     () => (Array.isArray(oeeSource?.rows) ? oeeSource.rows : []),
@@ -12271,72 +12272,33 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
           { label: "Avg OEE", value: `${Number(apiKpis.avgOee || 0).toFixed(2)}%`, color: "#0ea5e9", icon: TrendingUp },
           { label: "Availability", value: `${Number(apiKpis.avgAvailability || 0).toFixed(2)}%`, color: "#3b82f6", icon: Activity },
           { label: "Performance", value: `${Number(apiKpis.avgPerformance || 0).toFixed(2)}%`, color: "#10b981", icon: Zap },
-          { label: "Quality", value: `${Number(apiKpis.avgQuality || 0).toFixed(2)}%`, color: "#f59e0b", icon: Target },
+          { label: "Target Status", value: `0% Met`, color: "#f59e0b", icon: Target },
         ];
       }
       return [
         { label: "Avg OEE", value: loading || oeeLoading ? "…" : "0%", color: "#0ea5e9", icon: TrendingUp },
         { label: "Availability", value: "0%", color: "#3b82f6", icon: Activity },
         { label: "Performance", value: "0%", color: "#10b981", icon: Zap },
-        { label: "Quality", value: "0%", color: "#f59e0b", icon: Target },
+        { label: "Target Status", value: "0% Met", color: "#f59e0b", icon: Target },
       ];
     }
 
-    const n = filteredRows.length;
-    const validOee = filteredRows.filter(r => r.overallOee != null);
-    const validAvail = filteredRows.filter(r => r.availability != null);
-    const validPerf = filteredRows.filter(r => r.performance != null);
-    const validQual = filteredRows.filter(r => r.quality != null);
+    const validOee = filteredRows.filter(r => r.overallOee != null && !isNaN(Number(r.overallOee)));
+    const validAvail = filteredRows.filter(r => r.availability != null && !isNaN(Number(r.availability)));
+    const validPerf = filteredRows.filter(r => r.performance != null && !isNaN(Number(r.performance)));
 
-    const avgOee = machineSummaries.length
-      ? (machineSummaries.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / machineSummaries.length).toFixed(2)
+    const avgOee = validOee.length
+      ? (validOee.reduce((acc, r) => acc + Number(r.overallOee), 0) / validOee.length).toFixed(2)
       : "0.00";
-      
-    const calcAvgOfAvgs = (rows, field) => {
-      const byMac = {};
-      rows.forEach(r => {
-        if (r[field] == null) return;
-        const key = r.machine;
-        const val = Number(r[field]);
-        if (isNaN(val)) return;
-        
-        if (!byMac[key]) byMac[key] = { dailySums: {}, dailyCounts: {}, monthlySums: {}, monthlyCounts: {} };
-        const g = byMac[key];
-        
-        if (r.month) {
-          g.monthlySums[r.month] = (g.monthlySums[r.month] || 0) + val;
-          g.monthlyCounts[r.month] = (g.monthlyCounts[r.month] || 0) + 1;
-        }
-        const d = (r.date || "").slice(0, 10);
-        if (d) {
-          g.dailySums[d] = (g.dailySums[d] || 0) + val;
-          g.dailyCounts[d] = (g.dailyCounts[d] || 0) + 1;
-        }
-      });
-      
-      const macs = Object.values(byMac);
-      if (!macs.length) return "0.00";
-      
-      const macAvgVals = macs.map(g => {
-        const daily = Object.keys(g.dailySums).map(d => Number((g.dailySums[d] / g.dailyCounts[d]).toFixed(2)));
-        const monthly = Object.keys(g.monthlySums).map(mo => Number((g.monthlySums[mo] / g.monthlyCounts[mo]).toFixed(2)));
-        
-        const activeDaily = daily.filter(v => v > 0);
-        const activeMonthly = monthly.filter(v => v > 0);
-        
-        return activeDaily.length 
-          ? Number((activeDaily.reduce((a, b) => a + b, 0) / activeDaily.length).toFixed(2))
-          : activeMonthly.length
-            ? Number((activeMonthly.reduce((a, b) => a + b, 0) / activeMonthly.length).toFixed(2))
-            : 0;
-      });
-      
-      return (macAvgVals.reduce((a, b) => a + b, 0) / macAvgVals.length).toFixed(2);
-    };
 
-    const avgAvail = calcAvgOfAvgs(validAvail, 'availability');
-    const avgPerf = calcAvgOfAvgs(validPerf, 'performance');
-    const avgQual = calcAvgOfAvgs(validQual, 'quality');
+    const avgAvail = validAvail.length
+      ? (validAvail.reduce((acc, r) => acc + Number(r.availability), 0) / validAvail.length).toFixed(2)
+      : "0.00";
+
+    const avgPerf = validPerf.length
+      ? (validPerf.reduce((acc, r) => acc + Number(r.performance), 0) / validPerf.length).toFixed(2)
+      : "0.00";
+
     const metPct = Number(avgOee) >= targetVal ? 100 : 0;
 
     return [
@@ -12345,7 +12307,7 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       { label: "Performance", value: `${avgPerf}%`, color: "#10b981", icon: Zap },
       { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target },
     ];
-  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig, machineSummaries]);
+  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig]);
 
   const setupChart1 = React.useCallback((canvas) => {
     let minUtilization = 75;
@@ -12802,77 +12764,72 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
   }, [xAxisGroup, monthLabels]);
 
   const activeRows = React.useMemo(() => {
-    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      if (processedData.length === 0) return [];
-      const numMonths = processedData[0].monthlyVals.length;
-      const overallAvg = [];
-      for (let idx = 0; idx < numMonths; idx++) {
-        let sum = 0;
-        let count = 0;
-        processedData.forEach(m => {
-          if (m.monthlyVals[idx] > 0) {
-            sum += m.monthlyVals[idx];
-            count += 1;
-          }
-        });
-        overallAvg.push(count ? `${(sum / count).toFixed(2)}%` : "—");
-      }
-      return [["Overall Average", ...overallAvg]];
-    } else if (xAxisGroup === "Day Wise") {
-      if (processedData.length === 0) return [];
+    if (!filteredRows.length) return [];
 
-      const numDays = processedData[0].dayWiseVals.length;
-      const list = [];
-      for (let idx = 0; idx < numDays; idx++) {
-        let sum = 0;
-        let count = 0;
-        processedData.forEach(m => {
-          if (m.dayWiseVals[idx] > 0) {
-            sum += m.dayWiseVals[idx];
-            count += 1;
-          }
-        });
-        const rawDate = processedData[0].dayDates?.[idx];
-        const dayLabel = rawDate
-          ? rawDate.split("-").reverse().join("-")
-          : `Day ${idx + 1}`;
-        list.push([
+    const validAll = filteredRows.filter(r => r.overallOee != null && !isNaN(Number(r.overallOee)));
+    const overallOeeVal = validAll.length
+      ? (validAll.reduce((acc, r) => acc + Number(r.overallOee), 0) / validAll.length).toFixed(2)
+      : "0.00";
+
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+      const monthCols = monthLabels.map((mo) => {
+        const rowsInMo = filteredRows.filter(r => r.month === mo && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        if (!rowsInMo.length) return "—";
+        const sum = rowsInMo.reduce((acc, r) => acc + Number(r.overallOee), 0);
+        return `${(sum / rowsInMo.length).toFixed(2)}%`;
+      });
+      return [["Overall Average", ...monthCols]];
+    } else if (xAxisGroup === "Day Wise") {
+      const allDates = [...new Set(filteredRows.map(r => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
+      return allDates.map((d, idx) => {
+        const rowsOnDate = filteredRows.filter(r => (r.date || "").slice(0, 10) === d && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        const dayLabel = d.split("-").reverse().join("-");
+        if (!rowsOnDate.length) return [String(idx + 1), dayLabel, "—"];
+        const sum = rowsOnDate.reduce((acc, r) => acc + Number(r.overallOee), 0);
+        return [
           String(idx + 1),
           dayLabel,
-          count ? `${(sum / count).toFixed(2)}%` : "—"
-        ]);
-      }
-      return list;
+          `${(sum / rowsOnDate.length).toFixed(2)}%`
+        ];
+      });
     } else if (xAxisGroup === "Mac Wise") {
-      const list = processedData.map((m, idx) => [
-        String(idx + 1),
-        m.name,
-        `${Number(m.avgVal).toFixed(2)}%`
-      ]);
+      const allMacs = [...new Set(filteredRows.map(r => r.machine).filter(Boolean))].sort();
+      const list = allMacs.map((mac, idx) => {
+        const rowsForMac = filteredRows.filter(r => r.machine === mac && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        if (!rowsForMac.length) return [String(idx + 1), mac, "0.00%"];
+        const sum = rowsForMac.reduce((acc, r) => acc + Number(r.overallOee), 0);
+        return [
+          String(idx + 1),
+          mac,
+          `${(sum / rowsForMac.length).toFixed(2)}%`
+        ];
+      });
 
-      if (processedData.length > 0) {
-        const avgOee = (processedData.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / processedData.length).toFixed(2);
-        list.push(["-", "Overall Average", `${avgOee}%`]);
+      if (filteredRows.length > 0) {
+        list.push(["-", "Overall Average", `${overallOeeVal}%`]);
       }
       return list;
     } else {
-      const teamsList = [...new Set(processedData.map((m) => m.team).filter((t) => t && t !== "—"))].sort();
+      const teamsList = [...new Set(filteredRows.map(r => r.team || "—").filter(Boolean))].sort();
       const list = teamsList.map((team, idx) => {
-        const teamRows = processedData.filter(row => row.team === team);
-        if (teamRows.length === 0) {
-          return [String(idx + 1), team, "0%"];
+        const rowsForTeam = filteredRows.filter(r => (r.team || "—") === team && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        if (!rowsForTeam.length) {
+          return [String(idx + 1), team, "0.00%"];
         }
-        const teamOee = (teamRows.reduce((acc, r) => acc + Number(r.avgVal || 0), 0) / teamRows.length).toFixed(2);
-        return [String(idx + 1), team, `${teamOee}%`];
+        const sum = rowsForTeam.reduce((acc, r) => acc + Number(r.overallOee), 0);
+        return [
+          String(idx + 1),
+          team,
+          `${(sum / rowsForTeam.length).toFixed(2)}%`
+        ];
       });
 
-      if (processedData.length > 0) {
-        const avgOee = (processedData.reduce((acc, m) => acc + Number(m.avgVal || 0), 0) / processedData.length).toFixed(2);
-        list.push(["-", "Overall Average", `${avgOee}%`]);
+      if (filteredRows.length > 0) {
+        list.push(["-", "Overall Average", `${overallOeeVal}%`]);
       }
       return list;
     }
-  }, [processedData, xAxisGroup]);
+  }, [filteredRows, xAxisGroup, monthLabels]);
 
   const sortedRows = React.useMemo(() => {
     if (sortIndex === null) return activeRows;
@@ -13188,12 +13145,8 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
     borderRadius: 5,
   };
 
-  let summaries = operatorSummaries;
-  if (!summaries.length && Array.isArray(rawRows) && rawRows.length) {
-    summaries = buildEffOperatorSummaries(rawRows, monthLabels);
-  }
-
-  if (!summaries.length) {
+  const rows = Array.isArray(rawRows) ? rawRows : [];
+  if (!rows.length) {
     return { labels: [], datasets: [] };
   }
 
@@ -13201,61 +13154,70 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
   let avgData = [];
 
   if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-    labels = monthLabels;
-    avgData = monthLabels.map((_, idx) => {
-      let sum = 0;
-      let count = 0;
-      summaries.forEach((op) => {
-        const v = op.monthly[idx];
-        if (v > 0) {
-          sum += v;
-          count += 1;
-        }
-      });
-      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    const monthMap = {};
+    const monthCount = {};
+    rows.forEach((r) => {
+      const m = r.month || "—";
+      const val = Number(r.oaeff || 0);
+      monthMap[m] = (monthMap[m] || 0) + val;
+      monthCount[m] = (monthCount[m] || 0) + 1;
+    });
+
+    labels = monthLabels && monthLabels.length ? monthLabels : Object.keys(monthMap);
+    avgData = labels.map((m) => {
+      const cnt = monthCount[m] || 0;
+      return cnt ? Number((monthMap[m] / cnt).toFixed(2)) : 0;
     });
   } else if (xAxisGroup === "Day Wise") {
-    const dayDates = summaries[0]?.dayDates || [];
-    labels = dayDates.length
-      ? dayDates.map((d) => {
-        const p = d.split("-");
-        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
-      })
-      : [];
-    avgData = dayDates.map((_, idx) => {
-      let sum = 0;
-      let count = 0;
-      summaries.forEach((op) => {
-        const v = op.daily[idx];
-        if (v > 0) {
-          sum += v;
-          count += 1;
-        }
-      });
-      return count ? Math.min(100, Math.max(0, Math.round(sum / count))) : 0;
+    const dayMap = {};
+    const dayCount = {};
+    rows.forEach((r) => {
+      const d = (r.date || "").slice(0, 10);
+      if (d) {
+        const val = Number(r.oaeff || 0);
+        dayMap[d] = (dayMap[d] || 0) + val;
+        dayCount[d] = (dayCount[d] || 0) + 1;
+      }
+    });
+
+    const dayDates = Object.keys(dayMap).sort();
+    labels = dayDates.map((d) => {
+      const p = d.split("-");
+      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+    });
+    avgData = dayDates.map((d) => {
+      const cnt = dayCount[d] || 0;
+      return cnt ? Number((dayMap[d] / cnt).toFixed(2)) : 0;
     });
   } else if (xAxisGroup === "Mac Wise") {
     const macMap = {};
-    summaries.forEach((op) => {
-      if (!macMap[op.machine]) macMap[op.machine] = [];
-      macMap[op.machine].push(op.avgVal);
+    const macCount = {};
+    rows.forEach((r) => {
+      const m = r.machine || "Unassigned";
+      const val = Number(r.oaeff || 0);
+      macMap[m] = (macMap[m] || 0) + val;
+      macCount[m] = (macCount[m] || 0) + 1;
     });
+
     labels = Object.keys(macMap).sort();
     avgData = labels.map((m) => {
-      const vals = macMap[m];
-      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+      const cnt = macCount[m] || 0;
+      return cnt ? Number((macMap[m] / cnt).toFixed(2)) : 0;
     });
   } else if (xAxisGroup === "Team Wise") {
     const teamMap = {};
-    summaries.forEach((op) => {
-      const team = op.team || "—";
-      if (!teamMap[team]) teamMap[team] = [];
-      teamMap[team].push(op.avgVal);
+    const teamCount = {};
+    rows.forEach((r) => {
+      const t = r.team || "Unassigned";
+      const val = Number(r.oaeff || 0);
+      teamMap[t] = (teamMap[t] || 0) + val;
+      teamCount[t] = (teamCount[t] || 0) + 1;
     });
+
     labels = Object.keys(teamMap).sort();
     avgData = labels.map((t) => {
-      const vals = teamMap[t];
-      return Math.min(100, Math.max(0, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)));
+      const cnt = teamCount[t] || 0;
+      return cnt ? Number((teamMap[t] / cnt).toFixed(2)) : 0;
     });
   }
 
@@ -13267,7 +13229,7 @@ function buildEffChartData(operatorSummaries, xAxisGroup, monthLabels, rawRows) 
   };
 }
 
-function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig, uid, onEffData }) {
+function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChange, xAxisGroup, setXAxisGroup, onClose, targetConfig, uid, onEffData, defaultFrom, defaultTo }) {
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [machineTypeOpen, setMachineTypeOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("bar");
@@ -13350,8 +13312,9 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
   React.useEffect(() => {
     const ctrl = new AbortController();
     setEffLoading(true);
-    const fy = currentFinancialYearRange();
-    fetch(buildEffUrl(fy.from, fy.to, filters), {
+    const reqFrom = filters.fromDate || defaultFrom || "";
+    const reqTo = filters.toDate || defaultTo || "";
+    fetch(buildEffUrl(reqFrom, reqTo, filters), {
       credentials: "include",
       signal: ctrl.signal,
     })
@@ -13370,7 +13333,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       })
       .finally(() => setEffLoading(false));
     return () => ctrl.abort();
-  }, [filters.machineType, uid, onEffData, data?.efficiencyCompare]);
+  }, [filters.fromDate, filters.toDate, filters.machineType, filters.team, filters.machine, filters.operatorName, uid, onEffData, data?.efficiencyCompare, defaultFrom, defaultTo]);
 
   const effRows = React.useMemo(
     () => (Array.isArray(effSource?.rows) ? effSource.rows : []),
@@ -13378,15 +13341,11 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
   );
 
   const defaultRange = React.useMemo(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
     return {
-      from: `${year}-${month}-01`,
-      to: `${year}-${month}-${day}`,
+      from: defaultFrom || "",
+      to: defaultTo || "",
     };
-  }, []);
+  }, [defaultFrom, defaultTo]);
 
   const filteredRows = React.useMemo(
     () => filterEffRows(effRows, filters, defaultRange.from, defaultRange.to),
@@ -13604,105 +13563,67 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       targetVal = targetConfig?.efficiency?.teamWiseTarget ?? 80;
     }
 
-    if (!operatorSummaries.length) {
-      const hasActiveFilter = Boolean(
-        filters?.team || filters?.machineType || filters?.machine || filters?.operatorName
-      );
-      if (apiKpis && apiKpis.rowCount > 0 && !hasActiveFilter && !filters?.fromDate && !filters?.toDate) {
-        const avgEff = Math.round(Number(apiKpis.avgOaeff || 0));
+    if (!filteredRows.length) {
+      if (apiKpis && apiKpis.rowCount > 0 && !filters?.team && !filters?.machineType && !filters?.machine && !filters?.operatorName) {
+        const avgEff = Number(apiKpis.avgOaeff || 0).toFixed(2);
         const topStr = apiKpis.topPerformer
-          ? `${apiKpis.topPerformer} (${Math.round(Number(apiKpis.topPerformerOaeff || 0))}%)`
+          ? `${apiKpis.topPerformer} (${Number(apiKpis.topPerformerOaeff || 0).toFixed(2)}%)`
           : "N/A";
-        const metPct = avgEff >= targetVal ? 100 : 0;
+        const metPct = (Number(apiKpis.avgOaeff || 0) >= targetVal ? 100 : 0).toFixed(2);
         return [
           { label: "Avg Efficiency", value: `${avgEff}%`, color: "#10b981", icon: UserCheck },
           { label: "Top Performer", value: topStr, color: "#3b82f6", icon: Award },
-          { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target },
-          { label: "Trend (MoM)", value: "Stable", color: "#a855f7", icon: TrendingUp }
+          { label: "Target Status", value: `${metPct}% Met`, color: "#f59e0b", icon: Target }
         ];
       }
       return [
         { label: "Avg Efficiency", value: loading || effLoading ? "…" : "0%", color: "#10b981", icon: UserCheck },
         { label: "Top Performer", value: "N/A", color: "#3b82f6", icon: Award },
-        { label: "Target Status", value: "0% Met", color: "#f59e0b", icon: Target },
-        { label: "Trend", value: "Stable", color: "#a855f7", icon: TrendingUp }
+        { label: "Target Status", value: "0% Met", color: "#f59e0b", icon: Target }
       ];
     }
 
-    let totalSum = 0;
-    let count = 0;
-    operatorSummaries.forEach((op) => {
-      op.monthly.forEach((val) => {
-        if (val > 0) {
-          totalSum += val;
-          count += 1;
-        }
-      });
+    // 1. Avg Efficiency: SUM(OAEFF) / COUNT(*)
+    const totalOaeff = filteredRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+    const avgEff = (totalOaeff / filteredRows.length).toFixed(2);
+
+    // 2. Top Performer: GROUP BY Operator -> AVG(OAEFF)
+    const opTotals = {};
+    const opCounts = {};
+    filteredRows.forEach((r) => {
+      const op = r.operator || "Unassigned";
+      const val = Number(r.oaeff || 0);
+      opTotals[op] = (opTotals[op] || 0) + val;
+      opCounts[op] = (opCounts[op] || 0) + 1;
     });
-    const avgEff = count ? Math.min(100, Math.max(0, Math.round(totalSum / count))) : 0;
 
     let topOp = "";
     let topOpAvg = -1;
-    operatorSummaries.forEach((op) => {
-      const vals = op.monthly.filter((v) => v > 0);
-      if (!vals.length) return;
-      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    Object.keys(opTotals).forEach((op) => {
+      const avg = opTotals[op] / opCounts[op];
       if (avg > topOpAvg) {
         topOpAvg = avg;
-        topOp = op.name;
+        topOp = op;
       }
     });
     const topPerformerStr = topOp
-      ? `${topOp} (${Math.min(100, Math.max(0, Math.round(topOpAvg)))}%)`
+      ? `${topOp} (${(topOpAvg).toFixed(2)}%)`
       : "N/A";
 
+    // 3. Target Status
     let metCount = 0;
-    let totalMonthsCount = 0;
-    operatorSummaries.forEach((op) => {
-      op.monthly.forEach((val) => {
-        if (val > 0) {
-          if (val >= targetVal) metCount += 1;
-          totalMonthsCount += 1;
-        }
-      });
+    filteredRows.forEach((r) => {
+      if (Number(r.oaeff || 0) >= targetVal) metCount += 1;
     });
-    const metPct = totalMonthsCount > 0 ? Math.round((metCount / totalMonthsCount) * 100) : 0;
-    const targetStatusStr = `${metPct}% Met (${metCount}/${totalMonthsCount} Mo)`;
-
-    let firstSum = 0;
-    let lastSum = 0;
-    let firstCount = 0;
-    let lastCount = 0;
-    if (monthLabels.length > 0) {
-      const firstIdx = 0;
-      const lastIdx = monthLabels.length - 1;
-      operatorSummaries.forEach((op) => {
-        if (op.monthly[firstIdx] > 0) {
-          firstSum += op.monthly[firstIdx];
-          firstCount += 1;
-        }
-        if (op.monthly[lastIdx] > 0) {
-          lastSum += op.monthly[lastIdx];
-          lastCount += 1;
-        }
-      });
-    }
-    const firstAvg = firstCount ? firstSum / firstCount : 0;
-    const lastAvg = lastCount ? lastSum / lastCount : 0;
-    const trendDiff = lastAvg - firstAvg;
-    const trendStr = trendDiff > 0
-      ? `+${trendDiff.toFixed(1)}% MoM`
-      : trendDiff < 0
-        ? `${trendDiff.toFixed(1)}% MoM`
-        : "Stable";
+    const metPct = filteredRows.length > 0 ? ((metCount / filteredRows.length) * 100).toFixed(2) : "0.00";
+    const targetStatusStr = `${metPct}% Met`;
 
     return [
       { label: "Avg Efficiency", value: `${avgEff}%`, color: "#10b981", icon: UserCheck },
       { label: "Top Performer", value: topPerformerStr, color: "#3b82f6", icon: Award },
-      { label: "Target Status", value: targetStatusStr, color: "#f59e0b", icon: Target },
-      { label: "Trend (MoM)", value: trendStr, color: "#a855f7", icon: TrendingUp }
+      { label: "Target Status", value: targetStatusStr, color: "#f59e0b", icon: Target }
     ];
-  }, [operatorSummaries, monthLabels, targetConfig, xAxisGroup, loading, effLoading, effSource?.kpis]);
+  }, [filteredRows, chart1Data, targetConfig, xAxisGroup, loading, effLoading, effSource?.kpis, filters]);
 
   const carouselControls = (
     <div className="pp1-dt-card pp1-center-chart" style={{ marginTop: "10px" }}>
@@ -13931,7 +13852,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
   );
 }
 
-function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wise" }) {
+function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wise", defaultFrom, defaultTo }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
@@ -13963,15 +13884,11 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
   );
 
   const defaultRange = React.useMemo(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
     return {
-      from: `${year}-${month}-01`,
-      to: `${year}-${month}-${day}`,
+      from: defaultFrom || "",
+      to: defaultTo || "",
     };
-  }, []);
+  }, [defaultFrom, defaultTo]);
 
   const filteredRows = React.useMemo(
     () => filterEffRows(effRows, filters, defaultRange.from, defaultRange.to),
@@ -13982,16 +13899,6 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
     () => buildEffMonthLabelsForDisplay(effRows, filters, defaultRange.from, defaultRange.to),
     [effRows, filters, defaultRange]
   );
-
-  const processedData = React.useMemo(() => {
-    return buildEffOperatorSummaries(filteredRows, monthLabels).map((row) => ({
-      ...row,
-      monthlyVals: row.monthly,
-      dailyVals: row.daily,
-    }));
-  }, [filteredRows, monthLabels]);
-
-  const filteredData = processedData;
 
   const activeColumns = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
@@ -14007,91 +13914,84 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
 
   const activeRows = React.useMemo(() => {
     if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
-      if (filteredData.length === 0) return [];
-      const numMonths = filteredData[0].monthlyVals.length;
-      const overallAvg = [];
-      for (let idx = 0; idx < numMonths; idx++) {
-        let sum = 0;
-        let count = 0;
-        filteredData.forEach(row => {
-          if (row.monthlyVals[idx] > 0) {
-            sum += row.monthlyVals[idx];
-            count += 1;
-          }
-        });
-        overallAvg.push(count ? `${Math.round(sum / count)}%` : "—");
-      }
+      if (filteredRows.length === 0) return [];
+      const overallAvg = monthLabels.map((m) => {
+        const rowsInMonth = filteredRows.filter(r => r.month === m);
+        if (!rowsInMonth.length) return "—";
+        const sum = rowsInMonth.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+        return `${(sum / rowsInMonth.length).toFixed(2)}%`;
+      });
       return [["Overall Average", ...overallAvg]];
     } else if (xAxisGroup === "Day Wise") {
-      if (filteredData.length === 0) return [];
-
-      const numDays = filteredData[0].dailyVals.length;
-      const list = [];
-      for (let idx = 0; idx < numDays; idx++) {
-        let sum = 0;
-        let count = 0;
-        filteredData.forEach(row => {
-          if (row.dailyVals[idx] > 0) {
-            sum += row.dailyVals[idx];
-            count += 1;
-          }
-        });
-        const dayLabel = filteredData[0].dayDates?.[idx]
-          ? filteredData[0].dayDates[idx]
-          : `Day ${idx + 1}`;
-        list.push([
-          String(idx + 1),
-          dayLabel,
-          count ? `${Math.round(sum / count)}%` : "—"
-        ]);
-      }
+      if (filteredRows.length === 0) return [];
+      const dayMap = {};
+      const dayCount = {};
+      filteredRows.forEach(r => {
+        const d = (r.date || "").slice(0, 10);
+        if (d) {
+          const val = Number(r.oaeff || 0);
+          dayMap[d] = (dayMap[d] || 0) + val;
+          dayCount[d] = (dayCount[d] || 0) + 1;
+        }
+      });
+      const dayDates = Object.keys(dayMap).sort();
+      const list = dayDates.map((d, idx) => {
+        const p = d.split("-");
+        const dayLabel = p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(-2)}` : d;
+        const cnt = dayCount[d] || 0;
+        const avgStr = cnt ? `${(dayMap[d] / cnt).toFixed(2)}%` : "—";
+        return [String(idx + 1), dayLabel, avgStr];
+      });
+      const totalSum = filteredRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+      const overallAvg = (totalSum / filteredRows.length).toFixed(2);
+      list.push(["-", "Overall Average", `${overallAvg}%`]);
       return list;
     } else if (xAxisGroup === "Mac Wise") {
-      // Group by machine name only — combine all operators/shifts for the same machine
+      if (filteredRows.length === 0) return [];
       const machineMap = {};
+      const machineCount = {};
       filteredRows.forEach(r => {
-        const mac = (r.machine || "").trim();
-        if (!mac) return;
-        const eff = Number(r.oaeff || 0);
-        if (eff <= 0) return;
-        if (!machineMap[mac]) machineMap[mac] = { sum: 0, count: 0 };
-        machineMap[mac].sum += eff;
-        machineMap[mac].count += 1;
+        const mac = (r.machine || "").trim() || "Unassigned";
+        const val = Number(r.oaeff || 0);
+        machineMap[mac] = (machineMap[mac] || 0) + val;
+        machineCount[mac] = (machineCount[mac] || 0) + 1;
       });
 
       const machines = Object.keys(machineMap).sort();
       const list = machines.map((mac, idx) => {
-        const { sum, count } = machineMap[mac];
-        const avg = count ? Math.round(sum / count) : 0;
-        return [String(idx + 1), mac, `${avg}%`];
+        const cnt = machineCount[mac] || 0;
+        const avgStr = cnt ? `${(machineMap[mac] / cnt).toFixed(2)}%` : "—";
+        return [String(idx + 1), mac, avgStr];
       });
 
-      if (list.length > 0) {
-        // True period-wise overall from all raw rows
-        const validRows = filteredRows.filter(r => Number(r.oaeff || 0) > 0);
-        const overallAvg = validRows.length
-          ? Math.round(validRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0) / validRows.length)
-          : 0;
-        list.push(["-", "Overall Average", `${overallAvg}%`]);
-      }
+      const totalSum = filteredRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+      const overallAvg = (totalSum / filteredRows.length).toFixed(2);
+      list.push(["-", "Overall Average", `${overallAvg}%`]);
       return list;
     } else {
-      const teamsList = [...new Set(filteredData.map((row) => row.team).filter((t) => t && t !== "—"))].sort();
-      const list = teamsList.map((team, idx) => {
-        const teamRows = filteredData.filter(row => row.team === team);
-        if (teamRows.length === 0) return [String(idx + 1), team, "-"];
-        const avg = Math.round(teamRows.reduce((acc, r) => acc + r.avgVal, 0) / teamRows.length);
-        return [String(idx + 1), team, `${avg}%`];
+      if (filteredRows.length === 0) return [];
+      const teamMap = {};
+      const teamCount = {};
+      filteredRows.forEach(r => {
+        const t = (r.team || "").trim() || "Unassigned";
+        const val = Number(r.oaeff || 0);
+        teamMap[t] = (teamMap[t] || 0) + val;
+        teamCount[t] = (teamCount[t] || 0) + 1;
       });
 
-      const validList = list.filter(row => row[2] !== "-");
-      if (validList.length > 0) {
-        const overallAvg = Math.round(filteredData.reduce((acc, r) => acc + r.avgVal, 0) / filteredData.length);
-        validList.push(["-", "Overall Average", `${overallAvg}%`]);
-      }
-      return validList;
+      const teams = Object.keys(teamMap).sort();
+      const list = teams.map((team, idx) => {
+        const cnt = teamCount[team] || 0;
+        const avgStr = cnt ? `${(teamMap[team] / cnt).toFixed(2)}%` : "—";
+        return [String(idx + 1), team, avgStr];
+      });
+
+      const totalSum = filteredRows.reduce((acc, r) => acc + Number(r.oaeff || 0), 0);
+      const overallAvg = (totalSum / filteredRows.length).toFixed(2);
+      list.push(["-", "Overall Average", `${overallAvg}%`]);
+      return list;
     }
-  }, [filteredData, filteredRows, xAxisGroup]);
+  }, [filteredRows, monthLabels, xAxisGroup]);
 
   const sortedRows = React.useMemo(() => {
     if (sortIndex === null) return activeRows;
@@ -16854,9 +16754,13 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
             x: {
               grid: { display: false, drawBorder: false },
               ticks: {
-                display: false,
+                display: true,
                 font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
-                color: "#64748b"
+                color: "#64748b",
+                maxRotation: chartLabels.length > 8 ? 45 : 0,
+                minRotation: chartLabels.length > 8 ? 30 : 0,
+                autoSkip: chartLabels.length > 15,
+                autoSkipPadding: 8,
               }
             },
             y: {
@@ -16880,7 +16784,9 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
     [targetConfig?.supplier_rating?.minRating, chartType, chartData, chartLabels]
   );
 
-  const rebuildToken = `supplier-rating-chart|${targetConfig?.supplier_rating?.minRating ?? 90}|${chartType}|${JSON.stringify(chartData)}|${JSON.stringify(chartLabels)}`;
+  const isSupplierSelected = (filters.supplier || []).length > 0;
+  const rangeHintText = isSupplierSelected ? "Supplier Wise Rating Score" : "Overall Supplier Rating Score";
+  const rebuildToken = `supplier-rating-chart|${targetConfig?.supplier_rating?.minRating ?? 90}|${chartType}|${JSON.stringify(chartData)}|${JSON.stringify(chartLabels)}|${isSupplierSelected}`;
 
   return (
     <PremiumDashboardView
@@ -16890,7 +16796,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint="Month Wise Rating Score"
+      rangeHint={rangeHintText}
       onClose={onClose}
       rebuildToken={rebuildToken}
       noData={chartLabels.length === 0}
@@ -24630,7 +24536,7 @@ export default function PlantPerformance1() {
             ) : selectionId === "oee_comparison_report_dashboard" ? (
               <OeeComparisonReportBottomTable data={{ oeeCompare: oeePanelData || data?.oeeCompare }} filters={oeeCompFilters} xAxisGroup={oeeCompXAxisGroup} />
             ) : selectionId === "efficiency_eff_report_dashboard" ? (
-              <EfficiencyEffReportBottomTable data={{ efficiencyCompare: effPanelData || data?.efficiencyCompare }} filters={effFilters} xAxisGroup={effXAxisGroup} />
+              <EfficiencyEffReportBottomTable data={{ efficiencyCompare: effPanelData || data?.efficiencyCompare }} filters={effFilters} xAxisGroup={effXAxisGroup} defaultFrom={defaultFrom} defaultTo={defaultTo} />
             ) : selectionId === "rejection_report_dashboard" ? (
               <RejectionReportBottomTable data={{ rejectionCompare: rejPanelData || data?.rejectionCompare }} filters={rejFilters} />
             ) : selectionId === "rework_report_dashboard" ? (

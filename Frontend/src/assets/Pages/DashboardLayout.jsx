@@ -33,6 +33,7 @@ import ProductionAnalysis from "./ProductionAnalysis";
 import UserRights from "./UserRights";
 import Settings from "./Settings";
 import Welcome from "./Welcome";
+import PasswordExpiryModal from "./PasswordExpiryModal";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -464,6 +465,10 @@ export default function DashboardLayout() {
         return !!cachedUser.isExpired;
     });
     const [planId, setPlanId] = useState(() => (user.plan_id || "free").toLowerCase().trim());
+    const [showPasswordExpiry, setShowPasswordExpiry] = useState(() => {
+        const cachedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        return !!cachedUser.passwordExpired;
+    });
 
     // ✅ Filter menu items based on cached user rights, plan restrictions & tenant module license
     // ✅ Filter menu items based on cached user rights, plan restrictions & tenant module license
@@ -1197,6 +1202,13 @@ export default function DashboardLayout() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showPasswordExpiry && (
+                <PasswordExpiryModal
+                    user={user}
+                    onClose={() => setShowPasswordExpiry(false)}
+                />
             )}
         </div>
     );

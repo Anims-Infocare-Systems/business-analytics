@@ -2689,3 +2689,255 @@ def purchase_analysis_traceability_table(request):
         if cursor: cursor.close()
         try: conn.close()
         except: pass
+
+
+# ─────────────────────────────────────────────────────────────
+#  ENDPOINT — Purchase Analysis Supplier Rating
+# ─────────────────────────────────────────────────────────────
+
+@api_view(["GET"])
+def purchase_analysis_supplier_rating(request):
+    """
+    Purchase Analysis — Supplier Rating score calculation per supplier
+    using the Plant Performance supplier rating CTE logic (QualityRating + DeliveryRating).
+    If 'type' param is provided (e.g. from Charts screen), delegates to supplier_rating_monthwise in views.py.
+    """
+    if request.GET.get("type"):
+        from .views import supplier_rating_monthwise
+        return supplier_rating_monthwise(request)
+
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    supplier_param = (request.GET.get("supplier") or request.GET.get("name") or "").strip()
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+    try:
+        cursor = conn.cursor()
+
+        supplier_where = ""
+        params = [start_date, end_date, start_date, end_date]
+
+        if supplier_param and supplier_param.lower() != "all suppliers":
+            sups = [s.strip() for s in supplier_param.split(",") if s.strip()]
+            if sups:
+                placeholders = ",".join(["?"] * len(sups))
+                supplier_where += f" AND ss.SupplierName IN ({placeholders})"
+                params.extend(sups)
+
+        if search_q:
+            supplier_where += " AND LOWER(CAST(ss.SupplierName AS NVARCHAR(500))) LIKE LOWER(?)"
+            params.append(f"%{search_q}%")
+
+        sql = f"""
+        WITH POScope AS (
+            SELECT DISTINCT PM.pono, PM.cid, PM.dtype
+            FROM POMas PM
+            WHERE PM.deleted = 0
+              AND PM.cid LIKE 'S%'
+        ),
+        VendorLookup AS (
+            SELECT
+                P.cid,
+                LTRIM(RTRIM(ISNULL(CA.CName, CM.CName))) AS SupplierName,
+                MAX(P.dtype) AS Category
+            FROM POScope P
+            LEFT JOIN CustMast CM      ON CM.Id = P.cid
+            LEFT JOIN CustAliasMast CA ON CA.Id = P.cid
+            GROUP BY P.cid, LTRIM(RTRIM(ISNULL(CA.CName, CM.CName)))
+        ),
+        ScheduleBase AS (
+            SELECT
+                SD.pono,
+                SD.icode,
+                SD.shddate,
+                PM.cid
+            FROM iss_podet_ShdQty SD
+            INNER JOIN POMas PM ON PM.pono = SD.pono
+            WHERE SD.deleted = 0
+              AND PM.deleted = 0
+              AND PM.cid LIKE 'S%'
+              AND SD.shddate BETWEEN ? AND ?
+        ),
+        ActualReceipt AS (
+            SELECT
+                G.pono,
+                G.rmname AS icode,
+                MIN(GM.dcdt) AS DeliveryDate
+            FROM grninsubdet G
+            INNER JOIN grn_mas GM ON GM.grnno = G.grnno
+            INNER JOIN POMas PM   ON PM.pono = G.pono
+            WHERE G.deleted = 0
+              AND PM.deleted = 0
+              AND PM.cid LIKE 'S%'
+            GROUP BY G.pono, G.rmname
+        ),
+        DeliveryLineStatus AS (
+            SELECT
+                SB.cid,
+                SB.pono,
+                CASE
+                    WHEN AR.DeliveryDate IS NULL AND SB.shddate > CAST(SYSDATETIME() AS DATE) THEN 'Pending'
+                    WHEN AR.DeliveryDate IS NULL THEN 'Delayed'
+                    WHEN AR.DeliveryDate <= SB.shddate THEN 'OnTime'
+                    ELSE 'Delayed'
+                END AS EventStatus
+            FROM ScheduleBase SB
+            LEFT JOIN ActualReceipt AR
+                ON AR.pono = SB.pono
+               AND AR.icode = SB.icode
+        ),
+        PoStatus AS (
+            SELECT
+                cid,
+                pono,
+                MAX(
+                    CASE EventStatus
+                        WHEN 'Delayed' THEN 3
+                        WHEN 'Pending' THEN 2
+                        WHEN 'OnTime'  THEN 1
+                        ELSE 0
+                    END
+                ) AS StatusRank
+            FROM DeliveryLineStatus
+            GROUP BY cid, pono
+        ),
+        DeliveryBySupplier AS (
+            SELECT
+                cid,
+                COUNT(*) AS POsProduced,
+                SUM(CASE WHEN StatusRank = 1 THEN 1 ELSE 0 END) AS OnTimePOs,
+                SUM(CASE WHEN StatusRank = 3 THEN 1 ELSE 0 END) AS DelayedPOs,
+                SUM(CASE WHEN StatusRank = 2 THEN 1 ELSE 0 END) AS PendingPOs
+            FROM PoStatus
+            GROUP BY cid
+        ),
+        DeliveryCalc AS (
+            SELECT
+                cid,
+                POsProduced,
+                OnTimePOs,
+                DelayedPOs,
+                PendingPOs,
+                CASE WHEN POsProduced > 0
+                     THEN ROUND(OnTimePOs * 100.0 / POsProduced, 2)
+                     ELSE 0 END AS OnTimePct
+            FROM DeliveryBySupplier
+        ),
+        InspectionBase AS (
+            SELECT
+                ID.pono,
+                PM.cid,
+                ID.grnqty,
+                ID.okqty,
+                ID.matrej,
+                ID.macrej
+            FROM inspdet ID
+            INNER JOIN inspmas IM ON IM.irno = ID.irno
+            INNER JOIN POMas PM   ON PM.pono = ID.pono
+            WHERE ID.deleted = 0
+              AND PM.deleted = 0
+              AND PM.cid LIKE 'S%'
+              AND IM.irdate BETWEEN ? AND ?
+        ),
+        QualityCalc AS (
+            SELECT
+                cid,
+                SUM(grnqty) AS ItemsPurchased,
+                SUM(okqty)  AS ItemsAccepted,
+                SUM(ISNULL(matrej, 0)) + SUM(ISNULL(macrej, 0)) AS ItemsRejected,
+                CASE WHEN SUM(grnqty) > 0
+                     THEN ROUND(SUM(okqty) * 100.0 / SUM(grnqty), 2)
+                     ELSE 0 END AS AcceptancePct
+            FROM InspectionBase
+            GROUP BY cid
+            HAVING SUM(grnqty) > 0
+        ),
+        SupplierSummary AS (
+            SELECT
+                QC.cid                                      AS SupplierId,
+                ISNULL(VL.SupplierName, QC.cid)             AS SupplierName,
+                VL.Category                                 AS Category,
+
+                QC.ItemsPurchased                           AS NoOfItemsPurchased,
+                QC.ItemsAccepted                            AS NoOfItemsAccepted,
+                QC.ItemsRejected                            AS NoOfItemsRejected,
+                QC.AcceptancePct                            AS PctOfAcceptance,
+
+                ISNULL(QR.RatingFor, QC.AcceptancePct)      AS QualityRating,
+                QR.RatingStatus                             AS QualityGrade,
+
+                ISNULL(DC.POsProduced, 0)                   AS NoOfPurchaseOrdersProduced,
+                ISNULL(DC.OnTimePOs, 0)                     AS OnTimeDeliveryPOs,
+                ISNULL(DC.DelayedPOs, 0)                    AS DeliveryDelayPOs,
+                ISNULL(DC.PendingPOs, 0)                    AS PendingPOs,
+                ISNULL(DC.OnTimePct, 0)                     AS PctOfOnTimeDeliveryPOs,
+
+                ISNULL(DR.RatingFor, DC.OnTimePct)          AS DeliveryRating,
+                DR.RatingStatus                             AS DeliveryGrade,
+
+                CAST(
+                    (
+                        (ISNULL(ISNULL(QR.RatingFor, QC.AcceptancePct), 0) * CASE WHEN ISNULL(QR.RatingFor, QC.AcceptancePct) IS NOT NULL THEN 1 ELSE 0 END)
+                      + (ISNULL(ISNULL(DR.RatingFor, DC.OnTimePct), 0) * CASE WHEN ISNULL(DR.RatingFor, DC.OnTimePct) IS NOT NULL THEN 1 ELSE 0 END)
+                    )
+                    /
+                    NULLIF(
+                        CASE WHEN ISNULL(QR.RatingFor, QC.AcceptancePct) IS NOT NULL THEN 1 ELSE 0 END
+                      + CASE WHEN ISNULL(DR.RatingFor, DC.OnTimePct) IS NOT NULL THEN 1 ELSE 0 END,
+                        0
+                    )
+                    AS DECIMAL(18, 4)
+                ) AS TotalSupplierRating
+
+            FROM QualityCalc QC
+            LEFT JOIN VendorLookup VL
+                ON VL.cid = QC.cid
+            LEFT JOIN DeliveryCalc DC
+                ON DC.cid = QC.cid
+
+            LEFT JOIN QualityRating QR
+                ON QR.dtype = 'Supplier'
+               AND QC.ItemsPurchased > 0
+               AND QC.AcceptancePct <= QR.RatingTo
+               AND QC.AcceptancePct >= CASE WHEN QR.RatingFrom <= 0.01 THEN 0 ELSE QR.RatingFrom END
+
+            LEFT JOIN DeliveryRating DR
+                ON DR.dtype = 'Supplier'
+               AND ISNULL(DC.POsProduced, 0) > 0
+               AND ISNULL(DC.OnTimePct, 0) <= DR.RatingTo
+               AND ISNULL(DC.OnTimePct, 0) >= CASE WHEN DR.RatingFrom <= 0.01 THEN 0 ELSE DR.RatingFrom END
+        )
+        SELECT TOP 10
+            ss.SupplierName,
+            ROUND(CAST(ss.TotalSupplierRating AS FLOAT), 2) AS Score
+        FROM SupplierSummary ss
+        WHERE ss.SupplierName IS NOT NULL AND LTRIM(RTRIM(ss.SupplierName)) <> ''
+          AND ss.TotalSupplierRating IS NOT NULL
+          {supplier_where}
+        ORDER BY Score DESC;
+        """
+
+        cursor.execute(sql, tuple(params))
+        rows = cursor.fetchall() or []
+
+        labels = [str(r[0]).strip() for r in rows if r[0]]
+        data = [round(float(r[1] or 0), 2) for r in rows if r[0]]
+
+        cursor.close()
+        conn.close()
+
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "data": data,
+    })
+

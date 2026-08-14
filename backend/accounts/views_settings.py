@@ -79,10 +79,10 @@ def _build_invoice_history(start_dt, plan_name, no_of_users, billing_cycle, hist
         if "free" in active_plan_lower:
             price_val = 0
         elif "pro" in active_plan_lower:
-            rate = 500
+            rate = 1500
             price_val = rate * (6 if active_cycle in ["6month", "6 months"] else 12) * active_users_count
         else:
-            rate = 2000
+            rate = 2500
             price_val = rate * (6 if active_cycle in ["6month", "6 months"] else 12) * active_users_count
 
         inv_plan_price = "₹" + "{:,}".format(price_val)
@@ -329,7 +329,7 @@ def settings_change_password(request):
                 # 3. Update DB with new password
                 encrypted_new = encrypt_password(new_password)
                 cursor.execute(
-                    "UPDATE tenants_users SET password = %s WHERE company_code = %s AND username = %s AND deleted = 0",
+                    "UPDATE tenants_users SET password = %s, password_updated_at = GETDATE() WHERE company_code = %s AND username = %s AND deleted = 0",
                     [encrypted_new, company, username]
                 )
     except Exception as e:

@@ -97,26 +97,27 @@ function MonthGrid({ year, month, from, to, hovered, onDayClick, onDayHover }) {
     );
 }
 
-function PopupPortal({ anchorRef, children }) {
+function PopupPortal({ anchorRef, children, size }) {
     const [style, setStyle] = useState({});
     useEffect(() => {
         if (!anchorRef.current) return;
         const reposition = () => {
             const rect = anchorRef.current.getBoundingClientRect();
-            const popupH = 460;
+            const popupH = size === "small" ? 390 : 460;
+            const popupW = size === "small" ? 580 : 700;
             const spaceBelow = window.innerHeight - rect.bottom;
             const top = spaceBelow >= popupH || spaceBelow >= window.innerHeight/2 ? rect.bottom+8 : rect.top-popupH-8;
-            setStyle({ position:"fixed", top:Math.max(8,top), left:Math.min(rect.left, window.innerWidth-700), zIndex:999999 });
+            setStyle({ position:"fixed", top:Math.max(8,top), left:Math.min(rect.left, window.innerWidth-popupW), zIndex:999999 });
         };
         reposition();
         window.addEventListener("resize", reposition);
         window.addEventListener("scroll", reposition, true);
         return () => { window.removeEventListener("resize", reposition); window.removeEventListener("scroll", reposition, true); };
-    }, [anchorRef]);
-    return createPortal(<div className="sadp-portal-wrap" style={style}>{children}</div>, document.body);
+    }, [anchorRef, size]);
+    return createPortal(<div className={`sadp-portal-wrap ${size === "small" ? "sadp-portal-wrap--small" : ""}`} style={style}>{children}</div>, document.body);
 }
 
-export default function SalesAnalysisDatePicker({ from, to, onChange }) {
+export default function SalesAnalysisDatePicker({ from, to, onChange, size }) {
     const today = new Date();
     const [open,         setOpen]        = useState(false);
     const [leftMonth,    setLeft]        = useState(from ? new Date(from.getFullYear(),from.getMonth(),1) : addMonths(today,-1));
@@ -208,8 +209,8 @@ export default function SalesAnalysisDatePicker({ from, to, onChange }) {
     const isExtraActive = EXTRA_PRESETS.some(p => p.label === activePreset);
 
     return (
-        <div className="sadp-wrap" ref={wrapRef}>
-            <button ref={triggerRef} className={`sadp-trigger ${open?"sadp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
+        <div className={`sadp-wrap ${size === "small" ? "sadp-wrap--small" : ""}`} ref={wrapRef}>
+            <button ref={triggerRef} className={`sadp-trigger ${open?"sadp-trigger--open":""} ${size === "small" ? "sadp-trigger--small" : ""}`} onClick={()=>setOpen(o=>!o)} type="button">
                 <svg className="sadp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
                     <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
@@ -219,7 +220,7 @@ export default function SalesAnalysisDatePicker({ from, to, onChange }) {
             </button>
 
             {open && (
-                <PopupPortal anchorRef={triggerRef}>
+                <PopupPortal anchorRef={triggerRef} size={size}>
                     <div className="sadp-popup">
                         <div className="sadp-presets">
                             {PRESETS.map(p => (
