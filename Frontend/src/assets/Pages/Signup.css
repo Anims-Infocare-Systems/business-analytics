@@ -982,6 +982,10 @@ img {
     grid-column: 1 / -1;
 }
 
+.sg-field--full {
+    grid-column: 1 / -1;
+}
+
 .sg-label {
     font-size: 13px;
     font-weight: 700;
@@ -1914,6 +1918,7 @@ img {
     padding: 8px 4px;
     background: transparent;
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .sg-billing-users-input::-webkit-outer-spin-button,
@@ -2112,6 +2117,7 @@ img {
     padding: 0 10px !important;
     flex: 1;
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .sg-inp--stepper::-webkit-outer-spin-button,

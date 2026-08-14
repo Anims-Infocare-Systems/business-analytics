@@ -1027,8 +1027,8 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                     </div>
                                 </div>
                                 <div className="st-upg-card__price-row">
-                                    <span className="st-upg-card__price">₹2,500</span>
-                                    <span className="st-upg-card__per">/user/mo</span>
+                                    <span className="st-upg-card__price">₹5,000</span>
+                                    <span className="st-upg-card__per">/ 2 users / mo</span>
                                 </div>
                                 <div className="st-upg-card__billing-note">
                                     Min. 2 users &nbsp;·&nbsp;

@@ -2700,11 +2700,14 @@ def purchase_analysis_supplier_rating(request):
     """
     Purchase Analysis — Supplier Rating score calculation per supplier
     using the Plant Performance supplier rating CTE logic (QualityRating + DeliveryRating).
-    If 'type' param is provided (e.g. from Charts screen), delegates to supplier_rating_monthwise in views.py.
+    Delegates to supplier_rating_monthwise in views.py.
     """
-    if request.GET.get("type"):
-        from .views import supplier_rating_monthwise
-        return supplier_rating_monthwise(request)
+    from .views import supplier_rating_monthwise
+    if not request.GET.get("type"):
+        q = request.GET.copy()
+        q["type"] = "supplier"
+        request.GET = q
+    return supplier_rating_monthwise(request)
 
     try:
         conn, tenant = get_tenant_connection(request)

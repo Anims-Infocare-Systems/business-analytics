@@ -408,7 +408,8 @@ function buildPremiumDatalabels(baseOptions = {}, chartType = "bar") {
 
       if (isTargetDataset(context.dataset)) return false;
       const val = context.dataset.data[context.dataIndex];
-      if (val === 0 || val === null || val === undefined) return false;
+      if (val === null || val === undefined) return false;
+      if (val === 0 && isStacked) return false;
 
       const dsType = context.dataset.type || chartType;
 
@@ -581,6 +582,7 @@ function applyPremiumDatasetStyling(ctx, dataset, category, datasetIndex, datase
     const barRadius = isHorizontalBar
       ? { topLeft: 0, bottomLeft: 0, topRight: 8, bottomRight: 8 }
       : { topLeft: 8, topRight: 8, bottomLeft: 2, bottomRight: 2 };
+    dataset.minBarLength = dataset.minBarLength !== undefined ? dataset.minBarLength : 5;
     dataset.borderRadius = dataset.borderRadius !== undefined ? dataset.borderRadius : barRadius;
     dataset.borderSkipped = false;
     dataset.maxBarThickness = isHorizontalBar ? 22 : 42;
@@ -1365,8 +1367,6 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
     if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") {
       setLoading(true); setError(null);
       if (def.id === "production-1" && !selectedOpr) { if (oprLoading) return () => {}; setLoading(false); setError(operators.length === 0 ? "No operators found." : null); return () => {}; }
-      // ✅ Machine check
-      if (def.id === "production-4" && !selectedMac) { if (macLoading) return () => {}; setLoading(false); setError(machines.length === 0 ? "No machines found." : null); return () => {}; }
 
       const ac = new AbortController();
       let endpoint = api("/po-vs-sales/");
@@ -1514,7 +1514,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           }
           else if (def.id === "production-3") {
             const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
-            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette }];
+            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette, minBarLength: 5 }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "bar",
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "bar", def.config.options) },
@@ -1525,7 +1525,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
             });
           } 
           else if (def.id === "production-4") {
-            const ds = [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
+            const ds = [{ label: `${selectedMac || 'All Machines'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "line",
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
@@ -1533,7 +1533,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
                 ...def.config.options,
                 plugins: {
                   ...def.config.options.plugins,
-                  title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                  title: { display: true, text: `Machine Efficiency: ${selectedMac || 'All Machines'} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
                 },
                 scales: {
                   ...def.config.options.scales,
@@ -1997,7 +1997,6 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
     if (def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") {
       if (chartRef.current) chartRef.current.destroy();
       if (def.id === "production-1" && !modalOperator) { if (oprLoading) return () => {}; return () => {}; }
-      if (def.id === "production-4" && !selectedMac) { if (macLoading) return () => {}; return () => {}; }
 
       // Smart dynamic loader text
       let txt = "Loading chart data...";
@@ -2149,7 +2148,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
           }
           else if (def.id === "production-3") {
             const palette = ["#3b82f6","#06b6d4","#10b981","#f97316","#8b5cf6","#ec4899","#f43f5e","#84cc16","#14b8a6","#6366f1","#f59e0b","#a855f7"];
-            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette }];
+            const ds = [{ label: "Idle Time (hrs)", data: data.data || [], backgroundColor: palette, minBarLength: 5 }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
@@ -2157,11 +2156,11 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
             });
           } 
           else if (def.id === "production-4") {
-            const ds = [{ label: `${selectedMac || 'Machine'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
+            const ds = [{ label: `${selectedMac || 'All Machines'} Efficiency % — ${data.fy || ""}`, data: data.data || [], fill: true }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
-              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Machine Efficiency: ${selectedMac || 'All Machines'} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
             });
           }
           else if (def.id === "purchase-2" || def.id === "vendor-1") {

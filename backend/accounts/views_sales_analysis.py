@@ -1817,7 +1817,7 @@ def sales_analysis_future_projections(request):
             cust_name_expr = "LTRIM(RTRIM(ISNULL(cm.CName, N'')))"
             cust_join = "LEFT JOIN CustMast cm ON p.cid = cm.Id"
 
-        # 1. Fetch schedules within the selected PO date range
+        # 1. Fetch schedules within the selected Schedule date (shddate) range
         search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
         search_sql_pd, search_params_pd = _build_search_sql(cursor, search_q, "In_PoDet", "pd")
 
@@ -1840,7 +1840,8 @@ def sales_analysis_future_projections(request):
         WHERE ISNULL(s.deleted, 0) = 0
           AND ISNULL(p.deleted, 0) = 0
           AND ISNULL(pd.deleted, 0) = 0
-          AND CAST(p.podt AS DATE) BETWEEN ? AND ?
+          AND s.shddate IS NOT NULL
+          AND CAST(s.shddate AS DATE) BETWEEN ? AND ?
           {search_sql_pd}
         ORDER BY s.reqdate ASC
         """
@@ -1860,7 +1861,7 @@ def sales_analysis_future_projections(request):
                 "rate": float(row[9] or 0)
             })
 
-        # Schd Qty: direct from In_PoDet_ShdQty (no In_PoDet join) filtered by shddate month
+        # Schd Qty: direct from In_PoDet_ShdQty (no In_PoDet join) filtered by shddate date range
         search_sql_s, search_params_s = _build_search_sql(cursor, search_q, "In_PoDet_ShdQty", "s")
         schd_qty_sql = f"""
         SELECT
@@ -1875,8 +1876,8 @@ def sales_analysis_future_projections(request):
         {cust_join}
         WHERE ISNULL(s.deleted, 0) = 0
           AND ISNULL(p.deleted, 0) = 0
-          AND CAST(p.podt AS DATE) BETWEEN ? AND ?
           AND s.shddate IS NOT NULL
+          AND CAST(s.shddate AS DATE) BETWEEN ? AND ?
           {search_sql_s}
         GROUP BY
             {cust_name_expr},

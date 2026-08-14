@@ -953,7 +953,7 @@ export default function DashboardLayout() {
                         </button>
                     </div>
                     <div className="dl-expired-footer">
-                        <p>Need help? Contact our support team at <a href="mailto:support@animse.com">support@animse.com</a></p>
+                        <p>Need help? Contact our support team at <a href="mailto:teamweb@animse.com">teamweb@animse.com</a></p>
                     </div>
                 </div>
                 {/* Settings Overlay Modal in Expired Mode */}

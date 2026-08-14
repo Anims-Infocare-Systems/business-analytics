@@ -94,6 +94,12 @@ def signup_view(request):
     email = str(request.data.get("email") or "").strip()
     phone = str(request.data.get("phone") or "").strip()
     gst = str(request.data.get("gst") or "").strip()
+    address1 = str(request.data.get("address1") or "").strip()
+    address2 = str(request.data.get("address2") or "").strip()
+    city = str(request.data.get("city") or "").strip()
+    state = str(request.data.get("state") or "").strip()
+    pincode = str(request.data.get("pincode") or "").strip()
+    country = str(request.data.get("country") or "India").strip()
     employees = str(request.data.get("employees") or "").strip()
     users_count = int(request.data.get("users") or 1)
     plan_id = str(request.data.get("plan_id") or "free").strip().lower()
@@ -154,11 +160,13 @@ def signup_view(request):
                 INSERT INTO tenants_signup (
                     tenant_id, company_code, company_name, business_name, 
                     business_person_name, email_id, phone_number, gst_number, 
+                    address1, address2, city, state, pincode, country,
                     no_of_employees, no_of_users, plan_id, plan_name,
                     signup_date, end_date, active_status, created_at, billing_cycle
                 ) VALUES (
                     %s, %s, %s, %s, 
                     %s, %s, %s, %s, 
+                    %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, 
                     GETDATE(),
                     CASE 
@@ -172,6 +180,7 @@ def signup_view(request):
                 [
                     tenant_id, company_code, company_name, business_name,
                     person_name, email, phone, gst or None,
+                    address1 or None, address2 or None, city or None, state or None, pincode or None, country or None,
                     employees, users_count, plan_id, plan_name,
                     plan_id, billing_cycle, billing_cycle, billing_cycle
                 ]

@@ -151,8 +151,8 @@ const PLANS = [
         id: "max",
         name: "Max",
         tagline: "Full enterprise integrations & multi-plant operation tracking",
-        price: { yearly: "₹2,500", monthly: "₹8,999" },
-        priceUnit: "/ user / month",
+        price: { yearly: "₹5,000", monthly: "₹5,000" },
+        priceUnit: "/ 2 users / month",
         priceSub: { yearly: "billed annually (Min. 2 users)", monthly: "billed monthly (Min. 2 users)" },
         pricePrefix: "",
         ctaLabel: "Get Max plan",
@@ -328,6 +328,12 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
         gst: "",
         employees: "",
         users: defaultUsers,
+        address1: "",
+        address2: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: "India",
     });
     const [errors, setErrors] = useState({});
     const [formErr, setFormErr] = useState(false);
@@ -406,6 +412,10 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
         if (!form.personName.trim()) errs.personName = "Contact person name is required.";
         if (!validateEmail(form.email)) errs.email = "Enter a valid email address.";
         if (!validatePhone(form.phone)) errs.phone = "Enter a valid phone number.";
+        if (!form.address1.trim()) errs.address1 = "Address Line 1 is required.";
+        if (!form.city.trim()) errs.city = "City is required.";
+        if (!form.state.trim()) errs.state = "State is required.";
+        if (!/^\d{6}$/.test(form.pincode.trim())) errs.pincode = "Enter a valid 6-digit pincode.";
         if (!form.employees) errs.employees = "Please select employee count.";
         const u = parseInt(form.users) || 0;
         const limit = selectedPlan.id === "free" ? 5 : 9999;
@@ -706,6 +716,155 @@ function FormScreen({ selectedPlan, selectedBilling, defaultUsers = "1", onBack,
                                     onChange={e => handleField("gst", e.target.value.toUpperCase())} />
                             </div>
                             <span className="sg-hint">15-character Indian GSTIN (if applicable)</span>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION B2: Billing Address ── */}
+                    <p className="sg-section-head">Billing Address</p>
+                    <div className="sg-grid">
+
+                        {/* Address Line 1 */}
+                        <div className="sg-field sg-field--full">
+                            <label className="sg-label" htmlFor="f-addr1">
+                                Address Line 1&nbsp;<span className="sg-label__req">*</span>
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                        <polyline points="9,22 9,12 15,12 15,22" />
+                                    </svg>
+                                </span>
+                                <input id="f-addr1"
+                                    className={`sg-inp${errors.address1 ? " sg-inp--err" : ""}`}
+                                    type="text" placeholder="Street address, building name, door no."
+                                    value={form.address1}
+                                    onChange={e => handleField("address1", e.target.value)} />
+                            </div>
+                            {errors.address1 && (
+                                <span className="sg-err-text sg-err-text--show" id="err-addr1">
+                                    {errors.address1}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Address Line 2 */}
+                        <div className="sg-field sg-field--full">
+                            <label className="sg-label" htmlFor="f-addr2">
+                                Address Line 2&nbsp;<span className="sg-label__opt">(optional)</span>
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <rect x="2" y="7" width="20" height="14" rx="2" />
+                                        <path d="M16 7V5a2 2 0 0 0-4 0v2" />
+                                    </svg>
+                                </span>
+                                <input id="f-addr2" className="sg-inp" type="text"
+                                    placeholder="Area, landmark, suite, unit (optional)"
+                                    value={form.address2}
+                                    onChange={e => handleField("address2", e.target.value)} />
+                            </div>
+                        </div>
+
+                        {/* City */}
+                        <div className="sg-field">
+                            <label className="sg-label" htmlFor="f-city">
+                                City&nbsp;<span className="sg-label__req">*</span>
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                    </svg>
+                                </span>
+                                <input id="f-city"
+                                    className={`sg-inp${errors.city ? " sg-inp--err" : ""}`}
+                                    type="text" placeholder="City"
+                                    value={form.city}
+                                    onChange={e => handleField("city", e.target.value)} />
+                            </div>
+                            {errors.city && (
+                                <span className="sg-err-text sg-err-text--show" id="err-city">
+                                    {errors.city}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* State */}
+                        <div className="sg-field">
+                            <label className="sg-label" htmlFor="f-state">
+                                State&nbsp;<span className="sg-label__req">*</span>
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                                        <polyline points="2 17 12 22 22 17" />
+                                        <polyline points="2 12 12 17 22 12" />
+                                    </svg>
+                                </span>
+                                <input id="f-state"
+                                    className={`sg-inp${errors.state ? " sg-inp--err" : ""}`}
+                                    type="text" placeholder="State"
+                                    value={form.state}
+                                    onChange={e => handleField("state", e.target.value)} />
+                            </div>
+                            {errors.state && (
+                                <span className="sg-err-text sg-err-text--show" id="err-state">
+                                    {errors.state}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Pincode */}
+                        <div className="sg-field">
+                            <label className="sg-label" htmlFor="f-pincode">
+                                Pincode&nbsp;<span className="sg-label__req">*</span>
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                                        <line x1="7" y1="8" x2="17" y2="8" />
+                                        <line x1="7" y1="12" x2="17" y2="12" />
+                                    </svg>
+                                </span>
+                                <input id="f-pincode"
+                                    className={`sg-inp${errors.pincode ? " sg-inp--err" : ""}`}
+                                    type="text" placeholder="6-digit pincode" maxLength={6}
+                                    value={form.pincode}
+                                    onChange={e => handleField("pincode", e.target.value.replace(/\D/g, ""))} />
+                            </div>
+                            {errors.pincode && (
+                                <span className="sg-err-text sg-err-text--show" id="err-pincode">
+                                    {errors.pincode}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Country */}
+                        <div className="sg-field">
+                            <label className="sg-label" htmlFor="f-country">
+                                Country
+                            </label>
+                            <div className="sg-inp-wrap">
+                                <span className="sg-inp-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="2" y1="12" x2="22" y2="12" />
+                                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                    </svg>
+                                </span>
+                                <input id="f-country" className="sg-inp" type="text" value={form.country} readOnly tabIndex={-1} />
+                            </div>
                         </div>
                     </div>
 
@@ -1321,7 +1480,7 @@ function BillingModal({ plan, selectedCycle, onCycleChange, onClose, onContinue 
                         </div>
                         <div className="sg-breakdown-divider" />
                         <div className="sg-breakdown-row sg-breakdown-row--total">
-                            <span>Total due today</span>
+                            <span>Total Amount</span>
                             <span>₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                         </div>
                     </div>
@@ -1387,6 +1546,12 @@ export default function SignupPage() {
             email: data.form.email,
             phone: data.form.phone,
             gst: data.form.gst,
+            address1: data.form.address1,
+            address2: data.form.address2,
+            city: data.form.city,
+            state: data.form.state,
+            pincode: data.form.pincode,
+            country: data.form.country,
             employees: data.form.employees,
             users: data.form.users,
             plan_id: selectedPlan ? selectedPlan.id : "free",

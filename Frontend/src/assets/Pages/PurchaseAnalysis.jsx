@@ -1099,7 +1099,7 @@ export default function PurchaseAnalysis() {
             const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
         };
-        const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
+        const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to), type: "supplier" });
         if (debouncedSearchQuery) {
             params.set("search", debouncedSearchQuery);
         }

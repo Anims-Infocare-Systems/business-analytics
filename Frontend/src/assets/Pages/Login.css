@@ -248,7 +248,7 @@
     /* ── Card (form wrapper) ─────────────────────────────────────── */
     .lp__card {
         width: 100%;
-        max-width: 430px;
+        max-width: 365px;
         /* margin-top: auto; */
         margin-bottom: auto;
         transform: translateY(3vh);
@@ -1113,6 +1113,7 @@
 
     /* Reduced motion preference — scoped to login page only */
     @media (prefers-reduced-motion: reduce) {
+
         .lp,
         .lp *,
         .lp *::before,

@@ -415,7 +415,7 @@
 .st-billing-banner__plan { font-family: var(--st-font-heading); font-size: 22px; font-weight: 800; color: #fff; margin: 0; letter-spacing: -0.02em; }
 .st-billing-banner__expiry { font-size: 12.5px; color: rgba(255,255,255,0.8); margin: 0; }
 .st-billing-banner__dates { font-size: 11px; color: rgba(255,255,255,0.7); margin: 0; }
-.st-billing-banner__right { }
+.st-billing-banner__right { display: flex; align-items: center; }
 .st-billing-banner__upgrade-btn {
     display: flex; align-items: center; gap: 7px;
     padding: 11px 22px; background: rgba(255,255,255,0.95);
