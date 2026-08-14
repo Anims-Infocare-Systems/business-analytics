@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
@@ -48,6 +48,12 @@ function formatRupees(rupees) {
   const amount = Number(rupees);
   if (!Number.isFinite(amount)) return "—";
   return amount.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+
+function formatExactRupees(rupees) {
+  const amount = Number(rupees);
+  if (!Number.isFinite(amount)) return "—";
+  return amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatQty(qty) {
@@ -3868,6 +3874,61 @@ export default function SalesAnalysis() {
     return () => ctrl.abort();
   }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
 
+  // ── Real-time Live Background Sync for Despatch Planning Status ──
+  const fetchDespatchPlanLive = useCallback(async () => {
+    let fromDate = dateRange.from;
+    let toDate = dateRange.to;
+    if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      const dflt = getTodayMonthRange();
+      fromDate = dflt.from;
+      toDate = dflt.to;
+    }
+
+    const params = new URLSearchParams({
+      from: toIsoDate(fromDate),
+      to: toIsoDate(toDate),
+    });
+    if (invoiceBtype) params.set("btype", invoiceBtype);
+    if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
+
+    try {
+      const res = await fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.rows) {
+          setPlanVsActual(data.rows);
+        }
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.warn("Live despatch poll skipped:", err);
+      }
+    }
+  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
+
+  useEffect(() => {
+    // Background polling every 3 seconds for near real-time live data
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchDespatchPlanLive();
+      }
+    }, 3000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchDespatchPlanLive();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchDespatchPlanLive]);
+
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
     setDateRange(getTodayMonthRange());
@@ -4485,6 +4546,10 @@ export default function SalesAnalysis() {
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <FileText size={16} style={{ color: "#2d6de8" }} /> Despatch Planning Status
             </span>
+            <span className="sa-live-badge" title="Live Auto-Sync active: Data continuously updates without page reload">
+              <span className="sa-live-dot" />
+              <span>Live</span>
+            </span>
             <div className="sa-despatch-kpi-badge" style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -4500,13 +4565,8 @@ export default function SalesAnalysis() {
             }}>
               <span style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Total Inv Value:</span>
               <span style={{ color: '#2d6de8', fontWeight: '700', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                ₹{despatchTotalInvValue >= 100_000 ? `${(despatchTotalInvValue / 100_000).toFixed(2)}L` : formatRupees(despatchTotalInvValue)}
+                ₹{formatExactRupees(despatchTotalInvValue)}
               </span>
-              {despatchTotalInvValue >= 100_000 && (
-                <span style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: '500', marginLeft: '4px' }}>
-                  (₹{formatRupees(despatchTotalInvValue)})
-                </span>
-              )}
             </div>
           </div>
           <div className="sa-despatch-filters" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -4865,7 +4925,7 @@ export default function SalesAnalysis() {
                           )}
                         </td>
                         <td className="sa-num" style={{ fontWeight: 500 }}>
-                          {row.invValue ? `₹${formatRupees(row.invValue)}` : "—"}
+                          {row.invValue != null && row.invValue !== "" && Number(row.invValue) > 0 ? `₹${formatExactRupees(row.invValue)}` : "—"}
                         </td>
                       </tr>
                     ))}
