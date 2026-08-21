@@ -2003,17 +2003,25 @@ def sales_analysis_future_projections(request):
         if schd_qty <= 0:
             continue
         agg = projections.get((cust, po_month, schd_month))
+        pos_val = agg.get("pos") if agg else None
+        pos_count = len(pos_val) if isinstance(pos_val, set) else 0
+        tot_qty = round(float(agg["totQty"]), 2) if (agg and isinstance(agg.get("totQty"), (int, float))) else 0.0
+        tot_amt = round(float(agg["totAmt"]), 2) if (agg and isinstance(agg.get("totAmt"), (int, float))) else 0.0
+        disp_qty = round(float(agg["dispQty"]), 2) if (agg and isinstance(agg.get("dispQty"), (int, float))) else 0.0
+        pend_qty = round(float(agg["pendQty"]), 2) if (agg and isinstance(agg.get("pendQty"), (int, float))) else 0.0
+        pend_val = round(float(agg["pendVal"]), 2) if (agg and isinstance(agg.get("pendVal"), (int, float))) else 0.0
+
         rows.append({
             "customer": cust,
             "month": po_month,
-            "pos": len(agg["pos"]) if agg else 0,
-            "totQty": round(agg["totQty"], 2) if agg else 0.0,
-            "totAmt": round(agg["totAmt"], 2) if agg else 0.0,
+            "pos": pos_count,
+            "totQty": tot_qty,
+            "totAmt": tot_amt,
             "schdMonth": schd_month,
             "schdQty": schd_qty,
-            "dispQty": round(agg["dispQty"], 2) if agg else 0.0,
-            "pendQty": round(agg["pendQty"], 2) if agg else 0.0,
-            "pendVal": round(agg["pendVal"], 2) if agg else 0.0
+            "dispQty": disp_qty,
+            "pendQty": pend_qty,
+            "pendVal": pend_val
         })
 
     return Response({
@@ -2320,6 +2328,7 @@ def sales_analysis_po_ledger(request):
     btype_p = _btype_param(btype_filter)
     btype_sql = " AND LTRIM(RTRIM(ISNULL(bm.btype, N''))) = ?" if btype_p else ""
 
+    cursor = None
     try:
         cursor = conn.cursor()
         use_alias = table_exists(cursor, "CustAliasMast")
