@@ -249,6 +249,9 @@ def settings_profile(request):
             if end_dt:
                 renewal_str = f"Next renewal: {end_dt.strftime('%B %d, %Y')}"
 
+    if company and str(company).strip().upper().startswith(('T', 'P', 'D')):
+        renewal_str = "Lifetime (Free Forever)"
+
     plan_start_str = act_start.strftime("%Y-%m-%d") if isinstance(act_start, (datetime, date)) else str(act_start or "")
     plan_end_str = act_end.strftime("%Y-%m-%d") if isinstance(act_end, (datetime, date)) else str(act_end or "")
 

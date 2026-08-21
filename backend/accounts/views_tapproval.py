@@ -946,7 +946,7 @@ def tapproval_approve(request):
         )
         doc_label = "Returnable DC"
     else:
-        update_sql = "UPDATE Bill_Mas SET IsApproved = 1 WHERE ISNULL(deleted, 0) = 0 AND invno = ?"
+        update_sql = "UPDATE Bill_Mas SET IsApproved = 1, IsModifyOpen = 0 WHERE ISNULL(deleted, 0) = 0 AND invno = ?"
         doc_label = "Invoice"
 
     try:
@@ -1062,7 +1062,7 @@ def tapproval_modify(request):
         )
         doc_label = "Returnable DC"
     else:
-        update_sql = "UPDATE Bill_Mas SET IsApproved = 0 WHERE ISNULL(deleted, 0) = 0 AND invno = ?"
+        update_sql = "UPDATE Bill_Mas SET IsApproved = 0, IsModifyOpen = 1 WHERE ISNULL(deleted, 0) = 0 AND invno = ?"
         doc_label = "Invoice"
 
     try:

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { MdVisibility as MdEye, MdVisibilityOff as MdEyeOff, MdLockReset, MdArrowBack, MdCheckCircle, MdShield, MdAccessTime, MdPeople, MdPersonAdd, MdDelete, MdPerson } from "react-icons/md";
 import { resolveApiBase } from "../../apiBase";
 import { adminFetch, setAdminToken } from "../../adminAuth";
 import "./adminpannel.css";
@@ -10,6 +11,14 @@ import UserTransactionReport from "./UserTransactionReport";
 
 const API = resolveApiBase();
 const ADMIN_AUTH_CODE = "admin_auth_required";
+
+function getSeriesPlanName(companyCode, dbPlanName) {
+    const code = String(companyCode || "").trim().toUpperCase();
+    if (code.startsWith("T")) return "Testing Details (T)";
+    if (code.startsWith("D")) return "Demo Details (D)";
+    if (code.startsWith("P")) return "Programming Details (P)";
+    return dbPlanName || "Free";
+}
 
 function CustomSingleDatePicker({ value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -190,11 +199,12 @@ function CustomSingleDatePicker({ value, onChange }) {
     );
 }
 
-function CustomDropdown({ value, onChange, options, placeholder }) {
+function CustomDropdown({ value, onChange, options, placeholder, isWide }) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
     const selectedOption = options.find(opt => opt.value === value) || { label: placeholder || "Select...", value };
+    const isActive = value !== "all";
 
     useEffect(() => {
         const handleClick = (e) => {
@@ -212,13 +222,18 @@ function CustomDropdown({ value, onChange, options, placeholder }) {
     };
 
     return (
-        <div className="ap-custom-select-container" ref={dropdownRef}>
+        <div className={`ap-custom-select-container ${isWide ? "ap-custom-select-container--wide" : ""}`} ref={dropdownRef}>
             <button 
                 type="button"
-                className={`ap-custom-select-trigger ${isOpen ? "ap-custom-select-trigger--open" : ""}`}
+                className={`ap-custom-select-trigger ${isOpen ? "ap-custom-select-trigger--open" : ""} ${isActive ? "ap-custom-select-trigger--active" : ""}`}
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span>{selectedOption.label}</span>
+                <div className="ap-custom-select-val-wrap">
+                    <span className="ap-custom-select-text">{selectedOption.label}</span>
+                    {selectedOption.count !== undefined && (
+                        <span className="ap-custom-select-count">{selectedOption.count}</span>
+                    )}
+                </div>
                 <span className="ap-custom-select-arrow">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <polyline points="6 9 12 15 18 9" />
@@ -238,13 +253,11 @@ function CustomDropdown({ value, onChange, options, placeholder }) {
                                 onClick={() => handleSelectOption(opt.value)}
                             >
                                 <span className="ap-custom-select-option-text">{opt.label}</span>
-                                {isSelected && (
-                                    <span className="ap-custom-select-option-check">
-                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3">
-                                            <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                    </span>
-                                )}
+                                {opt.count !== undefined ? (
+                                    <span className="ap-custom-select-option-badge">{opt.count}</span>
+                                ) : isSelected ? (
+                                    <span className="ap-custom-select-option-check">✓</span>
+                                ) : null}
                             </button>
                         );
                     })}
@@ -345,6 +358,7 @@ export default function AdminPanel() {
     const [loginPassword, setLoginPassword] = useState("");
     const [loginError, setLoginError] = useState("");
     const [loginBusy, setLoginBusy] = useState(false);
+    const [currentAdminUser, setCurrentAdminUser] = useState(() => localStorage.getItem("ap_admin_user") || "");
 
     // Tenants State
     const [tenants, setTenants] = useState([]);
@@ -355,6 +369,7 @@ export default function AdminPanel() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [planFilter, setPlanFilter] = useState("all");
+    const [seriesFilter, setSeriesFilter] = useState("all");
 
     // Modal / Form States
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -374,6 +389,7 @@ export default function AdminPanel() {
     const [empCount, setEmpCount] = useState("");
     const [usersCount, setUsersCount] = useState(5);
     const [planId, setPlanId] = useState("free");
+    const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [city, setCity] = useState("");
     const [state, setState] = useState("");
@@ -415,6 +431,38 @@ export default function AdminPanel() {
         confirmBtnText: "Delete"
     });
 
+    // Login & Forgot Password States
+    const [showLoginPass, setShowLoginPass] = useState(false);
+    const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
+    const [forgotUsername, setForgotUsername] = useState("");
+    const [forgotNewPass, setForgotNewPass] = useState("");
+    const [forgotConfirmPass, setForgotConfirmPass] = useState("");
+    const [showForgotPass, setShowForgotPass] = useState(false);
+    const [forgotBusy, setForgotBusy] = useState(false);
+    const [forgotError, setForgotError] = useState("");
+    const [forgotSuccess, setForgotSuccess] = useState("");
+
+    // 60-Day Security Rotation States
+    const [securityInfo, setSecurityInfo] = useState(null);
+    const [showSecurityModal, setShowSecurityModal] = useState(false);
+    const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+    const [changeNewPass, setChangeNewPass] = useState("");
+    const [changeConfirmPass, setChangeConfirmPass] = useState("");
+    const [changePassBusy, setChangePassBusy] = useState(false);
+    const [changePassError, setChangePassError] = useState("");
+    const [showChangePassEye, setShowChangePassEye] = useState(false);
+
+    // Master Admin Controller Users State (Settings)
+    const [adminCredentials, setAdminCredentials] = useState([]);
+    const [loadingCredentials, setLoadingCredentials] = useState(false);
+    const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+    const [newAdminUser, setNewAdminUser] = useState("");
+    const [newAdminPass, setNewAdminPass] = useState("");
+    const [newAdminConfirmPass, setNewAdminConfirmPass] = useState("");
+    const [showNewAdminPassEye, setShowNewAdminPassEye] = useState(false);
+    const [addAdminBusy, setAddAdminBusy] = useState(false);
+    const [addAdminError, setAddAdminError] = useState("");
+
     // Check session on mount
     useEffect(() => {
         checkSession();
@@ -425,6 +473,14 @@ export default function AdminPanel() {
         localStorage.setItem("ap_active_tab", activeTab);
     }, [activeTab]);
 
+    // Ensure non-admin users cannot stay on settings_users tab
+    useEffect(() => {
+        if (String(currentAdminUser || "").trim().toLowerCase() !== "admin" && activeTab === "settings_users") {
+            setActiveTab("admin_pannel");
+            localStorage.removeItem("ap_active_tab");
+        }
+    }, [activeTab, currentAdminUser]);
+
     const handleAdminSessionLost = (message) => {
         const msg = message || "Admin session expired. Please sign in again.";
         setAdminToken("");
@@ -434,6 +490,18 @@ export default function AdminPanel() {
         setShowEditModal(false);
         setShowUserDrawer(false);
         setDeleteConfirm((prev) => ({ ...prev, show: false }));
+        setLoginUsername("");
+        setLoginPassword("");
+        setForgotUsername("");
+        setForgotNewPass("");
+        setForgotConfirmPass("");
+        setIsForgotPasswordMode(false);
+        setShowLoginPass(false);
+        setShowForgotPass(false);
+        setCurrentAdminUser("");
+        localStorage.removeItem("ap_admin_user");
+        setActiveTab("admin_pannel");
+        localStorage.removeItem("ap_active_tab");
         setLoginError(msg);
         showAdminToast("error", "Session Expired", msg);
     };
@@ -451,6 +519,15 @@ export default function AdminPanel() {
             if (data.authenticated) {
                 if (data.admin_token) setAdminToken(data.admin_token);
                 setIsAuthenticated(true);
+                if (data.username) {
+                    const user = data.username;
+                    setCurrentAdminUser(user);
+                    localStorage.setItem("ap_admin_user", user);
+                    if (user.toLowerCase() !== "admin" && activeTab === "settings_users") {
+                        setActiveTab("admin_pannel");
+                        localStorage.removeItem("ap_active_tab");
+                    }
+                }
                 fetchTenants();
             }
         } catch {
@@ -488,6 +565,27 @@ export default function AdminPanel() {
         }
     }, []);
 
+    const fetchAdminCredentials = useCallback(async () => {
+        setLoadingCredentials(true);
+        try {
+            const res = await adminFetch(`${API}/admin/credentials/`);
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setAdminCredentials(data.admins || []);
+            }
+        } catch {
+            /* ignore */
+        } finally {
+            setLoadingCredentials(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isAuthenticated && activeTab === "settings_users") {
+            fetchAdminCredentials();
+        }
+    }, [isAuthenticated, activeTab, fetchAdminCredentials]);
+
     // Authenticate Admin
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -510,6 +608,21 @@ export default function AdminPanel() {
             if (res.ok && data.success) {
                 if (data.admin_token) setAdminToken(data.admin_token);
                 setIsAuthenticated(true);
+                const user = data.username || loginUsername || "";
+                setCurrentAdminUser(user);
+                localStorage.setItem("ap_admin_user", user);
+                setActiveTab("admin_pannel");
+                if (user.toLowerCase() !== "admin") {
+                    localStorage.removeItem("ap_active_tab");
+                }
+                setLoginUsername("");
+                setLoginPassword("");
+                if (data.security_info) {
+                    setSecurityInfo(data.security_info);
+                    if (data.security_info.recommend_change) {
+                        setShowSecurityModal(true);
+                    }
+                }
                 fetchTenants();
                 showAdminToast("success", "Welcome Admin", "Signed in successfully.");
             } else {
@@ -526,6 +639,181 @@ export default function AdminPanel() {
         }
     };
 
+    // Forgot Password Submit
+    const handleForgotPasswordSubmit = async (e) => {
+        e.preventDefault();
+        setForgotError("");
+        setForgotSuccess("");
+
+        if (!forgotUsername || !forgotNewPass || !forgotConfirmPass) {
+            const msg = "Please enter username, new password, and confirm password.";
+            setForgotError(msg);
+            showAdminToast("error", "Missing Fields", msg);
+            return;
+        }
+
+        if (forgotNewPass !== forgotConfirmPass) {
+            const msg = "New password and Confirm password do not match.";
+            setForgotError(msg);
+            showAdminToast("error", "Mismatch Error", msg);
+            return;
+        }
+
+        if (forgotNewPass.length < 6) {
+            const msg = "Password must be at least 6 characters long.";
+            setForgotError(msg);
+            showAdminToast("error", "Validation Error", msg);
+            return;
+        }
+
+        setForgotBusy(true);
+        try {
+            const res = await fetch(`${API}/admin/forgot-password/reset/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: forgotUsername,
+                    new_password: forgotNewPass,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setForgotSuccess(data.message || "Password reset successfully!");
+                showAdminToast("success", "Password Reset", "Master admin password updated. You can now sign in.");
+                setLoginUsername(forgotUsername);
+                setLoginPassword("");
+                setTimeout(() => {
+                    setIsForgotPasswordMode(false);
+                    setForgotNewPass("");
+                    setForgotConfirmPass("");
+                    setForgotSuccess("");
+                }, 1200);
+            } else {
+                const msg = data.error || "Failed to reset password.";
+                setForgotError(msg);
+                showAdminToast("error", "Reset Failed", msg);
+            }
+        } catch {
+            const msg = "Network error. Please try again.";
+            setForgotError(msg);
+            showAdminToast("error", "Network Error", msg);
+        } finally {
+            setForgotBusy(false);
+        }
+    };
+
+    // Change Master Admin Password Submit
+    const handleChangePasswordSubmit = async (e) => {
+        e.preventDefault();
+        setChangePassError("");
+
+        if (!changeNewPass || !changeConfirmPass) {
+            setChangePassError("Please enter new password and confirm password.");
+            return;
+        }
+        if (changeNewPass !== changeConfirmPass) {
+            setChangePassError("New password and Confirm password do not match.");
+            return;
+        }
+        if (changeNewPass.length < 6) {
+            setChangePassError("Password must be at least 6 characters long.");
+            return;
+        }
+
+        setChangePassBusy(true);
+        try {
+            const res = await adminFetch(`${API}/admin/change-password/`, {
+                method: "POST",
+                body: JSON.stringify({
+                    username: securityInfo?.username || "admin",
+                    new_password: changeNewPass
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showAdminToast("success", "Password Rotation Complete", "Master admin password updated successfully.");
+                setShowChangePasswordModal(false);
+                setShowSecurityModal(false);
+                setChangeNewPass("");
+                setChangeConfirmPass("");
+                setSecurityInfo(prev => ({
+                    ...prev,
+                    password_age_days: 0,
+                    days_remaining: 60,
+                    recommend_change: false,
+                    last_changed_date: new Date().toLocaleDateString("en-GB")
+                }));
+            } else {
+                const msg = data.error || "Failed to update password.";
+                setChangePassError(msg);
+                showAdminToast("error", "Update Failed", msg);
+            }
+        } catch {
+            const msg = "Network error. Please try again.";
+            setChangePassError(msg);
+            showAdminToast("error", "Network Error", msg);
+        } finally {
+            setChangePassBusy(false);
+        }
+    };
+
+    // Add Master Admin User Submit (Settings)
+    const handleAddAdminSubmit = async (e) => {
+        e.preventDefault();
+        setAddAdminError("");
+
+        if (!newAdminUser || !newAdminPass || !newAdminConfirmPass) {
+            setAddAdminError("Please fill in all fields.");
+            return;
+        }
+        if (newAdminPass !== newAdminConfirmPass) {
+            setAddAdminError("Passwords do not match.");
+            return;
+        }
+        if (newAdminPass.length < 6) {
+            setAddAdminError("Password must be at least 6 characters long.");
+            return;
+        }
+
+        setAddAdminBusy(true);
+        try {
+            const res = await adminFetch(`${API}/admin/credentials/create/`, {
+                method: "POST",
+                body: JSON.stringify({ username: newAdminUser, password: newAdminPass })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showAdminToast("success", "User Created", `Master admin user '${newAdminUser}' created successfully.`);
+                setShowAddAdminModal(false);
+                setNewAdminUser("");
+                setNewAdminPass("");
+                setNewAdminConfirmPass("");
+                fetchAdminCredentials();
+            } else {
+                const msg = data.error || "Failed to create admin user.";
+                setAddAdminError(msg);
+                showAdminToast("error", "Creation Failed", msg);
+            }
+        } catch {
+            const msg = "Network error. Please try again.";
+            setAddAdminError(msg);
+            showAdminToast("error", "Network Error", msg);
+        } finally {
+            setAddAdminBusy(false);
+        }
+    };
+
+    const handleDeleteAdminUser = (admin) => {
+        setDeleteConfirm({
+            show: true,
+            type: "admin_user",
+            target: admin,
+            title: "Delete Master Admin User",
+            message: `Are you sure you want to delete master admin user '${admin.username}'?`,
+            confirmBtnText: "Delete Admin User"
+        });
+    };
+
     // Logout Admin
     const handleLogout = async () => {
         try {
@@ -536,6 +824,21 @@ export default function AdminPanel() {
         setAdminToken("");
         setIsAuthenticated(false);
         setTenants([]);
+        setLoginUsername("");
+        setLoginPassword("");
+        setLoginError("");
+        setForgotUsername("");
+        setForgotNewPass("");
+        setForgotConfirmPass("");
+        setForgotError("");
+        setForgotSuccess("");
+        setIsForgotPasswordMode(false);
+        setShowLoginPass(false);
+        setShowForgotPass(false);
+        setCurrentAdminUser("");
+        localStorage.removeItem("ap_admin_user");
+        setActiveTab("admin_pannel");
+        localStorage.removeItem("ap_active_tab");
         showAdminToast("success", "Logged Out", "You have signed out of Admin Panel.");
     };
 
@@ -611,6 +914,7 @@ export default function AdminPanel() {
         setEmpCount("");
         setUsersCount(5);
         setPlanId("free");
+        setStartDate(new Date().toISOString().split("T")[0]);
         setEndDate("");
         setCity("");
         setState("");
@@ -646,6 +950,7 @@ export default function AdminPanel() {
         setEmpCount(t.no_of_employees || "");
         setUsersCount(t.no_of_users || 5);
         setPlanId(t.plan_id || "free");
+        setStartDate(t.signup_date || t.start_date || "");
         setEndDate(t.end_date || "");
         setCity(t.city || "");
         setState(t.state || "");
@@ -687,11 +992,11 @@ export default function AdminPanel() {
                     business_person_name: persName,
                     email_id: emailId,
                     phone_number: phoneNo,
-                    gst_number: gstNo,
                     no_of_employees: empCount,
                     no_of_users: usersCount,
                     plan_id: planId,
                     plan_name: plan_name,
+                    signup_date: startDate,
                     end_date: endDate,
                     city: city,
                     state: state,
@@ -747,6 +1052,7 @@ export default function AdminPanel() {
                     no_of_users: usersCount,
                     plan_id: planId,
                     plan_name: plan_name,
+                    signup_date: startDate,
                     end_date: endDate,
                     active_status: editTenant.active_status,
                     city: city,
@@ -872,6 +1178,23 @@ export default function AdminPanel() {
                         showAdminToast("error", "Delete Failed", data.error || "Failed to delete user.");
                     }
                 }
+            } else if (deleteConfirm.type === "admin_user") {
+                const admin = deleteConfirm.target;
+                const res = await adminFetch(`${API}/admin/credentials/delete/${admin.id}/`, {
+                    method: "DELETE",
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAdminToast("success", "User Deleted", data.message);
+                    setDeleteConfirm((prev) => ({ ...prev, show: false }));
+                    fetchAdminCredentials();
+                } else {
+                    if (isAdminAuthFailure(res, data)) {
+                        handleAdminSessionLost(data.error);
+                    } else {
+                        showAdminToast("error", "Delete Failed", data.error || "Failed to delete user.");
+                    }
+                }
             }
         } catch {
             showAdminToast("error", "Network Error", "Delete request failed.");
@@ -882,25 +1205,43 @@ export default function AdminPanel() {
 
     const filteredTenants = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
-        return tenants.filter((t) => {
-            const matchesQuery = !query ||
-                t.company_name.toLowerCase().includes(query) ||
-                t.company_code.toLowerCase().includes(query) ||
-                t.business_person_name.toLowerCase().includes(query) ||
-                t.email_id.toLowerCase().includes(query);
+        return tenants
+            .filter((t) => {
+                const matchesQuery = !query ||
+                    t.company_name.toLowerCase().includes(query) ||
+                    t.company_code.toLowerCase().includes(query) ||
+                    t.business_person_name.toLowerCase().includes(query) ||
+                    t.email_id.toLowerCase().includes(query);
 
-            const matchesStatus = statusFilter === "all" ||
-                (statusFilter === "active" && t.active_status) ||
-                (statusFilter === "inactive" && !t.active_status);
+                const matchesStatus = statusFilter === "all" ||
+                    (statusFilter === "active" && t.active_status) ||
+                    (statusFilter === "inactive" && !t.active_status);
 
-            const matchesPlan = planFilter === "all" ||
-                t.plan_id === planFilter ||
-                (planFilter === "max" && t.plan_id === "enterprise") ||
-                (planFilter === "free" && !t.plan_id);
+                const matchesPlan = planFilter === "all" ||
+                    t.plan_id === planFilter ||
+                    (planFilter === "max" && t.plan_id === "enterprise") ||
+                    (planFilter === "free" && !t.plan_id);
 
-            return matchesQuery && matchesStatus && matchesPlan;
-        });
-    }, [tenants, searchQuery, statusFilter, planFilter]);
+                const codeUpper = (t.company_code || "").trim().toUpperCase();
+                const matchesSeries = seriesFilter === "all" || codeUpper.startsWith(seriesFilter);
+
+                return matchesQuery && matchesStatus && matchesPlan && matchesSeries;
+            })
+            .sort((a, b) => {
+                const codeA = (a.company_code || "").trim().toUpperCase();
+                const codeB = (b.company_code || "").trim().toUpperCase();
+                const getSeriesRank = (code) => {
+                    if (code.startsWith("A")) return 1;
+                    if (code.startsWith("D")) return 2;
+                    if (code.startsWith("P")) return 3;
+                    if (code.startsWith("T")) return 4;
+                    return 5;
+                };
+                const rankDiff = getSeriesRank(codeA) - getSeriesRank(codeB);
+                if (rankDiff !== 0) return rankDiff;
+                return codeA.localeCompare(codeB);
+            });
+    }, [tenants, searchQuery, statusFilter, planFilter, seriesFilter]);
 
     const kpiCounts = useMemo(() => ({
         total: tenants.length,
@@ -909,6 +1250,22 @@ export default function AdminPanel() {
         max: tenants.filter((t) => t.plan_id === "max" || t.plan_id === "enterprise").length,
         free: tenants.filter((t) => t.plan_id === "free" || !t.plan_id).length,
     }), [tenants]);
+
+    const seriesOptions = useMemo(() => {
+        const total = tenants.length;
+        const countA = tenants.filter(t => (t.company_code || "").trim().toUpperCase().startsWith("A")).length;
+        const countT = tenants.filter(t => (t.company_code || "").trim().toUpperCase().startsWith("T")).length;
+        const countD = tenants.filter(t => (t.company_code || "").trim().toUpperCase().startsWith("D")).length;
+        const countP = tenants.filter(t => (t.company_code || "").trim().toUpperCase().startsWith("P")).length;
+
+        return [
+            { label: "All Details / Series", value: "all", count: total },
+            { label: "Client Details (A)", value: "A", count: countA },
+            { label: "Testing Details (T)", value: "T", count: countT },
+            { label: "Demo Details (D)", value: "D", count: countD },
+            { label: "Programming Details (P)", value: "P", count: countP }
+        ];
+    }, [tenants]);
 
     const totalTenantsCount = kpiCounts.total;
     const activeCount = kpiCounts.active;
@@ -945,51 +1302,172 @@ export default function AdminPanel() {
                                 <img src="/Images/logo.png" alt="Anims Logo" className="ap-login-logo-img" />
                             </div>
                         </div>
-                        <h2 className="ap-login-title">Admin Controller</h2>
-                        <p className="ap-login-subtitle">Enter your master admin account credentials</p>
 
-                        <form onSubmit={handleLogin}>
-                            {loginError && <div className="ap-error-alert">{loginError}</div>}
+                        {isForgotPasswordMode ? (
+                            /* ── FORGOT PASSWORD VIEW ── */
+                            <>
+                                <button 
+                                    type="button" 
+                                    className="ap-btn-back-link" 
+                                    onClick={() => {
+                                        setIsForgotPasswordMode(false);
+                                        setForgotError("");
+                                        setForgotSuccess("");
+                                    }}
+                                    title="Back to Admin Login"
+                                >
+                                    <MdArrowBack size={16} />
+                                    <span>Back to Login</span>
+                                </button>
+                                <h2 className="ap-login-title">Reset Master Password</h2>
+                                <p className="ap-login-subtitle">Update your master admin account credentials</p>
 
-                            <div className="ap-field">
-                                <label className="ap-label">Username</label>
-                                <div className="ap-wrap">
-                                    <input 
-                                        type="text" 
-                                        className="ap-input" 
-                                        placeholder="admin"
-                                        value={loginUsername}
-                                        onChange={e => setLoginUsername(e.target.value)}
-                                        autoComplete="off"
-                                    />
-                                </div>
-                            </div>
+                                <form onSubmit={handleForgotPasswordSubmit}>
+                                    {forgotError && <div className="ap-error-alert">{forgotError}</div>}
+                                    {forgotSuccess && <div className="ap-success-alert"><MdCheckCircle size={16} /> <span>{forgotSuccess}</span></div>}
 
-                            <div className="ap-field">
-                                <label className="ap-label">Password</label>
-                                <div className="ap-wrap">
-                                    <input 
-                                        type="password" 
-                                        className="ap-input" 
-                                        placeholder="••••••••"
-                                        value={loginPassword}
-                                        onChange={e => setLoginPassword(e.target.value)}
-                                        autoComplete="off"
-                                    />
-                                </div>
-                            </div>
+                                    <div className="ap-field">
+                                        <label className="ap-label">Admin Username</label>
+                                        <div className="ap-wrap">
+                                            <input 
+                                                type="text" 
+                                                className="ap-input" 
+                                                placeholder="Enter admin username"
+                                                value={forgotUsername}
+                                                onChange={e => setForgotUsername(e.target.value)}
+                                                autoComplete="off"
+                                            />
+                                        </div>
+                                    </div>
 
-                            <button type="submit" className="ap-btn" disabled={loginBusy}>
-                                {loginBusy ? (
-                                    <>
-                                        <svg className="ap-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                            <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10" />
-                                        </svg>
-                                        Verifying Credentials...
-                                    </>
-                                ) : "Authenticate"}
-                            </button>
-                        </form>
+                                    <div className="ap-field">
+                                        <label className="ap-label">New Password</label>
+                                        <div className="ap-wrap ap-wrap-password">
+                                            <input 
+                                                type={showForgotPass ? "text" : "password"} 
+                                                className="ap-input" 
+                                                placeholder="Enter new password (min 6 chars)"
+                                                value={forgotNewPass}
+                                                onChange={e => setForgotNewPass(e.target.value)}
+                                                autoComplete="new-password"
+                                            />
+                                            <button 
+                                                type="button" 
+                                                className="ap-btn-eye-toggle"
+                                                onClick={() => setShowForgotPass(!showForgotPass)}
+                                                tabIndex={-1}
+                                                title={showForgotPass ? "Hide Password" : "Show Password"}
+                                            >
+                                                {showForgotPass ? <MdEyeOff size={18} /> : <MdEye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="ap-field">
+                                        <label className="ap-label">Confirm New Password</label>
+                                        <div className="ap-wrap ap-wrap-password">
+                                            <input 
+                                                type={showForgotPass ? "text" : "password"} 
+                                                className="ap-input" 
+                                                placeholder="Confirm new password"
+                                                value={forgotConfirmPass}
+                                                onChange={e => setForgotConfirmPass(e.target.value)}
+                                                autoComplete="new-password"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" className="ap-btn ap-btn--reset" disabled={forgotBusy}>
+                                        {forgotBusy ? (
+                                            <>
+                                                <svg className="ap-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                    <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10" />
+                                                </svg>
+                                                Updating Password...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <MdLockReset size={18} />
+                                                <span>Reset Password & Sign In</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </form>
+                            </>
+                        ) : (
+                            /* ── LOGIN VIEW ── */
+                            <>
+                                <h2 className="ap-login-title">Admin Controller</h2>
+                                <p className="ap-login-subtitle">Enter your master admin account credentials</p>
+
+                                <form onSubmit={handleLogin}>
+                                    {loginError && <div className="ap-error-alert">{loginError}</div>}
+
+                                    <div className="ap-field">
+                                        <label className="ap-label">Username</label>
+                                        <div className="ap-wrap">
+                                            <input 
+                                                type="text" 
+                                                name="master_admin_username_field"
+                                                className="ap-input" 
+                                                placeholder="Enter admin username"
+                                                value={loginUsername}
+                                                onChange={e => setLoginUsername(e.target.value)}
+                                                autoComplete="new-password"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="ap-field">
+                                        <div className="ap-label-flex">
+                                            <label className="ap-label">Password</label>
+                                            <button 
+                                                type="button" 
+                                                className="ap-forgot-link" 
+                                                onClick={() => {
+                                                    setIsForgotPasswordMode(true);
+                                                    setForgotUsername(loginUsername || "");
+                                                    setLoginError("");
+                                                }}
+                                            >
+                                                Forgot Password?
+                                            </button>
+                                        </div>
+                                        <div className="ap-wrap ap-wrap-password">
+                                            <input 
+                                                type={showLoginPass ? "text" : "password"} 
+                                                name="master_admin_password_field"
+                                                className="ap-input" 
+                                                placeholder="••••••••"
+                                                value={loginPassword}
+                                                onChange={e => setLoginPassword(e.target.value)}
+                                                autoComplete="new-password"
+                                            />
+                                            <button 
+                                                type="button" 
+                                                className="ap-btn-eye-toggle"
+                                                onClick={() => setShowLoginPass(!showLoginPass)}
+                                                tabIndex={-1}
+                                                title={showLoginPass ? "Hide Password" : "Show Password"}
+                                            >
+                                                {showLoginPass ? <MdEyeOff size={18} /> : <MdEye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" className="ap-btn" disabled={loginBusy}>
+                                        {loginBusy ? (
+                                            <>
+                                                <svg className="ap-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                    <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10" />
+                                                </svg>
+                                                Verifying Credentials...
+                                            </>
+                                        ) : "Authenticate"}
+                                    </button>
+                                </form>
+                            </>
+                        )}
                     </div>
                 </div>
             ) : (
@@ -1043,9 +1521,35 @@ export default function AdminPanel() {
                                 </svg>
                                 <span className="ap-sidebar-text">User Transaction Report</span>
                             </button>
+
+                            {String(currentAdminUser || "").trim().toLowerCase() === "admin" && (
+                                <>
+                                    <div className="ap-sidebar-section-title" style={{ marginTop: "16px" }}>Settings</div>
+
+                                    <button 
+                                        className={`ap-sidebar-item ${activeTab === "settings_users" ? "ap-sidebar-item--active" : ""}`}
+                                        onClick={() => setActiveTab("settings_users")}
+                                    >
+                                        <MdPeople className="ap-sidebar-icon" size={18} />
+                                        <span className="ap-sidebar-text">Users</span>
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         <div className="ap-sidebar-footer">
+                            <button 
+                                type="button" 
+                                className={`ap-sidebar-item ap-sidebar-security-badge ${securityInfo?.recommend_change ? "ap-sidebar-security-badge--due" : ""}`}
+                                onClick={() => setShowChangePasswordModal(true)}
+                                title="Master Admin Security & Password Rotation Status"
+                                style={{ marginBottom: "8px" }}
+                            >
+                                <MdShield className="ap-sidebar-icon" size={18} />
+                                <span className="ap-sidebar-text">
+                                    {securityInfo?.recommend_change ? `Password Rotation Due (${securityInfo?.password_age_days || 60}d)` : `Security: Good (${securityInfo?.password_age_days || 0}d)`}
+                                </span>
+                            </button>
                             <button className="ap-sidebar-logout-btn" onClick={handleLogout}>
                                 <svg className="ap-sidebar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -1113,6 +1617,13 @@ export default function AdminPanel() {
                                             />
                                         </div>
                                         <CustomDropdown
+                                            value={seriesFilter}
+                                            onChange={e => setSeriesFilter(e.target.value)}
+                                            options={seriesOptions}
+                                            placeholder="All Details / Series"
+                                            isWide={true}
+                                        />
+                                        <CustomDropdown
                                             value={statusFilter}
                                             onChange={e => setStatusFilter(e.target.value)}
                                             options={[
@@ -1175,8 +1686,8 @@ export default function AdminPanel() {
                                                                 <div style={{ fontSize: 11, color: "#9ca3af" }}>{t.phone_number}</div>
                                                             </td>
                                                             <td className="ap-td">
-                                                                <span className={`ap-badge ${t.plan_id === 'free' ? 'ap-badge--free' : 'ap-badge--plan'}`}>
-                                                                    {t.plan_name || "Free"}
+                                                                <span className={`ap-badge ${(t.company_code || '').toUpperCase().startsWith('A') && t.plan_id === 'free' ? 'ap-badge--free' : 'ap-badge--plan'}`}>
+                                                                    {getSeriesPlanName(t.company_code, t.plan_name)}
                                                                 </span>
                                                                 <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
                                                                     Limit: {t.no_of_users} User(s)
@@ -1240,11 +1751,143 @@ export default function AdminPanel() {
                             <main className="ap-main-utility">
                                 <AnimsUtility onAuthLost={handleAdminSessionLost} />
                             </main>
-                        ) : (
+                        ) : activeTab === "user_transaction_report" ? (
                             <main className="ap-main-utility">
                                 <UserTransactionReport onAuthLost={handleAdminSessionLost} />
                             </main>
-                        )}
+                        ) : activeTab === "settings_users" && String(currentAdminUser || "").trim().toLowerCase() === "admin" ? (
+                            <main className="ap-main ap-animate-fade-in">
+                                {/* KPI Grid for Admin Security */}
+                                <div className="ap-stats-grid ap-stats-grid--3col">
+                                    <div className="ap-stat-card ap-stat-card--users">
+                                        <div className="ap-stat-header">
+                                            <div className="ap-stat-title">Total Admin Accounts</div>
+                                            <div className="ap-stat-badge">Master Controller</div>
+                                        </div>
+                                        <div className="ap-stat-value">{adminCredentials.length}</div>
+                                    </div>
+                                    <div className="ap-stat-card ap-stat-card--success">
+                                        <div className="ap-stat-header">
+                                            <div className="ap-stat-title">Account Security</div>
+                                            <div className="ap-stat-badge">SHA-256</div>
+                                        </div>
+                                        <div className="ap-stat-value" style={{ fontSize: "20px", marginTop: "4px" }}>
+                                            Encrypted Credentials
+                                        </div>
+                                    </div>
+                                    <div className="ap-stat-card ap-stat-card--warning">
+                                        <div className="ap-stat-header">
+                                            <div className="ap-stat-title">Password Rotation</div>
+                                            <div className="ap-stat-badge">Compliance</div>
+                                        </div>
+                                        <div className="ap-stat-value" style={{ fontSize: "20px", marginTop: "4px" }}>
+                                            60-Day Policy Active
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Master Admin Directory Table */}
+                                <div className="ap-table-section">
+                                    <div className="ap-table-header">
+                                        <div>
+                                            <h3 className="ap-section-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <div className="ap-title-icon-box">
+                                                    <MdPeople size={20} />
+                                                </div>
+                                                <span>Admin Controller Users Directory</span>
+                                            </h3>
+                                            <p className="ap-section-subtitle">
+                                                Manage master admin accounts, system access credentials, and security permissions.
+                                            </p>
+                                        </div>
+                                        <button 
+                                            className="ap-btn ap-btn--add-user" 
+                                            onClick={() => {
+                                                setAddAdminError("");
+                                                setNewAdminUser("");
+                                                setNewAdminPass("");
+                                                setNewAdminConfirmPass("");
+                                                setShowAddAdminModal(true);
+                                            }} 
+                                        >
+                                            <MdPersonAdd size={18} />
+                                            <span>Add Admin User</span>
+                                        </button>
+                                    </div>
+
+                                    {loadingCredentials ? (
+                                        <div className="ap-table-loading">
+                                            <svg className="ap-spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10" />
+                                            </svg>
+                                            <span>Querying master admin credentials...</span>
+                                        </div>
+                                    ) : adminCredentials.length === 0 ? (
+                                        <div className="ap-table-empty">No master admin users found.</div>
+                                    ) : (
+                                        <div className="ap-table-wrapper">
+                                            <table className="ap-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th className="ap-th" style={{ width: "80px" }}>#</th>
+                                                        <th className="ap-th" style={{ minWidth: "220px" }}>Admin User</th>
+                                                        <th className="ap-th" style={{ minWidth: "140px" }}>Status</th>
+                                                        <th className="ap-th" style={{ minWidth: "180px" }}>Last Login</th>
+                                                        <th className="ap-th" style={{ minWidth: "180px" }}>Created Date</th>
+                                                        <th className="ap-th" style={{ textAlign: "right", width: "100px" }}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {adminCredentials.map((admin, idx) => (
+                                                        <tr key={admin.id} className="ap-tr ap-table-row-animated" style={{ animationDelay: `${idx * 0.05}s` }}>
+                                                            <td className="ap-td">
+                                                                <span className="ap-row-index">{idx + 1}</span>
+                                                            </td>
+                                                            <td className="ap-td">
+                                                                <div className="ap-user-cell">
+                                                                    <div className="ap-user-avatar-badge">
+                                                                        {admin.username.charAt(0).toUpperCase()}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="ap-user-title">{admin.username}</div>
+                                                                        <div className="ap-user-id">Master ID: #{admin.id}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="ap-td">
+                                                                <span className="ap-badge ap-badge--active">
+                                                                    <span className="ap-badge-dot"></span>
+                                                                    Active
+                                                                </span>
+                                                            </td>
+                                                            <td className="ap-td" style={{ color: '#cbd5e1', fontSize: '13px' }}>
+                                                                {admin.last_login || "Never"}
+                                                            </td>
+                                                            <td className="ap-td" style={{ color: '#cbd5e1', fontSize: '13px' }}>
+                                                                {admin.created_at || "—"}
+                                                            </td>
+                                                            <td className="ap-td" style={{ textAlign: "right" }}>
+                                                                {admin.username.toLowerCase() !== "admin" ? (
+                                                                    <button 
+                                                                        className="ap-action-btn ap-action-btn--delete" 
+                                                                        onClick={() => handleDeleteAdminUser(admin)}
+                                                                        title="Delete Master Admin User"
+                                                                    >
+                                                                        <MdDelete size={16} />
+                                                                    </button>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', paddingRight: '6px' }}>Protected</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </main>
+                        ) : null}
                     </div>
                 </div>
 
@@ -1468,7 +2111,7 @@ export default function AdminPanel() {
                                                 />
                                             </div>
 
-                                            <div className="ap-form-subtitle">Subscription & Rights Config</div>
+                                            <div className="ap-form-subtitle ap-form-full">Subscription & Rights Config</div>
 
                                             <div className="ap-field">
                                                 <label className="ap-label">Plan Tier</label>
@@ -1491,6 +2134,14 @@ export default function AdminPanel() {
                                                     className="ap-input" 
                                                     value={usersCount}
                                                     onChange={e => setUsersCount(e.target.value)}
+                                                />
+                                            </div>
+
+                                            <div className="ap-field">
+                                                <label className="ap-label">Start Date</label>
+                                                <CustomSingleDatePicker 
+                                                    value={startDate}
+                                                    onChange={setStartDate}
                                                 />
                                             </div>
 
@@ -1745,7 +2396,7 @@ export default function AdminPanel() {
                                                 />
                                             </div>
 
-                                            <div className="ap-form-subtitle">Subscription Config</div>
+                                            <div className="ap-form-subtitle ap-form-full">Subscription Config</div>
 
                                             <div className="ap-field">
                                                 <label className="ap-label">Plan Tier</label>
@@ -1768,6 +2419,14 @@ export default function AdminPanel() {
                                                     className="ap-input" 
                                                     value={usersCount}
                                                     onChange={e => setUsersCount(e.target.value)}
+                                                />
+                                            </div>
+
+                                            <div className="ap-field">
+                                                <label className="ap-label">Start Date</label>
+                                                <CustomSingleDatePicker 
+                                                    value={startDate}
+                                                    onChange={setStartDate}
                                                 />
                                             </div>
 
@@ -1876,16 +2535,17 @@ export default function AdminPanel() {
                     {/* ── CONFIRM DELETE MODAL ── */}
                     {deleteConfirm.show && (
                         <div className="ap-modal-overlay">
-                            <div className="ap-modal-container ap-modal-container--small">
+                            <div className="ap-modal-container ap-modal-container--danger ap-modal-container--small">
                                 <div className="ap-modal-header ap-modal-header--danger">
-                                    <h3 className="ap-modal-title" style={{ display: 'flex', alignItems: 'center' }}>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 8, color: '#ef4444' }}>
-                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                            <line x1="12" y1="9" x2="12" y2="13" />
-                                            <line x1="12" y1="17" x2="12.01" y2="17" />
-                                        </svg>
-                                        {deleteConfirm.title}
-                                    </h3>
+                                    <div className="ap-danger-header-left">
+                                        <div className="ap-danger-icon-glow">
+                                            <MdDelete size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 className="ap-modal-title">{deleteConfirm.title}</h3>
+                                            <p className="ap-modal-subtitle">Irreversible Administrative Action</p>
+                                        </div>
+                                    </div>
                                     <button className="ap-modal-close" onClick={() => setDeleteConfirm(prev => ({ ...prev, show: false }))}>
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -1894,18 +2554,263 @@ export default function AdminPanel() {
                                     </button>
                                 </div>
                                 <div className="ap-modal-body">
-                                    <p style={{ margin: 0, fontSize: 14, color: '#e5e7eb', lineHeight: 1.5 }}>
-                                        {deleteConfirm.message}
-                                    </p>
+                                    {deleteConfirm.target && (
+                                        <div className="ap-danger-target-card">
+                                            <div className="ap-danger-target-left">
+                                                <div className="ap-danger-avatar">
+                                                    {(deleteConfirm.target.username || deleteConfirm.target.company_name || "A").charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <div className="ap-danger-target-name">
+                                                        {deleteConfirm.target.username || deleteConfirm.target.company_name}
+                                                    </div>
+                                                    <div className="ap-danger-target-meta">
+                                                        {deleteConfirm.type === "admin_user" 
+                                                            ? `Master Admin ID: #${deleteConfirm.target.id}` 
+                                                            : `Tenant ID: #${deleteConfirm.target.tenant_id || deleteConfirm.target.id}`}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="ap-badge ap-badge--danger">To Be Removed</span>
+                                        </div>
+                                    )}
+
+                                    <div className="ap-danger-warning-box">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                            <line x1="12" y1="9" x2="12" y2="13" />
+                                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                                        </svg>
+                                        <span>
+                                            {deleteConfirm.message || "This action is permanent and cannot be undone. All access permissions for this record will be immediately revoked."}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="ap-modal-footer">
                                     <button type="button" className="ap-btn ap-btn--cancel" onClick={() => setDeleteConfirm(prev => ({ ...prev, show: false }))}>
                                         Cancel
                                     </button>
-                                    <button type="button" className="ap-btn ap-btn--danger" onClick={handleConfirmDelete} disabled={formBusy}>
-                                        {formBusy ? "Deleting..." : deleteConfirm.confirmBtnText}
+                                    <button type="button" className="ap-btn ap-btn--danger-glow" onClick={handleConfirmDelete} disabled={formBusy}>
+                                        <MdDelete size={18} />
+                                        <span>{formBusy ? "Deleting..." : deleteConfirm.confirmBtnText}</span>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* ── 60-DAY SECURITY RECOMMENDATION MODAL ── */}
+                    {showSecurityModal && (
+                        <div className="ap-modal-overlay">
+                            <div className="ap-modal-container ap-modal-container--security">
+                                <div className="ap-modal-header ap-modal-header--security">
+                                    <div className="ap-security-header-left">
+                                        <div className="ap-security-icon-box">
+                                            <MdShield size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="ap-modal-title">Security Recommendation</h3>
+                                            <p className="ap-modal-subtitle">60-Day Password Rotation Policy</p>
+                                        </div>
+                                    </div>
+                                    <button className="ap-modal-close" onClick={() => setShowSecurityModal(false)}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div className="ap-modal-body">
+                                    <div className="ap-security-badge-row">
+                                        <span className="ap-security-age-badge">
+                                            <MdAccessTime size={15} />
+                                            <span>Password Age: <strong>{securityInfo?.password_age_days || 60} Days</strong></span>
+                                        </span>
+                                        <span className="ap-security-policy-badge">Policy: 60 Days</span>
+                                    </div>
+
+                                    <div className="ap-security-alert-box">
+                                        <p>
+                                            Your master admin password was last updated on <strong>{securityInfo?.last_changed_date || "initial setup"}</strong> ({securityInfo?.password_age_days || 60} days ago).
+                                        </p>
+                                        <p style={{ marginTop: 8, color: "#e2e8f0" }}>
+                                            For maximum security compliance and protection of organization tenant data, we recommend rotating master credentials every 60 days.
+                                        </p>
+                                    </div>
+
+                                    <div className="ap-security-progress-wrap">
+                                        <div className="ap-security-progress-label">
+                                            <span>Rotation Status</span>
+                                            <span>{securityInfo?.password_age_days || 60} / 60 Days</span>
+                                        </div>
+                                        <div className="ap-security-progress-bar">
+                                            <div 
+                                                className="ap-security-progress-fill" 
+                                                style={{ width: `${Math.min(100, ((securityInfo?.password_age_days || 60) / 60) * 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="ap-modal-footer ap-modal-footer--security">
+                                    <button type="button" className="ap-btn ap-btn--cancel" onClick={() => setShowSecurityModal(false)}>
+                                        Remind Me Later
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="ap-btn ap-btn--submit ap-btn--security"
+                                        onClick={() => {
+                                            setShowSecurityModal(false);
+                                            setShowChangePasswordModal(true);
+                                        }}
+                                    >
+                                        <MdLockReset size={18} />
+                                        <span>Update Password Now</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── CHANGE MASTER ADMIN PASSWORD MODAL ── */}
+                    {showChangePasswordModal && (
+                        <div className="ap-modal-overlay">
+                            <div className="ap-modal-container ap-modal-container--small">
+                                <div className="ap-modal-header">
+                                    <h3 className="ap-modal-title">Change Master Admin Password</h3>
+                                    <button className="ap-modal-close" onClick={() => setShowChangePasswordModal(false)}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <form onSubmit={handleChangePasswordSubmit}>
+                                    <div className="ap-modal-body">
+                                        {changePassError && <div className="ap-error-alert">{changePassError}</div>}
+
+                                        <div className="ap-field">
+                                            <label className="ap-label">New Password</label>
+                                            <div className="ap-wrap ap-wrap-password">
+                                                <input 
+                                                    type={showChangePassEye ? "text" : "password"}
+                                                    className="ap-input"
+                                                    placeholder="Enter new password (min 6 chars)"
+                                                    value={changeNewPass}
+                                                    onChange={e => setChangeNewPass(e.target.value)}
+                                                    autoComplete="new-password"
+                                                />
+                                                <button 
+                                                    type="button" 
+                                                    className="ap-btn-eye-toggle"
+                                                    onClick={() => setShowChangePassEye(!showChangePassEye)}
+                                                    tabIndex={-1}
+                                                >
+                                                    {showChangePassEye ? <MdEyeOff size={18} /> : <MdEye size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="ap-field">
+                                            <label className="ap-label">Confirm New Password</label>
+                                            <div className="ap-wrap ap-wrap-password">
+                                                <input 
+                                                    type={showChangePassEye ? "text" : "password"}
+                                                    className="ap-input"
+                                                    placeholder="Confirm new password"
+                                                    value={changeConfirmPass}
+                                                    onChange={e => setChangeConfirmPass(e.target.value)}
+                                                    autoComplete="new-password"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="ap-modal-footer">
+                                        <button type="button" className="ap-btn ap-btn--cancel" onClick={() => setShowChangePasswordModal(false)}>Cancel</button>
+                                        <button type="submit" className="ap-btn ap-btn--submit" disabled={changePassBusy}>
+                                            {changePassBusy ? "Updating..." : "Save New Password"}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── ADD MASTER ADMIN USER MODAL ── */}
+                    {showAddAdminModal && (
+                        <div className="ap-modal-overlay">
+                            <div className="ap-modal-container ap-modal-container--small">
+                                <div className="ap-modal-header">
+                                    <h3 className="ap-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <MdPersonAdd size={20} style={{ color: '#818cf8' }} />
+                                        <span>Add Master Admin User</span>
+                                    </h3>
+                                    <button className="ap-modal-close" onClick={() => setShowAddAdminModal(false)}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <form onSubmit={handleAddAdminSubmit}>
+                                    <div className="ap-modal-body">
+                                        {addAdminError && <div className="ap-error-alert">{addAdminError}</div>}
+
+                                        <div className="ap-field">
+                                            <label className="ap-label">Admin Username</label>
+                                            <div className="ap-wrap">
+                                                <input 
+                                                    type="text"
+                                                    className="ap-input"
+                                                    placeholder="Enter admin username"
+                                                    value={newAdminUser}
+                                                    onChange={e => setNewAdminUser(e.target.value)}
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="ap-field">
+                                            <label className="ap-label">Password</label>
+                                            <div className="ap-wrap ap-wrap-password">
+                                                <input 
+                                                    type={showNewAdminPassEye ? "text" : "password"}
+                                                    className="ap-input"
+                                                    placeholder="Enter password (min 6 chars)"
+                                                    value={newAdminPass}
+                                                    onChange={e => setNewAdminPass(e.target.value)}
+                                                    autoComplete="new-password"
+                                                />
+                                                <button 
+                                                    type="button" 
+                                                    className="ap-btn-eye-toggle"
+                                                    onClick={() => setShowNewAdminPassEye(!showNewAdminPassEye)}
+                                                    tabIndex={-1}
+                                                >
+                                                    {showNewAdminPassEye ? <MdEyeOff size={18} /> : <MdEye size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="ap-field">
+                                            <label className="ap-label">Confirm Password</label>
+                                            <div className="ap-wrap ap-wrap-password">
+                                                <input 
+                                                    type={showNewAdminPassEye ? "text" : "password"}
+                                                    className="ap-input"
+                                                    placeholder="Confirm password"
+                                                    value={newAdminConfirmPass}
+                                                    onChange={e => setNewAdminConfirmPass(e.target.value)}
+                                                    autoComplete="new-password"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="ap-modal-footer">
+                                        <button type="button" className="ap-btn ap-btn--cancel" onClick={() => setShowAddAdminModal(false)}>Cancel</button>
+                                        <button type="submit" className="ap-btn ap-btn--submit" disabled={addAdminBusy}>
+                                            {addAdminBusy ? "Creating..." : "Create Admin User"}
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     )}

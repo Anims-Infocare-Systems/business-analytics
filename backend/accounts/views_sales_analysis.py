@@ -1555,9 +1555,9 @@ def sales_analysis_monthly_sales_trend(request):
         "period": format_period_label(start_date, end_date),
         "labels": labels,
         "sales_values": sales_values,
-        "sales_values_lakhs": [round(v / 100_000, 2) for v in sales_values],
+        "sales_values_lakhs": [round(v / 100_000, 3) for v in sales_values],
         "total": total,
-        "total_lakhs": round(total / 100_000, 2),
+        "total_lakhs": round(total / 100_000, 3),
     })
 
 

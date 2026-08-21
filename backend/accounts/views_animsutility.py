@@ -210,21 +210,34 @@ def admin_utility_clients(request):
                 last_sync_dt = (datetime.now() - timedelta(minutes=12 + i * 4)).isoformat() if is_active else None
                 api_calls = 350 + tenant_id * 85 + (active_users * 42) if is_active else 0
                 
-                # Derive industry & location
+                # Derive industry/category based on company code series prefix
                 if city and state:
                     location = f"{city}, {state}"
                 elif city:
                     location = city
                 else:
                     location = "Chennai, TN" if tenant_id % 3 == 0 else "Coimbatore, TN" if tenant_id % 3 == 1 else "Madurai, TN"
-                industry = "Manufacturing" if "engg" in company_name.lower() or "auto" in company_name.lower() or "machin" in company_name.lower() else "IT Services"
+                
+                code_prefix = (company_code or "").strip()[:1].upper()
+                if code_prefix == "T":
+                    industry = "Testing"
+                    display_plan = "Testing Details (T)"
+                elif code_prefix == "D":
+                    industry = "Demo"
+                    display_plan = "Demo Details (D)"
+                elif code_prefix == "P":
+                    industry = "Programming"
+                    display_plan = "Programming Details (P)"
+                else:
+                    industry = "Customer"
+                    display_plan = plan_name or "Free"
 
                 clients.append({
                     "id": tenant_id,
                     "code": company_code,
                     "name": company_name,
                     "industry": industry,
-                    "plan": plan_name or "Free Plan",
+                    "plan": display_plan,
                     "billingCycle": billing_cycle or "yearly",
                     "tunnel": tunnel,
                     "status": "active" if is_active else "inactive",

@@ -155,14 +155,25 @@ def health_check(request):
 def is_plan_expired(company_code):
     """
     Returns True if the tenant's plan has expired or is inactive, False otherwise.
+    Companies with company_code starting with T, P, or D are always free forever.
+    Companies with company_code starting with A (and other commercial codes) enforce plan & expiry rules.
     """
+    if not company_code:
+        return False
+
+    code = str(company_code).strip().upper()
+
+    # Company codes starting with T, P, or D are always free forever
+    if code.startswith(('T', 'P', 'D')):
+        return False
+
     from django.db import connection
     import datetime
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT active_status, end_date FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s)",
-                [company_code.strip()]
+                [code]
             )
             row = cursor.fetchone()
             if not row:
@@ -180,7 +191,7 @@ def is_plan_expired(company_code):
                 FROM tenant_planupgrade 
                 WHERE UPPER(company_code) = UPPER(%s) AND plan_status = 'Active'
                 """,
-                [company_code.strip()]
+                [code]
             )
             upgrade_row = cursor.fetchone()
             if upgrade_row:

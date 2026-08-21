@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { 
     MdOutlineCalendarMonth, 
     MdBusiness, 
@@ -12,7 +13,13 @@ import {
     MdChevronRight,
     MdSwapVert,
     MdArrowUpward,
-    MdArrowDownward
+    MdArrowDownward,
+    MdPieChart,
+    MdListAlt,
+    MdLeaderboard,
+    MdClose,
+    MdFolderSpecial,
+    MdWorkspacePremium
 } from "react-icons/md";
 import { FiArrowRight } from "react-icons/fi";
 import { resolveApiBase } from "../../apiBase";
@@ -74,6 +81,211 @@ function CustomSelect({ label, value, onChange, options, icon: Icon, placeholder
                                     </svg>
                                 </span>
                             )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MultiSelectOrganization({ selectedValues, onChange, options, icon: Icon }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = useMemo(() => {
+        if (!searchQuery.trim()) return options;
+        const q = searchQuery.toLowerCase().trim();
+        return options.filter(opt => opt.label.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q));
+    }, [options, searchQuery]);
+
+    const isAllSelected = selectedValues.length === 0 || selectedValues.includes("all");
+
+    const handleToggleOption = (val) => {
+        if (val === "all") {
+            onChange(["all"]);
+            return;
+        }
+
+        let newSelected = isAllSelected ? [] : [...selectedValues];
+        if (newSelected.includes(val)) {
+            newSelected = newSelected.filter(v => v !== val);
+        } else {
+            newSelected.push(val);
+        }
+
+        const realOptions = options.filter(o => o.value !== "all");
+        if (newSelected.length === 0 || newSelected.length === realOptions.length) {
+            onChange(["all"]);
+        } else {
+            onChange(newSelected);
+        }
+    };
+
+    const handleSelectAll = () => {
+        onChange(["all"]);
+    };
+
+    const handleClearAll = () => {
+        onChange([]);
+    };
+
+    const getTriggerText = () => {
+        if (isAllSelected) return "All Organizations";
+        if (selectedValues.length === 1) {
+            const opt = options.find(o => o.value === selectedValues[0]);
+            return opt ? opt.label : selectedValues[0];
+        }
+        return `${selectedValues.length} Organizations Selected`;
+    };
+
+    return (
+        <div className="utr-custom-select-container utr-multi-select-container" ref={containerRef}>
+            <button 
+                type="button"
+                className={`utr-custom-select-trigger ${isOpen ? "utr-custom-select-trigger--open" : ""} ${!isAllSelected ? "utr-custom-select-trigger--active" : ""}`}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className="utr-trigger-left">
+                    {Icon && <Icon className="utr-trigger-icon" size={16} />}
+                    <span className="utr-trigger-text">{getTriggerText()}</span>
+                </span>
+                {!isAllSelected && (
+                    <span className="utr-multi-count-badge">{selectedValues.length}</span>
+                )}
+                <span className={`utr-trigger-arrow ${isOpen ? "utr-trigger-arrow--open" : ""}`}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="utr-custom-options-dropdown utr-multi-select-dropdown">
+                    <div className="utr-multi-header">
+                        <div className="utr-multi-search-wrap">
+                            <MdSearch className="utr-multi-search-icon" size={15} />
+                            <input
+                                type="text"
+                                className="utr-multi-search-input"
+                                placeholder="Search organization…"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                            {searchQuery && (
+                                <button 
+                                    type="button" 
+                                    className="utr-multi-search-clear" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSearchQuery("");
+                                    }}
+                                    title="Clear search"
+                                >
+                                    <MdClose size={13} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="utr-multi-options-list">
+                        <div 
+                            className={`utr-custom-option utr-multi-option ${isAllSelected ? "utr-custom-option--selected" : ""}`}
+                            onClick={() => handleToggleOption("all")}
+                        >
+                            <div className="utr-multi-checkbox-wrap">
+                                <input 
+                                    type="checkbox" 
+                                    className="utr-multi-checkbox" 
+                                    checked={isAllSelected}
+                                    onChange={() => {}}
+                                />
+                            </div>
+                            <span className="utr-option-label" style={{ fontWeight: 700 }}>All Organizations</span>
+                        </div>
+
+                        {filteredOptions.filter(o => o.value !== "all").map((opt) => {
+                            const checked = !isAllSelected && selectedValues.includes(opt.value);
+                            return (
+                                <div 
+                                    key={opt.value}
+                                    className={`utr-custom-option utr-multi-option ${checked ? "utr-custom-option--selected" : ""}`}
+                                    onClick={() => handleToggleOption(opt.value)}
+                                >
+                                    <div className="utr-multi-checkbox-wrap">
+                                        <input 
+                                            type="checkbox" 
+                                            className="utr-multi-checkbox" 
+                                            checked={checked}
+                                            onChange={() => {}}
+                                        />
+                                    </div>
+                                    <span className="utr-option-label">{opt.label}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CustomPlanDropdown({ value, onChange, options }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    const selectedOption = options.find(opt => opt.value.toLowerCase() === value.toLowerCase()) || options[0];
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="utr-plan-select-container" ref={containerRef}>
+            <button 
+                type="button"
+                className={`utr-plan-select-trigger ${isOpen ? "utr-plan-select-trigger--open" : ""} ${value !== "all" ? "utr-plan-select-trigger--active" : ""}`}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <div className="utr-plan-select-val-wrap">
+                    <span className="utr-plan-select-text">{selectedOption ? selectedOption.label : "All Plans"}</span>
+                    <span className="utr-plan-select-count">{selectedOption ? selectedOption.count : 0}</span>
+                </div>
+                <span className={`utr-select-arrow ${isOpen ? "utr-select-arrow--open" : ""}`}>▾</span>
+            </button>
+
+            {isOpen && (
+                <div className="utr-plan-select-dropdown">
+                    {options.map((opt) => (
+                        <div 
+                            key={opt.value}
+                            className={`utr-plan-option ${opt.value.toLowerCase() === value.toLowerCase() ? "utr-plan-option--selected" : ""}`}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                            }}
+                        >
+                            <span>{opt.label}</span>
+                            <span className="utr-plan-option-badge">{opt.count}</span>
                         </div>
                     ))}
                 </div>
@@ -342,25 +554,32 @@ function CustomDateRangePicker({ fromDate, toDate, onChange }) {
 }
 
 export default function UserTransactionReport({ onAuthLost }) {
-    // Dates defaults: from 30 days ago to today
-    const getFormattedDate = (d) => d.toISOString().split("T")[0];
-    const today = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 30);
+    const getLocalFormattedDate = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
 
-    const [fromDate, setFromDate] = useState(getFormattedDate(thirtyDaysAgo));
-    const [toDate, setToDate] = useState(getFormattedDate(today));
-    const [selectedCompany, setSelectedCompany] = useState("all");
+    const todayObj = new Date();
+    const firstDayOfCurrentMonth = new Date(todayObj.getFullYear(), todayObj.getMonth(), 1);
+
+    const [fromDate, setFromDate] = useState(getLocalFormattedDate(firstDayOfCurrentMonth));
+    const [toDate, setToDate] = useState(getLocalFormattedDate(todayObj));
+    const [selectedCompanies, setSelectedCompanies] = useState(["all"]);
     const [selectedUser, setSelectedUser] = useState("all");
     const [selectedModule, setSelectedModule] = useState("all");
-    const [reportType, setReportType] = useState("date_wise"); // date_wise | user_wise
+    const [selectedSeries, setSelectedSeries] = useState("all");
+    const [selectedPlan, setSelectedPlan] = useState("all");
+    const [reportType, setReportType] = useState("date_wise");
+    const [viewMode, setViewMode] = useState("detailed");
+    const [selectedOrgModal, setSelectedOrgModal] = useState(null);
+    const [selectedUserModal, setSelectedUserModal] = useState(null);
 
-    // Loaded dropdown items
     const [companies, setCompanies] = useState([]);
     const [usernames, setUsernames] = useState([]);
     const [modules, setModules] = useState([]);
 
-    // Data table
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
@@ -368,15 +587,19 @@ export default function UserTransactionReport({ onAuthLost }) {
     const [sortConfig, setSortConfig] = useState({ key: "timestamp", direction: "desc" });
 
     const handleResetFilters = () => {
-        const todayObj = new Date();
-        const thirtyDaysAgoObj = new Date();
-        thirtyDaysAgoObj.setDate(todayObj.getDate() - 30);
-        setFromDate(getFormattedDate(thirtyDaysAgoObj));
-        setToDate(getFormattedDate(todayObj));
-        setSelectedCompany("all");
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        setFromDate(getLocalFormattedDate(startOfMonth));
+        setToDate(getLocalFormattedDate(now));
+        setSelectedCompanies(["all"]);
         setSelectedUser("all");
         setSelectedModule("all");
+        setSelectedSeries("all");
+        setSelectedPlan("all");
         setReportType("date_wise");
+        setViewMode("detailed");
+        setSelectedOrgModal(null);
+        setSelectedUserModal(null);
         setSearchQuery("");
         setSortConfig({ key: "timestamp", direction: "desc" });
     };
@@ -432,38 +655,49 @@ export default function UserTransactionReport({ onAuthLost }) {
         fetchReport();
     }, [fetchReport]);
 
-    // Local filter / search matching & sorting (Front alone)
-    const filteredTransactions = useMemo(() => {
-        let list = transactions.filter(t => {
-            // 1. Date Range
+    const baseFilteredTransactions = useMemo(() => {
+        return transactions.filter(t => {
             const rowDate = t.timestamp ? t.timestamp.split("T")[0] : "";
             if (fromDate && rowDate < fromDate) return false;
             if (toDate && rowDate > toDate) return false;
 
-            // 2. Company code (case-insensitive)
-            if (selectedCompany !== "all" && (t.company_code || "").toUpperCase() !== selectedCompany.toUpperCase()) return false;
+            if (selectedCompanies.length > 0 && !selectedCompanies.includes("all")) {
+                const cUpper = (t.company_code || "").toUpperCase().trim();
+                const matchesComp = selectedCompanies.some(sc => sc.toUpperCase().trim() === cUpper);
+                if (!matchesComp) return false;
+            }
 
-            // 3. Username (case-insensitive)
-            if (selectedUser !== "all" && (t.username || "").toLowerCase() !== selectedUser.toLowerCase()) return false;
+            if (selectedUser !== "all" && (t.username || "").toLowerCase().trim() !== selectedUser.toLowerCase().trim()) return false;
+            if (selectedModule !== "all" && (t.module_name || "").toLowerCase().trim() !== selectedModule.toLowerCase().trim()) return false;
 
-            // 4. Module name (case-insensitive)
-            if (selectedModule !== "all" && (t.module_name || "").toLowerCase() !== selectedModule.toLowerCase()) return false;
-
-            // 5. Search query text
             if (searchQuery) {
                 const q = searchQuery.toLowerCase().trim();
                 const matches = 
-                    t.username.toLowerCase().includes(q) || 
-                    t.module_name.toLowerCase().includes(q) || 
-                    t.company_name.toLowerCase().includes(q) || 
-                    t.company_code.toLowerCase().includes(q);
+                    (t.username || "").toLowerCase().includes(q) || 
+                    (t.module_name || "").toLowerCase().includes(q) || 
+                    (t.company_name || "").toLowerCase().includes(q) || 
+                    (t.company_code || "").toLowerCase().includes(q) ||
+                    (t.plan_name || "").toLowerCase().includes(q);
                 if (!matches) return false;
             }
 
             return true;
         });
+    }, [transactions, fromDate, toDate, selectedCompanies, selectedUser, selectedModule, searchQuery]);
 
-        // 6. Sorting based on sortConfig
+    const filteredTransactions = useMemo(() => {
+        let list = baseFilteredTransactions.filter(t => {
+            if (selectedSeries !== "all") {
+                const codeUpper = (t.company_code || "").toUpperCase().trim();
+                if (!codeUpper.startsWith(selectedSeries)) return false;
+            }
+            if (selectedPlan !== "all") {
+                const planVal = (t.plan_name || "—").trim().toLowerCase();
+                if (planVal !== selectedPlan.toLowerCase()) return false;
+            }
+            return true;
+        });
+
         if (sortConfig.key) {
             list.sort((a, b) => {
                 let valA = a[sortConfig.key];
@@ -485,17 +719,20 @@ export default function UserTransactionReport({ onAuthLost }) {
         }
 
         return list;
-    }, [transactions, fromDate, toDate, selectedCompany, selectedUser, selectedModule, searchQuery, sortConfig]);
+    }, [baseFilteredTransactions, selectedSeries, selectedPlan, sortConfig]);
 
-    // Derived Stats (based on filtered transactions)
     const stats = useMemo(() => {
         const total = filteredTransactions.length;
-        const uniqueUsers = new Set(filteredTransactions.map(t => (t.username || "").toLowerCase().trim())).size;
+        const uniqueUsers = new Set(
+            filteredTransactions.map(t => (t.username || "").toLowerCase().trim()).filter(Boolean)
+        ).size;
         
-        // Find most active module
         const moduleCounts = {};
         filteredTransactions.forEach(t => {
-            moduleCounts[t.module_name] = (moduleCounts[t.module_name] || 0) + 1;
+            const modName = (t.module_name || "").trim();
+            if (modName) {
+                moduleCounts[modName] = (moduleCounts[modName] || 0) + 1;
+            }
         });
         let topModule = "—";
         let maxCount = 0;
@@ -506,21 +743,206 @@ export default function UserTransactionReport({ onAuthLost }) {
             }
         });
 
-        const activeCompanies = new Set(filteredTransactions.map(t => (t.company_code || "").toUpperCase().trim())).size;
+        const activeCompanies = new Set(
+            filteredTransactions.map(t => (t.company_code || "").toUpperCase().trim()).filter(Boolean)
+        ).size;
 
         return { total, uniqueUsers, topModule, activeCompanies };
     }, [filteredTransactions]);
 
-    // Custom select dropdown options
+    const companySummaryList = useMemo(() => {
+        const groupMap = {};
+        const totalTxCount = filteredTransactions.length;
+
+        filteredTransactions.forEach(t => {
+            const code = (t.company_code || "UNKNOWN").toUpperCase().trim();
+            if (!groupMap[code]) {
+                groupMap[code] = {
+                    company_code: code,
+                    company_name: t.company_name || code,
+                    plan_name: t.plan_name || "—",
+                    count: 0,
+                    users: new Set(),
+                    modules: {}
+                };
+            }
+            groupMap[code].count += 1;
+            if (t.username) groupMap[code].users.add((t.username || "").toLowerCase().trim());
+            if (t.module_name) {
+                const m = (t.module_name || "").trim();
+                if (m) groupMap[code].modules[m] = (groupMap[code].modules[m] || 0) + 1;
+            }
+        });
+
+        const list = Object.values(groupMap).map(g => {
+            let topMod = "—";
+            let maxM = 0;
+            Object.entries(g.modules).forEach(([m, cnt]) => {
+                if (cnt > maxM) {
+                    maxM = cnt;
+                    topMod = m;
+                }
+            });
+
+            const pctVal = totalTxCount > 0 ? ((g.count / totalTxCount) * 100).toFixed(1) : "0.0";
+
+            return {
+                company_code: g.company_code,
+                company_name: g.company_name,
+                plan_name: g.plan_name,
+                count: g.count,
+                active_users_count: g.users.size,
+                top_module: topMod,
+                percentage: parseFloat(pctVal)
+            };
+        });
+
+        list.sort((a, b) => b.count - a.count);
+        return list;
+    }, [filteredTransactions]);
+
+    const filteredSummaryList = useMemo(() => {
+        if (!searchQuery) return companySummaryList;
+        const q = searchQuery.toLowerCase().trim();
+        return companySummaryList.filter(s => 
+            s.company_name.toLowerCase().includes(q) || 
+            s.company_code.toLowerCase().includes(q) ||
+            s.plan_name.toLowerCase().includes(q)
+        );
+    }, [companySummaryList, searchQuery]);
+
+    const orgUserRankingList = useMemo(() => {
+        if (!selectedOrgModal) return [];
+
+        const companyCode = selectedOrgModal.company_code;
+        const companyTxLogs = filteredTransactions.filter(t => 
+            (t.company_code || "").toUpperCase().trim() === companyCode.toUpperCase().trim()
+        );
+
+        const totalOrgTx = companyTxLogs.length;
+        const userMap = {};
+
+        companyTxLogs.forEach(t => {
+            const u = (t.username || "Unknown").trim();
+            if (!userMap[u]) {
+                userMap[u] = {
+                    username: u,
+                    count: 0,
+                    modules: {},
+                    lastTimestamp: t.timestamp
+                };
+            }
+            userMap[u].count += 1;
+            if (t.timestamp && (!userMap[u].lastTimestamp || t.timestamp > userMap[u].lastTimestamp)) {
+                userMap[u].lastTimestamp = t.timestamp;
+            }
+            if (t.module_name) {
+                const m = t.module_name.trim();
+                if (m) userMap[u].modules[m] = (userMap[u].modules[m] || 0) + 1;
+            }
+        });
+
+        const list = Object.values(userMap).map(u => {
+            let topMod = "—";
+            let maxM = 0;
+            Object.entries(u.modules).forEach(([m, cnt]) => {
+                if (cnt > maxM) {
+                    maxM = cnt;
+                    topMod = m;
+                }
+            });
+
+            const pctVal = totalOrgTx > 0 ? ((u.count / totalOrgTx) * 100).toFixed(1) : "0.0";
+
+            return {
+                username: u.username,
+                count: u.count,
+                percentage: parseFloat(pctVal),
+                top_module: topMod,
+                last_timestamp: u.lastTimestamp
+            };
+        });
+
+        list.sort((a, b) => b.count - a.count);
+        return list;
+    }, [selectedOrgModal, filteredTransactions]);
+
+    const userModuleRankingList = useMemo(() => {
+        if (!selectedOrgModal || !selectedUserModal) return [];
+
+        const companyCode = selectedOrgModal.company_code;
+        const userName = selectedUserModal.username;
+
+        const userTxLogs = filteredTransactions.filter(t => 
+            (t.company_code || "").toUpperCase().trim() === companyCode.toUpperCase().trim() &&
+            (t.username || "").toLowerCase().trim() === userName.toLowerCase().trim()
+        );
+
+        const totalUserTx = userTxLogs.length;
+        const moduleMap = {};
+
+        userTxLogs.forEach(t => {
+            const m = (t.module_name || "General").trim();
+            if (!moduleMap[m]) {
+                moduleMap[m] = {
+                    module_name: m,
+                    count: 0,
+                    lastTimestamp: t.timestamp
+                };
+            }
+            moduleMap[m].count += 1;
+            if (t.timestamp && (!moduleMap[m].lastTimestamp || t.timestamp > moduleMap[m].lastTimestamp)) {
+                moduleMap[m].lastTimestamp = t.timestamp;
+            }
+        });
+
+        const list = Object.values(moduleMap).map(m => {
+            const pctVal = totalUserTx > 0 ? ((m.count / totalUserTx) * 100).toFixed(1) : "0.0";
+            return {
+                module_name: m.module_name,
+                count: m.count,
+                percentage: parseFloat(pctVal),
+                last_timestamp: m.lastTimestamp
+            };
+        });
+
+        list.sort((a, b) => b.count - a.count);
+        return list;
+    }, [selectedOrgModal, selectedUserModal, filteredTransactions]);
+
+    const handleSeriesChange = (seriesVal) => {
+        setSelectedSeries(seriesVal);
+        setSelectedPlan("all");
+        if (seriesVal !== "all" && selectedCompanies.length > 0 && !selectedCompanies.includes("all")) {
+            const invalidSelected = selectedCompanies.filter(sc => !sc.toUpperCase().trim().startsWith(seriesVal));
+            if (invalidSelected.length > 0) {
+                setSelectedCompanies(["all"]);
+            }
+        }
+    };
+
     const companyOptions = useMemo(() => {
+        let filteredCompanies = companies;
+        if (selectedSeries !== "all") {
+            filteredCompanies = companies.filter(c => 
+                (c.company_code || "").toUpperCase().trim().startsWith(selectedSeries)
+            );
+        }
+
+        const sortedCompanies = [...filteredCompanies].sort((a, b) => {
+            const codeA = (a.company_code || "").toUpperCase().trim();
+            const codeB = (b.company_code || "").toUpperCase().trim();
+            return codeA.localeCompare(codeB);
+        });
+
         return [
             { label: "All Organizations", value: "all" },
-            ...companies.map(c => ({
-                label: `${c.company_name} (${c.company_code})`,
+            ...sortedCompanies.map(c => ({
+                label: `${c.company_code} - ${c.company_name}`,
                 value: c.company_code
             }))
         ];
-    }, [companies]);
+    }, [companies, selectedSeries]);
 
     const userOptions = useMemo(() => {
         return [
@@ -536,7 +958,44 @@ export default function UserTransactionReport({ onAuthLost }) {
         ];
     }, [modules]);
 
-    // Local helper to format UTC ISO string to browser local timezone
+    const seriesOptions = useMemo(() => {
+        return [
+            { label: "All Series", value: "all" },
+            { label: "Client Details (A)", value: "A" },
+            { label: "Testing Details (T)", value: "T" },
+            { label: "Demo Details (D)", value: "D" },
+            { label: "Programming Details (P)", value: "P" },
+        ];
+    }, []);
+
+    const planOptions = useMemo(() => {
+        const planCounts = {};
+        baseFilteredTransactions.forEach(t => {
+            if (selectedSeries !== "all") {
+                const codeUpper = (t.company_code || "").toUpperCase().trim();
+                if (!codeUpper.startsWith(selectedSeries)) return;
+            }
+            const p = (t.plan_name || "—").trim();
+            if (p) {
+                planCounts[p] = (planCounts[p] || 0) + 1;
+            }
+        });
+
+        const options = [
+            { label: "All Plans", value: "all", count: Object.values(planCounts).reduce((a, b) => a + b, 0) }
+        ];
+
+        Object.keys(planCounts).sort().forEach(p => {
+            options.push({
+                label: p,
+                value: p,
+                count: planCounts[p]
+            });
+        });
+
+        return options;
+    }, [baseFilteredTransactions, selectedSeries]);
+
     const formatLocalTime = (isoString) => {
         if (!isoString) return { date: "—", time: "—" };
         try {
@@ -558,30 +1017,54 @@ export default function UserTransactionReport({ onAuthLost }) {
         }
     };
 
-    // Export to CSV
     const exportCSV = () => {
-        if (filteredTransactions.length === 0) return;
-        const headers = ["#", "Date", "Time", "User Name", "Module Name", "Organization Code", "Organization Name", "Database Name"];
-        const rows = filteredTransactions.map((t, idx) => {
-            const { date, time } = formatLocalTime(t.timestamp);
-            return [
-                idx + 1,
-                date,
-                time,
-                t.username,
-                t.module_name,
-                t.company_code,
-                t.company_name,
-                t.erp_database
-            ];
-        });
+        let headers = [];
+        let rows = [];
+        let filenameSuffix = viewMode;
 
-        const csvText = [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
-        const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+        if (viewMode === "summary") {
+            if (filteredSummaryList.length === 0) return;
+            headers = ["Rank", "Organization Name", "Organization Code", "Plan Name", "Transactions", "Usage Share (%)", "Active Users", "Most Visited Module"];
+            rows = filteredSummaryList.map((item, idx) => [
+                idx + 1,
+                item.company_name,
+                item.company_code,
+                item.plan_name,
+                item.count,
+                `${item.percentage}%`,
+                item.active_users_count,
+                item.top_module
+            ]);
+        } else {
+            if (filteredTransactions.length === 0) return;
+            headers = ["#", "Date", "Time", "User Name", "Module Name", "Organization Name", "Plan Name", "Organization Code", "Database Name"];
+            rows = filteredTransactions.map((t, idx) => {
+                const { date, time } = formatLocalTime(t.timestamp);
+                return [
+                    idx + 1,
+                    date,
+                    time,
+                    t.username,
+                    t.module_name,
+                    t.company_name,
+                    t.plan_name || "—",
+                    t.company_code,
+                    t.erp_database
+                ];
+            });
+        }
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(row => row.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(","))
+        ].join("\n");
+
+        // Prefix UTF-8 Byte Order Mark (\uFEFF) so Excel opens CSV cleanly formatted
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `User_Transaction_Report_${reportType}_${fromDate}_to_${toDate}.csv`);
+        link.setAttribute("download", `User_Transaction_Report_${filenameSuffix}_${fromDate}_to_${toDate}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -590,7 +1073,6 @@ export default function UserTransactionReport({ onAuthLost }) {
 
     return (
         <div className="utr-container">
-            {/* Header section */}
             <div className="utr-header">
                 <div>
                     <h2 className="utr-title">User Transaction Report</h2>
@@ -613,7 +1095,6 @@ export default function UserTransactionReport({ onAuthLost }) {
                 </div>
             </div>
 
-            {/* KPI cards grid */}
             <div className="utr-stats-grid">
                 <div className="utr-stat-card">
                     <span className="utr-stat-icon utr-stat-icon--total"><MdOutlineAnalytics size={20} /></span>
@@ -645,9 +1126,7 @@ export default function UserTransactionReport({ onAuthLost }) {
                 </div>
             </div>
 
-            {/* Filters panel */}
             <div className="utr-filters-panel">
-                {/* Date range picker wrapped in a single gorgeous input-group */}
                 <div className="utr-filter-group">
                     <label className="utr-filter-label"><MdOutlineCalendarMonth size={15} /> Date Range</label>
                     <CustomDateRangePicker 
@@ -660,19 +1139,16 @@ export default function UserTransactionReport({ onAuthLost }) {
                     />
                 </div>
 
-                {/* Company filter */}
                 <div className="utr-filter-group">
                     <label className="utr-filter-label"><MdBusiness size={15} /> Organization</label>
-                    <CustomSelect 
-                        value={selectedCompany}
-                        onChange={setSelectedCompany}
+                    <MultiSelectOrganization 
+                        selectedValues={selectedCompanies}
+                        onChange={setSelectedCompanies}
                         options={companyOptions}
                         icon={MdBusiness}
-                        placeholder="All Organizations"
                     />
                 </div>
 
-                {/* User filter */}
                 <div className="utr-filter-group">
                     <label className="utr-filter-label"><MdPersonOutline size={15} /> User Name</label>
                     <CustomSelect 
@@ -684,7 +1160,6 @@ export default function UserTransactionReport({ onAuthLost }) {
                     />
                 </div>
 
-                {/* Module filter */}
                 <div className="utr-filter-group">
                     <label className="utr-filter-label"><MdEventNote size={15} /> Module Name</label>
                     <CustomSelect 
@@ -696,7 +1171,6 @@ export default function UserTransactionReport({ onAuthLost }) {
                     />
                 </div>
 
-                {/* Report Type filter */}
                 <div className="utr-filter-group">
                     <label className="utr-filter-label"><MdOutlineAnalytics size={15} /> Report Type</label>
                     <div className="utr-segmented-control">
@@ -721,7 +1195,6 @@ export default function UserTransactionReport({ onAuthLost }) {
                     </div>
                 </div>
 
-                {/* Reset button */}
                 <div className="utr-filter-group utr-filter-group--reset">
                     <label className="utr-filter-label" style={{ opacity: 0, pointerEvents: "none" }}>Reset</label>
                     <button 
@@ -736,23 +1209,78 @@ export default function UserTransactionReport({ onAuthLost }) {
                 </div>
             </div>
 
-            {/* Search and Table section */}
-            <div className="utr-table-section">
-                <div className="utr-table-header">
-                    <h3 className="utr-table-title">Transaction Details</h3>
-                    <div className="utr-search-wrap">
-                        <MdSearch className="utr-search-icon" size={18} />
-                        <input 
-                            type="text" 
-                            className="utr-search-input" 
-                            placeholder="Search transactions..." 
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
+            {/* Series & Plan Filter Section */}
+            <div className="utr-series-plan-container">
+                <div className="utr-filter-bar-group utr-filter-bar-group--series">
+                    <span className="utr-series-label">
+                        <MdFolderSpecial size={15} />
+                        <span>Series Filter:</span>
+                    </span>
+                    <div className="utr-pills-row">
+                        {seriesOptions.map(opt => {
+                            const isSelected = selectedSeries === opt.value;
+                            const count = opt.value === "all"
+                                ? baseFilteredTransactions.length
+                                : baseFilteredTransactions.filter(t => (t.company_code || "").toUpperCase().trim().startsWith(opt.value)).length;
+
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    className={`utr-series-pill ${isSelected ? "utr-series-pill--active" : ""}`}
+                                    onClick={() => handleSeriesChange(opt.value)}
+                                >
+                                    <span>{opt.label}</span>
+                                    <span className="utr-series-pill-count">{count}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Table Data */}
+                <div className="utr-series-plan-divider"></div>
+
+                <div className="utr-filter-bar-group utr-filter-bar-group--plan">
+                    <span className="utr-series-label utr-series-label--plan">
+                        <MdWorkspacePremium size={15} />
+                        <span>Plan Filter:</span>
+                    </span>
+                    <CustomPlanDropdown 
+                        value={selectedPlan}
+                        onChange={setSelectedPlan}
+                        options={planOptions}
+                    />
+                </div>
+            </div>
+
+            <div className="utr-table-section">
+                <div className="utr-table-header">
+                    <h3 className="utr-table-title">
+                        {viewMode === "detailed" ? "Transaction Details" : "Organization Usage & Ranking Summary"}
+                    </h3>
+                    <div className="utr-table-actions">
+                        <div className="utr-search-wrap">
+                            <MdSearch className="utr-search-icon" size={18} />
+                            <input 
+                                type="text" 
+                                className="utr-search-input" 
+                                placeholder={viewMode === "detailed" ? "Search transactions..." : "Search summary..."} 
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <button 
+                            type="button" 
+                            className={`utr-btn-summary ${viewMode === "summary" ? "utr-btn-summary--active" : ""}`}
+                            onClick={() => setViewMode(v => v === "detailed" ? "summary" : "detailed")}
+                            title={viewMode === "detailed" ? "Switch to Organization Ranking & Usage Summary" : "Switch to Detailed Transactions List"}
+                        >
+                            {viewMode === "summary" ? <MdListAlt size={16} /> : <MdPieChart size={16} />}
+                            <span>{viewMode === "summary" ? "Detailed View" : "Summary"}</span>
+                        </button>
+                    </div>
+                </div>
+
                 {loading ? (
                     <div className="utr-loading-container">
                         <div className="utr-spinner"></div>
@@ -763,6 +1291,83 @@ export default function UserTransactionReport({ onAuthLost }) {
                 ) : filteredTransactions.length === 0 ? (
                     <div className="utr-empty-container">
                         <p>No transaction logs match the filter criteria.</p>
+                    </div>
+                ) : viewMode === "summary" ? (
+                    <div className="utr-table-wrapper">
+                        <table className="utr-table">
+                            <thead>
+                                <tr>
+                                    <th className="utr-th utr-th--index" style={{ textAlign: "center" }}>Rank</th>
+                                    <th className="utr-th">Organization</th>
+                                    <th className="utr-th">Plan Name</th>
+                                    <th className="utr-th" style={{ textAlign: "center" }}>Transactions</th>
+                                    <th className="utr-th" style={{ width: "220px" }}>Usage Share (%)</th>
+                                    <th className="utr-th" style={{ textAlign: "center" }}>Active Users</th>
+                                    <th className="utr-th">Most Visited Module</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredSummaryList.map((item, index) => {
+                                    const rank = index + 1;
+                                    const rankBadgeClass = rank === 1 ? "utr-rank-badge--1" : rank === 2 ? "utr-rank-badge--2" : rank === 3 ? "utr-rank-badge--3" : "";
+                                    const seriesPrefix = (item.company_code || "")[0]?.toLowerCase() || 'a';
+                                    return (
+                                        <tr className="utr-tr" key={item.company_code} style={{ "--idx": index % 10 }}>
+                                            <td className="utr-td utr-td--index" style={{ textAlign: "center" }}>
+                                                <span className={`utr-rank-badge ${rankBadgeClass}`}>
+                                                    #{rank}
+                                                </span>
+                                            </td>
+                                            <td className="utr-td utr-td--company">
+                                                <div className="utr-summary-org-cell">
+                                                    <div className="utr-org-title-row">
+                                                        <span 
+                                                            className="utr-summary-org-name utr-summary-org-name--clickable"
+                                                            onClick={() => { setSelectedOrgModal(item); setSelectedUserModal(null); }}
+                                                            title="Click to view User Ranking & Usage Breakdown"
+                                                        >
+                                                            {item.company_name}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            className="utr-btn-org-modal"
+                                                            onClick={() => { setSelectedOrgModal(item); setSelectedUserModal(null); }}
+                                                            title="View User Ranking & Usage Breakdown"
+                                                        >
+                                                            <MdLeaderboard size={13} />
+                                                            <span>User Breakdown</span>
+                                                        </button>
+                                                    </div>
+                                                    <span className="utr-summary-org-code">{item.company_code}</span>
+                                                </div>
+                                            </td>
+                                            <td className="utr-td utr-td--plan">
+                                                <span className={`utr-plan-badge utr-plan-badge--${seriesPrefix}`}>
+                                                    {item.plan_name}
+                                                </span>
+                                            </td>
+                                            <td className="utr-td" style={{ textAlign: "center" }}>
+                                                <span className="utr-summary-tx-count">{item.count}</span>
+                                            </td>
+                                            <td className="utr-td utr-td--share">
+                                                <div className="utr-share-wrapper">
+                                                    <div className="utr-share-bar-bg">
+                                                        <div className="utr-share-bar-fill" style={{ width: `${Math.max(item.percentage, 4)}%` }}></div>
+                                                    </div>
+                                                    <span className="utr-share-text">{item.percentage}%</span>
+                                                </div>
+                                            </td>
+                                            <td className="utr-td" style={{ textAlign: "center", color: "#a5b4fc", fontWeight: 700 }}>
+                                                {item.active_users_count}
+                                            </td>
+                                            <td className="utr-td utr-td--module">
+                                                <span className="utr-summary-mod-tag">{item.top_module}</span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 ) : (
                     <div className="utr-table-wrapper">
@@ -800,6 +1405,12 @@ export default function UserTransactionReport({ onAuthLost }) {
                                             {renderSortIcon("company_name")}
                                         </div>
                                     </th>
+                                    <th className="utr-th utr-th--sortable" onClick={() => requestSort("plan_name")}>
+                                        <div className="utr-th-content">
+                                            <span>Plan Name</span>
+                                            {renderSortIcon("plan_name")}
+                                        </div>
+                                    </th>
                                     <th className="utr-th utr-th--sortable" onClick={() => requestSort("company_code")}>
                                         <div className="utr-th-content">
                                             <span>Organization Code</span>
@@ -817,6 +1428,7 @@ export default function UserTransactionReport({ onAuthLost }) {
                             <tbody>
                                 {filteredTransactions.map((t, index) => {
                                     const { date, time } = formatLocalTime(t.timestamp);
+                                    const seriesPrefix = (t.company_code || "")[0]?.toLowerCase() || 'a';
                                     return (
                                         <tr className="utr-tr" key={t.id} style={{ "--idx": index % 10 }}>
                                             <td className="utr-td utr-td--index">{index + 1}</td>
@@ -827,6 +1439,11 @@ export default function UserTransactionReport({ onAuthLost }) {
                                             </td>
                                             <td className="utr-td utr-td--module">{t.module_name}</td>
                                             <td className="utr-td utr-td--company">{t.company_name}</td>
+                                            <td className="utr-td utr-td--plan">
+                                                <span className={`utr-plan-badge utr-plan-badge--${seriesPrefix}`}>
+                                                    {t.plan_name || "—"}
+                                                </span>
+                                            </td>
                                             <td className="utr-td utr-td--code">{t.company_code}</td>
                                             <td className="utr-td utr-td--database">{t.erp_database}</td>
                                         </tr>
@@ -837,6 +1454,253 @@ export default function UserTransactionReport({ onAuthLost }) {
                     </div>
                 )}
             </div>
+
+            {/* Organization User Ranking Modal */}
+            {selectedOrgModal && createPortal(
+                <div className="utr-modal-backdrop" onClick={() => { setSelectedOrgModal(null); setSelectedUserModal(null); }}>
+                    <div className={`utr-modal-container ${selectedUserModal ? "utr-modal-container--expanded" : ""}`} onClick={e => e.stopPropagation()}>
+                        
+                        {/* Main Left Modal Panel */}
+                        <div className="utr-modal-main-panel">
+                            <div className="utr-modal-header">
+                                <div className="utr-modal-title-wrap">
+                                    <span className="utr-modal-icon"><MdLeaderboard size={20} /></span>
+                                    <div>
+                                        <h3 className="utr-modal-title">{selectedOrgModal.company_name}</h3>
+                                        <p className="utr-modal-subtitle">
+                                            Code: <span className="utr-modal-code">{selectedOrgModal.company_code}</span> • 
+                                            Plan: <span className="utr-modal-plan">{selectedOrgModal.plan_name}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    type="button" 
+                                    className="utr-modal-close-btn" 
+                                    onClick={() => { setSelectedOrgModal(null); setSelectedUserModal(null); }}
+                                    title="Close Modal"
+                                >
+                                    <MdClose size={20} />
+                                </button>
+                            </div>
+
+                            <div className="utr-modal-kpi-grid">
+                                <div className="utr-modal-kpi-card">
+                                    <span className="utr-modal-kpi-label">Total Organization Tx</span>
+                                    <span className="utr-modal-kpi-val">{selectedOrgModal.count}</span>
+                                </div>
+                                <div className="utr-modal-kpi-card">
+                                    <span className="utr-modal-kpi-label">Active Users</span>
+                                    <span className="utr-modal-kpi-val">{selectedOrgModal.active_users_count}</span>
+                                </div>
+                                <div className="utr-modal-kpi-card">
+                                    <span className="utr-modal-kpi-label">Overall Usage Share</span>
+                                    <span className="utr-modal-kpi-val">{selectedOrgModal.percentage}%</span>
+                                </div>
+                            </div>
+
+                            <div className="utr-modal-body">
+                                <div className="utr-modal-section-header">
+                                    <h4 className="utr-modal-section-title">User Transaction Ranking & % Breakdown</h4>
+                                    <span className="utr-modal-hint font-mono">💡 Click any username to view module diagram</span>
+                                </div>
+                                {orgUserRankingList.length === 0 ? (
+                                    <div className="utr-empty-container">
+                                        <p>No user transactions recorded for this organization under current filters.</p>
+                                    </div>
+                                ) : (
+                                    <div className="utr-table-wrapper utr-modal-table-wrapper" style={{ maxHeight: "360px" }}>
+                                        <table className="utr-table utr-modal-table">
+                                            <thead>
+                                                <tr>
+                                                    <th className="utr-th" style={{ textAlign: "center", width: "54px" }}>Rank</th>
+                                                    <th className="utr-th" style={{ width: "130px" }}>User Name</th>
+                                                    <th className="utr-th" style={{ textAlign: "center", width: "95px" }}>Transactions</th>
+                                                    <th className="utr-th" style={{ width: "150px" }}>User Share (%)</th>
+                                                    <th className="utr-th" style={{ width: "140px" }}>Most Visited Module</th>
+                                                    <th className="utr-th" style={{ width: "125px" }}>Last Activity</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {orgUserRankingList.map((user, idx) => {
+                                                    const rank = idx + 1;
+                                                    const rankBadgeClass = rank === 1 ? "utr-rank-badge--1" : rank === 2 ? "utr-rank-badge--2" : rank === 3 ? "utr-rank-badge--3" : "";
+                                                    const { date, time } = formatLocalTime(user.last_timestamp);
+                                                    const isSelectedUser = selectedUserModal?.username === user.username;
+
+                                                    return (
+                                                        <tr 
+                                                            className={`utr-tr ${isSelectedUser ? "utr-tr--selected-user" : ""}`} 
+                                                            key={user.username}
+                                                        >
+                                                            <td className="utr-td" style={{ textAlign: "center" }}>
+                                                                <span className={`utr-rank-badge ${rankBadgeClass}`}>
+                                                                    #{rank}
+                                                                </span>
+                                                            </td>
+                                                            <td className="utr-td utr-td--username">
+                                                                <span 
+                                                                    className={`utr-username-badge utr-username-badge--clickable ${isSelectedUser ? "utr-username-badge--active" : ""}`}
+                                                                    onClick={() => setSelectedUserModal(isSelectedUser ? null : user)}
+                                                                    title="Click to view module usage breakdown & diagram"
+                                                                >
+                                                                    {user.username}
+                                                                    <span className="utr-user-node-dot"></span>
+                                                                </span>
+                                                            </td>
+                                                            <td className="utr-td" style={{ textAlign: "center", fontWeight: 700, color: "#fff" }}>
+                                                                {user.count}
+                                                            </td>
+                                                            <td className="utr-td utr-td--share">
+                                                                <div className="utr-share-wrapper">
+                                                                    <div className="utr-share-bar-bg">
+                                                                        <div className="utr-share-bar-fill" style={{ width: `${Math.max(user.percentage, 5)}%` }}></div>
+                                                                    </div>
+                                                                    <span className="utr-share-text">{user.percentage}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="utr-td utr-td--module">
+                                                                <span className="utr-summary-mod-tag" title={user.top_module}>{user.top_module}</span>
+                                                            </td>
+                                                            <td className="utr-td" style={{ fontSize: "11.5px", color: "#94a3b8", whiteSpace: "nowrap" }}>
+                                                                {date} {time}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="utr-modal-footer">
+                                <button 
+                                    type="button" 
+                                    className="utr-modal-close-btn-footer"
+                                    onClick={() => { setSelectedOrgModal(null); setSelectedUserModal(null); }}
+                                >
+                                    Close Breakdown
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ERD Connector & Connected Module Panel */}
+                        {selectedUserModal && (
+                            <>
+                                <div className="utr-erd-connector">
+                                    <div className="utr-erd-node utr-erd-node--left"></div>
+                                    <div className="utr-erd-pulse-line"></div>
+                                    <div className="utr-erd-node utr-erd-node--right"></div>
+                                </div>
+
+                                <div className="utr-modal-right-panel">
+                                    <div className="utr-modal-header">
+                                        <div className="utr-modal-title-wrap">
+                                            <span className="utr-modal-icon utr-modal-icon--user"><MdPersonOutline size={20} /></span>
+                                            <div>
+                                                <h3 className="utr-modal-title">{selectedUserModal.username}</h3>
+                                                <p className="utr-modal-subtitle">
+                                                    User Module Usage & Ranking Breakdown
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            className="utr-modal-close-btn" 
+                                            onClick={() => setSelectedUserModal(null)}
+                                            title="Close User Diagram"
+                                        >
+                                            <MdClose size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="utr-modal-kpi-grid">
+                                        <div className="utr-modal-kpi-card">
+                                            <span className="utr-modal-kpi-label">User Total Tx</span>
+                                            <span className="utr-modal-kpi-val">{selectedUserModal.count}</span>
+                                        </div>
+                                        <div className="utr-modal-kpi-card">
+                                            <span className="utr-modal-kpi-label">Active Modules</span>
+                                            <span className="utr-modal-kpi-val">{userModuleRankingList.length}</span>
+                                        </div>
+                                        <div className="utr-modal-kpi-card">
+                                            <span className="utr-modal-kpi-label">Org User Share</span>
+                                            <span className="utr-modal-kpi-val">{selectedUserModal.percentage}%</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="utr-modal-body">
+                                        <h4 className="utr-modal-section-title">Module Visits & % Contribution</h4>
+                                        {userModuleRankingList.length === 0 ? (
+                                            <div className="utr-empty-container">
+                                                <p>No module transaction logs for this user.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="utr-table-wrapper utr-modal-table-wrapper" style={{ maxHeight: "360px" }}>
+                                                <table className="utr-table utr-modal-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="utr-th" style={{ textAlign: "center", width: "54px" }}>Rank</th>
+                                                            <th className="utr-th" style={{ width: "160px" }}>Module Name</th>
+                                                            <th className="utr-th" style={{ textAlign: "center", width: "75px" }}>Visits</th>
+                                                            <th className="utr-th" style={{ width: "150px" }}>Module Share (%)</th>
+                                                            <th className="utr-th" style={{ width: "125px" }}>Last Visited</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {userModuleRankingList.map((mod, idx) => {
+                                                            const rank = idx + 1;
+                                                            const rankBadgeClass = rank === 1 ? "utr-rank-badge--1" : rank === 2 ? "utr-rank-badge--2" : rank === 3 ? "utr-rank-badge--3" : "";
+                                                            const { date, time } = formatLocalTime(mod.last_timestamp);
+                                                            return (
+                                                                <tr className="utr-tr" key={mod.module_name}>
+                                                                    <td className="utr-td" style={{ textAlign: "center" }}>
+                                                                        <span className={`utr-rank-badge ${rankBadgeClass}`}>
+                                                                            #{rank}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="utr-td utr-td--module">
+                                                                        <span className="utr-summary-mod-tag utr-summary-mod-tag--highlight" title={mod.module_name}>{mod.module_name}</span>
+                                                                    </td>
+                                                                    <td className="utr-td" style={{ textAlign: "center", fontWeight: 700, color: "#fff" }}>
+                                                                        {mod.count}
+                                                                    </td>
+                                                                    <td className="utr-td utr-td--share">
+                                                                        <div className="utr-share-wrapper">
+                                                                            <div className="utr-share-bar-bg">
+                                                                                <div className="utr-share-bar-fill utr-share-bar-fill--user" style={{ width: `${Math.max(mod.percentage, 5)}%` }}></div>
+                                                                            </div>
+                                                                            <span className="utr-share-text">{mod.percentage}%</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="utr-td" style={{ fontSize: "11.5px", color: "#94a3b8", whiteSpace: "nowrap" }}>
+                                                                        {date} {time}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="utr-modal-footer">
+                                        <button 
+                                            type="button" 
+                                            className="utr-modal-close-btn-footer"
+                                            onClick={() => setSelectedUserModal(null)}
+                                        >
+                                            Close User Breakdown
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

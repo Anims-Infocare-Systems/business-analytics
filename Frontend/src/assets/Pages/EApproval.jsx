@@ -213,6 +213,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
         document.body
     );
 
+    const financial = card.financial || {};
     const {
         totalAmount,
         discount,
@@ -353,24 +354,37 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             Financial Summary
                         </div>
                         <div className="eap-prev__summary">
-                            {[
-                                { label: "Total Amount", val: fmt(totalAmount), sub: false },
-                                { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
-                                { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
-                                { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
-                                { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
-                                { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
-                                { label: "Round Off", val: (roundOff >= 0 ? "+ " : "") + fmt(roundOff), sub: true },
-                            ].map(r => (
-                                <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
-                                    <span className="eap-prev__sum-label">{r.label}</span>
-                                    <span className="eap-prev__sum-val">{r.val}</span>
-                                </div>
-                            ))}
-                            <div className="eap-prev__sum-row eap-prev__sum-row--grand">
-                                <span className="eap-prev__sum-label">Grand Total</span>
-                                <span className="eap-prev__sum-val">₹ {fmt(grandTotal)}</span>
-                            </div>
+                            {financial?.summaryRows && financial.summaryRows.length > 0 ? (
+                                financial.summaryRows.map(r => (
+                                    <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}${r.grand ? " eap-prev__sum-row--grand" : ""}`}>
+                                        <span className="eap-prev__sum-label">{r.label}</span>
+                                        <span className="eap-prev__sum-val">
+                                            {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : fmt(r.value)}
+                                        </span>
+                                    </div>
+                                ))
+                            ) : (
+                                <>
+                                    {[
+                                        { label: "Total Amount", val: fmt(totalAmount), sub: false },
+                                        { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
+                                        { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
+                                        { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
+                                        { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
+                                        { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
+                                        { label: "Round Off", val: fmt(0), sub: true },
+                                    ].map(r => (
+                                        <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
+                                            <span className="eap-prev__sum-label">{r.label}</span>
+                                            <span className="eap-prev__sum-val">{r.val}</span>
+                                        </div>
+                                    ))}
+                                    <div className="eap-prev__sum-row eap-prev__sum-row--grand">
+                                        <span className="eap-prev__sum-label">Grand Total</span>
+                                        <span className="eap-prev__sum-val">₹ {fmt(grandTotal)}</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

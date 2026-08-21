@@ -2024,7 +2024,7 @@ export default function SalesAnalysis() {
       const key = `${s.year}-${s.month}`;
       return jsRound(monthMap[key] || 0, 2);
     });
-    const sales_values_lakhs = sales_values.map(v => jsRound(v / 100_000, 2));
+    const sales_values_lakhs = sales_values.map(v => jsRound(v / 100_000, 3));
     const total = jsRound(sales_values.reduce((sum, v) => sum + v, 0), 2);
 
     return {
@@ -2033,7 +2033,7 @@ export default function SalesAnalysis() {
       sales_values,
       sales_values_lakhs,
       total,
-      total_lakhs: jsRound(total / 100_000, 2)
+      total_lakhs: jsRound(total / 100_000, 3)
     };
   }, [monthlyTrendData, filteredInvoices, selectedCustomers, dateRange]);
 
@@ -2484,7 +2484,7 @@ export default function SalesAnalysis() {
               offset: 2,
               font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
               color: "#10b981",
-              formatter: (v) => `₹${safeToFixed(v, 1)}L`
+              formatter: (v) => `₹${safeToFixed(v, 3)}L`
             }
           }
         ];
@@ -2537,7 +2537,7 @@ export default function SalesAnalysis() {
             padding: { top: 2, bottom: 2, left: 5, right: 5 },
             borderColor: "rgba(45, 109, 232, 0.4)",
             color: "#2d6de8",
-            formatter: (v) => `₹${safeToFixed(v, 1)}L`
+            formatter: (v) => `₹${safeToFixed(v, 3)}L`
           }
         }];
 
@@ -2582,7 +2582,7 @@ export default function SalesAnalysis() {
             padding: { top: 2, bottom: 2, left: 5, right: 5 },
             borderColor: "rgba(16, 185, 129, 0.4)",
             color: "#10b981",
-            formatter: (v) => `₹${safeToFixed(v, 1)}L`
+            formatter: (v) => `₹${safeToFixed(v, 3)}L`
           }
         }];
 
@@ -2744,13 +2744,13 @@ export default function SalesAnalysis() {
                     if (isShare) {
                       text = `${ctx.label || ''}: ${val === 0 ? "—" : (val > 0 ? "+" : "") + safeToFixed(val, 1) + "%"}`;
                     } else {
-                      const val3 = (Math.floor(val * 1000) / 1000).toFixed(3);
+                      const val3 = safeToFixed(val, 3);
                       text = `Sales Value: ₹${val3}L`;
                       if (prev != null && Number(prev) > 0) {
                         const pVal = Number(prev);
                         const pct = ((val - pVal) / pVal) * 100;
                         const diff = val - pVal;
-                        const diffText = (Math.floor(Math.abs(diff) * 1000) / 1000).toFixed(3);
+                        const diffText = safeToFixed(Math.abs(diff), 3);
                         const diffSign = diff >= 0 ? `+₹${diffText}L` : `-₹${diffText}L`;
                         text += ` (${pct >= 0 ? "+" : ""}${safeToFixed(pct, 1)}% MoM, ${diffSign})`;
                       }
@@ -2788,7 +2788,7 @@ export default function SalesAnalysis() {
                   if (isShare) {
                     return num === 0 ? "—" : `${num > 0 ? "↑" : "↓"} ${safeToFixed(Math.abs(num), 1)}%`;
                   }
-                  const num3 = (Math.floor(num * 1000) / 1000).toFixed(3);
+                  const num3 = safeToFixed(num, 3);
                   let label = `₹${num3}L`;
                   const idx = context.dataIndex;
                   const prev = context.dataset?.data?.[idx - 1];
@@ -3235,10 +3235,22 @@ export default function SalesAnalysis() {
     if (loading) return;
     const timer = setTimeout(() => {
       if (!planRef.current) return;
-      planChart.current?.destroy();
+
+      const { labels, planned, dispatched, sortedKeys } = weeklyPlanVsActual;
+      const maxVal = Math.max(0, ...planned, ...dispatched);
+
+      if (planChart.current) {
+        planChart.current.data.labels = labels;
+        planChart.current.data.datasets[0].data = planned;
+        planChart.current.data.datasets[1].data = dispatched;
+        if (planChart.current.options?.scales?.y) {
+          planChart.current.options.scales.y.max = maxVal > 0 ? Math.ceil(maxVal * 1.25) : 10;
+        }
+        planChart.current.update("none");
+        return;
+      }
 
       const ctx = planRef.current.getContext("2d");
-      const { labels, planned, dispatched, sortedKeys } = weeklyPlanVsActual;
 
       const gradPlanned = ctx.createLinearGradient(0, 0, 0, 240);
       gradPlanned.addColorStop(0, "rgba(139, 92, 246, 0.95)");
@@ -3247,8 +3259,6 @@ export default function SalesAnalysis() {
       const gradDispatched = ctx.createLinearGradient(0, 0, 0, 240);
       gradDispatched.addColorStop(0, "rgba(16, 185, 129, 0.95)");
       gradDispatched.addColorStop(1, "rgba(16, 185, 129, 0.15)");
-
-      const maxVal = Math.max(0, ...planned, ...dispatched);
 
       try {
         planChart.current = new Chart(ctx, {
@@ -3345,9 +3355,8 @@ export default function SalesAnalysis() {
 
     return () => {
       clearTimeout(timer);
-      planChart.current?.destroy();
     };
-  }, [filteredPlanVsActual, loading]);
+  }, [weeklyPlanVsActual, loading]);
 
   const monthlyProjectionsChartData = useMemo(() => {
     if (!filteredProjections || filteredProjections.length === 0) {
@@ -3898,7 +3907,12 @@ export default function SalesAnalysis() {
       if (res.ok) {
         const data = await res.json();
         if (data?.rows) {
-          setPlanVsActual(data.rows);
+          setPlanVsActual(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(data.rows)) {
+              return prev;
+            }
+            return data.rows;
+          });
         }
       }
     } catch (err) {
@@ -4972,7 +4986,7 @@ export default function SalesAnalysis() {
               </h4>
               {performanceChartType !== "share" && !loading && monthlyAvg > 0 && (
                 <span className="sa-badge sa-badge--purple" style={{ margin: 0, fontSize: '0.72rem', fontWeight: '700', padding: '3px 8px', borderRadius: '6px' }}>
-                  ₹{monthlyAvg.toFixed(2)}L Avg
+                  ₹{monthlyAvg.toFixed(3)}L Avg
                 </span>
               )}
             </div>

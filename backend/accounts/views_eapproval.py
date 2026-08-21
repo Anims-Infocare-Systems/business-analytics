@@ -701,23 +701,23 @@ def eapproval_detail(request):
     pacamtbf = _safe_float(header["pacamtbf"])
     pacamt = _safe_float(header["pacamt"])
 
-    # Residual round-off vs line + header add-ons + tax (totamt is ERP grand)
-    computed = line_sum - disamt + pacamtbf + pacamt + tax_sum
-    round_off = round(totamt - computed, 2)
-    grand_total = totamt
+    # Base total amount: line_sum if line_sum > 0 else totamt
+    base_amount = line_sum if line_sum > 0 else totamt
+    round_off = 0.0  # Round Off as 0 by default
+    grand_total = round(base_amount - disamt + pacamtbf + tax_sum + pacamt + round_off, 2)
 
     financial = {
-        "totalAmount": round(totamt, 2),
+        "totalAmount": round(base_amount, 2),
         "lineItemsTotal": round(line_sum, 2),
         "discount": round(disamt, 2),
         "beforeTaxPF": round(pacamtbf, 2),
         "afterTaxPF": round(pacamt, 2),
         "taxes": tax_lines,
         "totalTaxAmount": round(tax_sum, 2),
-        "roundOff": round_off,
+        "roundOff": 0.0,
         "grandTotal": round(grand_total, 2),
         "summaryRows": _build_financial_summary_rows(
-            totamt, disamt, pacamtbf, pacamt, tax_lines, round_off, grand_total
+            base_amount, disamt, pacamtbf, pacamt, tax_lines, 0.0, grand_total
         ),
     }
 
@@ -760,7 +760,7 @@ def eapproval_detail(request):
         "discount": financial["discount"],
         "bfTaxPF": financial["beforeTaxPF"],
         "afTaxPF": financial["afterTaxPF"],
-        "roundOff": financial["roundOff"],
+        "roundOff": 0.0,
         "cgstPct": 0,
         "sgstPct": 0,
         "approvedBy": approved_by,
@@ -785,7 +785,7 @@ def _build_financial_summary_rows(totamt, disamt, pacamtbf, pacamt, tax_lines, r
             "sub": False,
             "neg": False,
         })
-    rows.append({"label": "Round Off", "value": round(round_off, 2), "sub": True, "neg": round_off < 0})
+    rows.append({"label": "Round Off", "value": 0.0, "sub": True, "neg": False})
     rows.append({"label": "Grand Total", "value": round(grand_total, 2), "sub": False, "neg": False, "grand": True})
     return rows
 

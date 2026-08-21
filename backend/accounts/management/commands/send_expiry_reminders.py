@@ -30,6 +30,10 @@ class Command(BaseCommand):
         for row in rows:
             company_code, company_name, plan_name, person_name, email_id, end_date = row
 
+            # T, P, D companies are free forever, skip sending expiry email reminders
+            if company_code and str(company_code).strip().upper().startswith(('T', 'P', 'D')):
+                continue
+
             if not end_date:
                 continue
 

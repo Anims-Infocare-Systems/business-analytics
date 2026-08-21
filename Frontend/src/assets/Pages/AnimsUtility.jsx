@@ -6,7 +6,8 @@
  * status, last login, active users, and data-sync health — all driven
  * from the multi-tenant CompanyMaster model described in the BRD.
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { MdFolderSpecial, MdWorkspacePremium } from "react-icons/md";
 import "./AnimsUtility.css";
 import { resolveApiBase } from "../../apiBase";
 import { adminFetch } from "../../adminAuth";
@@ -14,6 +15,56 @@ import { adminFetch } from "../../adminAuth";
 const API = resolveApiBase();
 
 /* ── Helpers ────────────────────────────────────────────────── */
+function CustomPlanDropdown({ value, onChange, options }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    const selectedOption = options.find(opt => opt.value.toLowerCase() === value.toLowerCase()) || options[0];
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="utr-plan-select-container" ref={containerRef}>
+            <button 
+                type="button"
+                className={`utr-plan-select-trigger ${isOpen ? "utr-plan-select-trigger--open" : ""} ${value !== "all" ? "utr-plan-select-trigger--active" : ""}`}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <div className="utr-plan-select-val-wrap">
+                    <span className="utr-plan-select-text">{selectedOption ? selectedOption.label : "All Plans"}</span>
+                    <span className="utr-plan-select-count">{selectedOption ? selectedOption.count : 0}</span>
+                </div>
+                <span className={`utr-select-arrow ${isOpen ? "utr-select-arrow--open" : ""}`}>▾</span>
+            </button>
+
+            {isOpen && (
+                <div className="utr-plan-select-dropdown">
+                    {options.map((opt) => (
+                        <div 
+                            key={opt.value}
+                            className={`utr-plan-option ${opt.value.toLowerCase() === value.toLowerCase() ? "utr-plan-option--selected" : ""}`}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                            }}
+                        >
+                            <span>{opt.label}</span>
+                            <span className="utr-plan-option-badge">{opt.count}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 function timeAgo(dateInput) {
     if (!dateInput) return "—";
     const dateObj = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
@@ -30,6 +81,24 @@ function useTick(ms = 30000) {
         const t = setInterval(() => setTick(n => n + 1), ms);
         return () => clearInterval(t);
     }, [ms]);
+}
+
+function getSeriesCategory(client) {
+    if (!client) return "Customer";
+    const code = (client.code || "").trim().toUpperCase();
+    if (code.startsWith("T")) return "Testing";
+    if (code.startsWith("D")) return "Demo";
+    if (code.startsWith("P")) return "Programming";
+    return "Customer";
+}
+
+function getSeriesPlanName(client) {
+    if (!client) return "Free";
+    const code = (client.code || "").trim().toUpperCase();
+    if (code.startsWith("T")) return "Testing Details (T)";
+    if (code.startsWith("D")) return "Demo Details (D)";
+    if (code.startsWith("P")) return "Programming Details (P)";
+    return client.plan || "Free";
 }
 
 /* ── Tunnel badge ─────────────────────────────────────────────*/
@@ -127,7 +196,7 @@ function ClientDrawer({ client, onClose }) {
                     </div>
                     <div className="au-drawer__hd-info">
                         <h3 className="au-drawer__name">{client.name}</h3>
-                        <p className="au-drawer__code">{client.code} · {client.industry}</p>
+                        <p className="au-drawer__code">{client.code} · {getSeriesCategory(client)}</p>
                     </div>
                     <div className="au-drawer__hd-right">
                         <TunnelBadge status={client.tunnel} />
@@ -158,7 +227,7 @@ function ClientDrawer({ client, onClose }) {
                     <h4 className="au-drawer__sec-title">Company Details</h4>
                     <div className="au-drawer__rows">
                         {[
-                            ["Plan", client.plan],
+                            ["Plan", getSeriesPlanName(client)],
                             ["Billing Cycle", client.billingCycle ? (client.billingCycle.charAt(0).toUpperCase() + client.billingCycle.slice(1)) : "—"],
                             ["Plan Start Date", client.planStartDate || "—"],
                             ["Plan End Date", client.planEndDate || "—"],
@@ -240,9 +309,34 @@ export default function AnimsUtility({ onAuthLost }) {
 
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState("all");   // all | active | inactive | warning
+    const [seriesFilter, setSeriesFilter] = useState("all"); // all | A | T | D | P
+    const [selectedPlan, setSelectedPlan] = useState("all"); // all | plan name
     const [view, setView] = useState("grid");  // grid | table
     const [selected, setSelected] = useState(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
+
+    // Memoized plan options with live counts
+    const planOptions = useMemo(() => {
+        const counts = {};
+        clients.forEach(c => {
+            const p = getSeriesPlanName(c);
+            counts[p] = (counts[p] || 0) + 1;
+        });
+
+        const opts = [
+            { label: "All Plans", value: "all", count: clients.length }
+        ];
+
+        Object.keys(counts).sort().forEach(planName => {
+            opts.push({
+                label: planName,
+                value: planName,
+                count: counts[planName]
+            });
+        });
+
+        return opts;
+    }, [clients]);
 
     useEffect(() => {
         fetchData({ silent: false });
@@ -259,10 +353,12 @@ export default function AnimsUtility({ onAuthLost }) {
             setErrorMsg("");
         }
         try {
-            const clientsRes = await adminFetch(`${API}/admin/utility/clients/`);
-            const clientsData = await clientsRes.json();
+            const [clientsRes, activityRes] = await Promise.all([
+                adminFetch(`${API}/admin/utility/clients/`),
+                adminFetch(`${API}/admin/utility/activity/`),
+            ]);
 
-            const activityRes = await adminFetch(`${API}/admin/utility/activity/`);
+            const clientsData = await clientsRes.json();
             const activityData = await activityRes.json();
 
             if (clientsRes.ok && activityRes.ok) {
@@ -297,22 +393,54 @@ export default function AnimsUtility({ onAuthLost }) {
     const liveUsers = clients.reduce((a, c) => a + c.activeUsers, 0);
     const registeredUsers = clients.reduce((a, c) => a + (c.totalUsers || 0), 0);
 
-    /* ── Filtered ── */
-    const visible = clients.filter(c => {
-        const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-            c.code.toLowerCase().includes(search.toLowerCase()) ||
-            c.location.toLowerCase().includes(search.toLowerCase());
-        
-        let matchFilter = false;
-        if (filter === "all") {
-            matchFilter = true;
-        } else if (filter === "active") {
-            matchFilter = c.status === "active" && c.activeUsers > 0;
-        } else if (filter === "inactive") {
-            matchFilter = c.status === "inactive" || (c.status === "active" && c.activeUsers === 0);
-        }
-        return matchSearch && matchFilter;
-    });
+    const countA = clients.filter(c => (c.code || "").toUpperCase().startsWith("A")).length;
+    const countT = clients.filter(c => (c.code || "").toUpperCase().startsWith("T")).length;
+    const countD = clients.filter(c => (c.code || "").toUpperCase().startsWith("D")).length;
+    const countP = clients.filter(c => (c.code || "").toUpperCase().startsWith("P")).length;
+
+    /* ── Filtered & Series Sorted ── */
+    const visible = clients
+        .filter(c => {
+            const codeUpper = (c.code || "").toUpperCase();
+            const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
+                c.code.toLowerCase().includes(search.toLowerCase()) ||
+                c.location.toLowerCase().includes(search.toLowerCase());
+            
+            let matchStatus = true;
+            if (filter === "active") {
+                matchStatus = c.status === "active" && c.activeUsers > 0;
+            } else if (filter === "inactive") {
+                matchStatus = c.status === "inactive" || (c.status === "active" && c.activeUsers === 0);
+            }
+
+            let matchSeries = true;
+            if (seriesFilter !== "all") {
+                matchSeries = codeUpper.startsWith(seriesFilter);
+            }
+
+            let matchPlan = true;
+            if (selectedPlan !== "all") {
+                const pName = getSeriesPlanName(c);
+                matchPlan = pName.toLowerCase() === selectedPlan.toLowerCase() ||
+                            (c.plan || "").toLowerCase() === selectedPlan.toLowerCase();
+            }
+
+            return matchSearch && matchStatus && matchSeries && matchPlan;
+        })
+        .sort((a, b) => {
+            const codeA = (a.code || "").toUpperCase();
+            const codeB = (b.code || "").toUpperCase();
+            const getSeriesRank = (code) => {
+                if (code.startsWith("A")) return 1;
+                if (code.startsWith("D")) return 2;
+                if (code.startsWith("P")) return 3;
+                if (code.startsWith("T")) return 4;
+                return 5;
+            };
+            const rankDiff = getSeriesRank(codeA) - getSeriesRank(codeB);
+            if (rankDiff !== 0) return rankDiff;
+            return codeA.localeCompare(codeB);
+        });
 
     /* ── Manual refresh ── */
     const handleRefresh = () => {
@@ -320,10 +448,18 @@ export default function AnimsUtility({ onAuthLost }) {
     };
 
     /* ── Filter pills ── */
-    const FILTERS = [
+    const STATUS_FILTERS = [
         { key: "all", label: "All", count: total },
         { key: "active", label: "Active", count: active },
         { key: "inactive", label: "Offline", count: inactive },
+    ];
+
+    const SERIES_FILTERS = [
+        { key: "all", label: "All Details", count: total },
+        { key: "A", label: "Client Details (A)", count: countA },
+        { key: "T", label: "Testing Details (T)", count: countT },
+        { key: "D", label: "Demo Details (D)", count: countD },
+        { key: "P", label: "Programming Details (P)", count: countP },
     ];
 
     if (loading) {
@@ -381,63 +517,99 @@ export default function AnimsUtility({ onAuthLost }) {
             </div>
 
             {/* ── Toolbar ── */}
-            <div className="au-toolbar">
-                {/* Search */}
-                <div className="au-search-wrap">
-                    <svg className="au-search-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                        className="au-search"
-                        placeholder="Search company, code, location…"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                    {search && (
-                        <button className="au-search-clear" onClick={() => setSearch("")}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            <div className="au-toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", width: "100%" }}>
+                    {/* Search */}
+                    <div className="au-search-wrap" style={{ flex: "1 1 240px", minWidth: "220px" }}>
+                        <svg className="au-search-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                            className="au-search"
+                            placeholder="Search company, code, location…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                        {search && (
+                            <button className="au-search-clear" onClick={() => setSearch("")}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Status filter pills */}
+                    <div className="au-filters">
+                        {STATUS_FILTERS.map(f => (
+                            <button
+                                key={f.key}
+                                className={`au-filter-pill ${filter === f.key ? "au-filter-pill--active" : ""}`}
+                                onClick={() => setFilter(f.key)}
+                            >
+                                {f.label}
+                                <span className="au-filter-pill__count">{f.count}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* View toggle */}
+                    <div className="au-view-toggle">
+                        <button
+                            className={`au-view-btn ${view === "grid" ? "au-view-btn--active" : ""}`}
+                            onClick={() => setView("grid")}
+                            title="Grid view"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                             </svg>
                         </button>
-                    )}
-                </div>
-
-                {/* Filter pills */}
-                <div className="au-filters">
-                    {FILTERS.map(f => (
                         <button
-                            key={f.key}
-                            className={`au-filter-pill ${filter === f.key ? "au-filter-pill--active" : ""} au-filter-pill--${f.key}`}
-                            onClick={() => setFilter(f.key)}
+                            className={`au-view-btn ${view === "table" ? "au-view-btn--active" : ""}`}
+                            onClick={() => setView("table")}
+                            title="Table view"
                         >
-                            {f.label}
-                            <span className="au-filter-pill__count">{f.count}</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" />
+                                <line x1="3" y1="18" x2="21" y2="18" />
+                            </svg>
                         </button>
-                    ))}
+                    </div>
                 </div>
 
-                {/* View toggle */}
-                <div className="au-view-toggle">
-                    <button
-                        className={`au-view-btn ${view === "grid" ? "au-view-btn--active" : ""}`}
-                        onClick={() => setView("grid")}
-                        title="Grid view"
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-                            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                        </svg>
-                    </button>
-                    <button
-                        className={`au-view-btn ${view === "table" ? "au-view-btn--active" : ""}`}
-                        onClick={() => setView("table")}
-                        title="Table view"
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" />
-                            <line x1="3" y1="18" x2="21" y2="18" />
-                        </svg>
-                    </button>
+                {/* ── Single Row Series & Plan Filter Bar ── */}
+                <div className="utr-series-plan-container" style={{ marginTop: "10px" }}>
+                    <div className="utr-filter-bar-group utr-filter-bar-group--series">
+                        <span className="utr-series-label">
+                            <MdWorkspacePremium /> Series Filter:
+                        </span>
+                        <div className="utr-pills-row">
+                            {SERIES_FILTERS.map(sf => (
+                                <button
+                                    key={sf.key}
+                                    className={`utr-series-pill ${seriesFilter === sf.key ? 'utr-series-pill--active' : ''}`}
+                                    onClick={() => setSeriesFilter(sf.key)}
+                                >
+                                    <span>{sf.label}</span>
+                                    <span className="utr-series-pill-count">{sf.count}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="utr-series-plan-divider" />
+
+                    <div className="utr-filter-bar-group utr-filter-bar-group--plan">
+                        <span className="utr-series-label utr-series-label--plan">
+                            <MdFolderSpecial /> Plan Filter:
+                        </span>
+                        <CustomPlanDropdown 
+                            value={selectedPlan}
+                            onChange={(val) => setSelectedPlan(val)}
+                            options={planOptions}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -474,9 +646,9 @@ export default function AnimsUtility({ onAuthLost }) {
                                         </div>
                                         <div className="au-client-card__info">
                                             <span className="au-client-card__name">{c.name}</span>
-                                            <span className="au-client-card__code">{c.code} · {c.industry}</span>
+                                            <span className="au-client-card__code">{c.code} · {getSeriesCategory(c)}</span>
                                         </div>
-                                        <span className={`au-plan au-plan--${c.plan.toLowerCase()}`}>{c.plan}</span>
+                                        <span className={`au-plan au-plan--${(c.code || "").trim().charAt(0).toLowerCase()}`}>{getSeriesPlanName(c)}</span>
                                     </div>
 
                                     <div className="au-client-card__mid">

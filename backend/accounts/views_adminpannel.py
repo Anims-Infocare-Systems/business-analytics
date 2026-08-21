@@ -19,9 +19,9 @@ ADMIN_PASS = getattr(settings, "ADMIN_PANEL_PASSWORD", "admin12345678")
 ADMIN_TOKEN_MAX_AGE = 86400
 
 
-def issue_admin_token():
+def issue_admin_token(username="admin"):
     ts = int(time.time())
-    payload = f"admin-panel:{ts}"
+    payload = f"admin-panel:{username}:{ts}"
     sig = hmac.new(
         settings.SECRET_KEY.encode(),
         payload.encode(),
@@ -43,14 +43,28 @@ def verify_admin_token(token):
         ).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return False
-        prefix, ts_str = payload.split(":", 1)
-        if prefix != "admin-panel":
+        parts = payload.split(":")
+        if parts[0] != "admin-panel":
             return False
-        if time.time() - int(ts_str) > ADMIN_TOKEN_MAX_AGE:
+        ts = int(parts[-1])
+        if time.time() - ts > ADMIN_TOKEN_MAX_AGE:
             return False
         return True
     except (ValueError, TypeError):
         return False
+
+def get_username_from_token(token):
+    token = (token or "").strip()
+    if not token:
+        return "admin"
+    try:
+        payload, _ = token.rsplit(":", 1)
+        parts = payload.split(":")
+        if len(parts) >= 3:
+            return parts[1]
+    except Exception:
+        pass
+    return "admin"
 
 
 def _admin_token_from_request(request):
@@ -68,8 +82,47 @@ def admin_auth_denied_response(exc):
         status=403,
     )
 
+def ensure_admin_credentials_table():
+    """Ensure admin_panel_credentials table exists in DB and seed initial master admin account if table is empty."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'admin_panel_credentials')
+                BEGIN
+                    CREATE TABLE admin_panel_credentials (
+                        id INT IDENTITY(1,1) PRIMARY KEY,
+                        username VARCHAR(100) NOT NULL UNIQUE,
+                        password VARCHAR(255) NOT NULL,
+                        is_active BIT DEFAULT 1,
+                        last_login DATETIME NULL,
+                        password_updated_at DATETIME DEFAULT GETDATE(),
+                        created_at DATETIME DEFAULT GETDATE()
+                    );
+                END
+                ELSE IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('admin_panel_credentials') AND name = 'password_updated_at')
+                BEGIN
+                    ALTER TABLE admin_panel_credentials ADD password_updated_at DATETIME DEFAULT GETDATE();
+                END
+                """
+            )
+            cursor.execute("SELECT COUNT(1) FROM admin_panel_credentials")
+            count = cursor.fetchone()[0]
+            if count == 0:
+                default_user = ADMIN_USER
+                default_pass_hash = hashlib.sha256(ADMIN_PASS.encode()).hexdigest()
+                cursor.execute(
+                    """
+                    INSERT INTO admin_panel_credentials (username, password, is_active, password_updated_at, created_at)
+                    VALUES (%s, %s, 1, GETDATE(), GETDATE())
+                    """,
+                    [default_user, default_pass_hash]
+                )
+    except Exception as e:
+        print(f"[ADMIN AUTH] Error creating/checking admin_panel_credentials table: {e}")
+
 # ─────────────────────────────────────────────────────────────
-#  AUTHENTICATION
+#  AUTHENTICATION & MASTER CREDENTIALS
 # ─────────────────────────────────────────────────────────────
 @api_view(["POST"])
 @authentication_classes([])
@@ -78,13 +131,83 @@ def admin_login(request):
     username = (request.data.get("username") or "").strip()
     password = (request.data.get("password") or "").strip()
 
-    if username == ADMIN_USER and password == ADMIN_PASS:
-        token = issue_admin_token()
+    if not username or not password:
+        return Response({"error": "Username and password are required."}, status=400)
+
+    # 1. Ensure separate table admin_panel_credentials exists
+    ensure_admin_credentials_table()
+
+    # 2. Check credentials in admin_panel_credentials table
+    authenticated = False
+    admin_id = None
+    pass_updated_at = None
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, username, password, is_active, password_updated_at 
+                FROM admin_panel_credentials 
+                WHERE LOWER(username) = LOWER(%s) AND is_active = 1
+                """,
+                [username]
+            )
+            row = cursor.fetchone()
+            if row:
+                aid, db_user, db_pass, is_active, pass_upd = row
+                input_hash = hashlib.sha256(password.encode()).hexdigest()
+                if db_pass == input_hash or db_pass == password or (password == ADMIN_PASS and username == ADMIN_USER):
+                    authenticated = True
+                    admin_id = aid
+                    pass_updated_at = pass_upd
+                    if db_pass != input_hash:
+                        cursor.execute(
+                            "UPDATE admin_panel_credentials SET password = %s, password_updated_at = GETDATE() WHERE id = %s",
+                            [input_hash, aid]
+                        )
+                    cursor.execute(
+                        "UPDATE admin_panel_credentials SET last_login = GETDATE() WHERE id = %s",
+                        [aid]
+                    )
+    except Exception as e:
+        print(f"[ADMIN AUTH DB ERROR] {e}")
+
+    # Fallback to settings ADMIN_USER and ADMIN_PASS if DB check fails
+    if not authenticated and username == ADMIN_USER and password == ADMIN_PASS:
+        authenticated = True
+
+    if authenticated:
+        token = issue_admin_token(username)
+        
+        # Calculate password age for 60-day rotation recommendation
+        now_dt = datetime.now()
+        if pass_updated_at:
+            if isinstance(pass_updated_at, date) and not isinstance(pass_updated_at, datetime):
+                last_dt = datetime.combine(pass_updated_at, datetime.min.time())
+            else:
+                last_dt = pass_updated_at
+            password_age_days = (now_dt - last_dt).days
+        else:
+            password_age_days = 60 # Default to prompt rotation if not recorded
+            last_dt = now_dt
+
+        days_remaining = max(0, 60 - password_age_days)
+        recommend_change = password_age_days >= 60
+
         return Response({
             "success": True,
             "message": "Admin authenticated successfully.",
             "admin_token": token,
+            "username": username,
+            "security_info": {
+                "password_age_days": password_age_days,
+                "days_remaining": days_remaining,
+                "recommend_change": recommend_change,
+                "rotation_cycle_days": 60,
+                "last_changed_date": last_dt.strftime("%d/%m/%Y")
+            }
         })
+
     return Response({"error": "Invalid admin username or password."}, status=401)
 
 @api_view(["POST"])
@@ -99,8 +222,197 @@ def admin_logout(request):
 def admin_check_session(request):
     token = _admin_token_from_request(request)
     if verify_admin_token(token):
-        return Response({"authenticated": True, "admin_token": token})
+        username = get_username_from_token(token)
+        return Response({"authenticated": True, "admin_token": token, "username": username})
     return Response({"authenticated": False, "admin_token": None})
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_change_password(request):
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    username = (request.data.get("username") or "admin").strip()
+    new_password = (request.data.get("new_password") or "").strip()
+
+    if not new_password:
+        return Response({"error": "New password is required."}, status=400)
+
+    if len(new_password) < 6:
+        return Response({"error": "Password must be at least 6 characters long."}, status=400)
+
+    ensure_admin_credentials_table()
+    try:
+        new_pass_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE admin_panel_credentials 
+                SET password = %s, password_updated_at = GETDATE() 
+                WHERE LOWER(username) = LOWER(%s)
+                """,
+                [new_pass_hash, username]
+            )
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_panel_credentials (username, password, is_active, password_updated_at, created_at)
+                    VALUES (%s, %s, 1, GETDATE(), GETDATE())
+                    """,
+                    [username, new_pass_hash]
+                )
+        return Response({"success": True, "message": f"Password for master admin '{username}' updated successfully."})
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_forgot_password_reset(request):
+    username = (request.data.get("username") or "admin").strip()
+    new_password = (request.data.get("new_password") or "").strip()
+
+    if not username:
+        return Response({"error": "Admin username is required."}, status=400)
+    if not new_password:
+        return Response({"error": "New password is required."}, status=400)
+    if len(new_password) < 6:
+        return Response({"error": "Password must be at least 6 characters long."}, status=400)
+
+    ensure_admin_credentials_table()
+    try:
+        new_pass_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE admin_panel_credentials 
+                SET password = %s, password_updated_at = GETDATE() 
+                WHERE LOWER(username) = LOWER(%s) AND is_active = 1
+                """,
+                [new_pass_hash, username]
+            )
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_panel_credentials (username, password, is_active, password_updated_at, created_at)
+                    VALUES (%s, %s, 1, GETDATE(), GETDATE())
+                    """,
+                    [username, new_pass_hash]
+                )
+
+        return Response({
+            "success": True,
+            "message": f"Password for master admin '{username}' reset successfully! You can now sign in."
+        })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_list_credentials(request):
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    ensure_admin_credentials_table()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, username, is_active, last_login, created_at 
+                FROM admin_panel_credentials 
+                ORDER BY id
+                """
+            )
+            rows = cursor.fetchall()
+            admins = []
+            for r in rows:
+                last_login = r[3].strftime("%Y-%m-%d %H:%M:%S") if isinstance(r[3], (datetime, date)) else (str(r[3]) if r[3] else "Never")
+                created_at = r[4].strftime("%Y-%m-%d %H:%M:%S") if isinstance(r[4], (datetime, date)) else str(r[4] or "")
+                admins.append({
+                    "id": r[0],
+                    "username": r[1],
+                    "is_active": bool(r[2]),
+                    "last_login": last_login,
+                    "created_at": created_at
+                })
+        return Response({"success": True, "admins": admins})
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_create_credential(request):
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    username = str(request.data.get("username") or "").strip()
+    password = str(request.data.get("password") or "").strip()
+
+    if not username:
+        return Response({"error": "Admin username is required."}, status=400)
+    if not password:
+        return Response({"error": "Password is required."}, status=400)
+    if len(password) < 6:
+        return Response({"error": "Password must be at least 6 characters long."}, status=400)
+
+    ensure_admin_credentials_table()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(1) FROM admin_panel_credentials WHERE LOWER(username) = LOWER(%s)", [username])
+            if cursor.fetchone()[0] > 0:
+                return Response({"error": f"Admin user '{username}' already exists."}, status=409)
+
+            pass_hash = hashlib.sha256(password.encode()).hexdigest()
+            cursor.execute(
+                """
+                INSERT INTO admin_panel_credentials (username, password, is_active, password_updated_at, created_at)
+                VALUES (%s, %s, 1, GETDATE(), GETDATE())
+                """,
+                [username, pass_hash]
+            )
+
+        return Response({"success": True, "message": f"Master admin user '{username}' created successfully."})
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+@api_view(["DELETE"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def admin_delete_credential(request, admin_id):
+    try:
+        check_admin_auth(request)
+    except PermissionError as e:
+        return admin_auth_denied_response(e)
+
+    ensure_admin_credentials_table()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT username FROM admin_panel_credentials WHERE id = %s", [admin_id])
+            row = cursor.fetchone()
+            if not row:
+                return Response({"error": "Admin user not found."}, status=404)
+            if str(row[0]).strip().lower() == "admin":
+                return Response({"error": "The root 'admin' account cannot be deleted."}, status=400)
+
+            cursor.execute("SELECT COUNT(1) FROM admin_panel_credentials WHERE is_active = 1")
+            active_count = cursor.fetchone()[0]
+            if active_count <= 1:
+                return Response({"error": "Cannot delete the last remaining master admin user."}, status=400)
+
+            cursor.execute("DELETE FROM admin_panel_credentials WHERE id = %s", [admin_id])
+
+        return Response({"success": True, "message": "Master admin user deleted successfully."})
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
 
 # ─────────────────────────────────────────────────────────────
 #  TENANTS LIST & MANAGEMENT
@@ -157,6 +469,16 @@ def admin_list_tenants(request):
                 end_date = r[14].strftime("%Y-%m-%d") if isinstance(r[14], (datetime, date)) else str(r[14] or "")
                 comp_code = r[2]
                 lic_flags = get_tenant_license(comp_code)
+                db_plan = r[12]
+                prefix = str(comp_code or "").strip().upper()[:1]
+                if prefix == "T":
+                    plan_val = "Testing Details (T)"
+                elif prefix == "D":
+                    plan_val = "Demo Details (D)"
+                elif prefix == "P":
+                    plan_val = "Programming Details (P)"
+                else:
+                    plan_val = db_plan or "Free"
                 
                 tenants.append({
                     "id": r[0],
@@ -171,7 +493,7 @@ def admin_list_tenants(request):
                     "no_of_employees": r[9],
                     "no_of_users": r[10],
                     "plan_id": r[11],
-                    "plan_name": r[12],
+                    "plan_name": plan_val,
                     "signup_date": signup_date,
                     "end_date": end_date,
                     "active_status": bool(r[15]),
@@ -334,6 +656,7 @@ def admin_update_tenant(request):
     users_count = int(request.data.get("no_of_users") or 5)
     plan_id = str(request.data.get("plan_id") or "free").strip().lower()
     plan_name = str(request.data.get("plan_name") or "Free Plan").strip()
+    signup_date = str(request.data.get("signup_date") or request.data.get("start_date") or "").strip()
     end_date = str(request.data.get("end_date") or "").strip()
     city = str(request.data.get("city") or "").strip()
     state = str(request.data.get("state") or "").strip()
@@ -367,6 +690,7 @@ def admin_update_tenant(request):
                         no_of_users = %s,
                         plan_id = %s,
                         plan_name = %s,
+                        signup_date = COALESCE(%s, signup_date),
                         end_date = %s,
                         active_status = %s,
                         city = %s,
@@ -375,7 +699,7 @@ def admin_update_tenant(request):
                     """,
                     [
                         company_name, business_name, person_name, email, phone, gst or None,
-                        employees, users_count, plan_id, plan_name, end_date or None, active_status,
+                        employees, users_count, plan_id, plan_name, signup_date or None, end_date or None, active_status,
                         city, state,
                         tenant_id
                     ]
@@ -616,9 +940,11 @@ def admin_user_transactions(request):
             ut.module_name, 
             ut.company_code,
             t.company_name,
-            t.erp_database
+            t.erp_database,
+            ts.plan_name
         FROM tenants_usersTransaction ut
         LEFT JOIN tenants t ON ut.company_code = t.company_code
+        LEFT JOIN tenants_signup ts ON ut.company_code = ts.company_code
         {where_sql}
         {order_sql}
     """
@@ -630,8 +956,20 @@ def admin_user_transactions(request):
 
             transactions = []
             for r in rows:
-                tx_id, created_at, uname, mname, ccode, cname, dbname = r
+                tx_id, created_at, uname, mname, ccode, cname, dbname, db_plan_name = r
                 iso_time = (created_at.isoformat() + "Z") if created_at else ""
+                
+                # Determine plan name
+                prefix = (ccode or "").strip().upper()[:1]
+                if prefix == "T":
+                    plan_val = "Testing Details (T)"
+                elif prefix == "D":
+                    plan_val = "Demo Details (D)"
+                elif prefix == "P":
+                    plan_val = "Programming Details (P)"
+                else:
+                    plan_val = db_plan_name or "Free"
+
                 transactions.append({
                     "id": tx_id,
                     "timestamp": iso_time,
@@ -639,7 +977,8 @@ def admin_user_transactions(request):
                     "module_name": mname,
                     "company_code": ccode,
                     "company_name": cname or ccode,
-                    "erp_database": dbname or "—"
+                    "erp_database": dbname or "—",
+                    "plan_name": plan_val
                 })
 
             # Also fetch all distinct company codes & usernames for filters
