@@ -1419,20 +1419,7 @@ export default function AdminPanel() {
                                     </div>
 
                                     <div className="ap-field">
-                                        <div className="ap-label-flex">
-                                            <label className="ap-label">Password</label>
-                                            <button 
-                                                type="button" 
-                                                className="ap-forgot-link" 
-                                                onClick={() => {
-                                                    setIsForgotPasswordMode(true);
-                                                    setForgotUsername(loginUsername || "");
-                                                    setLoginError("");
-                                                }}
-                                            >
-                                                Forgot Password?
-                                            </button>
-                                        </div>
+                                        <label className="ap-label">Password</label>
                                         <div className="ap-wrap ap-wrap-password">
                                             <input 
                                                 type={showLoginPass ? "text" : "password"} 

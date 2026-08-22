@@ -235,7 +235,9 @@ def admin_change_password(request):
     except PermissionError as e:
         return admin_auth_denied_response(e)
 
-    username = (request.data.get("username") or "admin").strip()
+    token = _admin_token_from_request(request)
+    token_username = get_username_from_token(token)
+    username = token_username if token_username else (request.data.get("username") or "admin").strip()
     new_password = (request.data.get("new_password") or "").strip()
 
     if not new_password:
