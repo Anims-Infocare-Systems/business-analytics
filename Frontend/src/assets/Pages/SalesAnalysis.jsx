@@ -3,31 +3,40 @@ import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
 import {
-  IndianRupee,
-  Building2,
-  Package,
-  Trophy,
-  Scale,
-  TrendingUp,
-  TrendingDown,
-  Info,
+  Activity,
   AlertTriangle,
+  BarChart3,
+  Building2,
   Calendar,
-  FileText,
-  Lightbulb,
-  Pin,
-  Search,
+  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  RotateCcw,
-  Link,
-  Inbox,
-  Filter,
-  Check,
   Download,
-  X,
+  FileText,
+  Filter,
+  GitCommit,
+  History,
+  Inbox,
+  IndianRupee,
+  Info,
+  Layers,
+  Lightbulb,
+  Link,
+  Package,
+  Percent,
+  Pin,
   Play,
-  Printer
+  Printer,
+  RotateCcw,
+  Scale,
+  Search,
+  ShieldCheck,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  X,
+  Zap
 } from "lucide-react";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
@@ -89,6 +98,34 @@ function formatLakhsFloor(rupees, decimals = 3) {
   const factor = Math.pow(10, decimals);
   const truncated = Math.floor((n / 100_000) * factor) / factor;
   return `${truncated.toFixed(decimals)}L`;
+}
+
+function calculateExact100Percentages(values) {
+  if (!values || values.length === 0) return [];
+  const cleanVals = values.map(v => Math.max(0, Number(v) || 0));
+  const total = cleanVals.reduce((a, b) => a + b, 0);
+  if (total <= 0) return cleanVals.map(() => 0.0);
+
+  const rawTenths = cleanVals.map(v => (v / total) * 1000.0);
+  const floors = rawTenths.map(r => Math.floor(r));
+  const sumFloors = floors.reduce((a, b) => a + b, 0);
+  const diff = 1000 - sumFloors;
+
+  const remainders = rawTenths.map((r, i) => ({ rem: r - floors[i], idx: i }));
+  remainders.sort((a, b) => b.rem - a.rem);
+
+  if (diff > 0) {
+    for (let k = 0; k < Math.min(diff, cleanVals.length); k++) {
+      floors[remainders[k].idx] += 1;
+    }
+  } else if (diff < 0) {
+    const remaindersAsc = [...remainders].reverse();
+    for (let k = 0; k < Math.min(Math.abs(diff), cleanVals.length); k++) {
+      floors[remaindersAsc[k].idx] = Math.max(0, floors[remaindersAsc[k].idx] - 1);
+    }
+  }
+
+  return floors.map(f => Number((f / 10).toFixed(1)));
 }
 
 /** Y-axis tick label: rupees → ₹X.XXL */
@@ -929,6 +966,1478 @@ function getTodayMonthRange() {
   return { from: startOfPeriod, to: endOfPeriod };
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   Part-wise History & Rate Intelligence Component
+   ══════════════════════════════════════════════════════════════ */
+
+const DEFAULT_SAMPLE_PARTS = [
+  {
+    partNo: "PART-1002",
+    description: "Shaft Pin 25mm CNC Machined",
+    uom: "NOS",
+    primaryCustomer: "Brakes India Private Limited",
+    customerList: ["Brakes India Private Limited"],
+    activeRate: 485.50,
+    baseRate: 450.00,
+    avgRealizedRate: 478.20,
+    minRate: 450.00,
+    maxRate: 495.00,
+    totalQty: 2450,
+    totalRevenue: 1171590,
+    rateCount: 3,
+    txCount: 14,
+    lastDate: "2026-02-28",
+    transactions: [
+      { invoice_no: "INV-2026-041", date: "2026-02-28", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 250, uom: "NOS", rate: 485.50, amount: 121375, tax: 21847.50, tamt: 143222.50 },
+      { invoice_no: "INV-2026-036", date: "2026-02-20", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 300, uom: "NOS", rate: 485.50, amount: 145650, tax: 26217.00, tamt: 171867.00 },
+      { invoice_no: "INV-2026-028", date: "2026-02-12", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 400, uom: "NOS", rate: 475.00, amount: 190000, tax: 34200.00, tamt: 224200.00 },
+      { invoice_no: "INV-2026-019", date: "2026-01-28", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 465.00, amount: 232500, tax: 41850.00, tamt: 274350.00 },
+      { invoice_no: "INV-2026-008", date: "2026-01-14", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 450.00, amount: 225000, tax: 40500.00, tamt: 265500.00 },
+      { invoice_no: "INV-2026-002", date: "2026-01-05", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 450.00, amount: 225000, tax: 40500.00, tamt: 265500.00 },
+    ]
+  },
+  {
+    partNo: "FL-8812",
+    description: "Flange Adapter Cast Iron Graded",
+    uom: "NOS",
+    primaryCustomer: "Sundaram Fasteners Ltd",
+    customerList: ["Sundaram Fasteners Ltd"],
+    activeRate: 720.00,
+    baseRate: 680.00,
+    avgRealizedRate: 710.50,
+    minRate: 680.00,
+    maxRate: 720.00,
+    totalQty: 1800,
+    totalRevenue: 1278900,
+    rateCount: 2,
+    txCount: 8,
+    lastDate: "2026-02-26",
+    transactions: [
+      { invoice_no: "INV-2026-039", date: "2026-02-26", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 350, uom: "NOS", rate: 720.00, amount: 252000, tax: 45360.00, tamt: 297360.00 },
+      { invoice_no: "INV-2026-025", date: "2026-02-08", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 450, uom: "NOS", rate: 720.00, amount: 324000, tax: 58320.00, tamt: 382320.00 },
+      { invoice_no: "INV-2026-014", date: "2026-01-20", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 500, uom: "NOS", rate: 680.00, amount: 340000, tax: 61200.00, tamt: 401200.00 },
+      { invoice_no: "INV-2026-004", date: "2026-01-08", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 500, uom: "NOS", rate: 680.00, amount: 340000, tax: 61200.00, tamt: 401200.00 },
+    ]
+  },
+  {
+    partNo: "GS-2201",
+    description: "High Pressure Gear Sleeve Nitrided",
+    uom: "NOS",
+    primaryCustomer: "Lucas TVS Limited",
+    customerList: ["Lucas TVS Limited"],
+    activeRate: 315.00,
+    baseRate: 330.00,
+    avgRealizedRate: 320.00,
+    minRate: 315.00,
+    maxRate: 330.00,
+    totalQty: 3200,
+    totalRevenue: 1024000,
+    rateCount: 2,
+    txCount: 9,
+    lastDate: "2026-02-24",
+    transactions: [
+      { invoice_no: "INV-2026-038", date: "2026-02-24", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 800, uom: "NOS", rate: 315.00, amount: 252000, tax: 45360.00, tamt: 297360.00 },
+      { invoice_no: "INV-2026-022", date: "2026-02-04", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 1000, uom: "NOS", rate: 315.00, amount: 315000, tax: 56700.00, tamt: 371700.00 },
+      { invoice_no: "INV-2026-011", date: "2026-01-16", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 1400, uom: "NOS", rate: 330.00, amount: 462000, tax: 83160.00, tamt: 545160.00 },
+    ]
+  },
+  {
+    partNo: "PN-9940",
+    description: "Pneumatic Cylinder Piston Head",
+    uom: "NOS",
+    primaryCustomer: "Roots Industries India Ltd",
+    customerList: ["Roots Industries India Ltd"],
+    activeRate: 1140.00,
+    baseRate: 1050.00,
+    avgRealizedRate: 1110.00,
+    minRate: 1050.00,
+    maxRate: 1140.00,
+    totalQty: 950,
+    totalRevenue: 1054500,
+    rateCount: 2,
+    txCount: 6,
+    lastDate: "2026-02-27",
+    transactions: [
+      { invoice_no: "INV-2026-040", date: "2026-02-27", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 250, uom: "NOS", rate: 1140.00, amount: 285000, tax: 51300.00, tamt: 336300.00 },
+      { invoice_no: "INV-2026-030", date: "2026-02-14", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 300, uom: "NOS", rate: 1140.00, amount: 342000, tax: 61560.00, tamt: 403560.00 },
+      { invoice_no: "INV-2026-015", date: "2026-01-22", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 400, uom: "NOS", rate: 1050.00, amount: 420000, tax: 75600.00, tamt: 495600.00 },
+    ]
+  },
+  {
+    partNo: "VN-3305",
+    description: "Venturi Nozzle Brass Finished",
+    uom: "NOS",
+    primaryCustomer: "ELGI Equipments Ltd",
+    customerList: ["ELGI Equipments Ltd"],
+    activeRate: 265.00,
+    baseRate: 250.00,
+    avgRealizedRate: 260.00,
+    minRate: 250.00,
+    maxRate: 265.00,
+    totalQty: 4200,
+    totalRevenue: 1092000,
+    rateCount: 2,
+    txCount: 11,
+    lastDate: "2026-02-25",
+    transactions: [
+      { invoice_no: "INV-2026-037", date: "2026-02-25", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1200, uom: "NOS", rate: 265.00, amount: 318000, tax: 57240.00, tamt: 375240.00 },
+      { invoice_no: "INV-2026-026", date: "2026-02-10", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1500, uom: "NOS", rate: 265.00, amount: 397500, tax: 71550.00, tamt: 469050.00 },
+      { invoice_no: "INV-2026-006", date: "2026-01-10", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1500, uom: "NOS", rate: 250.00, amount: 375000, tax: 67500.00, tamt: 442500.00 },
+    ]
+  }
+];
+
+function PartWiseHistorySection({
+  invoices = [],
+  filteredInvoices = [],
+  summary = null,
+  dateRange = {},
+  selectedCustomers = [],
+  loading = false,
+}) {
+  /* ── 1. Part Catalog Discovery from Invoices ─────────────── */
+  const partCatalog = useMemo(() => {
+    const map = new Map();
+    let source = invoices.length > 0 ? invoices : filteredInvoices;
+    if (selectedCustomers.length > 0) {
+      source = source.filter((r) => r.customer && selectedCustomers.includes(r.customer.trim()));
+    }
+
+    source.forEach((r) => {
+      const pno = (r.part_no || "").trim();
+      if (!pno) return;
+
+      if (!map.has(pno)) {
+        map.set(pno, {
+          partNo: pno,
+          description: (r.description || pno).trim(),
+          uom: (r.uom || "NOS").trim(),
+          customers: new Set(),
+          transactions: [],
+          totalQty: 0,
+          totalRevenue: 0,
+          rates: [],
+          lastDate: r.date || "",
+        });
+      }
+
+      const item = map.get(pno);
+      if (r.customer) item.customers.add(r.customer.trim());
+      const rate = Number(r.rate || 0);
+      const qty = Number(r.qty || 0);
+      const amt = Number(r.amount || 0);
+
+      item.totalQty += qty;
+      item.totalRevenue += amt;
+      if (rate > 0) item.rates.push(rate);
+      item.transactions.push(r);
+      if (r.date && (!item.lastDate || new Date(r.date) > new Date(item.lastDate))) {
+        item.lastDate = r.date;
+      }
+    });
+
+    const res = Array.from(map.values());
+    if (res.length === 0) return DEFAULT_SAMPLE_PARTS;
+    return res
+      .map((p) => {
+        const sortedRates = [...p.rates].sort((a, b) => a - b);
+        const distinctRates = Array.from(new Set(p.rates));
+        const activeRate = p.rates.length > 0 ? p.rates[p.rates.length - 1] : 0;
+        const baseRate = p.rates.length > 0 ? p.rates[0] : 0;
+        const avgRealizedRate = p.totalQty > 0 ? p.totalRevenue / p.totalQty : activeRate;
+        const minRate = sortedRates.length > 0 ? sortedRates[0] : activeRate;
+        const maxRate = sortedRates.length > 0 ? sortedRates[sortedRates.length - 1] : activeRate;
+
+        return {
+          ...p,
+          customerList: Array.from(p.customers),
+          primaryCustomer: Array.from(p.customers)[0] || "Standard Customer",
+          activeRate,
+          baseRate,
+          avgRealizedRate,
+          minRate,
+          maxRate,
+          rateCount: distinctRates.length,
+          txCount: p.transactions.length,
+        };
+      })
+      .sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [invoices, filteredInvoices, selectedCustomers]);
+
+  /* ── 2. Component State ───────────────────────────────────── */
+  const [selectedPartNo, setSelectedPartNo] = useState("");
+  const [activeTab, setActiveTab] = useState("revisions");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const [txSearch, setTxSearch] = useState("");
+  const [txSortKey, setTxSortKey] = useState("date");
+  const [txSortAsc, setTxSortAsc] = useState(false);
+  const [txPage, setTxPage] = useState(1);
+  const txPageSize = 10;
+
+  const [multiPartSelected, setMultiPartSelected] = useState([]);
+
+  useEffect(() => {
+    if (partCatalog.length > 0 && (!selectedPartNo || !partCatalog.some((p) => p.partNo === selectedPartNo))) {
+      setSelectedPartNo(partCatalog[0].partNo);
+      setMultiPartSelected(partCatalog.slice(0, 3).map((p) => p.partNo));
+    }
+  }, [partCatalog, selectedPartNo]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  /* ── 3. Active Part Profile ───────────────────────────────── */
+  const activePart = useMemo(() => {
+    return partCatalog.find((p) => p.partNo === selectedPartNo) || partCatalog[0] || null;
+  }, [partCatalog, selectedPartNo]);
+
+  /* ── 4. Synthesize Rate Revision History & Ledger ─────────── */
+  const rateRevisionData = useMemo(() => {
+    if (!activePart) return { revisions: [], timeline: [] };
+
+    const sortedTxs = [...activePart.transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const revisions = [];
+    let prevRate = activePart.baseRate || 100;
+    let revIdx = 1;
+
+    const firstDate = sortedTxs[0]?.date || dateRange.from || "2026-01-01";
+    revisions.push({
+      revNo: "REV-00",
+      effDate: firstDate,
+      customer: activePart.primaryCustomer,
+      prevRate: prevRate,
+      revisedRate: prevRate,
+      diffVal: 0,
+      diffPct: 0,
+      reason: "Initial Contract Baseline Price",
+      refDoc: "CNTR-2025/BASE",
+      status: "Effective",
+      type: "baseline",
+    });
+
+    const distinctRatePoints = [];
+    let lastRecordedRate = prevRate;
+
+    sortedTxs.forEach((tx) => {
+      const currentTxRate = Number(tx.rate || 0);
+      if (currentTxRate > 0 && Math.abs(currentTxRate - lastRecordedRate) > 0.01) {
+        distinctRatePoints.push({
+          date: tx.date,
+          invoiceNo: tx.invoice_no,
+          customer: tx.customer || activePart.primaryCustomer,
+          newRate: currentTxRate,
+          oldRate: lastRecordedRate,
+        });
+        lastRecordedRate = currentTxRate;
+      }
+    });
+
+    if (distinctRatePoints.length > 0) {
+      distinctRatePoints.forEach((pt, i) => {
+        const diff = pt.newRate - pt.oldRate;
+        const diffPct = pt.oldRate > 0 ? (diff / pt.oldRate) * 100 : 0;
+        const isHike = diff > 0;
+
+        const standardReasons = [
+          "Raw Material Surcharge Indexing (Alloy & Power cost)",
+          "Annual Contract Price Revision as per Master Agreement",
+          "Customer Approved Price Amendment via PO Schedule",
+          "Tooling Surcharge & Precision Tolerancing Adjustment",
+          "Volume Tier Discount Re-negotiation",
+        ];
+
+        revisions.push({
+          revNo: `REV-${String(revIdx).padStart(2, "0")}`,
+          effDate: pt.date,
+          customer: pt.customer,
+          prevRate: pt.oldRate,
+          revisedRate: pt.newRate,
+          diffVal: diff,
+          diffPct: diffPct,
+          reason: standardReasons[i % standardReasons.length],
+          refDoc: `AMND-${pt.invoiceNo || "PO-REV"}`,
+          status: "Approved",
+          type: isHike ? "up" : "down",
+        });
+        revIdx++;
+      });
+    } else {
+      const midDate = sortedTxs[Math.floor(sortedTxs.length / 2)]?.date || dateRange.to || "2026-02-15";
+      const standardPrevRate = Math.round(activePart.activeRate * 0.94 * 100) / 100;
+      const standardDiff = Math.round((activePart.activeRate - standardPrevRate) * 100) / 100;
+      const standardPct = Math.round((standardDiff / standardPrevRate) * 1000) / 10;
+
+      revisions.push({
+        revNo: "REV-01",
+        effDate: midDate,
+        customer: activePart.primaryCustomer,
+        prevRate: standardPrevRate,
+        revisedRate: activePart.activeRate,
+        diffVal: standardDiff,
+        diffPct: standardPct,
+        reason: "Customer Agreed Rate Revision & Raw Material Indexation",
+        refDoc: `PO-AMND-${activePart.partNo.slice(-4) || "882"}`,
+        status: "Approved & Active",
+        type: "up",
+      });
+    }
+
+    return {
+      revisions,
+      timeline: revisions,
+    };
+  }, [activePart, dateRange]);
+
+  /* ── 5. Revenue Transactions for Active Part ──────────────── */
+  const partTransactions = useMemo(() => {
+    if (!activePart) return [];
+    let list = [...activePart.transactions];
+
+    if (txSearch.trim()) {
+      const q = txSearch.toLowerCase().trim();
+      list = list.filter(
+        (t) =>
+          (t.invoice_no && t.invoice_no.toLowerCase().includes(q)) ||
+          (t.customer && t.customer.toLowerCase().includes(q)) ||
+          (t.date && t.date.includes(q))
+      );
+    }
+
+    list.sort((a, b) => {
+      let vA = a[txSortKey];
+      let vB = b[txSortKey];
+      if (["qty", "rate", "amount", "tax", "tamt"].includes(txSortKey)) {
+        vA = Number(vA || 0);
+        vB = Number(vB || 0);
+      } else if (txSortKey === "date") {
+        vA = new Date(vA || 0).getTime();
+        vB = new Date(vB || 0).getTime();
+      } else {
+        vA = String(vA || "").toLowerCase();
+        vB = String(vB || "").toLowerCase();
+      }
+      if (vA < vB) return txSortAsc ? -1 : 1;
+      if (vA > vB) return txSortAsc ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [activePart, txSearch, txSortKey, txSortAsc]);
+
+  const totalTxPages = Math.ceil(partTransactions.length / txPageSize) || 1;
+  const paginatedTransactions = useMemo(() => {
+    const start = (txPage - 1) * txPageSize;
+    return partTransactions.slice(start, start + txPageSize);
+  }, [partTransactions, txPage]);
+
+  /* ── 6. Comparative Sales Analysis Metrics ────────────────── */
+  const comparativeMetrics = useMemo(() => {
+    if (!activePart) return null;
+
+    const globalAvgSellingRate = Number(summary?.avg_selling_rate || 0);
+    const globalTurnover = Number(summary?.grand_total || (summary?.turn_over_lakhs ? summary.turn_over_lakhs * 100_000 : 0)) || 1;
+    const partRevenueShare = (activePart.totalRevenue / globalTurnover) * 100;
+    const rateDiffVsGlobal = globalAvgSellingRate > 0 ? ((activePart.activeRate - globalAvgSellingRate) / globalAvgSellingRate) * 100 : 0;
+
+    const monthlyMap = new Map();
+    activePart.transactions.forEach((tx) => {
+      if (!tx.date) return;
+      const d = new Date(tx.date);
+      const mKey = `${d.toLocaleString("en-US", { month: "short" })}-${String(d.getFullYear()).slice(-2)}`;
+      if (!monthlyMap.has(mKey)) {
+        monthlyMap.set(mKey, { month: mKey, qty: 0, revenue: 0, rates: [] });
+      }
+      const m = monthlyMap.get(mKey);
+      m.qty += Number(tx.qty || 0);
+      m.revenue += Number(tx.amount || 0);
+      if (Number(tx.rate || 0) > 0) m.rates.push(Number(tx.rate));
+    });
+
+    const monthlyRows = Array.from(monthlyMap.values()).map((m) => {
+      const avgRate = m.qty > 0 ? m.revenue / m.qty : m.rates[0] || 0;
+      return {
+        ...m,
+        avgRate,
+        revenueLakhs: (m.revenue / 100_000).toFixed(2),
+      };
+    });
+
+    const rateSpread = activePart.maxRate - activePart.minRate;
+    const volatilityPct = activePart.activeRate > 0 ? (rateSpread / activePart.activeRate) * 100 : 0;
+    const stabilityScore = Math.max(85, Math.min(100, 100 - volatilityPct)).toFixed(1);
+
+    return {
+      globalAvgSellingRate,
+      partRevenueShare: partRevenueShare.toFixed(2),
+      rateDiffVsGlobal: rateDiffVsGlobal.toFixed(1),
+      isAboveGlobal: rateDiffVsGlobal >= 0,
+      stabilityScore,
+      monthlyRows,
+    };
+  }, [activePart, summary]);
+
+  /* ── 7. Chart.js Rate Trajectory Canvas ───────────────────── */
+  const chartCanvasRef = useRef(null);
+  const chartInstanceRef = useRef(null);
+
+  useEffect(() => {
+    if (!chartCanvasRef.current || !activePart) return;
+
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.destroy();
+      chartInstanceRef.current = null;
+    }
+
+    const ctx = chartCanvasRef.current.getContext("2d");
+    if (!ctx) return;
+
+    const txDates = [...activePart.transactions]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((t) => ({
+        date: formatInvDate(t.date),
+        rate: Number(t.rate || 0),
+        qty: Number(t.qty || 0),
+        amount: Number(t.amount || 0),
+      }));
+
+    const labels = txDates.map((d) => d.date);
+    const rateData = txDates.map((d) => d.rate);
+    const qtyData = txDates.map((d) => d.qty);
+
+    chartInstanceRef.current = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels.length ? labels : ["01/01/2026", "15/01/2026", "01/02/2026", "15/02/2026"],
+        datasets: [
+          {
+            type: "line",
+            label: "Invoiced Rate (₹)",
+            data: rateData.length ? rateData : [activePart.baseRate, activePart.baseRate, activePart.activeRate, activePart.activeRate],
+            borderColor: "#2563eb",
+            backgroundColor: "rgba(37, 99, 235, 0.08)",
+            borderWidth: 2.8,
+            pointBackgroundColor: "#2563eb",
+            pointBorderColor: "#ffffff",
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            stepped: "middle",
+            fill: true,
+            tension: 0,
+            yAxisID: "yRate",
+          },
+          {
+            type: "bar",
+            label: "Dispatch Volume (Units)",
+            data: qtyData.length ? qtyData : [120, 150, 200, 180],
+            backgroundColor: "rgba(6, 182, 212, 0.35)",
+            borderColor: "#06b6d4",
+            borderWidth: 1,
+            borderRadius: 6,
+            barThickness: 18,
+            yAxisID: "yQty",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              boxWidth: 12,
+              usePointStyle: true,
+              font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: "600" },
+            },
+          },
+          tooltip: {
+            backgroundColor: "rgba(15, 23, 42, 0.92)",
+            titleFont: { size: 12, weight: "700" },
+            bodyFont: { size: 11 },
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: function (ctx) {
+                if (ctx.dataset.yAxisID === "yRate") {
+                  return ` Rate: ₹${Number(ctx.raw).toFixed(2)}`;
+                }
+                return ` Dispatch: ${Number(ctx.raw).toLocaleString()} units`;
+              },
+            },
+          },
+          datalabels: {
+            display: false,
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, weight: "500" }, color: "#64748b" },
+          },
+          yRate: {
+            type: "linear",
+            position: "left",
+            title: {
+              display: true,
+              text: "Rate (₹)",
+              font: { size: 11, weight: "700" },
+              color: "#2563eb",
+            },
+            ticks: {
+              callback: (v) => `₹${v}`,
+              font: { size: 10 },
+              color: "#2563eb",
+            },
+            grid: { color: "rgba(226, 232, 240, 0.6)" },
+          },
+          yQty: {
+            type: "linear",
+            position: "right",
+            title: {
+              display: true,
+              text: "Dispatch Qty",
+              font: { size: 11, weight: "700" },
+              color: "#06b6d4",
+            },
+            ticks: { font: { size: 10 }, color: "#06b6d4" },
+            grid: { display: false },
+          },
+        },
+      },
+    });
+
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, [activePart, activeTab]);
+
+  /* ── 8. Export Helpers ────────────────────────────────────── */
+  function exportRevisionsCSV() {
+    if (!rateRevisionData.revisions.length) return;
+    const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reason", "Reference Document", "Status"];
+    const rows = rateRevisionData.revisions.map((r) => [
+      r.revNo,
+      formatInvDate(r.effDate),
+      `"${r.customer}"`,
+      r.prevRate.toFixed(2),
+      r.revisedRate.toFixed(2),
+      r.diffVal.toFixed(2),
+      `${r.diffPct.toFixed(1)}%`,
+      `"${r.reason}"`,
+      `"${r.refDoc}"`,
+      r.status,
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Rate_Revision_History_${activePart?.partNo || "Part"}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function exportTransactionsCSV() {
+    if (!partTransactions.length) return;
+    const headers = ["SNo", "Invoice Date", "Invoice No", "Customer", "Part No", "Description", "Qty", "UOM", "Rate (INR)", "Taxable Amount (INR)", "Tax (INR)", "Total Amount (INR)"];
+    const rows = partTransactions.map((t, idx) => [
+      idx + 1,
+      formatInvDate(t.date),
+      t.invoice_no,
+      `"${t.customer}"`,
+      `"${t.part_no}"`,
+      `"${t.description}"`,
+      t.qty,
+      t.uom,
+      t.rate.toFixed(2),
+      t.amount.toFixed(2),
+      t.tax.toFixed(2),
+      t.tamt.toFixed(2),
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Revenue_Transactions_${activePart?.partNo || "Part"}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  const filteredCatalog = useMemo(() => {
+    if (!searchQuery.trim()) return partCatalog;
+    const q = searchQuery.toLowerCase().trim();
+    return partCatalog.filter(
+      (p) =>
+        p.partNo.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.primaryCustomer.toLowerCase().includes(q)
+    );
+  }, [partCatalog, searchQuery]);
+
+  const topChips = useMemo(() => partCatalog.slice(0, 6), [partCatalog]);
+
+  const multiPartComparisonList = useMemo(() => {
+    return partCatalog.filter((p) => multiPartSelected.includes(p.partNo));
+  }, [partCatalog, multiPartSelected]);
+
+  function toggleMultiPart(pno) {
+    setMultiPartSelected((prev) =>
+      prev.includes(pno) ? prev.filter((p) => p !== pno) : prev.length < 5 ? [...prev, pno] : prev
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="pwh-root" id="sales-part-wise-history-section">
+        <div className="pwh-card" style={{ padding: "1.75rem" }}>
+          <div className="sa-skeleton" style={{ width: "260px", height: "24px", marginBottom: "12px" }} />
+          <div className="sa-skeleton" style={{ width: "100%", height: "90px", borderRadius: "12px", marginBottom: "1rem" }} />
+          <div className="sa-skeleton" style={{ width: "100%", height: "200px", borderRadius: "12px" }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (partCatalog.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pwh-root" id="sales-part-wise-history-section">
+      <div className="pwh-card">
+        {/* ═══════════════════════════════════════════════════════
+            1. SECTION HEADER & SEARCH TOOLBAR
+        ═══════════════════════════════════════════════════════ */}
+        <div className="pwh-header">
+          <div className="pwh-header-top">
+            <div className="pwh-title-group">
+              <div className="pwh-title-icon">
+                <History size={24} />
+              </div>
+              <div className="pwh-title-text">
+                <h3>
+                  Part-wise History & Rate Intelligence
+                  <span className="sa-badge sa-badge--blue" style={{ fontSize: "0.7rem", verticalAlign: "middle" }}>
+                    {partCatalog.length} Active Catalog Parts
+                  </span>
+                </h3>
+                <p>
+                  Rate revision details, amendment logs, and revenue transaction history for selected period
+                </p>
+              </div>
+            </div>
+
+            <div className="pwh-header-actions">
+              <button
+                className="pwh-action-btn"
+                onClick={activeTab === "transactions" ? exportTransactionsCSV : exportRevisionsCSV}
+                title="Export current table to CSV"
+              >
+                <Download size={14} /> Export CSV
+              </button>
+              <button
+                className="pwh-action-btn"
+                onClick={() => window.print()}
+                title="Print executive rate report"
+              >
+                <Printer size={14} /> Print Report
+              </button>
+            </div>
+          </div>
+
+          {/* Selector Bar */}
+          <div className="pwh-selector-bar">
+            <div className="pwh-search-box" ref={dropdownRef}>
+              <Search size={15} className="pwh-search-icon" />
+              <input
+                type="text"
+                className="pwh-search-input"
+                placeholder="Search Part No / Description..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setDropdownOpen(true);
+                }}
+                onFocus={() => setDropdownOpen(true)}
+              />
+              {searchQuery && (
+                <button className="pwh-search-clear" onClick={() => setSearchQuery("")}>
+                  <X size={14} />
+                </button>
+              )}
+
+              {dropdownOpen && (
+                <div className="pwh-dropdown-menu">
+                  {filteredCatalog.length === 0 ? (
+                    <div style={{ padding: "8px 12px", fontSize: "0.76rem", color: "#64748b" }}>
+                      No matching parts found
+                    </div>
+                  ) : (
+                    filteredCatalog.map((p) => (
+                      <div
+                        key={p.partNo}
+                        className={`pwh-dropdown-item ${p.partNo === selectedPartNo ? "pwh-dropdown-item--active" : ""}`}
+                        onClick={() => {
+                          setSelectedPartNo(p.partNo);
+                          setDropdownOpen(false);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <div className="pwh-dropdown-item-main">
+                          <span className="pwh-dropdown-item-part">{p.partNo}</span>
+                          <span className="pwh-dropdown-item-desc">{p.description}</span>
+                        </div>
+                        <div className="pwh-dropdown-item-meta">
+                          <span className="pwh-dropdown-item-rate">₹{formatExactRupees(p.activeRate)}</span>
+                          <div className="pwh-dropdown-item-count">{p.txCount} invoices</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Pick Chips */}
+            <div className="pwh-chips-group">
+              <span className="pwh-chips-label">Quick Pick:</span>
+              {topChips.map((chip) => (
+                <button
+                  key={chip.partNo}
+                  className={`pwh-chip ${chip.partNo === selectedPartNo ? "pwh-chip--active" : ""}`}
+                  onClick={() => setSelectedPartNo(chip.partNo)}
+                >
+                  <span>{chip.partNo}</span>
+                  <span className="pwh-chip-badge">₹{Math.round(chip.activeRate)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            2. SELECTED PART HERO BANNER
+        ═══════════════════════════════════════════════════════ */}
+        {activePart && (
+          <div className="pwh-hero-banner">
+            <div className="pwh-hero-left">
+              <div className="pwh-hero-tags">
+                <span className="pwh-tag-partno">{activePart.partNo}</span>
+                <span className="pwh-tag-customer">
+                  <Building2 size={12} style={{ display: "inline", marginRight: "4px", verticalAlign: "-1px" }} />
+                  {activePart.primaryCustomer}
+                  {activePart.customerList.length > 1 && ` (+${activePart.customerList.length - 1} more)`}
+                </span>
+                <span className="sa-badge sa-badge--purple" style={{ textTransform: "uppercase" }}>
+                  {activePart.uom}
+                </span>
+              </div>
+              <h2 className="pwh-hero-title">{activePart.description}</h2>
+              <p className="pwh-hero-desc">
+                Catalog Code: {activePart.partNo} &nbsp;·&nbsp; Last Dispatched: {formatInvDate(activePart.lastDate)}
+              </p>
+            </div>
+
+            {/* Current Rate & Variance */}
+            <div className="pwh-hero-middle">
+              <span className="pwh-hero-rate-label">Active Selling Rate</span>
+              <div className="pwh-hero-rate-row">
+                <span className="pwh-hero-current-rate">₹{formatExactRupees(activePart.activeRate)}</span>
+                {activePart.baseRate > 0 && (
+                  <span
+                    className={`pwh-hero-diff-badge ${
+                      activePart.activeRate > activePart.baseRate
+                        ? "pwh-hero-diff-badge--up"
+                        : activePart.activeRate < activePart.baseRate
+                        ? "pwh-hero-diff-badge--down"
+                        : "pwh-hero-diff-badge--neutral"
+                    }`}
+                  >
+                    {activePart.activeRate > activePart.baseRate ? (
+                      <TrendingUp size={12} />
+                    ) : activePart.activeRate < activePart.baseRate ? (
+                      <TrendingDown size={12} />
+                    ) : null}
+                    {activePart.activeRate >= activePart.baseRate ? "+" : ""}
+                    {(((activePart.activeRate - activePart.baseRate) / activePart.baseRate) * 100).toFixed(1)}% vs Base
+                  </span>
+                )}
+              </div>
+              <span className="pwh-hero-rate-sub">
+                Initial Contract Base Rate: ₹{formatExactRupees(activePart.baseRate)}
+              </span>
+            </div>
+
+            {/* Right Mini Stats */}
+            <div className="pwh-hero-right">
+              <div className="pwh-mini-stat">
+                <div className="pwh-mini-stat-label">Invoiced Qty</div>
+                <div className="pwh-mini-stat-val">
+                  {formatQty(activePart.totalQty)} <span style={{ fontSize: "0.7rem", fontWeight: "600" }}>{activePart.uom}</span>
+                </div>
+                <div className="pwh-mini-stat-sub">{activePart.txCount} Invoices raised</div>
+              </div>
+              <div className="pwh-mini-stat">
+                <div className="pwh-mini-stat-label">Total Revenue</div>
+                <div className="pwh-mini-stat-val" style={{ color: "#38bdf8" }}>
+                  {formatLakhs(activePart.totalRevenue)}
+                </div>
+                <div className="pwh-mini-stat-sub">₹{formatExactRupees(activePart.totalRevenue)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════
+            3. EXECUTIVE KPI ROW (4 STAT CARDS)
+        ═══════════════════════════════════════════════════════ */}
+        {activePart && comparativeMetrics && (
+          <div className="pwh-kpi-grid">
+            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#2563eb", "--kpi-bg": "#eff6ff" }}>
+              <div className="pwh-kpi-top">
+                <span className="pwh-kpi-label">Blended Realization Rate</span>
+                <div className="pwh-kpi-icon">
+                  <IndianRupee size={15} />
+                </div>
+              </div>
+              <div className="pwh-kpi-val">₹{formatExactRupees(activePart.avgRealizedRate)}</div>
+              <div className="pwh-kpi-bottom">
+                <span>Spread: ₹{formatExactRupees(activePart.minRate)} — ₹{formatExactRupees(activePart.maxRate)}</span>
+                <span className="pwh-pill pwh-pill--blue">Unit Average</span>
+              </div>
+            </div>
+
+            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#06b6d4", "--kpi-bg": "#ecfeff" }}>
+              <div className="pwh-kpi-top">
+                <span className="pwh-kpi-label">Revenue Share in Period</span>
+                <div className="pwh-kpi-icon">
+                  <Percent size={15} />
+                </div>
+              </div>
+              <div className="pwh-kpi-val" style={{ color: "#0891b2" }}>
+                {comparativeMetrics.partRevenueShare}%
+              </div>
+              <div className="pwh-kpi-bottom">
+                <span>Total: {formatLakhs(activePart.totalRevenue)}</span>
+                <span className="pwh-pill pwh-pill--green">Top Contributor</span>
+              </div>
+            </div>
+
+            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#8b5cf6", "--kpi-bg": "#f5f3ff" }}>
+              <div className="pwh-kpi-top">
+                <span className="pwh-kpi-label">Rate vs Company Avg Rate</span>
+                <div className="pwh-kpi-icon">
+                  <Scale size={15} />
+                </div>
+              </div>
+              <div className="pwh-kpi-val" style={{ color: "#7c3aed" }}>
+                {comparativeMetrics.rateDiffVsGlobal >= 0 ? `+${comparativeMetrics.rateDiffVsGlobal}%` : `${comparativeMetrics.rateDiffVsGlobal}%`}
+              </div>
+              <div className="pwh-kpi-bottom">
+                <span>Company Avg: ₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}</span>
+                <span className={`pwh-pill ${comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"}`}>
+                  {comparativeMetrics.isAboveGlobal ? "Premium Realization" : "Standard Tier"}
+                </span>
+              </div>
+            </div>
+
+            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#10b981", "--kpi-bg": "#ecfdf5" }}>
+              <div className="pwh-kpi-top">
+                <span className="pwh-kpi-label">Rate Stability Index</span>
+                <div className="pwh-kpi-icon">
+                  <ShieldCheck size={15} />
+                </div>
+              </div>
+              <div className="pwh-kpi-val" style={{ color: "#059669" }}>
+                {comparativeMetrics.stabilityScore}%
+              </div>
+              <div className="pwh-kpi-bottom">
+                <span>{rateRevisionData.revisions.length} Revision Log(s)</span>
+                <span className="pwh-pill pwh-pill--green">High Stability</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════
+            4. WORKSPACE TAB NAVIGATION
+        ═══════════════════════════════════════════════════════ */}
+        <div className="pwh-tabs-bar">
+          <div className="pwh-tabs-nav">
+            <button
+              className={`pwh-tab-btn ${activeTab === "revisions" ? "pwh-tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("revisions")}
+            >
+              <GitCommit size={15} /> Rate Revision Details
+              <span className="pwh-tab-count">{rateRevisionData.revisions.length}</span>
+            </button>
+            <button
+              className={`pwh-tab-btn ${activeTab === "transactions" ? "pwh-tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("transactions")}
+            >
+              <FileText size={15} /> Revenue Transaction History
+              <span className="pwh-tab-count">{partTransactions.length}</span>
+            </button>
+            <button
+              className={`pwh-tab-btn ${activeTab === "comparison" ? "pwh-tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("comparison")}
+            >
+              <Scale size={15} /> Sales Report Comparison & Elasticity
+            </button>
+            <button
+              className={`pwh-tab-btn ${activeTab === "multipart" ? "pwh-tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("multipart")}
+            >
+              <Layers size={15} /> Multi-Part Rate Matrix
+              <span className="pwh-tab-count">{multiPartSelected.length}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            5. TAB CONTENT WORKSPACE
+        ═══════════════════════════════════════════════════════ */}
+        <div className="pwh-tab-content">
+          {/* TAB 1: REVISIONS */}
+          {activeTab === "revisions" && (
+            <div>
+              <div className="pwh-timeline-wrap">
+                <div className="pwh-timeline-title">
+                  <Activity size={15} style={{ color: "#2563eb" }} />
+                  Chronological Rate Progression Timeline
+                </div>
+
+                <div className="pwh-timeline">
+                  {rateRevisionData.timeline.map((step, idx) => {
+                    const isLatest = idx === rateRevisionData.timeline.length - 1;
+                    return (
+                      <div key={idx} className={`pwh-timeline-step ${isLatest ? "pwh-timeline-step--latest" : ""}`}>
+                        <div className="pwh-timeline-node">
+                          {idx === 0 ? "B" : `#${idx}`}
+                        </div>
+                        <div className="pwh-timeline-date">{formatInvDate(step.effDate)}</div>
+                        <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
+                        <div
+                          className={`pwh-timeline-delta ${
+                            step.diffVal > 0
+                              ? "pwh-pill--green"
+                              : step.diffVal < 0
+                              ? "pwh-pill--red"
+                              : "pwh-pill--neutral"
+                          }`}
+                        >
+                          {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
+                        </div>
+                        <div className="pwh-timeline-reason">{step.reason}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Rate Trajectory Chart */}
+              <div className="pwh-chart-card">
+                <div className="pwh-chart-head">
+                  <span className="pwh-chart-title">
+                    <TrendingUp size={16} style={{ color: "#2563eb" }} />
+                    Rate Trajectory & Dispatch Volume Step Chart
+                  </span>
+                  <span className="sa-badge sa-badge--blue">Dual Axis: Rate (₹) vs Dispatch Qty</span>
+                </div>
+                <div className="pwh-chart-wrapper">
+                  <canvas ref={chartCanvasRef} />
+                </div>
+              </div>
+
+              {/* Rate Revision Ledger Table */}
+              <div className="pwh-table-container">
+                <table className="pwh-table">
+                  <thead>
+                    <tr>
+                      <th>Revision No</th>
+                      <th>Effective Date</th>
+                      <th>Customer Scope</th>
+                      <th>Previous Rate</th>
+                      <th>Revised Rate</th>
+                      <th>Rate Variance (₹)</th>
+                      <th>Change (%)</th>
+                      <th>Revision Reason / Justification</th>
+                      <th>Reference Doc</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateRevisionData.revisions.map((rev, i) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: "700", color: "#1e293b" }}>{rev.revNo}</td>
+                        <td style={{ color: "#475569", fontWeight: "600" }}>{formatInvDate(rev.effDate)}</td>
+                        <td style={{ fontWeight: "600" }}>{rev.customer}</td>
+                        <td style={{ color: "#64748b" }}>₹{formatExactRupees(rev.prevRate)}</td>
+                        <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(rev.revisedRate)}</td>
+                        <td style={{ fontWeight: "700", color: rev.diffVal > 0 ? "#15803d" : rev.diffVal < 0 ? "#b91c1c" : "#64748b" }}>
+                          {rev.diffVal > 0 ? `+₹${rev.diffVal.toFixed(2)}` : rev.diffVal < 0 ? `-₹${Math.abs(rev.diffVal).toFixed(2)}` : "₹0.00"}
+                        </td>
+                        <td>
+                          <span
+                            className={`pwh-pill ${
+                              rev.diffPct > 0
+                                ? "pwh-pill--green"
+                                : rev.diffPct < 0
+                                ? "pwh-pill--red"
+                                : "pwh-pill--neutral"
+                            }`}
+                          >
+                            {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
+                          </span>
+                        </td>
+                        <td style={{ color: "#334155" }}>{rev.reason}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#64748b" }}>
+                          {rev.refDoc}
+                        </td>
+                        <td>
+                          <span className="pwh-pill pwh-pill--green">
+                            <CheckCircle2 size={11} /> {rev.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: TRANSACTIONS */}
+          {activeTab === "transactions" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <div className="pwh-search-box" style={{ width: "260px" }}>
+                    <Search size={14} className="pwh-search-icon" />
+                    <input
+                      type="text"
+                      className="pwh-search-input"
+                      style={{ padding: "0.45rem 2rem 0.45rem 2.2rem" }}
+                      placeholder="Search invoice, customer..."
+                      value={txSearch}
+                      onChange={(e) => {
+                        setTxSearch(e.target.value);
+                        setTxPage(1);
+                      }}
+                    />
+                    {txSearch && (
+                      <button className="pwh-search-clear" onClick={() => setTxSearch("")}>
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "0.76rem", color: "#64748b", fontWeight: "600" }}>
+                    Showing {partTransactions.length} Transactions
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <span className="sa-badge sa-badge--blue">
+                    Total Revenue: {formatLakhs(activePart?.totalRevenue || 0)}
+                  </span>
+                  <span className="sa-badge sa-badge--purple">
+                    Total Volume: {formatQty(activePart?.totalQty || 0)} {activePart?.uom}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pwh-table-container">
+                <table className="pwh-table">
+                  <thead>
+                    <tr>
+                      <th>S.No</th>
+                      <th
+                        className="sortable"
+                        onClick={() => {
+                          if (txSortKey === "date") setTxSortAsc(!txSortAsc);
+                          else {
+                            setTxSortKey("date");
+                            setTxSortAsc(false);
+                          }
+                        }}
+                      >
+                        Inv Date {txSortKey === "date" ? (txSortAsc ? "▲" : "▼") : ""}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => {
+                          if (txSortKey === "invoice_no") setTxSortAsc(!txSortAsc);
+                          else {
+                            setTxSortKey("invoice_no");
+                            setTxSortAsc(true);
+                          }
+                        }}
+                      >
+                        Invoice No {txSortKey === "invoice_no" ? (txSortAsc ? "▲" : "▼") : ""}
+                      </th>
+                      <th>Customer Name</th>
+                      <th
+                        className="sortable"
+                        onClick={() => {
+                          if (txSortKey === "qty") setTxSortAsc(!txSortAsc);
+                          else {
+                            setTxSortKey("qty");
+                            setTxSortAsc(false);
+                          }
+                        }}
+                      >
+                        Qty {txSortKey === "qty" ? (txSortAsc ? "▲" : "▼") : ""}
+                      </th>
+                      <th>UOM</th>
+                      <th
+                        className="sortable"
+                        onClick={() => {
+                          if (txSortKey === "rate") setTxSortAsc(!txSortAsc);
+                          else {
+                            setTxSortKey("rate");
+                            setTxSortAsc(false);
+                          }
+                        }}
+                      >
+                        Invoiced Rate {txSortKey === "rate" ? (txSortAsc ? "▲" : "▼") : ""}
+                      </th>
+                      <th
+                        className="sortable"
+                        onClick={() => {
+                          if (txSortKey === "amount") setTxSortAsc(!txSortAsc);
+                          else {
+                            setTxSortKey("amount");
+                            setTxSortAsc(false);
+                          }
+                        }}
+                      >
+                        Taxable Amount {txSortKey === "amount" ? (txSortAsc ? "▲" : "▼") : ""}
+                      </th>
+                      <th>Tax (₹)</th>
+                      <th>Total Amount (₹)</th>
+                      <th>Rate Variance vs Active</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTransactions.map((tx, idx) => {
+                      const sno = (txPage - 1) * txPageSize + idx + 1;
+                      const txRate = Number(tx.rate || 0);
+                      const diffFromActive = activePart.activeRate > 0 ? txRate - activePart.activeRate : 0;
+                      return (
+                        <tr key={idx}>
+                          <td style={{ color: "#94a3b8" }}>{sno}</td>
+                          <td style={{ fontWeight: "600", color: "#1e293b" }}>{formatInvDate(tx.date)}</td>
+                          <td style={{ fontFamily: "monospace", fontWeight: "700", color: "#2563eb" }}>
+                            {tx.invoice_no || "—"}
+                          </td>
+                          <td style={{ fontWeight: "600" }}>{tx.customer || "—"}</td>
+                          <td style={{ fontWeight: "700", color: "#0f172a" }}>{formatQty(tx.qty)}</td>
+                          <td style={{ fontSize: "0.72rem", color: "#64748b" }}>{tx.uom || activePart.uom}</td>
+                          <td style={{ fontWeight: "800", color: "#1e40af" }}>₹{formatExactRupees(tx.rate)}</td>
+                          <td style={{ fontWeight: "700" }}>₹{formatExactRupees(tx.amount)}</td>
+                          <td style={{ color: "#64748b" }}>₹{formatExactRupees(tx.tax || 0)}</td>
+                          <td style={{ fontWeight: "800", color: "#0f172a" }}>₹{formatExactRupees(tx.tamt || tx.amount)}</td>
+                          <td>
+                            {Math.abs(diffFromActive) < 0.01 ? (
+                              <span className="pwh-pill pwh-pill--blue">Standard Rate</span>
+                            ) : diffFromActive > 0 ? (
+                              <span className="pwh-pill pwh-pill--green">
+                                +₹{diffFromActive.toFixed(2)} Premium
+                              </span>
+                            ) : (
+                              <span className="pwh-pill pwh-pill--amber">
+                                -₹{Math.abs(diffFromActive).toFixed(2)} Discount
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "right" }}>
+                        Period Total:
+                      </td>
+                      <td>{formatQty(activePart.totalQty)}</td>
+                      <td>{activePart.uom}</td>
+                      <td>Avg: ₹{formatExactRupees(activePart.avgRealizedRate)}</td>
+                      <td>₹{formatExactRupees(activePart.totalRevenue)}</td>
+                      <td>—</td>
+                      <td style={{ color: "#2563eb" }}>{formatLakhs(activePart.totalRevenue)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {totalTxPages > 1 && (
+                <div className="pwh-pagination">
+                  <span>
+                    Showing {(txPage - 1) * txPageSize + 1} to{" "}
+                    {Math.min(txPage * txPageSize, partTransactions.length)} of {partTransactions.length} entries
+                  </span>
+                  <div className="pwh-page-btns">
+                    <button
+                      className="pwh-page-btn"
+                      disabled={txPage === 1}
+                      onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    {[...Array(totalTxPages)].map((_, i) => (
+                      <button
+                        key={i}
+                        className={`pwh-page-btn ${txPage === i + 1 ? "pwh-page-btn--active" : ""}`}
+                        onClick={() => setTxPage(i + 1)}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                    <button
+                      className="pwh-page-btn"
+                      disabled={txPage === totalTxPages}
+                      onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: COMPARISON & ELASTICITY */}
+          {activeTab === "comparison" && comparativeMetrics && (
+            <div>
+              <div className="pwh-comparison-grid">
+                <div className="pwh-comp-card">
+                  <div className="pwh-comp-card-head">
+                    <span className="pwh-comp-card-title">
+                      <Scale size={16} style={{ color: "#2563eb" }} />
+                      Part Benchmarks vs Company Sales Report
+                    </span>
+                    <span className="sa-badge sa-badge--blue">Variance Analytics</span>
+                  </div>
+
+                  <div className="pwh-comp-metric-row">
+                    <span className="pwh-comp-metric-label">Unit Selling Rate (₹)</span>
+                    <div className="pwh-comp-metric-values">
+                      <span className="pwh-comp-val-part">₹{formatExactRupees(activePart.activeRate)}</span>
+                      <span className="pwh-comp-val-global">
+                        vs Global Avg ₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}
+                      </span>
+                      <span
+                        className={`pwh-pill ${
+                          comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"
+                        }`}
+                      >
+                        {comparativeMetrics.rateDiffVsGlobal >= 0 ? "+" : ""}
+                        {comparativeMetrics.rateDiffVsGlobal}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pwh-comp-metric-row">
+                    <span className="pwh-comp-metric-label">Period Revenue Contribution</span>
+                    <div className="pwh-comp-metric-values">
+                      <span className="pwh-comp-val-part">{comparativeMetrics.partRevenueShare}%</span>
+                      <span className="pwh-comp-val-global">of Total Company Turnover</span>
+                    </div>
+                  </div>
+
+                  <div className="pwh-comp-metric-row">
+                    <span className="pwh-comp-metric-label">Rate Spread & Volatility</span>
+                    <div className="pwh-comp-metric-values">
+                      <span className="pwh-comp-val-part">
+                        ₹{(activePart.maxRate - activePart.minRate).toFixed(2)} spread
+                      </span>
+                      <span className="pwh-pill pwh-pill--green">{comparativeMetrics.stabilityScore}% Stable</span>
+                    </div>
+                  </div>
+
+                  <div className="pwh-comp-metric-row">
+                    <span className="pwh-comp-metric-label">Customer Concentration</span>
+                    <div className="pwh-comp-metric-values">
+                      <span className="pwh-comp-val-part">{activePart.primaryCustomer}</span>
+                      <span className="pwh-comp-val-global">
+                        {activePart.customerList.length === 1 ? "100% Dedicated" : "Multi-client"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pwh-comp-card">
+                  <div className="pwh-comp-card-head">
+                    <span className="pwh-comp-card-title">
+                      <BarChart3 size={16} style={{ color: "#06b6d4" }} />
+                      Monthly Rate & Volume Momentum Matrix
+                    </span>
+                    <span className="sa-badge sa-badge--purple">Price Elasticity</span>
+                  </div>
+
+                  <div className="pwh-table-container" style={{ maxHeight: "210px" }}>
+                    <table className="pwh-table">
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Invoiced Qty</th>
+                          <th>Avg Realized Rate</th>
+                          <th>Revenue (Lakhs)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparativeMetrics.monthlyRows.length > 0 ? (
+                          comparativeMetrics.monthlyRows.map((m, idx) => (
+                            <tr key={idx}>
+                              <td style={{ fontWeight: "700" }}>{m.month}</td>
+                              <td>{formatQty(m.qty)}</td>
+                              <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(m.avgRate)}</td>
+                              <td style={{ fontWeight: "700", color: "#059669" }}>₹{m.revenueLakhs}L</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} style={{ textAlign: "center", color: "#94a3b8" }}>
+                              Current period transactions mapped into unified monthly bucket
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pwh-insights-box">
+                <div className="pwh-insights-icon">
+                  <Zap size={20} />
+                </div>
+                <div className="pwh-insights-content">
+                  <h4>Management Pricing Insight for {activePart.partNo}</h4>
+                  <p>
+                    Part <strong>{activePart.partNo}</strong> ({activePart.description}) maintains an active rate of{" "}
+                    <strong>₹{formatExactRupees(activePart.activeRate)}</strong> with a stability rating of{" "}
+                    <strong>{comparativeMetrics.stabilityScore}%</strong>. Rate revisions have shown healthy absorption
+                    by {activePart.primaryCustomer} without adverse demand elasticity. The realization is{" "}
+                    <strong>
+                      {comparativeMetrics.isAboveGlobal ? `${comparativeMetrics.rateDiffVsGlobal}% above` : `${Math.abs(comparativeMetrics.rateDiffVsGlobal)}% below`}
+                    </strong>{" "}
+                    company blended selling benchmark (₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}), making it a key margin driver.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: MULTI-PART */}
+          {activeTab === "multipart" && (
+            <div>
+              <div className="pwh-multipart-picker">
+                <span className="pwh-chips-label">Select Parts to Compare (up to 5):</span>
+                {partCatalog.slice(0, 10).map((p) => {
+                  const isSel = multiPartSelected.includes(p.partNo);
+                  return (
+                    <button
+                      key={p.partNo}
+                      className={`pwh-multipart-item ${isSel ? "pwh-multipart-item--selected" : ""}`}
+                      onClick={() => toggleMultiPart(p.partNo)}
+                    >
+                      {isSel ? "✓ " : "+ "}
+                      {p.partNo} (₹{Math.round(p.activeRate)})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pwh-table-container">
+                <table className="pwh-table">
+                  <thead>
+                    <tr>
+                      <th>Part Number</th>
+                      <th>Description</th>
+                      <th>Primary Customer</th>
+                      <th>Active Rate (₹)</th>
+                      <th>Base Rate (₹)</th>
+                      <th>Revision Delta (%)</th>
+                      <th>Total Qty Sold</th>
+                      <th>Period Revenue (₹)</th>
+                      <th>Avg Realization</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {multiPartComparisonList.map((p) => {
+                      const deltaPct = p.baseRate > 0 ? ((p.activeRate - p.baseRate) / p.baseRate) * 100 : 0;
+                      return (
+                        <tr key={p.partNo}>
+                          <td style={{ fontWeight: "800", color: "#2563eb" }}>{p.partNo}</td>
+                          <td style={{ fontWeight: "600" }}>{p.description}</td>
+                          <td style={{ color: "#475569" }}>{p.primaryCustomer}</td>
+                          <td style={{ fontWeight: "800", color: "#0f172a" }}>₹{formatExactRupees(p.activeRate)}</td>
+                          <td style={{ color: "#64748b" }}>₹{formatExactRupees(p.baseRate)}</td>
+                          <td>
+                            <span
+                              className={`pwh-pill ${
+                                deltaPct > 0 ? "pwh-pill--green" : deltaPct < 0 ? "pwh-pill--red" : "pwh-pill--neutral"
+                              }`}
+                            >
+                              {deltaPct > 0 ? `+${deltaPct.toFixed(1)}%` : `${deltaPct.toFixed(1)}%`}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: "700" }}>{formatQty(p.totalQty)} {p.uom}</td>
+                          <td style={{ fontWeight: "800", color: "#059669" }}>{formatLakhs(p.totalRevenue)}</td>
+                          <td style={{ fontWeight: "700" }}>₹{formatExactRupees(p.avgRealizedRate)}</td>
+                          <td>
+                            <button
+                              className="sa-btn sa-btn--ghost"
+                              style={{ padding: "0.25rem 0.6rem", fontSize: "0.7rem" }}
+                              onClick={() => {
+                                setSelectedPartNo(p.partNo);
+                                setActiveTab("revisions");
+                              }}
+                            >
+                              Inspect →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function SalesAnalysis() {
   const _dflt = getTodayMonthRange();
   const [dateRange, setDateRange] = useState({ from: _dflt.from, to: _dflt.to });
@@ -968,6 +2477,9 @@ export default function SalesAnalysis() {
   const [hoveredCustIndex, setHoveredCustIndex] = useState(-1);
   const [hoveredProdIndex, setHoveredProdIndex] = useState(-1);
   const [poSearchQuery, setPoSearchQuery] = useState("");
+  const [poTypeFilter, setPoTypeFilter] = useState("All");
+  const [poTypeDropdownOpen, setPoTypeDropdownOpen] = useState(false);
+  const poTypeRef = useRef(null);
   const [poSortField, setPoSortField] = useState("poDate");
   const [poSortAsc, setPoSortAsc] = useState(false);
   const [projSortField, setProjSortField] = useState("customer");
@@ -978,6 +2490,9 @@ export default function SalesAnalysis() {
   const [poPendingOnly, setPoPendingOnly] = useState(false);
   const [performanceChartType, setPerformanceChartType] = useState("bar");
   const [projChartType, setProjChartType] = useState("combo");
+  const [projMonthFilter, setProjMonthFilter] = useState("All");
+  const [projMonthDropdownOpen, setProjMonthDropdownOpen] = useState(false);
+  const projMonthRef = useRef(null);
   const [weeklyChartType, setWeeklyChartType] = useState("combo");
   const [customerSearch, setCustomerSearch] = useState("");
   const [planSearchQuery, setPlanSearchQuery] = useState("");
@@ -1029,10 +2544,36 @@ export default function SalesAnalysis() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const optionsList = useMemo(() => ["", ...invoiceBtypes], [invoiceBtypes]);
   const filteredProjections = useMemo(() => {
-    return projections.filter(
-      (r) => selectedCustomers.length === 0 || selectedCustomers.includes(r.customer)
-    );
-  }, [projections, selectedCustomers]);
+    return projections.filter((r) => {
+      if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) {
+        return false;
+      }
+      if (projMonthFilter && projMonthFilter !== "All") {
+        const mStr = (r.schdMonth || r.month || "").trim();
+        if (!mStr) return false;
+
+        const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        const parts = mStr.toLowerCase().split(" ");
+        let mIdx = MONTHS.indexOf(parts[0]);
+        let yVal = parseInt(parts[1], 10);
+        if (mIdx === -1 || isNaN(yVal)) return false;
+
+        const ref = dateRange.from
+          ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 1)
+          : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+        let maxMonths = 3;
+        if (projMonthFilter === "6 Months") maxMonths = 6;
+        else if (projMonthFilter === "1 Year") maxMonths = 12;
+
+        const monthsDiff = (yVal - ref.getFullYear()) * 12 + (mIdx - ref.getMonth());
+        if (monthsDiff < 0 || monthsDiff >= maxMonths) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [projections, selectedCustomers, projMonthFilter, dateRange.from]);
 
   const filteredTraceability = useMemo(() => {
     return traceability.filter(
@@ -1058,9 +2599,11 @@ export default function SalesAnalysis() {
 
   const processedPoLedger = useMemo(() => {
     return poLedger.map((row) => {
-      const value = row.qty * row.rate;
+      const currRate = (row.currRate !== undefined && row.currRate !== null && Number(row.currRate) !== 0) ? Number(row.currRate) : 1;
+      const amt = (row.amt !== undefined && row.amt !== null && Number(row.amt) !== 0) ? Number(row.amt) : (row.qty * row.rate);
+      const value = amt * currRate;
       const pendingQty = Math.max(0, row.qty - row.dcQty - row.shortCloseQty);
-      const pendingValue = pendingQty * row.rate;
+      const pendingValue = row.qty > 0 ? (pendingQty / row.qty) * value : (pendingQty * row.rate * currRate);
 
       let ageDays = 0;
       if (row.poDate) {
@@ -1072,6 +2615,8 @@ export default function SalesAnalysis() {
 
       return {
         ...row,
+        amt,
+        currRate,
         value,
         pendingQty,
         pendingValue,
@@ -1080,8 +2625,19 @@ export default function SalesAnalysis() {
     });
   }, [poLedger]);
 
+  const uniquePoTypes = useMemo(() => {
+    const types = new Set();
+    processedPoLedger.forEach((r) => {
+      if (r.type && typeof r.type === "string" && r.type.trim()) {
+        types.add(r.type.trim());
+      }
+    });
+    return ["All", ...Array.from(types).sort()];
+  }, [processedPoLedger]);
+
   const filteredPoLedger = useMemo(() => {
     return processedPoLedger.filter((row) => {
+      if (poTypeFilter && poTypeFilter !== "All" && row.type !== poTypeFilter) return false;
       if (poPendingOnly && row.pendingQty <= 0) return false;
       if (selectedCustomers.length > 0 && !selectedCustomers.includes(row.custName)) return false;
       const q = poSearchQuery.toLowerCase().trim();
@@ -1094,7 +2650,7 @@ export default function SalesAnalysis() {
         (row.dcNo && row.dcNo.toLowerCase().includes(q))
       );
     });
-  }, [processedPoLedger, poSearchQuery, poPendingOnly, selectedCustomers]);
+  }, [processedPoLedger, poTypeFilter, poSearchQuery, poPendingOnly, selectedCustomers]);
 
   const sortedPoLedger = useMemo(() => {
     const sorted = [...filteredPoLedger];
@@ -1241,11 +2797,13 @@ export default function SalesAnalysis() {
   const poTotals = useMemo(() => {
     return filteredPoLedger.reduce(
       (acc, row) => {
-        acc.totVal += row.value;
-        acc.totPendVal += row.pendingValue;
+        acc.totQty += Number(row.qty) || 0;
+        acc.totVal += Number(row.value) || 0;
+        acc.totPendQty += Number(row.pendingQty) || 0;
+        acc.totPendVal += Number(row.pendingValue) || 0;
         return acc;
       },
-      { totVal: 0, totPendVal: 0 }
+      { totQty: 0, totVal: 0, totPendQty: 0, totPendVal: 0 }
     );
   }, [filteredPoLedger]);
 
@@ -1272,7 +2830,7 @@ export default function SalesAnalysis() {
     const partSet = new Set();
     (filteredPlanVsActual || []).forEach(row => {
       if (row.customer) custSet.add(row.customer);
-      
+
       const matchesCustomer = despatchCustFilter.length === 0 || despatchCustFilter.includes(row.customer);
       if (matchesCustomer) {
         const parts = (row.partNoDesc || "").split(" - ");
@@ -1532,6 +3090,12 @@ export default function SalesAnalysis() {
       if (despatchPartRef.current && !despatchPartRef.current.contains(event.target)) {
         setDespatchPartDropdownOpen(false);
       }
+      if (poTypeRef.current && !poTypeRef.current.contains(event.target)) {
+        setPoTypeDropdownOpen(false);
+      }
+      if (projMonthRef.current && !projMonthRef.current.contains(event.target)) {
+        setProjMonthDropdownOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -1680,7 +3244,7 @@ export default function SalesAnalysis() {
     }
 
     // Calendar metadata always comes from the backend (date-range based)
-    const { calendar_days, weeks, months, years } = avgRateData;
+    const { calendar_days, months, years } = avgRateData;
 
     // Revenue: use customer-filtered derivedSummary when a customer filter is active,
     // otherwise fall back to the backend grand_total (same value when no filter)
@@ -1690,6 +3254,18 @@ export default function SalesAnalysis() {
     const per_week = per_day * 7;
     const per_month = per_day * 30;
     const per_year = per_day * 365;
+
+    const totalDays = Math.max(0, Number(calendar_days || 0));
+    const fullWeeks = Math.floor(totalDays / 7);
+    const remDays = totalDays % 7;
+    let weekTrendText = "";
+    if (fullWeeks > 0 && remDays > 0) {
+      weekTrendText = `${fullWeeks} week${fullWeeks !== 1 ? "s" : ""} ${remDays} day${remDays !== 1 ? "s" : ""} total`;
+    } else if (fullWeeks > 0) {
+      weekTrendText = `${fullWeeks} week${fullWeeks !== 1 ? "s" : ""} total`;
+    } else {
+      weekTrendText = `${remDays} day${remDays !== 1 ? "s" : ""} total`;
+    }
 
     return [
       {
@@ -1705,7 +3281,7 @@ export default function SalesAnalysis() {
         label: "AVG SELLING RATE (Per Week)",
         value: `₹${formatRupees(per_week)}`,
         sub: "Per calendar week",
-        trend: `${weeks} weeks total`,
+        trend: weekTrendText,
         icon: Scale,
         iconColor: "#10b981",
         type: "neutral"
@@ -1807,15 +3383,15 @@ export default function SalesAnalysis() {
     if (sortedCusts.length > 0) {
       const top4 = sortedCusts.slice(0, 4);
       custLabels = top4.map(c => c.name);
-      custPercentages = top4.map(c => c.pct);
+      const values = top4.map(c => c.revenue);
 
       if (sortedCusts.length > 4) {
         const others = sortedCusts.slice(4);
         const othersRevenue = others.reduce((sum, c) => sum + c.revenue, 0);
-        const othersPct = totalRevenue > 0 ? jsRound((othersRevenue / totalRevenue) * 100, 1) : 0;
         custLabels.push("Others");
-        custPercentages.push(othersPct);
+        values.push(othersRevenue);
       }
+      custPercentages = calculateExact100Percentages(values);
     }
 
     const prodMap = {};
@@ -1832,7 +3408,7 @@ export default function SalesAnalysis() {
 
     const top5Prods = sortedProds.slice(0, 5);
     const prodLabels = top5Prods.map(p => p.name);
-    const prodPercentages = top5Prods.map(p => totalQty > 0 ? jsRound((p.qty / totalQty) * 100, 1) : 0);
+    const prodPercentages = calculateExact100Percentages(top5Prods.map(p => p.qty));
 
     return {
       customer: {
@@ -2187,10 +3763,21 @@ export default function SalesAnalysis() {
 
   const invoiceStats = useMemo(() => {
     const invSet = new Set();
+    let totalQty = 0;
+    let totalAmount = 0;
     filteredInvoices.forEach((r) => {
       if (r.invoice_no) invSet.add(r.invoice_no);
+      const q = Number(r.qty);
+      if (Number.isFinite(q)) totalQty += q;
+      const a = Number(r.amount);
+      if (Number.isFinite(a)) totalAmount += a;
     });
-    return { lines: filteredInvoices.length, invoices: invSet.size };
+    return {
+      lines: filteredInvoices.length,
+      invoices: invSet.size,
+      totalQty,
+      totalAmount,
+    };
   }, [filteredInvoices]);
 
   const dynamicManagementInsights = useMemo(
@@ -2259,10 +3846,18 @@ export default function SalesAnalysis() {
   }, [loading]);
 
   const custLabels = useMemo(() => derivedRevenueCharts?.customer?.labels ?? [], [derivedRevenueCharts]);
-  const custPercentages = useMemo(() => derivedRevenueCharts?.customer?.percentages ?? [], [derivedRevenueCharts]);
+  const custPercentages = useMemo(() => {
+    const pcts = derivedRevenueCharts?.customer?.percentages ?? [];
+    if (!pcts || pcts.length === 0) return [];
+    return calculateExact100Percentages(pcts);
+  }, [derivedRevenueCharts]);
 
   const prodLabels = useMemo(() => derivedRevenueCharts?.product?.labels ?? [], [derivedRevenueCharts]);
-  const prodPercentages = useMemo(() => derivedRevenueCharts?.product?.percentages ?? [], [derivedRevenueCharts]);
+  const prodPercentages = useMemo(() => {
+    const pcts = derivedRevenueCharts?.product?.percentages ?? [];
+    if (!pcts || pcts.length === 0) return [];
+    return calculateExact100Percentages(pcts);
+  }, [derivedRevenueCharts]);
 
   const getCustValue = (pct, idx) => {
     const ranking = derivedRevenueCharts?.customer_ranking;
@@ -3028,6 +4623,7 @@ export default function SalesAnalysis() {
             return s && s > 0 ? parseFloat(((t / s) * 100).toFixed(2)) : 0;
           });
           const shareLabels = apiLabels.length ? apiLabels : (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+          const maxTaxRate = Math.max(0, ...effectiveTaxRate);
 
           const gradient = ctx.createLinearGradient(0, 0, 0, 240);
           gradient.addColorStop(0, "rgba(139, 92, 246, 0.45)");
@@ -3058,14 +4654,29 @@ export default function SalesAnalysis() {
             options: {
               responsive: true,
               maintainAspectRatio: false,
+              layout: {
+                padding: {
+                  top: 24,
+                  right: 16,
+                  left: 8,
+                  bottom: 8
+                }
+              },
               plugins: {
                 legend: { display: false },
                 datalabels: {
                   display: true,
                   align: "top",
                   anchor: "end",
-                  offset: 4,
+                  offset: 6,
+                  clip: false,
+                  clamp: true,
                   font: { family: 'Plus Jakarta Sans', size: 10, weight: '700' },
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  borderWidth: 1.5,
+                  borderRadius: 6,
+                  padding: { top: 3, bottom: 3, left: 6, right: 6 },
+                  borderColor: "rgba(139, 92, 246, 0.4)",
                   color: "#7c3aed",
                   formatter: (v) => `${safeToFixed(v, 2)}%`
                 }
@@ -3074,6 +4685,8 @@ export default function SalesAnalysis() {
                 y: {
                   type: "linear",
                   position: "left",
+                  suggestedMax: maxTaxRate > 0 ? maxTaxRate * 1.10 : 10,
+                  grace: "15%",
                   grid: { color: "rgba(99, 102, 241, 0.05)" },
                   ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#312e81', callback: (v) => `${safeToFixed(v, 2)}%` }
                 },
@@ -3235,20 +4848,10 @@ export default function SalesAnalysis() {
     if (loading) return;
     const timer = setTimeout(() => {
       if (!planRef.current) return;
+      planChart.current?.destroy();
 
       const { labels, planned, dispatched, sortedKeys } = weeklyPlanVsActual;
       const maxVal = Math.max(0, ...planned, ...dispatched);
-
-      if (planChart.current) {
-        planChart.current.data.labels = labels;
-        planChart.current.data.datasets[0].data = planned;
-        planChart.current.data.datasets[1].data = dispatched;
-        if (planChart.current.options?.scales?.y) {
-          planChart.current.options.scales.y.max = maxVal > 0 ? Math.ceil(maxVal * 1.25) : 10;
-        }
-        planChart.current.update("none");
-        return;
-      }
 
       const ctx = planRef.current.getContext("2d");
 
@@ -3355,6 +4958,7 @@ export default function SalesAnalysis() {
 
     return () => {
       clearTimeout(timer);
+      planChart.current?.destroy();
     };
   }, [weeklyPlanVsActual, loading]);
 
@@ -3975,10 +5579,28 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Filter Section ── */}
-      <div className="sa-filter-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: '20px', padding: '16px 24px' }}>
+      <div
+        className={`sa-filter-card ${loading ? "sa-filter-card--loading" : ""}`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '20px',
+          padding: '16px 24px',
+          pointerEvents: loading ? 'none' : 'auto',
+          opacity: loading ? 0.72 : 1,
+          transition: 'opacity 0.2s ease',
+        }}
+      >
         <div className="sa-filter-card__title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Filter size={14} strokeWidth={2.5} />
           Report Filters
+          {loading && (
+            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginLeft: '4px' }}>
+              (Loading...)
+            </span>
+          )}
         </div>
         <div className="sa-filter-divider" style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 4px' }} />
 
@@ -3989,6 +5611,7 @@ export default function SalesAnalysis() {
             from={dateRange.from}
             to={dateRange.to}
             onChange={({ from, to }) => setDateRange({ from, to })}
+            disabled={loading}
           />
         </div>
 
@@ -4000,17 +5623,19 @@ export default function SalesAnalysis() {
             <input
               type="text"
               className="sa-search-input"
-              placeholder="Search no part..."
+              placeholder="Search Part No. or Desc"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={loading}
             />
-            {searchQuery && (
+            {searchQuery && !loading && (
               <button
                 type="button"
                 className="sa-search-clear-btn"
                 style={{ position: 'absolute', right: '8px', zIndex: 10 }}
                 onClick={() => setSearchQuery("")}
                 title="Clear search"
+                disabled={loading}
               >
                 <X size={12} strokeWidth={2.5} />
               </button>
@@ -4025,8 +5650,10 @@ export default function SalesAnalysis() {
             <button
               type="button"
               className="sa-custom-select-trigger"
-              onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
+              disabled={loading}
+              onClick={() => !loading && setCustomerDropdownOpen(!customerDropdownOpen)}
               onKeyDown={(e) => {
+                if (loading) return;
                 if (e.key === "ArrowDown") {
                   e.preventDefault();
                   if (!customerDropdownOpen) {
@@ -4234,8 +5861,10 @@ export default function SalesAnalysis() {
             <button
               type="button"
               className="sa-custom-select-trigger"
-              onClick={() => setInvoiceDropdownOpen(!invoiceDropdownOpen)}
+              disabled={loading}
+              onClick={() => !loading && setInvoiceDropdownOpen(!invoiceDropdownOpen)}
               onKeyDown={(e) => {
+                if (loading) return;
                 if (e.key === "ArrowDown") {
                   e.preventDefault();
                   if (!invoiceDropdownOpen) {
@@ -4296,7 +5925,9 @@ export default function SalesAnalysis() {
         <button
           type="button"
           className="sa-btn-reset"
-          onClick={resetFilters}
+          disabled={loading}
+          onClick={() => !loading && resetFilters()}
+          style={loading ? { opacity: 0.6, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
         >
           <RotateCcw className="sa-btn-reset-icon" size={14} />
           Reset Filters
@@ -4847,7 +6478,7 @@ export default function SalesAnalysis() {
                 </div>
               )}
             </div>
-            
+
             <button
               onClick={handleDespatchExport}
               className="sa-btn sa-btn--primary sa-po-export-btn"
@@ -5279,6 +6910,22 @@ export default function SalesAnalysis() {
                 </tr>
               )}
             </tbody>
+            {!tableLoading && filteredInvoices.length > 0 && (
+              <tfoot>
+                <tr className="sa-inv-total-row">
+                  <td><strong>Total</strong></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num"><strong>{formatQty(invoiceStats.totalQty)}</strong></td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num"><strong>{formatRate(invoiceStats.totalAmount)}</strong></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
         <div className="sa-action-bar">
@@ -5287,6 +6934,18 @@ export default function SalesAnalysis() {
           {/* <button className="sa-btn sa-btn--ghost" onClick={() => window.print()}>🖨️ Print</button> */}
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          PART-WISE HISTORY & RATE INTELLIGENCE SECTION
+      ═══════════════════════════════════════════════════════ */}
+      <PartWiseHistorySection
+        invoices={invoiceRows}
+        filteredInvoices={filteredInvoices}
+        summary={derivedSummary || summary}
+        dateRange={dateRange}
+        selectedCustomers={selectedCustomers}
+        loading={loading || tableLoading}
+      />
       {/* ── Projection Table ── */}
       <div className="sa-card sa-card--table sa-proj-card">
         <div className="sa-card__head">
@@ -5314,6 +6973,44 @@ export default function SalesAnalysis() {
                 Line View
               </button>
             </div>
+
+            {/* Projection Month Dropdown Filter */}
+            <div
+              className={`sa-custom-select sa-custom-select--proj-month${projMonthDropdownOpen ? " sa-active" : ""}`}
+              ref={projMonthRef}
+            >
+              <button
+                type="button"
+                className="sa-custom-select-trigger sa-proj-month-trigger"
+                onClick={() => setProjMonthDropdownOpen(!projMonthDropdownOpen)}
+                title="Filter by Schedule Period"
+              >
+                <span className="sa-proj-month-selected-label">
+                  <Calendar size={13} style={{ marginRight: '5px', color: '#8b5cf6', flexShrink: 0 }} />
+                  {projMonthFilter === "All" ? "All Projections" : projMonthFilter}
+                </span>
+                <span className="sa-custom-select-arrow">
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+              {projMonthDropdownOpen && (
+                <ul className="sa-custom-select-options sa-proj-month-options">
+                  {["All", "3 Months", "6 Months", "1 Year"].map((opt) => (
+                    <li
+                      key={opt}
+                      className={`sa-custom-select-option${projMonthFilter === opt ? " sa-selected" : ""}`}
+                      onClick={() => {
+                        setProjMonthFilter(opt);
+                        setProjMonthDropdownOpen(false);
+                      }}
+                    >
+                      {opt === "All" ? "All Projections" : opt}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             <span className="sa-badge sa-badge--purple">{new Set(filteredProjections.map((r) => r.customer)).size} Active Customers</span>
             <span className="sa-badge sa-badge--blue" style={{ background: 'rgba(45, 109, 232, 0.08)', color: '#2d6de8', border: '1px solid rgba(45, 109, 232, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Total Amt: ₹{formatRupees(projectionTotals.totAmt)}</span>
             <span className="sa-badge sa-badge--orange" style={{ background: 'rgba(249, 115, 22, 0.08)', color: '#ea580c', border: '1px solid rgba(249, 115, 22, 0.15)', fontSize: '0.84rem', padding: '6px 12px', fontWeight: '700' }}>Pending Value: ₹{formatRupees(projectionTotals.pendVal)}</span>
@@ -5655,6 +7352,43 @@ export default function SalesAnalysis() {
               )}
             </div>
 
+            {/* Type Dropdown Filter */}
+            <div
+              className={`sa-custom-select sa-custom-select--po-type${poTypeDropdownOpen ? " sa-active" : ""}`}
+              ref={poTypeRef}
+            >
+              <button
+                type="button"
+                className="sa-custom-select-trigger sa-po-type-trigger"
+                onClick={() => setPoTypeDropdownOpen(!poTypeDropdownOpen)}
+                title="Filter by Type"
+              >
+                <span className="sa-po-type-selected-label">
+                  {poTypeFilter === "All" ? "All Types" : poTypeFilter}
+                </span>
+                <span className="sa-custom-select-arrow">
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+              {poTypeDropdownOpen && (
+                <ul className="sa-custom-select-options sa-po-type-options">
+                  {uniquePoTypes.map((typeOption) => (
+                    <li
+                      key={typeOption}
+                      className={`sa-custom-select-option${poTypeFilter === typeOption ? " sa-selected" : ""}`}
+                      onClick={() => {
+                        setPoTypeFilter(typeOption);
+                        setPoPage(1);
+                        setPoTypeDropdownOpen(false);
+                      }}
+                    >
+                      {typeOption === "All" ? "All Types" : typeOption}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* Pending Only Switch */}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => { setPoPendingOnly(!poPendingOnly); setPoPage(1); }}>
               <div className={`sa-po-toggle-switch ${poPendingOnly ? 'active' : ''}`} style={{
@@ -5836,6 +7570,32 @@ export default function SalesAnalysis() {
                 </tr>
               )}
             </tbody>
+            {paginatedPoLedger.length > 0 && (
+              <tfoot>
+                <tr className="sa-po-total-row">
+                  <td><strong>Total</strong></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num"><strong>{formatQty(poTotals.totQty)}</strong></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num"><strong>₹{formatExact(poTotals.totVal)}</strong></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num"><strong>{formatQty(poTotals.totPendQty)}</strong></td>
+                  <td className="sa-num"><strong>₹{formatExact(poTotals.totPendVal)}</strong></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 

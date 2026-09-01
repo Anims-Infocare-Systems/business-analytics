@@ -2259,6 +2259,51 @@
     color: #0f172a;
 }
 
+/* ── Department Filter Dropdown near PO Details Search ── */
+.pa2-po-dept-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pa2-po-dept-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.pa2-po-dept-trigger:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.pa2-po-dept-trigger.active,
+.pa2-po-dept-trigger:focus {
+    border-color: #2d6de8;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(45, 109, 232, 0.1);
+    color: #2d6de8;
+}
+
+.pa2-po-dept-trigger-label {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ═══════════════════════════════════════════════
    PREMIUM "NO DATA" EMPTY STATE
    ═══════════════════════════════════════════════ */

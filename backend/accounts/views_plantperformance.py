@@ -2700,7 +2700,7 @@ def _otd_filter_clause(customer="", part=""):
         cust_list = [c.strip() for c in customer.split(",") if c.strip()]
         if cust_list:
             placeholders = ",".join(["?"] * len(cust_list))
-            sql += f" AND ISNULL(cm.CName, N'') IN ({placeholders})"
+            sql += f" AND ISNULL(NULLIF(LTRIM(RTRIM(cm.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(ca.CName)), N''), N'')) IN ({placeholders})"
             params.extend(cust_list)
     if part:
         sql += " AND s.itcode LIKE ?"
@@ -2728,6 +2728,7 @@ WITH AllSchedules AS (
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
     LEFT JOIN CustMast cm ON p.cid = cm.Id
+    LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
     WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
       AND ISNULL(s.deleted, 0) = 0
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
@@ -2796,6 +2797,7 @@ WITH AllSchedules AS (
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
     LEFT JOIN CustMast cm ON p.cid = cm.Id
+    LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
     WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
       AND ISNULL(s.deleted, 0) = 0
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
@@ -2825,7 +2827,7 @@ DeliverySummary AS (
              sch.PoMonth, sch.pono, sch.refno, sch.cid
 )
 SELECT TOP 5000
-    ISNULL(LTRIM(RTRIM(cm.CName)), N'—') AS CustomerName,
+    ISNULL(NULLIF(LTRIM(RTRIM(cm.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(ca.CName)), N''), N'—')) AS CustomerName,
     LTRIM(RTRIM(CAST(ds.pono AS NVARCHAR(128)))) AS PONumber,
     LTRIM(RTRIM(CAST(ds.Apono AS NVARCHAR(128)))) AS PORefNumber,
     LTRIM(RTRIM(CAST(ds.partno AS NVARCHAR(128)))) AS PartNumber,
@@ -2833,12 +2835,16 @@ SELECT TOP 5000
     CAST(ds.reqdate AS DATE) AS ReqDt,
     ISNULL(CAST(ds.shdQty AS FLOAT), 0) AS OrderQty,
     ISNULL(CAST(ds.TotalDelQty AS FLOAT), 0) AS DeliveryQty,
-    CASE WHEN ds.DelayedDelQty = 0 AND ds.TotalDelQty > 0 THEN N'On Time' ELSE N'Delayed' END AS Status,
+    CASE
+        WHEN ds.TotalDelQty = 0 THEN N'Pending'
+        WHEN ds.DelayedDelQty = 0 AND ds.TotalDelQty > 0 THEN N'On Time'
+        ELSE N'Delayed'
+    END AS Status,
     ISNULL(CAST(pd.rate AS FLOAT), 0) * ISNULL(CAST(ds.shdQty AS FLOAT), 0) AS Value,
     ISNULL(CAST(ds.OnTimeDelQty AS FLOAT), 0) AS OnTimeDelQty,
     ISNULL(CAST(ds.DelayedDelQty AS FLOAT), 0) AS DelayedDelQty,
     CASE
-        WHEN ds.TotalDelQty = 0 THEN 0.0
+        WHEN ds.TotalDelQty = 0 THEN NULL
         WHEN ds.DelayedDelQty = 0 THEN 100.0
         ELSE ISNULL(
             (SELECT TOP 1 r2.RatingFor FROM CustPoOTDRating r2
@@ -2848,10 +2854,10 @@ SELECT TOP 5000
     END AS OtdPct
 FROM DeliverySummary ds
 LEFT JOIN CustMast cm ON ds.cid = cm.Id
+LEFT JOIN CustAliasMast ca ON ds.cid = ca.Id
 LEFT JOIN In_PoDet pd
     ON pd.Apono = ds.Apono AND pd.itcode = ds.partno AND pd.poslno = ds.poslno
    AND ISNULL(pd.deleted, 0) = 0
-WHERE ds.TotalDelQty > 0
 ORDER BY ds.targetdate DESC, ds.pono, ds.partno
 """
 
@@ -2992,9 +2998,15 @@ def _fetch_otd_report_monthly_filtered(conn, sql_start, sql_end, customer="", pa
 def _format_otd_date(value):
     if value is None:
         return ""
-    if hasattr(value, "isoformat"):
-        return value.isoformat()[:10]
-    return str(value)[:10]
+    if hasattr(value, "strftime"):
+        return value.strftime("%d-%m-%Y")
+    val_str = str(value).strip()
+    if not val_str:
+        return ""
+    if len(val_str) >= 10 and val_str[4] == '-' and val_str[7] == '-':
+        parts = val_str[:10].split('-')
+        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    return val_str[:10]
 
 
 def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
@@ -3021,7 +3033,13 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
         status = str(row[8] or "—").strip()
         on_time_del_qty = round(float(row[10] or 0), 2) if len(row) > 10 else (del_qty if status == "On Time" else 0.0)
         delayed_del_qty = round(float(row[11] or 0), 2) if len(row) > 11 else (del_qty if status == "Delayed" else 0.0)
-        otd_pct = round(float(row[12] or 0), 2) if len(row) > 12 else (100.0 if status == "On Time" else 85.0)
+        otd_pct_val = row[12] if len(row) > 12 else None
+        if del_qty == 0 or status == "Pending":
+            otd_pct = None
+        elif otd_pct_val is not None:
+            otd_pct = round(float(otd_pct_val), 2)
+        else:
+            otd_pct = 100.0 if status == "On Time" else 85.0
 
         rows.append({
             "customerName": customer,

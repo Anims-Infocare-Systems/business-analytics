@@ -261,11 +261,48 @@ export default function PurchaseAnalysis() {
     const [shortCloseLoading, setShortCloseLoading] = useState(false);
     const [priceTrendRows, setPriceTrendRows] = useState([]);
     const [priceTrendLoading, setPriceTrendLoading] = useState(false);
+    const [ptSupplierFilter, setPtSupplierFilter] = useState([]);
+    const [ptSupplierDropdownOpen, setPtSupplierDropdownOpen] = useState(false);
+    const [ptSupplierSearch, setPtSupplierSearch] = useState("");
+    const ptSupplierRef = useRef(null);
+    const [ptPartFilter, setPtPartFilter] = useState([]);
+    const [ptPartDropdownOpen, setPtPartDropdownOpen] = useState(false);
+    const [ptPartSearch, setPtPartSearch] = useState("");
+    const ptPartRef = useRef(null);
+    const [poTableDeptFilter, setPoTableDeptFilter] = useState([]);
+    const [poTableDeptDropdownOpen, setPoTableDeptDropdownOpen] = useState(false);
+    const [poDeptSearchQuery, setPoDeptSearchQuery] = useState("");
+    const poTableDeptRef = useRef(null);
     const [alertsData, setAlertsData] = useState(null);
     const [alertsLoading, setAlertsLoading] = useState(false);
     const [weeklyTrend, setWeeklyTrend] = useState(null);
     const [weeklyChartType, setWeeklyChartType] = useState("combo");
     const [sortConfig, setSortConfig] = useState({ key: "po_date", direction: "desc" });
+
+    const uniquePoDepartments = useMemo(() => {
+        const set = new Set();
+        poRows.forEach(r => {
+            const d = (r.department || "").trim();
+            if (d && d !== "–" && d !== "-") set.add(d);
+        });
+        return Array.from(set).sort();
+    }, [poRows]);
+
+    const filteredDropdownDepts = useMemo(() => {
+        const q = poDeptSearchQuery.toLowerCase().trim();
+        if (!q) return uniquePoDepartments;
+        return uniquePoDepartments.filter(d => d.toLowerCase().includes(q));
+    }, [uniquePoDepartments, poDeptSearchQuery]);
+
+    const handlePoDeptToggle = (dept) => {
+        setPoTableDeptFilter(prev => {
+            if (prev.includes(dept)) {
+                return prev.filter(d => d !== dept);
+            } else {
+                return [...prev, dept];
+            }
+        });
+    };
 
     const handleSort = (key) => {
         let direction = "asc";
@@ -302,10 +339,15 @@ export default function PurchaseAnalysis() {
 
     const filteredPoRows = useMemo(() => {
         return poRows.filter(r => {
+            if (poTableDeptFilter.length > 0) {
+                const d = (r.department || "").trim();
+                if (!poTableDeptFilter.includes(d)) return false;
+            }
             const tableQ = poTableSearchQuery.toLowerCase().trim();
             if (tableQ) {
                 const match = (r.po_number && r.po_number.toLowerCase().includes(tableQ)) ||
                     (r.po_type && r.po_type.toLowerCase().includes(tableQ)) ||
+                    (r.department && r.department.toLowerCase().includes(tableQ)) ||
                     (r.vendor_name && r.vendor_name.toLowerCase().includes(tableQ)) ||
                     (r.material_code && r.material_code.toLowerCase().includes(tableQ)) ||
                     (r.material && r.material.toLowerCase().includes(tableQ)) ||
@@ -318,6 +360,7 @@ export default function PurchaseAnalysis() {
             if (globalQ) {
                 const match = (r.po_number && r.po_number.toLowerCase().includes(globalQ)) ||
                     (r.po_type && r.po_type.toLowerCase().includes(globalQ)) ||
+                    (r.department && r.department.toLowerCase().includes(globalQ)) ||
                     (r.vendor_name && r.vendor_name.toLowerCase().includes(globalQ)) ||
                     (r.material_code && r.material_code.toLowerCase().includes(globalQ)) ||
                     (r.material && r.material.toLowerCase().includes(globalQ));
@@ -326,10 +369,6 @@ export default function PurchaseAnalysis() {
             if (filters.supplier && filters.supplier.length > 0 && !filters.supplier.includes("All Suppliers")) {
                 if (!filters.supplier.includes(r.vendor_name)) return false;
             }
-            if (filters.department && filters.department !== "All Departments" && filters.department !== "Production") {
-                const d = r.department || r.dept;
-                if ((d || "").toLowerCase() !== filters.department.toLowerCase()) return false;
-            }
             if (filters.status && filters.status !== "All Status") {
                 const isGrn = !!r.grn_no;
                 if (filters.status === "GRN Done" && !isGrn) return false;
@@ -337,7 +376,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [poRows, poTableSearchQuery, searchQuery, filters.supplier, filters.department, filters.status]);
+    }, [poRows, poTableDeptFilter, poTableSearchQuery, searchQuery, filters.supplier, filters.status]);
 
     const sortedFilteredPoRows = useMemo(() => {
         const sorted = [...filteredPoRows];
@@ -478,18 +517,80 @@ export default function PurchaseAnalysis() {
         });
     }, [shortCloseRows, searchQuery, filters.supplier]);
 
+    const uniquePtSuppliers = useMemo(() => {
+        const set = new Set();
+        priceTrendRows.forEach(r => {
+            const name = (r.supplierName || r.supplier || "").trim();
+            if (name && name !== "—") set.add(name);
+        });
+        return Array.from(set).sort();
+    }, [priceTrendRows]);
+
+    const filteredPtDropdownSuppliers = useMemo(() => {
+        const q = ptSupplierSearch.toLowerCase().trim();
+        if (!q) return uniquePtSuppliers;
+        return uniquePtSuppliers.filter(s => s.toLowerCase().includes(q));
+    }, [uniquePtSuppliers, ptSupplierSearch]);
+
+    const uniquePtParts = useMemo(() => {
+        const set = new Set();
+        priceTrendRows.forEach(r => {
+            const p = (r.partDesc || r.partNo || "").trim();
+            if (p && p !== "—") set.add(p);
+        });
+        return Array.from(set).sort();
+    }, [priceTrendRows]);
+
+    const filteredPtDropdownParts = useMemo(() => {
+        const q = ptPartSearch.toLowerCase().trim();
+        if (!q) return uniquePtParts;
+        return uniquePtParts.filter(p => p.toLowerCase().includes(q));
+    }, [uniquePtParts, ptPartSearch]);
+
+    const handlePtSupplierToggle = (sup) => {
+        setPtSupplierFilter(prev => {
+            if (prev.includes(sup)) {
+                return prev.filter(s => s !== sup);
+            } else {
+                return [...prev, sup];
+            }
+        });
+    };
+
+    const handlePtPartToggle = (part) => {
+        setPtPartFilter(prev => {
+            if (prev.includes(part)) {
+                return prev.filter(p => p !== part);
+            } else {
+                return [...prev, part];
+            }
+        });
+    };
+
     const filteredPriceTrendRows = useMemo(() => {
         return priceTrendRows.filter(r => {
+            if (ptSupplierFilter.length > 0) {
+                const sup = (r.supplierName || r.supplier || "").trim();
+                if (!ptSupplierFilter.includes(sup)) return false;
+            }
+
+            if (ptPartFilter.length > 0) {
+                const part = (r.partDesc || r.partNo || "").trim();
+                if (!ptPartFilter.includes(part)) return false;
+            }
+
             const q = searchQuery.toLowerCase().trim();
             if (q) {
                 const match = (r.partDesc && r.partDesc.toLowerCase().includes(q)) ||
+                    (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
+                    (r.supplier && r.supplier.toLowerCase().includes(q)) ||
                     (r.month && r.month.toLowerCase().includes(q)) ||
                     (r.type && r.type.toLowerCase().includes(q));
                 if (!match) return false;
             }
             return true;
         });
-    }, [priceTrendRows, searchQuery]);
+    }, [priceTrendRows, ptSupplierFilter, ptPartFilter, searchQuery]);
 
     const [traceSearch, setTraceSearch] = useState("");
 
@@ -600,6 +701,15 @@ export default function PurchaseAnalysis() {
             }
             if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
                 setStatusDropdownOpen(false);
+            }
+            if (ptSupplierRef.current && !ptSupplierRef.current.contains(event.target)) {
+                setPtSupplierDropdownOpen(false);
+            }
+            if (ptPartRef.current && !ptPartRef.current.contains(event.target)) {
+                setPtPartDropdownOpen(false);
+            }
+            if (poTableDeptRef.current && !poTableDeptRef.current.contains(event.target)) {
+                setPoTableDeptDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -2811,6 +2921,86 @@ export default function PurchaseAnalysis() {
                 <div className="pa2-table-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", paddingRight: "1.3rem" }}>
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Details" />
                     <div className="pa2-tag-row" style={{ display: "flex", alignItems: "center", gap: "0.8rem", paddingBottom: "0" }}>
+                        {/* Department Filter Dropdown */}
+                        <div className="pa2-po-dept-select-wrap" ref={poTableDeptRef}>
+                            <button
+                                type="button"
+                                className={`pa2-po-dept-trigger${poTableDeptDropdownOpen ? " active" : ""}`}
+                                onClick={() => setPoTableDeptDropdownOpen(!poTableDeptDropdownOpen)}
+                                title="Filter by Department"
+                            >
+                                <Building2 size={14} style={{ color: poTableDeptFilter.length > 0 ? "#2d6de8" : "#64748b" }} />
+                                <span className="pa2-po-dept-trigger-label">
+                                    {poTableDeptFilter.length === 0
+                                        ? "All Departments"
+                                        : poTableDeptFilter.length === 1
+                                        ? poTableDeptFilter[0]
+                                        : `${poTableDeptFilter.length} Depts`}
+                                </span>
+                                <ChevronDown size={13} style={{ color: "#64748b", transition: "transform 0.2s", transform: poTableDeptDropdownOpen ? "rotate(180deg)" : "none" }} />
+                            </button>
+                            {poTableDeptDropdownOpen && (
+                                <ul className="pa2-custom-select-options" style={{ minWidth: "210px", maxHeight: "250px", zIndex: 999, top: "calc(100% + 4px)", left: 0 }}>
+                                    <div className="pa2-dropdown-search-wrapper" style={{ padding: "6px 8px" }}>
+                                        <Search size={12} className="pa2-dropdown-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search departments..."
+                                            className="pa2-dropdown-search-input"
+                                            value={poDeptSearchQuery}
+                                            onChange={(e) => setPoDeptSearchQuery(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{ height: "26px", fontSize: "0.75rem" }}
+                                        />
+                                        {poDeptSearchQuery && (
+                                            <X size={12} onClick={(e) => { e.stopPropagation(); setPoDeptSearchQuery(""); }} style={{ cursor: "pointer", color: "#94a3b8" }} />
+                                        )}
+                                    </div>
+                                    <li
+                                        className={`pa2-custom-select-option${poTableDeptFilter.length === 0 ? " pa2-selected" : ""}`}
+                                        style={{ fontSize: "0.78rem", padding: "6px 10px", fontWeight: "600" }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPoTableDeptFilter([]);
+                                        }}
+                                    >
+                                        <span className="pa2-opt-text">All Departments</span>
+                                        {poTableDeptFilter.length === 0 && <Check size={12} className="pa2-check-icon" />}
+                                    </li>
+                                    {filteredDropdownDepts.length === 0 ? (
+                                        <div style={{ padding: "8px 12px", fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
+                                            No departments found
+                                        </div>
+                                    ) : (
+                                        filteredDropdownDepts.map((dept) => {
+                                            const isSelected = poTableDeptFilter.includes(dept);
+                                            return (
+                                                <li
+                                                    key={dept}
+                                                    className={`pa2-custom-select-option${isSelected ? " pa2-selected" : ""}`}
+                                                    style={{ fontSize: "0.78rem", padding: "6px 10px" }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handlePoDeptToggle(dept);
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => {}}
+                                                        style={{ marginRight: "6px", cursor: "pointer", accentColor: "#2d6de8" }}
+                                                    />
+                                                    <span className="pa2-opt-text">{dept}</span>
+                                                    {isSelected && <Check size={12} className="pa2-check-icon" />}
+                                                </li>
+                                            );
+                                        })
+                                    )}
+                                </ul>
+                            )}
+                        </div>
+
+                        {/* Search Table Box */}
                         <div className="pa2-premium-search-box">
                             <Search className="pa2-premium-search-icon" size={14} />
                             <input
@@ -2843,6 +3033,7 @@ export default function PurchaseAnalysis() {
                                 {renderSortableTh("PO NUMBER", "po_number")}
                                 {renderSortableTh("PO DATE", "po_date")}
                                 {renderSortableTh("PO TYPE", "po_type")}
+                                {renderSortableTh("DEPARTMENT", "department")}
                                 {renderSortableTh("SUPPLIER", "vendor_name")}
                                 {renderSortableTh("MATERIAL", "material", false, true)}
                                 {renderSortableTh("QTY", "po_qty", true)}
@@ -2861,6 +3052,7 @@ export default function PurchaseAnalysis() {
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "85px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "180px", height: "13px" }} /></td>
                                         <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
@@ -2873,7 +3065,7 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!poLoading && sortedFilteredPoRows.length === 0 && (
-                                <tr><td colSpan={12} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
+                                <tr><td colSpan={13} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
                             )}
                             {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
@@ -2887,6 +3079,9 @@ export default function PurchaseAnalysis() {
                                             ? <span className="pa2-po-type-badge">{r.po_type}</span>
                                             : <span className="pa2-po-dash">–</span>}
                                     </td>
+                                    <td className="pa2-po-td" style={{ fontWeight: "600", color: "#475569", whiteSpace: "nowrap" }}>
+                                        {r.department || "–"}
+                                    </td>
                                     <td className="pa2-po-td pa2-po-vendor">{r.vendor_name || "–"}</td>
                                     <td className="pa2-po-td pa2-po-material">
                                         {r.material_code
@@ -2895,10 +3090,14 @@ export default function PurchaseAnalysis() {
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r">{r.po_qty || "–"}</td>
                                     <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>
-                                        {r.rate > 0 ? `₹${r.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "–"}
+                                        {r.rate !== undefined && r.rate !== null && r.rate !== "" && !isNaN(Number(r.rate))
+                                            ? `₹${Number(r.rate).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                            : "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">
-                                        ₹{r.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        {r.value !== undefined && r.value !== null && r.value !== "" && !isNaN(Number(r.value))
+                                            ? `₹${Number(r.value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                            : "–"}
                                     </td>
                                     <td className="pa2-po-td">
                                         {r.grn_no
@@ -2986,10 +3185,14 @@ export default function PurchaseAnalysis() {
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r">{r.po_qty || "–"}</td>
                                     <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>
-                                        {r.rate > 0 ? `₹${r.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "–"}
+                                        {r.rate !== undefined && r.rate !== null && r.rate !== "" && !isNaN(Number(r.rate))
+                                            ? `₹${Number(r.rate).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                            : "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r pa2-po-value">
-                                        ₹{r.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        {r.value !== undefined && r.value !== null && r.value !== "" && !isNaN(Number(r.value))
+                                            ? `₹${Number(r.value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                            : "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-date">
                                         {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
@@ -3186,14 +3389,182 @@ export default function PurchaseAnalysis() {
                         title="Price Trend Analysis"
                         badge="Rate Changes"
                         badgeCls="pa2-badge-green"
+                        extra={
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                {/* Supplier Filter Dropdown */}
+                                <div className="pa2-filter-group" ref={ptSupplierRef} style={{ minWidth: "155px", maxWidth: "200px" }}>
+                                    <div className={`pa2-custom-select${ptSupplierDropdownOpen ? " pa2-active" : ""}`}>
+                                        <button
+                                            type="button"
+                                            className="pa2-custom-select-trigger"
+                                            style={{ height: "32px", fontSize: "0.78rem", padding: "0 10px" }}
+                                            onClick={() => setPtSupplierDropdownOpen(!ptSupplierDropdownOpen)}
+                                            title="Filter by Supplier"
+                                        >
+                                            <span className="pa2-custom-select-label" style={{ fontSize: "0.78rem" }}>
+                                                {ptSupplierFilter.length === 0
+                                                    ? "All Suppliers"
+                                                    : ptSupplierFilter.length === 1
+                                                    ? ptSupplierFilter[0]
+                                                    : `${ptSupplierFilter.length} Suppliers`}
+                                            </span>
+                                            <span className="pa2-custom-select-arrow">
+                                                <ChevronDown size={13} />
+                                            </span>
+                                        </button>
+                                        {ptSupplierDropdownOpen && (
+                                            <ul className="pa2-custom-select-options" style={{ minWidth: "220px", maxHeight: "240px", zIndex: 999 }}>
+                                                <div className="pa2-dropdown-search-wrapper" style={{ padding: "6px 8px" }}>
+                                                    <Search size={12} className="pa2-dropdown-search-icon" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search suppliers..."
+                                                        className="pa2-dropdown-search-input"
+                                                        value={ptSupplierSearch}
+                                                        onChange={(e) => setPtSupplierSearch(e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{ height: "26px", fontSize: "0.75rem" }}
+                                                    />
+                                                    {ptSupplierSearch && (
+                                                        <X size={12} onClick={(e) => { e.stopPropagation(); setPtSupplierSearch(""); }} style={{ cursor: "pointer", color: "#94a3b8" }} />
+                                                    )}
+                                                </div>
+                                                <li
+                                                    className={`pa2-custom-select-option${ptSupplierFilter.length === 0 ? " pa2-selected" : ""}`}
+                                                    style={{ fontSize: "0.78rem", padding: "6px 10px", fontWeight: "600" }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setPtSupplierFilter([]);
+                                                    }}
+                                                >
+                                                    <span className="pa2-opt-text">All Suppliers</span>
+                                                    {ptSupplierFilter.length === 0 && <Check size={12} className="pa2-check-icon" />}
+                                                </li>
+                                                {filteredPtDropdownSuppliers.length === 0 ? (
+                                                    <div style={{ padding: "8px 12px", fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
+                                                        No suppliers found
+                                                    </div>
+                                                ) : (
+                                                    filteredPtDropdownSuppliers.map((sup) => {
+                                                        const isSelected = ptSupplierFilter.includes(sup);
+                                                        return (
+                                                            <li
+                                                                key={sup}
+                                                                className={`pa2-custom-select-option${isSelected ? " pa2-selected" : ""}`}
+                                                                style={{ fontSize: "0.78rem", padding: "6px 10px" }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handlePtSupplierToggle(sup);
+                                                                }}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => {}}
+                                                                    style={{ marginRight: "8px", accentColor: "#10b981", pointerEvents: "none" }}
+                                                                />
+                                                                <span className="pa2-opt-text" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{sup}</span>
+                                                            </li>
+                                                        );
+                                                    })
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Part No / Description Filter Dropdown */}
+                                <div className="pa2-filter-group" ref={ptPartRef} style={{ minWidth: "155px", maxWidth: "200px" }}>
+                                    <div className={`pa2-custom-select${ptPartDropdownOpen ? " pa2-active" : ""}`}>
+                                        <button
+                                            type="button"
+                                            className="pa2-custom-select-trigger"
+                                            style={{ height: "32px", fontSize: "0.78rem", padding: "0 10px" }}
+                                            onClick={() => setPtPartDropdownOpen(!ptPartDropdownOpen)}
+                                            title="Filter by Part No"
+                                        >
+                                            <span className="pa2-custom-select-label" style={{ fontSize: "0.78rem" }}>
+                                                {ptPartFilter.length === 0
+                                                    ? "All Parts"
+                                                    : ptPartFilter.length === 1
+                                                    ? ptPartFilter[0]
+                                                    : `${ptPartFilter.length} Parts`}
+                                            </span>
+                                            <span className="pa2-custom-select-arrow">
+                                                <ChevronDown size={13} />
+                                            </span>
+                                        </button>
+                                        {ptPartDropdownOpen && (
+                                            <ul className="pa2-custom-select-options" style={{ minWidth: "240px", maxHeight: "240px", zIndex: 999 }}>
+                                                <div className="pa2-dropdown-search-wrapper" style={{ padding: "6px 8px" }}>
+                                                    <Search size={12} className="pa2-dropdown-search-icon" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search parts..."
+                                                        className="pa2-dropdown-search-input"
+                                                        value={ptPartSearch}
+                                                        onChange={(e) => setPtPartSearch(e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{ height: "26px", fontSize: "0.75rem" }}
+                                                    />
+                                                    {ptPartSearch && (
+                                                        <X size={12} onClick={(e) => { e.stopPropagation(); setPtPartSearch(""); }} style={{ cursor: "pointer", color: "#94a3b8" }} />
+                                                    )}
+                                                </div>
+                                                <li
+                                                    className={`pa2-custom-select-option${ptPartFilter.length === 0 ? " pa2-selected" : ""}`}
+                                                    style={{ fontSize: "0.78rem", padding: "6px 10px", fontWeight: "600" }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setPtPartFilter([]);
+                                                    }}
+                                                >
+                                                    <span className="pa2-opt-text">All Parts</span>
+                                                    {ptPartFilter.length === 0 && <Check size={12} className="pa2-check-icon" />}
+                                                </li>
+                                                {filteredPtDropdownParts.length === 0 ? (
+                                                    <div style={{ padding: "8px 12px", fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
+                                                        No parts found
+                                                    </div>
+                                                ) : (
+                                                    filteredPtDropdownParts.map((part) => {
+                                                        const isSelected = ptPartFilter.includes(part);
+                                                        return (
+                                                            <li
+                                                                key={part}
+                                                                className={`pa2-custom-select-option${isSelected ? " pa2-selected" : ""}`}
+                                                                style={{ fontSize: "0.78rem", padding: "6px 10px" }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handlePtPartToggle(part);
+                                                                }}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => {}}
+                                                                    style={{ marginRight: "8px", accentColor: "#10b981", pointerEvents: "none" }}
+                                                                />
+                                                                <span className="pa2-opt-text" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{part}</span>
+                                                            </li>
+                                                        );
+                                                    })
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     />
                     <div className="pa2-table-scroll" style={{ maxHeight: "300px", overflowY: "auto", marginTop: "0.5rem" }}>
                         <table className="pa2-po-tbl">
                             <thead>
                                 <tr>
                                     <th className="pa2-po-th">#</th>
-                                    <th className="pa2-po-th">PARTNO-DESC</th>
-                                    <th className="pa2-po-th">MONTH</th>
+                                    <th className="pa2-po-th">SUPPLIER NAME</th>
+                                    <th className="pa2-po-th" style={{ maxWidth: "200px", minWidth: "140px" }}>PARTNO-DESC</th>
+                                    <th className="pa2-po-th">EFFECTIVE DATE</th>
                                     <th className="pa2-po-th pa2-po-th--r">RATE</th>
                                     <th className="pa2-po-th pa2-po-th--r">COST TREND %</th>
                                     <th className="pa2-po-th pa2-po-th--r">COST DIFF</th>
@@ -3204,8 +3575,9 @@ export default function PurchaseAnalysis() {
                                     [1, 2, 3].map(i => (
                                         <tr key={i} className="pa2-po-tr pa2-pulse-loader">
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "20px", height: "13px" }} /></td>
-                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "150px", height: "13px" }} /></td>
-                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "130px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "100px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                             <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "50px", height: "13px" }} /></td>
                                             <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "45px", height: "13px", marginLeft: "auto" }} /></td>
                                             <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
@@ -3213,13 +3585,14 @@ export default function PurchaseAnalysis() {
                                     ))
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.length === 0 && (
-                                    <tr><td colSpan={6} className="pa2-nodata-td-wrap"><PaNoData icon={<CheckCircle2 size={16} style={{ color: "#10b981" }} />} compact /></td></tr>
+                                    <tr><td colSpan={7} className="pa2-nodata-td-wrap"><PaNoData icon={<CheckCircle2 size={16} style={{ color: "#10b981" }} />} compact /></td></tr>
                                 )}
                                 {!priceTrendLoading && filteredPriceTrendRows.map((row, i) => (
                                     <tr key={i} className="pa2-po-tr">
                                         <td className="pa2-po-td pa2-po-dash">{row.sno}</td>
-                                        <td className="pa2-po-td pa2-po-vendor" style={{ fontWeight: "700", whiteSpace: "nowrap" }}>{row.partDesc}</td>
-                                        <td className="pa2-po-td" style={{ whiteSpace: "nowrap" }}>{row.month}</td>
+                                        <td className="pa2-po-td pa2-po-vendor" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.supplierName || row.supplier || "—"}</td>
+                                        <td className="pa2-po-td" style={{ fontWeight: "700", maxWidth: "200px", minWidth: "140px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" }}>{row.partDesc}</td>
+                                        <td className="pa2-po-td" style={{ whiteSpace: "nowrap" }}>{row.effDate || row.month}</td>
                                         <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600" }}>₹{row.rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                                         <td className="pa2-po-td pa2-po-td--r">
                                             {row.type === "up" ? (

@@ -2531,6 +2531,7 @@ def otd_report(request):
         FROM In_PoDet_ShdQty s
         INNER JOIN In_PoMas p ON s.Apono = p.Apono
         LEFT JOIN CustMast cm ON p.cid = cm.Id
+        LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
         WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
           AND ISNULL(s.deleted, 0) = 0
           AND ISNULL(p.deleted, 0) = 0

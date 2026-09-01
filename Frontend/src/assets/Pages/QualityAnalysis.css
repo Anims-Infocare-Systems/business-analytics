@@ -728,8 +728,10 @@
 
 .qa2-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 0.77rem;
+    background: #ffffff;
 }
 
 .qa2-table thead th {
@@ -745,7 +747,7 @@
     white-space: nowrap;
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 2;
 }
 
 .qa2-table thead th.qa2-th-r {
@@ -759,6 +761,7 @@
     color: #334155;
     font-size: 0.74rem;
     font-weight: 500;
+    background: #ffffff;
 }
 
 .qa2-table tbody tr:last-child td {
@@ -770,7 +773,7 @@
 }
 
 .qa2-tr:hover td {
-    background: #f1f5f9;
+    background: #f1f5f9 !important;
 }
 
 .qa2-td-r {
@@ -825,10 +828,10 @@
 .qa2-total-row td {
     background: #f8fafc !important;
     border-top: 2px solid #cbd5e1 !important;
-    border-bottom: 2px solid #cbd5e1 !important;
+    border-bottom: none !important;
     position: sticky;
     bottom: 0;
-    z-index: 1;
+    z-index: 3;
     padding: 0.75rem 1rem !important;
 }
 

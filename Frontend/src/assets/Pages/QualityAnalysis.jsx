@@ -697,6 +697,32 @@ export default function QualityAnalysis() {
         });
     }, [rawSupplierRejections, selectedSuppliers, selectedGrnNos, selectedItems]);
 
+    const activeSupplierRejectionsTotals = useMemo(() => {
+        let totalQty = 0;
+        let totalOkQty = 0;
+        let totalMatRej = 0;
+        let totalMacRej = 0;
+
+        activeSupplierRejections.forEach(r => {
+            const qty = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+            const okQty = parseFloat(String(r.okQty || 0).replace(/,/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRej || 0).replace(/,/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRej || 0).replace(/,/g, "")) || 0;
+
+            totalQty += qty;
+            totalOkQty += okQty;
+            totalMatRej += matRej;
+            totalMacRej += macRej;
+        });
+
+        return {
+            qty: totalQty,
+            okQty: totalOkQty,
+            matRej: totalMatRej,
+            macRej: totalMacRej
+        };
+    }, [activeSupplierRejections]);
+
     const rawCustomerComplaints = useMemo(() => {
         if (Array.isArray(customerComplaintsData?.complaints)) return customerComplaintsData.complaints;
         if (Array.isArray(customerComplaintsData)) return customerComplaintsData;
@@ -841,7 +867,20 @@ export default function QualityAnalysis() {
 
         const trendData = chartsData?.trend || { labels: [], datasets: [] };
         const resultDonut = chartsData?.result_donut || { labels: [], datasets: [] };
-        const defectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
+        const rawDefectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
+        const defectData = rawDefectDonut.datasets?.[0]?.data || [];
+        const defectTotal = defectData.reduce((a, b) => Number(a) + Number(b), 0);
+        const defectBaseNames = ["Material Rejection", "Machine Rejection", "Rework"];
+        const defectLabels = defectBaseNames.map((name, idx) => {
+            const rawVal = Number(defectData[idx]) || 0;
+            const pct = defectTotal > 0 ? ((rawVal / defectTotal) * 100).toFixed(1) : "0.0";
+            return `${name} (${pct}%)`;
+        });
+        const defectDonut = {
+            ...rawDefectDonut,
+            labels: defectLabels,
+            datasets: rawDefectDonut.datasets || []
+        };
         const ppmData = chartsData?.mac_rejection_ppm || { labels: [], datasets: [] };
         const paretoData = chartsData?.pareto || { labels: [], datasets: [] };
 
@@ -1138,10 +1177,12 @@ export default function QualityAnalysis() {
                     borderWidth: 1,
                     callbacks: {
                         label: (ctx) => {
+                            const rawLabel = ctx.label || "";
+                            const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
                             const val = Number(ctx.parsed) || 0;
-                            const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
                             const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                            return ` ${ctx.label}: ${pct}%`;
+                            return ` ${cleanLabel}: ${pct}%`;
                         }
                     }
                 },
@@ -1150,9 +1191,9 @@ export default function QualityAnalysis() {
                     color: "#fff",
                     font: { size: 10.5, weight: "700", family: "Poppins" },
                     formatter: (value, context) => {
-                        const sum = context.dataset.data.reduce((a, b) => a + b, 0);
-                        const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
-                        return pct > 3 ? `${pct}%` : "";
+                        const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
+                        const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
+                        return Number(pct) >= 1 ? `${pct}%` : "";
                     }
                 }
             },
@@ -1479,14 +1520,19 @@ export default function QualityAnalysis() {
 
         const suppMap = {};
         activeSupplierRejections.forEach(r => {
-            const sName = r.supplier ? (r.supplier.length > 18 ? r.supplier.substring(0, 16) + "..." : r.supplier) : "Unknown";
-            if (!suppMap[sName]) {
-                suppMap[sName] = { matRej: 0, macRej: 0 };
+            const mat = (parseFloat(r.matRej) || 0);
+            const mac = (parseFloat(r.macRej) || 0);
+            if (mat > 0 || mac > 0) {
+                const sName = r.supplier ? (r.supplier.length > 20 ? r.supplier.substring(0, 18) + "..." : r.supplier) : "Unknown";
+                if (!suppMap[sName]) {
+                    suppMap[sName] = { matRej: 0, macRej: 0, total: 0 };
+                }
+                suppMap[sName].matRej += mat;
+                suppMap[sName].macRej += mac;
+                suppMap[sName].total += (mat + mac);
             }
-            suppMap[sName].matRej += (parseFloat(r.matRej) || 0);
-            suppMap[sName].macRej += (parseFloat(r.macRej) || 0);
         });
-        const supplierLabels = Object.keys(suppMap);
+        const supplierLabels = Object.keys(suppMap).sort((a, b) => suppMap[b].total - suppMap[a].total);
         const supplierMatRej = supplierLabels.map(l => suppMap[l].matRej);
         const supplierMacRej = supplierLabels.map(l => suppMap[l].macRej);
 
@@ -1642,6 +1688,36 @@ export default function QualityAnalysis() {
         });
     }, [searchFilteredInspectionRows, selectedTraceTypeFilter, selectedTraceInspNos, selectedTraceMachineNos, selectedTracePartNos]);
 
+    const activeTraceabilityRowsTotals = useMemo(() => {
+        let totalProd = 0;
+        let totalOk = 0;
+        let totalMatRej = 0;
+        let totalMacRej = 0;
+        let totalRework = 0;
+
+        activeTraceabilityRows.forEach(r => {
+            const prod = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+            const ok = parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : 0)).replace(/,/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0;
+            const rework = parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0;
+
+            totalProd += prod;
+            totalOk += ok;
+            totalMatRej += matRej;
+            totalMacRej += macRej;
+            totalRework += rework;
+        });
+
+        return {
+            prodQty: totalProd,
+            okQty: totalOk,
+            matRej: totalMatRej,
+            macRej: totalMacRej,
+            reworkQty: totalRework
+        };
+    }, [activeTraceabilityRows]);
+
     const activeProductQuality = useMemo(() => {
         if (hasNoData && !hasSearchWithData) return [];
         return prodPerfData?.products || [];
@@ -1706,8 +1782,8 @@ export default function QualityAnalysis() {
         activeInspectionRows.forEach(r => {
             const qty = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
             const ok = parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : "0"))).replace(/,/g, "")) || 0;
-            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.partNoDesc?.toLowerCase().includes("segment") && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/,/g, "")) || 0;
-            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && (r.partNoDesc?.toLowerCase().includes("segment") || r.product?.toLowerCase().includes("segment")) ? r.qty : "0")).replace(/,/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0;
             const rework = parseFloat(String(r.reworkQty || (r.result === "REWORK" ? r.qty : "0")).replace(/,/g, "")) || 0;
 
             totalInsp += qty;
@@ -1882,7 +1958,7 @@ export default function QualityAnalysis() {
         const map = {};
         searchFilteredInspectionRows.forEach(r => {
             const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
-            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0;
             if (matRej > 0) {
                 if (!map[partNoDesc]) {
                     map[partNoDesc] = { name: partNoDesc, qty: 0, process: r.process || "—" };
@@ -1891,14 +1967,14 @@ export default function QualityAnalysis() {
             }
         });
         const list = Object.values(map).sort((a, b) => b.qty - a.qty);
-        return list.slice(0, 5);
+        return list.slice(0, 10);
     }, [searchFilteredInspectionRows, hasNoData]);
 
     const topMachineRejections = useMemo(() => {
         const map = {};
         searchFilteredInspectionRows.forEach(r => {
             const partNoDesc = r.partNoDesc || (r.partNo && r.product ? `${r.partNo} - ${r.product}` : (r.partNo || r.product || "—"));
-            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0;
             if (macRej > 0) {
                 if (!map[partNoDesc]) {
                     map[partNoDesc] = { name: partNoDesc, qty: 0, process: r.process || "—" };
@@ -1907,15 +1983,15 @@ export default function QualityAnalysis() {
             }
         });
         const list = Object.values(map).sort((a, b) => b.qty - a.qty);
-        return list.slice(0, 5);
+        return list.slice(0, 10);
     }, [searchFilteredInspectionRows, hasNoData]);
 
     const departmentRejections = useMemo(() => {
         const map = {};
         searchFilteredInspectionRows.forEach(r => {
             const dept = getDepartmentForProcess(r.process || "Other");
-            const matRej = parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
-            const macRej = parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0;
+            const matRej = parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0;
+            const macRej = parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0;
             const rej = matRej + macRej;
             const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
 
@@ -1993,8 +2069,8 @@ export default function QualityAnalysis() {
     const activeSummaryStrip = useMemo(() => {
         const totalInsp = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0);
         const totalOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
-        const totalMatRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
-        const totalMacRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalMatRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
+        const totalMacRej = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
         const totalRej = totalMatRej + totalMacRej;
         const totalRwk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0), 0);
         const pendingCount = searchFilteredInspectionRows.filter(r => r.result === "PENDING" || (r.id || "").toLowerCase().includes("pending")).length;
@@ -2023,17 +2099,32 @@ export default function QualityAnalysis() {
     const activeKpiCards = useMemo(() => {
         if (hasNoData) return EMPTY_KPI_CARDS;
 
-        const totalInspected = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0);
-        const totalOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
-        const totalMaterialRej = searchFilteredInspectionRows.reduce((sum, r) => {
-            return sum + (parseFloat(String(r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
+        const rowsInspected = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
+        const rowsOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+        const rowsMatRej = searchFilteredInspectionRows.reduce((sum, r) => {
+            return sum + (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
         }, 0);
-        const totalMachineRej = searchFilteredInspectionRows.reduce((sum, r) => {
-            return sum + (parseFloat(String(r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0);
+        const rowsMacRej = searchFilteredInspectionRows.reduce((sum, r) => {
+            return sum + (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
         }, 0);
-        const totalReworkQty = searchFilteredInspectionRows.reduce((sum, r) => {
+        const rowsRework = searchFilteredInspectionRows.reduce((sum, r) => {
             return sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0);
         }, 0);
+
+        const summaryMatRej = summaryData?.total_mat_rej !== undefined 
+            ? parseFloat(summaryData.total_mat_rej) 
+            : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+
+        const summaryMacRej = summaryData?.total_mac_rej !== undefined 
+            ? parseFloat(summaryData.total_mac_rej) 
+            : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+
+        const totalMaterialRej = searchFilteredInspectionRows.length > 0 ? rowsMatRej : summaryMatRej;
+        const totalMachineRej = searchFilteredInspectionRows.length > 0 ? rowsMacRej : summaryMacRej;
+        const totalInspected = searchFilteredInspectionRows.length > 0 ? rowsInspected : (parseFloat(String(summaryData?.total_inspected || 0).replace(/[^0-9.]/g, "")) || 0);
+        const totalOk = rowsOk;
+        const totalReworkQty = searchFilteredInspectionRows.length > 0 ? rowsRework : (parseFloat(String(summaryData?.rework || 0).replace(/[^0-9.]/g, "")) || 0);
+
         const pendingCount = searchFilteredInspectionRows.filter(r => r.result === "PENDING" || (r.id || "").toLowerCase().includes("pending")).length;
         const complaintsCount = activeCustomerComplaints.length;
         const ppm = totalInspected > 0 ? Math.round(((totalMaterialRej + totalMachineRej) / totalInspected) * 1000000) : 0;
@@ -2617,12 +2708,12 @@ export default function QualityAnalysis() {
                 </div>
             </div>
 
-            {/* ── Top 5 Material Rejection + Top 5 Machine Rejection + Dept Rejection (3-Col Grid) ── */}
+            {/* ── Top 10 Material Rejection + Top 10 Machine Rejection + Dept Rejection (3-Col Grid) ── */}
             <div className="qa2-charts-3-equal qa2-animate qa2-d4">
 
-                {/* Top 5 Material Rejection */}
+                {/* Top 10 Material Rejection */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon={Package} iconColor="#f43f5e" title="Top 5 Material Rejection"
+                    <SectionHead icon={Package} iconColor="#f43f5e" title="Top 10 Material Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity material failures</span>} />
                     <div className="qa2-pq-header">
                         <span className="qa2-pqh-name">Material / Product</span>
@@ -2644,9 +2735,9 @@ export default function QualityAnalysis() {
                     </div>
                 </div>
 
-                {/* Top 5 Machine Rejection */}
+                {/* Top 10 Machine Rejection */}
                 <div className="qa2-card qa2-card-premium">
-                    <SectionHead icon={Activity} iconColor="#0f766e" title="Top 5 Machine Rejection"
+                    <SectionHead icon={Activity} iconColor="#0f766e" title="Top 10 Machine Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity processing failures</span>} />
                     <div className="qa2-pq-header">
                         <span className="qa2-pqh-name">Product / Part</span>
@@ -3241,7 +3332,7 @@ export default function QualityAnalysis() {
                     </div>
 
                     {/* Right side: Table */}
-                    <div className="qa2-table-scroll" style={{ margin: 0, padding: 0, background: "rgba(255, 255, 255, 0.2)", borderRadius: "12px", border: "1px solid rgba(226, 232, 240, 0.8)", minHeight: "340px" }}>
+                    <div className="qa2-table-scroll" style={{ margin: 0, padding: 0, background: "#ffffff", borderRadius: "12px", border: "1px solid rgba(226, 232, 240, 0.8)", minHeight: "340px", overflow: "auto" }}>
                         <table className="qa2-table">
                             <thead>
                                 <tr>
@@ -3274,6 +3365,26 @@ export default function QualityAnalysis() {
                                     </tr>
                                 )}
                             </tbody>
+                            {activeSupplierRejections.length > 0 && (
+                                <tfoot>
+                                    <tr className="qa2-total-row">
+                                        <td colSpan="5" className="qa2-total-label">Total</td>
+                                        <td className="qa2-td-r" style={getSuppColStyle("GRN Qty")}>
+                                            <span className="qa2-total-badge qa2-total-badge-blue">{activeSupplierRejectionsTotals.qty.toLocaleString()}</span>
+                                        </td>
+                                        <td style={getSuppColStyle("UOM")}></td>
+                                        <td className="qa2-td-r" style={getSuppColStyle("Ok Qty")}>
+                                            <span className="qa2-total-badge qa2-total-badge-green">{activeSupplierRejectionsTotals.okQty.toLocaleString()}</span>
+                                        </td>
+                                        <td className="qa2-td-r" style={getSuppColStyle("Mat Rej")}>
+                                            <span className="qa2-total-badge qa2-total-badge-red">{activeSupplierRejectionsTotals.matRej.toLocaleString()}</span>
+                                        </td>
+                                        <td className="qa2-td-r" style={getSuppColStyle("Mac Rej")}>
+                                            <span className="qa2-total-badge qa2-total-badge-red">{activeSupplierRejectionsTotals.macRej.toLocaleString()}</span>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 </div>
@@ -3646,6 +3757,30 @@ export default function QualityAnalysis() {
                                 </tr>
                             )}
                         </tbody>
+                        {activeTraceabilityRows.length > 0 && (
+                            <tfoot>
+                                <tr className="qa2-total-row">
+                                    <td colSpan="9" className="qa2-total-label">Total</td>
+                                    <td className="qa2-td-r" style={getTraceColStyle("Prod Qty")}>
+                                        <span className="qa2-total-badge qa2-total-badge-blue">{activeTraceabilityRowsTotals.prodQty.toLocaleString()}</span>
+                                    </td>
+                                    <td className="qa2-td-r" style={getTraceColStyle("Ok Qty")}>
+                                        <span className="qa2-total-badge qa2-total-badge-green">{activeTraceabilityRowsTotals.okQty.toLocaleString()}</span>
+                                    </td>
+                                    <td className="qa2-td-r" style={getTraceColStyle("Mat Rej")}>
+                                        <span className="qa2-total-badge qa2-total-badge-red">{activeTraceabilityRowsTotals.matRej.toLocaleString()}</span>
+                                    </td>
+                                    <td className="qa2-td-r" style={getTraceColStyle("Mac Rej")}>
+                                        <span className="qa2-total-badge qa2-total-badge-red">{activeTraceabilityRowsTotals.macRej.toLocaleString()}</span>
+                                    </td>
+                                    <td className="qa2-td-r" style={getTraceColStyle("Rw Qty")}>
+                                        <span className="qa2-total-badge qa2-total-badge-orange">{activeTraceabilityRowsTotals.reworkQty.toLocaleString()}</span>
+                                    </td>
+                                    <td style={getTraceColStyle("Inspected By")}></td>
+                                    <td style={getTraceColStyle("Routecard Details")}></td>
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
                 </div>
             </div>

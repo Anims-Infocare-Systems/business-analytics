@@ -286,26 +286,6 @@ def _fetch_top_product(cursor, start_date, end_date, search_q=None, btype_filter
         INNER JOIN Bill_Mas m ON d.invno = m.invno
         WHERE {det_filters} {search_sql}
           AND NULLIF({product_key}, N'') IS NOT NULL
-          AND CAST(ISNULL(d.qty, 0) AS FLOAT) = 1
-        GROUP BY {product_key}
-        ORDER BY MAX(CAST(d.rate AS FLOAT)) DESC, SUM(CAST(d.amt AS FLOAT)) DESC
-        """,
-        (start_date, end_date) + btype_p + tuple(search_params),
-    )
-
-    row = cursor.fetchone()
-    if row and (row[0] or "").strip():
-        return (row[0] or "").strip(), float(row[1] or 0)
-
-    cursor.execute(
-        f"""
-        SELECT TOP 1
-            {product_key} AS product_name,
-            ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS revenue
-        FROM Bill_Det d
-        INNER JOIN Bill_Mas m ON d.invno = m.invno
-        WHERE {det_filters} {search_sql}
-          AND NULLIF({product_key}, N'') IS NOT NULL
         GROUP BY {product_key}
         ORDER BY SUM(CAST(d.amt AS FLOAT)) DESC
         """,
@@ -498,7 +478,15 @@ def sales_analysis_summary_strip(request):
         customers = int(mas_row[2] or 0) if mas_row else 0
 
         qty_kgs_col = find_column_ci(cursor, "dbo", "Bill_Det", ["QtyKgs", "qtykgs"])
-        qty_expr = f"ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) + ISNULL(SUM(CAST(d.[{qty_kgs_col}] AS FLOAT)), 0)" if qty_kgs_col else "ISNULL(SUM(CAST(d.qty AS FLOAT)), 0)"
+        if qty_kgs_col:
+            qty_expr = f"""ISNULL(SUM(
+                CASE
+                    WHEN ISNULL(CAST(d.qty AS FLOAT), 0) <> 0 THEN CAST(d.qty AS FLOAT)
+                    ELSE ISNULL(CAST(d.[{qty_kgs_col}] AS FLOAT), 0)
+                END
+            ), 0)"""
+        else:
+            qty_expr = "ISNULL(SUM(CAST(d.qty AS FLOAT)), 0)"
 
         btype_qty_cond = " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?" if btype_p else ""
 
@@ -776,6 +764,8 @@ def _bill_det_partno_expr(cursor, det_alias="d"):
     return expr, col
 
 
+import math
+
 def _customer_ranking(cust_rows, total_revenue, top_n=5):
     """Top customers by revenue for the ranking bar list."""
     ranking = []
@@ -792,8 +782,8 @@ def _customer_ranking(cust_rows, total_revenue, top_n=5):
 
 
 def _pie_slices(rows, total, label_key=0, value_key=1, top_n=None, others_label="Others"):
-    """Build labels + share % from ranked rows; optional Others bucket."""
-    if not total:
+    """Build labels + share % from ranked rows; optional Others bucket. Ensures percentages sum to exactly 100.0%."""
+    if not total or total <= 0:
         return [], []
     ranked = [(str(r[label_key] or "").strip() or "Unknown", float(r[value_key] or 0)) for r in rows]
     if top_n is not None:
@@ -804,7 +794,29 @@ def _pie_slices(rows, total, label_key=0, value_key=1, top_n=None, others_label=
                 head.append((others_label, tail_sum))
         ranked = head
     labels = [x[0] for x in ranked]
-    pcts = [_pct(v, total) for _, v in ranked]
+    values = [max(0.0, float(v)) for _, v in ranked]
+    val_sum = sum(values)
+    if val_sum <= 0 or not values:
+        return labels, [0.0] * len(labels)
+
+    raw_tenths = [(v / val_sum) * 1000.0 for v in values]
+    floors = [int(math.floor(r)) for r in raw_tenths]
+    diff = 1000 - sum(floors)
+
+    remainders = [(raw_tenths[i] - floors[i], i) for i in range(len(values))]
+    remainders.sort(key=lambda x: x[0], reverse=True)
+
+    if diff > 0:
+        for k in range(min(diff, len(values))):
+            idx = remainders[k][1]
+            floors[idx] += 1
+    elif diff < 0:
+        remainders_asc = sorted(remainders, key=lambda x: x[0])
+        for k in range(min(abs(diff), len(values))):
+            idx = remainders_asc[k][1]
+            floors[idx] = max(0, floors[idx] - 1)
+
+    pcts = [round(f / 10.0, 1) for f in floors]
     return labels, pcts
 
 
@@ -1336,6 +1348,15 @@ def sales_analysis_invoice_details(request):
             )
         btypes = [(row[0] or "").strip() for row in cursor.fetchall() if (row[0] or "").strip()]
 
+        qty_kgs_col_bd = find_column_ci(cursor, "dbo", "Bill_Det", ["QtyKgs", "qtykgs"])
+        if qty_kgs_col_bd:
+            qty_col_expr = f"""CASE
+                    WHEN ISNULL(CAST(BD.qty AS FLOAT), 0) <> 0 THEN CAST(BD.qty AS FLOAT)
+                    ELSE ISNULL(CAST(BD.[{qty_kgs_col_bd}] AS FLOAT), 0)
+                END"""
+        else:
+            qty_col_expr = "ISNULL(CAST(BD.qty AS FLOAT), 0)"
+
         cursor.execute(
             f"""
             SELECT
@@ -1344,10 +1365,7 @@ def sales_analysis_invoice_details(request):
                 {cust_expr} AS customer,
                 LTRIM(RTRIM(ISNULL(BD.itcode, N''))) AS part_no,
                 LTRIM(RTRIM(ISNULL(BD.itdesc, N''))) AS description,
-                CASE
-                    WHEN UPPER(LTRIM(RTRIM(ISNULL(BD.uom, N'')))) <> 'NOS' THEN ISNULL(CAST(BD.QtyKgs AS FLOAT), 0)
-                    ELSE ISNULL(CAST(BD.qty AS FLOAT), 0)
-                END AS qty,
+                {qty_col_expr} AS qty,
                 LTRIM(RTRIM(ISNULL(BD.uom, N''))) AS uom,
                 ISNULL(CAST(BD.rate AS FLOAT), 0) AS rate,
                 ISNULL(CAST(BD.amt AS FLOAT), 0) AS amount,
@@ -1434,13 +1452,24 @@ def sales_analysis_top_products(request):
     try:
         cursor = conn.cursor()
         search_sql, search_params = _build_search_sql(cursor, search_q, "Bill_Det", "d")
+        qty_kgs_col_tp = find_column_ci(cursor, "dbo", "Bill_Det", ["QtyKgs", "qtykgs"])
+        if qty_kgs_col_tp:
+            qty_tp_expr = f"""ISNULL(SUM(
+                CASE
+                    WHEN ISNULL(CAST(d.qty AS FLOAT), 0) <> 0 THEN CAST(d.qty AS FLOAT)
+                    ELSE ISNULL(CAST(d.[{qty_kgs_col_tp}] AS FLOAT), 0)
+                END
+            ), 0)"""
+        else:
+            qty_tp_expr = "ISNULL(SUM(CAST(d.qty AS FLOAT)), 0)"
+
         cursor.execute(
             f"""
             SELECT
                 LTRIM(RTRIM(ISNULL(d.itcode, N''))) AS part_no,
                 MAX(LTRIM(RTRIM(ISNULL(d.itdesc, N'')))) AS description,
                 MAX(LTRIM(RTRIM(ISNULL(d.uom, N'')))) AS uom,
-                ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) AS qty,
+                {qty_tp_expr} AS qty,
                 ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS revenue
             FROM Bill_Det d
             INNER JOIN Bill_Mas m ON d.invno = m.invno
@@ -1490,13 +1519,8 @@ def sales_analysis_monthly_sales_trend(request):
     """
     Monthly Sales Trend (Value) — Bar chart data.
 
-    Returns month-wise SUM(Bill_Det.amt) for the selected date range.
-    SQL mirrors:
-        SELECT DATENAME(MONTH, BM.invdt), MONTH(BM.invdt), SUM(BD.amt)
-        FROM Bill_Mas BM INNER JOIN Bill_Det BD ON BM.invno = BD.invno
-        WHERE BD.deleted = 0 AND BM.deleted = 0 AND BM.invdt BETWEEN ? AND ?
-        GROUP BY MONTH(BM.invdt), DATENAME(MONTH, BM.invdt)
-        ORDER BY MonthNo
+    Returns month-wise SUM(Bill_Det.amt) from valid non-deleted Bill_Mas invoices
+    excluding invalid btypes for the selected date range.
     """
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1517,19 +1541,23 @@ def sales_analysis_monthly_sales_trend(request):
             SELECT
                 DATENAME(MONTH, BM.invdt)   AS MonthName,
                 MONTH(BM.invdt)             AS MonthNo,
-                ISNULL(SUM(BD.amt), 0)      AS SalesValue
-            FROM Bill_Mas AS BM
-            INNER JOIN Bill_Det AS BD ON BM.invno = BD.invno
+                YEAR(BM.invdt)              AS YearNo,
+                ISNULL(SUM(CAST(BD.amt AS FLOAT)), 0) AS SalesValue
+            FROM Bill_Det AS BD
+            INNER JOIN Bill_Mas AS BM ON BD.invno = BM.invno
             WHERE
-                BD.deleted  = 0
-                AND BM.deleted = 0
+                ISNULL(BD.deleted, 0) = 0
+                AND ISNULL(BM.deleted, 0) = 0
+                AND ISNULL(BM.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL})
                 AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
                 {btype_sql}
                 {search_sql}
             GROUP BY
+                YEAR(BM.invdt),
                 MONTH(BM.invdt),
                 DATENAME(MONTH, BM.invdt)
             ORDER BY
+                YearNo,
                 MonthNo
             """,
             (start_date, end_date) + btype_p + tuple(search_params),
@@ -1540,11 +1568,34 @@ def sales_analysis_monthly_sales_trend(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    labels = []
-    sales_values = []
+    # Build calendar month slots in date range
+    month_slots = []
+    curr = date(start_date.year, start_date.month, 1)
+    limit = date(end_date.year, end_date.month, 1)
+    safety = 0
+    while curr <= limit and safety < 120:
+        month_slots.append((curr.year, curr.month, curr.strftime("%B")))
+        if curr.month == 12:
+            curr = date(curr.year + 1, 1, 1)
+        else:
+            curr = date(curr.year, curr.month + 1, 1)
+        safety += 1
+
+    sales_by_slot = {(yr, mo): 0.0 for yr, mo, _ in month_slots}
     for row in rows:
-        labels.append(str(row[0] or "").strip())
-        sales_values.append(round(float(row[2] or 0), 2))
+        m_no = int(row[1] or 0)
+        y_no = int(row[2] or 0) if len(row) > 3 and row[2] else 0
+        val = float(row[3] or 0) if len(row) > 3 else float(row[2] or 0)
+        if (y_no, m_no) in sales_by_slot:
+            sales_by_slot[(y_no, m_no)] += val
+        else:
+            for (s_yr, s_mo) in sales_by_slot:
+                if s_mo == m_no:
+                    sales_by_slot[(s_yr, s_mo)] += val
+                    break
+
+    labels = [m_name for _, _, m_name in month_slots] if month_slots else [str(r[0] or "").strip() for r in rows]
+    sales_values = [round(sales_by_slot[(yr, mo)], 2) for yr, mo, _ in month_slots] if month_slots else [round(float(r[2] or 0), 2) for r in rows]
 
     total = round(sum(sales_values), 2)
 
@@ -1801,7 +1852,25 @@ def sales_analysis_future_projections(request):
     start_date, end_date = parse_date_range(request)
 
     from collections import defaultdict
-    from datetime import datetime
+    from datetime import datetime, date
+    from calendar import monthrange
+
+    # Calculate 1-year projection window starting from selected month start date
+    proj_start_date = date(start_date.year, start_date.month, 1)
+    months_param = (request.GET.get("months") or "").strip()
+    if months_param == "3":
+        num_months = 3
+    elif months_param == "6":
+        num_months = 6
+    elif months_param in ("12", "1y", "1"):
+        num_months = 12
+    else:
+        num_months = 12
+
+    end_year = proj_start_date.year + (proj_start_date.month + num_months - 1) // 12
+    end_month = (proj_start_date.month + num_months - 1) % 12 + 1
+    _, last_day = monthrange(end_year, end_month)
+    proj_end_date = date(end_year, end_month, last_day)
 
     try:
         cursor = conn.cursor()
@@ -1832,7 +1901,10 @@ def sales_analysis_future_projections(request):
             s.shdQty,
             p.podt,
             {cust_name_expr} AS CustomerName,
-            pd.Rate
+            pd.Rate,
+            ISNULL(pd.amt, 0) AS amt,
+            CASE WHEN ISNULL(pd.CurrRate, 0) = 0 THEN 1 ELSE pd.CurrRate END AS CurrRate,
+            ISNULL(pd.Qty, 0) AS poQty
         FROM In_PoDet_ShdQty s
         INNER JOIN In_PoMas p ON s.Apono = p.Apono
         INNER JOIN In_PoDet pd ON pd.pono = p.pono AND pd.ItCode = s.itcode AND pd.poslno = s.poslno
@@ -1845,9 +1917,21 @@ def sales_analysis_future_projections(request):
           {search_sql_pd}
         ORDER BY s.reqdate ASC
         """
-        cursor.execute(schedules_sql, (start_date, end_date) + tuple(search_params_pd))
+        cursor.execute(schedules_sql, (proj_start_date, proj_end_date) + tuple(search_params_pd))
         schedules = []
         for row in cursor.fetchall() or []:
+            rate = float(row[9] or 0)
+            amt = float(row[10] or 0) if len(row) > 10 else 0
+            curr_rate = float(row[11] or 1) if len(row) > 11 and row[11] is not None else 1
+            if curr_rate == 0:
+                curr_rate = 1
+            po_qty = float(row[12] or 0) if len(row) > 12 else 0
+
+            if po_qty > 0 and amt > 0:
+                effective_rate = (amt * curr_rate) / po_qty
+            else:
+                effective_rate = rate * curr_rate
+
             schedules.append({
                 "apono": row[0],
                 "pono": row[1],
@@ -1858,7 +1942,11 @@ def sales_analysis_future_projections(request):
                 "shdQty": float(row[6] or 0),
                 "podt": row[7],
                 "customer": row[8] or "—",
-                "rate": float(row[9] or 0)
+                "rate": rate,
+                "amt": amt,
+                "currRate": curr_rate,
+                "poQty": po_qty,
+                "effectiveRate": effective_rate
             })
 
         # Schd Qty: direct from In_PoDet_ShdQty (no In_PoDet join) filtered by shddate date range
@@ -1886,7 +1974,7 @@ def sales_analysis_future_projections(request):
             YEAR(CAST(s.shddate AS DATE)),
             MONTH(CAST(s.shddate AS DATE))
         """
-        cursor.execute(schd_qty_sql, (start_date, end_date) + tuple(search_params_s))
+        cursor.execute(schd_qty_sql, (proj_start_date, proj_end_date) + tuple(search_params_s))
         schd_qty_lookup = {}
         for row in cursor.fetchall() or []:
             cust = row[0] or "—"
@@ -1961,8 +2049,9 @@ def sales_analysis_future_projections(request):
                         disp_rem = disps[disp_idx]["okqty"]
 
             sch["pendQty"] = max(0.0, sch["shdQty"] - sch["dispQty"])
-            sch["pendVal"] = sch["pendQty"] * sch["rate"]
-            sch["totAmt"] = sch["shdQty"] * sch["rate"]
+            eff_rate = sch.get("effectiveRate", sch["rate"])
+            sch["pendVal"] = sch["pendQty"] * eff_rate
+            sch["totAmt"] = sch["shdQty"] * eff_rate
 
     # Aggregate projections by Customer, Month (PO Date), Schd Month (shddate)
     projections = defaultdict(lambda: {
@@ -2405,7 +2494,9 @@ def sales_analysis_po_ledger(request):
             D.dcNo,
             D.dcDate AS DcDate,
             B.InvDetails AS InvNoDt,
-            ISNULL(PD.ShotClsReason, '') AS ShotCloseReason
+            ISNULL(PD.ShotClsReason, '') AS ShotCloseReason,
+            ISNULL(PD.amt, 0) AS Amt,
+            CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END AS CurrRate
         FROM In_PoMas PM
         INNER JOIN In_PoDet PD ON PM.PONO = PD.PONO
         {cust_join}
@@ -2437,6 +2528,10 @@ def sales_analysis_po_ledger(request):
             dc_date = str(row[13]) if row[13] else ""
             inv_no_dt = str(row[14]) if row[14] else ""
             shot_close_reason = str(row[15]) if len(row) > 15 and row[15] else ""
+            amt = float(row[16] or 0) if len(row) > 16 else 0
+            curr_rate = float(row[17] or 1) if len(row) > 17 and row[17] is not None else 1
+            if curr_rate == 0:
+                curr_rate = 1
 
             rows.append({
                 "type": po_type,
@@ -2450,6 +2545,8 @@ def sales_analysis_po_ledger(request):
                 "shortCloseQty": short_close_qty,
                 "shotCloseReason": shot_close_reason,
                 "rate": rate,
+                "amt": amt,
+                "currRate": curr_rate,
                 "dcNo": dc_no,
                 "dcDate": dc_date,
                 "dcQty": dc_qty,

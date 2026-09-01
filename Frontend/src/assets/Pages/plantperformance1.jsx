@@ -5503,7 +5503,9 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
           <thead>
             <tr style={{ background: "rgba(37, 99, 235, 0.05)" }}>
               {columns.map((col, idx) => {
-                const isRightAligned = idx > 2 && (col.toLowerCase().includes("qty") || col.toLowerCase().includes("value") || col.toLowerCase().includes("hours") || col.toLowerCase().includes("hour") || col.toLowerCase().includes("rate") || col.toLowerCase().includes("ratio") || col.toLowerCase().includes("%") || col.toLowerCase().includes("day") || col.toLowerCase().includes("month") || col.toLowerCase().includes("loss") || col.toLowerCase().includes("price"));
+                const colLower = col.toLowerCase();
+                const isDateCol = colLower.includes("date") || colLower.includes("dt") || colLower.includes("schd") || colLower.includes("req");
+                const isRightAligned = idx > 2 && (colLower.includes("qty") || colLower.includes("value") || colLower.includes("hours") || colLower.includes("hour") || colLower.includes("rate") || colLower.includes("ratio") || colLower.includes("%") || colLower.includes("day") || colLower.includes("month") || colLower.includes("loss") || colLower.includes("price"));
                 const isHovered = hoveredHeader === idx;
                 const isSorted = sortIndex === idx;
                 const isSlNo = idx === 0;
@@ -5523,7 +5525,9 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                       cursor: isSlNo ? "default" : "pointer",
                       userSelect: "none",
                       transition: "background-color 0.2s ease",
-                      padding: "12px 16px"
+                      padding: "12px 16px",
+                      whiteSpace: isDateCol ? "nowrap" : undefined,
+                      minWidth: isDateCol ? "120px" : undefined
                     }}
                   >
                     <div style={{ display: "inline-flex", alignItems: "center", justifyContent: isRightAligned ? "flex-end" : "flex-start", gap: "5px", width: "100%" }}>
@@ -5627,7 +5631,7 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                       );
                     }
 
-                    if (isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) {
+                    if ((isRejectionPct || isReworkPct || isOtdPct || isLossPct || isOperatorPct || isMachinePct) && cell !== "—" && cell != null && cell !== "") {
                       const pctVal = parseFloat(cell) || 0;
                       let barGradient = "linear-gradient(90deg, #10b981 0%, #3b82f6 100%)";
                       let barWidthPct = 0;
@@ -5717,8 +5721,19 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
                       );
                     }
 
+                    const isDateCol = colLower.includes("date") || colLower.includes("dt") || colLower.includes("schd") || colLower.includes("req");
+
                     return (
-                      <td key={ci} className={ci === 0 ? "pp1-cc-tbl__bold" : ci === 1 ? "pp1-cc-tbl__id" : ""} style={{ textAlign: isRightAligned ? "right" : "left", fontWeight: isRightAligned ? 600 : "normal" }}>
+                      <td
+                        key={ci}
+                        className={ci === 0 ? "pp1-cc-tbl__bold" : ci === 1 ? "pp1-cc-tbl__id" : ""}
+                        style={{
+                          textAlign: isRightAligned ? "right" : "left",
+                          fontWeight: isRightAligned ? 600 : "normal",
+                          whiteSpace: (isDateCol || ci === 0 || ci === 1) ? "nowrap" : undefined,
+                          minWidth: isDateCol ? "120px" : undefined
+                        }}
+                      >
                         {cell}
                       </td>
                     );
@@ -16382,6 +16397,19 @@ function OtdReportBottomTable({ data, filters }) {
     [data?.otd?.rows]
   );
 
+  const formatToDDMMYYYY = (dateVal) => {
+    if (!dateVal || dateVal === "—" || dateVal === "null" || dateVal === "undefined") return "—";
+    const str = String(dateVal).trim();
+    const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (match) {
+      const dd = match[3].padStart(2, "0");
+      const mm = match[2].padStart(2, "0");
+      const yyyy = match[1];
+      return `${dd}-${mm}-${yyyy}`;
+    }
+    return str;
+  };
+
   const columns = [
     "Sl.No.",
     "Customer Name",
@@ -16402,9 +16430,12 @@ function OtdReportBottomTable({ data, filters }) {
   const rows = React.useMemo(
     () => sourceRows.map((r, idx) => {
       const delQty = Number(r.deliveryQty || 0);
+      const isDelivered = delQty > 0 && r.status !== "Pending";
       const onTimeDelQty = r.onTimeDelQty != null ? Number(r.onTimeDelQty) : (r.status === "On Time" ? delQty : 0);
       const delayedDelQty = r.delayedDelQty != null ? Number(r.delayedDelQty) : (r.status === "Delayed" ? delQty : 0);
-      const otdPctVal = r.otdPct != null ? Number(r.otdPct) : (r.status === "On Time" ? 100 : (r.status === "Delayed" ? 85 : 0));
+      const otdPctVal = isDelivered
+        ? (r.otdPct != null ? Number(r.otdPct) : (r.status === "On Time" ? 100 : 85))
+        : null;
 
       return [
         String(idx + 1),
@@ -16412,13 +16443,13 @@ function OtdReportBottomTable({ data, filters }) {
         r.poNumber || "—",
         r.poRefNumber || "—",
         r.partNumber || "—",
-        r.schdDate || "—",
-        r.reqDate || "—",
+        formatToDDMMYYYY(r.schdDate),
+        formatToDDMMYYYY(r.reqDate),
         fmtNum(r.orderQty),
         fmtNum(r.deliveryQty),
         fmtNum(onTimeDelQty),
         fmtNum(delayedDelQty),
-        `${otdPctVal.toFixed(1)}%`,
+        otdPctVal != null ? `${otdPctVal.toFixed(1)}%` : "—",
         r.status || "—",
         r.value != null ? `₹${Number(r.value).toLocaleString("en-IN")}` : "—",
       ];
