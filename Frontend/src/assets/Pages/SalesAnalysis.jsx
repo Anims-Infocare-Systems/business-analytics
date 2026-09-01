@@ -1172,12 +1172,6 @@ function PartWiseHistorySection({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const [txSearch, setTxSearch] = useState("");
-  const [txSortKey, setTxSortKey] = useState("date");
-  const [txSortAsc, setTxSortAsc] = useState(false);
-  const [txPage, setTxPage] = useState(1);
-  const txPageSize = 10;
-
   const [multiPartSelected, setMultiPartSelected] = useState([]);
 
   useEffect(() => {
@@ -1300,49 +1294,7 @@ function PartWiseHistorySection({
     };
   }, [activePart, dateRange]);
 
-  /* ── 5. Revenue Transactions for Active Part ──────────────── */
-  const partTransactions = useMemo(() => {
-    if (!activePart) return [];
-    let list = [...activePart.transactions];
-
-    if (txSearch.trim()) {
-      const q = txSearch.toLowerCase().trim();
-      list = list.filter(
-        (t) =>
-          (t.invoice_no && t.invoice_no.toLowerCase().includes(q)) ||
-          (t.customer && t.customer.toLowerCase().includes(q)) ||
-          (t.date && t.date.includes(q))
-      );
-    }
-
-    list.sort((a, b) => {
-      let vA = a[txSortKey];
-      let vB = b[txSortKey];
-      if (["qty", "rate", "amount", "tax", "tamt"].includes(txSortKey)) {
-        vA = Number(vA || 0);
-        vB = Number(vB || 0);
-      } else if (txSortKey === "date") {
-        vA = new Date(vA || 0).getTime();
-        vB = new Date(vB || 0).getTime();
-      } else {
-        vA = String(vA || "").toLowerCase();
-        vB = String(vB || "").toLowerCase();
-      }
-      if (vA < vB) return txSortAsc ? -1 : 1;
-      if (vA > vB) return txSortAsc ? 1 : -1;
-      return 0;
-    });
-
-    return list;
-  }, [activePart, txSearch, txSortKey, txSortAsc]);
-
-  const totalTxPages = Math.ceil(partTransactions.length / txPageSize) || 1;
-  const paginatedTransactions = useMemo(() => {
-    const start = (txPage - 1) * txPageSize;
-    return partTransactions.slice(start, start + txPageSize);
-  }, [partTransactions, txPage]);
-
-  /* ── 6. Comparative Sales Analysis Metrics ────────────────── */
+  /* ── 5. Comparative Sales Analysis Metrics ────────────────── */
   const comparativeMetrics = useMemo(() => {
     if (!activePart) return null;
 
@@ -1352,29 +1304,6 @@ function PartWiseHistorySection({
     const effectiveTotalTurnover = globalTurnover > 0 ? globalTurnover : (totalCatalogRev > 0 ? totalCatalogRev : activePart.totalRevenue);
     const partRevenueShare = effectiveTotalTurnover > 0 ? ((activePart.totalRevenue / effectiveTotalTurnover) * 100) : 0;
     const rateDiffVsGlobal = globalAvgSellingRate > 0 ? ((activePart.activeRate - globalAvgSellingRate) / globalAvgSellingRate) * 100 : 0;
-
-    const monthlyMap = new Map();
-    activePart.transactions.forEach((tx) => {
-      if (!tx.date) return;
-      const d = new Date(tx.date);
-      const mKey = `${d.toLocaleString("en-US", { month: "short" })}-${String(d.getFullYear()).slice(-2)}`;
-      if (!monthlyMap.has(mKey)) {
-        monthlyMap.set(mKey, { month: mKey, qty: 0, revenue: 0, rates: [] });
-      }
-      const m = monthlyMap.get(mKey);
-      m.qty += Number(tx.qty || 0);
-      m.revenue += Number(tx.amount || 0);
-      if (Number(tx.rate || 0) > 0) m.rates.push(Number(tx.rate));
-    });
-
-    const monthlyRows = Array.from(monthlyMap.values()).map((m) => {
-      const avgRate = m.qty > 0 ? m.revenue / m.qty : m.rates[0] || 0;
-      return {
-        ...m,
-        avgRate,
-        revenueLakhs: (m.revenue / 100_000).toFixed(2),
-      };
-    });
 
     const rateSpread = activePart.maxRate - activePart.minRate;
     const volatilityPct = activePart.activeRate > 0 ? (rateSpread / activePart.activeRate) * 100 : 0;
@@ -1386,11 +1315,10 @@ function PartWiseHistorySection({
       rateDiffVsGlobal: rateDiffVsGlobal.toFixed(1),
       isAboveGlobal: rateDiffVsGlobal >= 0,
       stabilityScore,
-      monthlyRows,
     };
-  }, [activePart, summary]);
+  }, [activePart, summary, partCatalog]);
 
-  /* ── 7. Export Helpers ────────────────────────────────────── */
+  /* ── 6. Export Helpers ────────────────────────────────────── */
   function exportRevisionsCSV() {
     if (!rateRevisionData.revisions.length) return;
     const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reference Document", "Status"];
@@ -1411,34 +1339,6 @@ function PartWiseHistorySection({
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Rate_Revision_History_${activePart?.partNo || "Part"}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  function exportTransactionsCSV() {
-    if (!partTransactions.length) return;
-    const headers = ["SNo", "Invoice Date", "Invoice No", "Customer", "Part No", "Description", "Qty", "UOM", "Rate (INR)", "Taxable Amount (INR)", "Tax (INR)", "Total Amount (INR)"];
-    const rows = partTransactions.map((t, idx) => [
-      idx + 1,
-      formatInvDate(t.date),
-      t.invoice_no,
-      `"${t.customer}"`,
-      `"${t.part_no}"`,
-      `"${t.description}"`,
-      t.qty,
-      t.uom,
-      t.rate.toFixed(2),
-      t.amount.toFixed(2),
-      t.tax.toFixed(2),
-      t.tamt.toFixed(2),
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Revenue_Transactions_${activePart?.partNo || "Part"}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1504,23 +1404,6 @@ function PartWiseHistorySection({
                   Rate revision details, amendment logs, and revenue transaction history for selected period
                 </p>
               </div>
-            </div>
-
-            <div className="pwh-header-actions">
-              <button
-                className="pwh-action-btn"
-                onClick={activeTab === "transactions" ? exportTransactionsCSV : exportRevisionsCSV}
-                title="Export current table to CSV"
-              >
-                <Download size={14} /> Export CSV
-              </button>
-              <button
-                className="pwh-action-btn"
-                onClick={() => window.print()}
-                title="Print executive rate report"
-              >
-                <Printer size={14} /> Print Report
-              </button>
             </div>
           </div>
 
@@ -1610,10 +1493,10 @@ function PartWiseHistorySection({
                 {activePart.baseRate > 0 && (
                   <span
                     className={`pwh-hero-diff-badge ${activePart.activeRate > activePart.baseRate
-                        ? "pwh-hero-diff-badge--up"
-                        : activePart.activeRate < activePart.baseRate
-                          ? "pwh-hero-diff-badge--down"
-                          : "pwh-hero-diff-badge--neutral"
+                      ? "pwh-hero-diff-badge--up"
+                      : activePart.activeRate < activePart.baseRate
+                        ? "pwh-hero-diff-badge--down"
+                        : "pwh-hero-diff-badge--neutral"
                       }`}
                   >
                     {activePart.activeRate > activePart.baseRate ? (
@@ -1735,19 +1618,6 @@ function PartWiseHistorySection({
               <span className="pwh-tab-count">{rateRevisionData.revisions.length}</span>
             </button>
             <button
-              className={`pwh-tab-btn ${activeTab === "transactions" ? "pwh-tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("transactions")}
-            >
-              <FileText size={15} /> Revenue Transaction History
-              <span className="pwh-tab-count">{partTransactions.length}</span>
-            </button>
-            <button
-              className={`pwh-tab-btn ${activeTab === "comparison" ? "pwh-tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("comparison")}
-            >
-              <Scale size={15} /> Sales Report Comparison & Elasticity
-            </button>
-            <button
               className={`pwh-tab-btn ${activeTab === "multipart" ? "pwh-tab-btn--active" : ""}`}
               onClick={() => setActiveTab("multipart")}
             >
@@ -1782,10 +1652,10 @@ function PartWiseHistorySection({
                         <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
                         <div
                           className={`pwh-timeline-delta ${step.diffVal > 0
-                              ? "pwh-pill--green"
-                              : step.diffVal < 0
-                                ? "pwh-pill--red"
-                                : "pwh-pill--neutral"
+                            ? "pwh-pill--green"
+                            : step.diffVal < 0
+                              ? "pwh-pill--red"
+                              : "pwh-pill--neutral"
                             }`}
                         >
                           {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
@@ -1826,10 +1696,10 @@ function PartWiseHistorySection({
                         <td>
                           <span
                             className={`pwh-pill ${rev.diffPct > 0
-                                ? "pwh-pill--green"
-                                : rev.diffPct < 0
-                                  ? "pwh-pill--red"
-                                  : "pwh-pill--neutral"
+                              ? "pwh-pill--green"
+                              : rev.diffPct < 0
+                                ? "pwh-pill--red"
+                                : "pwh-pill--neutral"
                               }`}
                           >
                             {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
@@ -1851,329 +1721,7 @@ function PartWiseHistorySection({
             </div>
           )}
 
-          {/* TAB 2: TRANSACTIONS */}
-          {activeTab === "transactions" && (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <div className="pwh-search-box" style={{ width: "260px" }}>
-                    <Search size={14} className="pwh-search-icon" />
-                    <input
-                      type="text"
-                      className="pwh-search-input"
-                      style={{ padding: "0.45rem 2rem 0.45rem 2.2rem" }}
-                      placeholder="Search invoice, customer..."
-                      value={txSearch}
-                      onChange={(e) => {
-                        setTxSearch(e.target.value);
-                        setTxPage(1);
-                      }}
-                    />
-                    {txSearch && (
-                      <button className="pwh-search-clear" onClick={() => setTxSearch("")}>
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                  <span style={{ fontSize: "0.76rem", color: "#64748b", fontWeight: "600" }}>
-                    Showing {partTransactions.length} Transactions
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", gap: "0.4rem" }}>
-                  <span className="sa-badge sa-badge--blue">
-                    Total Revenue: {formatLakhs(activePart?.totalRevenue || 0)}
-                  </span>
-                  <span className="sa-badge sa-badge--purple">
-                    Total Volume: {formatQty(activePart?.totalQty || 0)} {activePart?.uom}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pwh-table-container">
-                <table className="pwh-table">
-                  <thead>
-                    <tr>
-                      <th>S.No</th>
-                      <th
-                        className="sortable"
-                        onClick={() => {
-                          if (txSortKey === "date") setTxSortAsc(!txSortAsc);
-                          else {
-                            setTxSortKey("date");
-                            setTxSortAsc(false);
-                          }
-                        }}
-                      >
-                        Inv Date {txSortKey === "date" ? (txSortAsc ? "▲" : "▼") : ""}
-                      </th>
-                      <th
-                        className="sortable"
-                        onClick={() => {
-                          if (txSortKey === "invoice_no") setTxSortAsc(!txSortAsc);
-                          else {
-                            setTxSortKey("invoice_no");
-                            setTxSortAsc(true);
-                          }
-                        }}
-                      >
-                        Invoice No {txSortKey === "invoice_no" ? (txSortAsc ? "▲" : "▼") : ""}
-                      </th>
-                      <th>Customer Name</th>
-                      <th
-                        className="sortable"
-                        onClick={() => {
-                          if (txSortKey === "qty") setTxSortAsc(!txSortAsc);
-                          else {
-                            setTxSortKey("qty");
-                            setTxSortAsc(false);
-                          }
-                        }}
-                      >
-                        Qty {txSortKey === "qty" ? (txSortAsc ? "▲" : "▼") : ""}
-                      </th>
-                      <th>UOM</th>
-                      <th
-                        className="sortable"
-                        onClick={() => {
-                          if (txSortKey === "rate") setTxSortAsc(!txSortAsc);
-                          else {
-                            setTxSortKey("rate");
-                            setTxSortAsc(false);
-                          }
-                        }}
-                      >
-                        Invoiced Rate {txSortKey === "rate" ? (txSortAsc ? "▲" : "▼") : ""}
-                      </th>
-                      <th
-                        className="sortable"
-                        onClick={() => {
-                          if (txSortKey === "amount") setTxSortAsc(!txSortAsc);
-                          else {
-                            setTxSortKey("amount");
-                            setTxSortAsc(false);
-                          }
-                        }}
-                      >
-                        Taxable Amount {txSortKey === "amount" ? (txSortAsc ? "▲" : "▼") : ""}
-                      </th>
-                      <th>Tax (₹)</th>
-                      <th>Total Amount (₹)</th>
-                      <th>Rate Variance vs Active</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedTransactions.map((tx, idx) => {
-                      const sno = (txPage - 1) * txPageSize + idx + 1;
-                      const txRate = Number(tx.rate || 0);
-                      const diffFromActive = activePart.activeRate > 0 ? txRate - activePart.activeRate : 0;
-                      return (
-                        <tr key={idx}>
-                          <td style={{ color: "#94a3b8" }}>{sno}</td>
-                          <td style={{ fontWeight: "600", color: "#1e293b" }}>{formatInvDate(tx.date)}</td>
-                          <td style={{ fontFamily: "monospace", fontWeight: "700", color: "#2563eb" }}>
-                            {tx.invoice_no || "—"}
-                          </td>
-                          <td style={{ fontWeight: "600" }}>{tx.customer || "—"}</td>
-                          <td style={{ fontWeight: "700", color: "#0f172a" }}>{formatQty(tx.qty)}</td>
-                          <td style={{ fontSize: "0.72rem", color: "#64748b" }}>{tx.uom || activePart.uom}</td>
-                          <td style={{ fontWeight: "800", color: "#1e40af" }}>₹{formatExactRupees(tx.rate)}</td>
-                          <td style={{ fontWeight: "700" }}>₹{formatExactRupees(tx.amount)}</td>
-                          <td style={{ color: "#64748b" }}>₹{formatExactRupees(tx.tax || 0)}</td>
-                          <td style={{ fontWeight: "800", color: "#0f172a" }}>₹{formatExactRupees(tx.tamt || tx.amount)}</td>
-                          <td>
-                            {Math.abs(diffFromActive) < 0.01 ? (
-                              <span className="pwh-pill pwh-pill--blue">Standard Rate</span>
-                            ) : diffFromActive > 0 ? (
-                              <span className="pwh-pill pwh-pill--green">
-                                +₹{diffFromActive.toFixed(2)} Premium
-                              </span>
-                            ) : (
-                              <span className="pwh-pill pwh-pill--amber">
-                                -₹{Math.abs(diffFromActive).toFixed(2)} Discount
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colSpan={4} style={{ textAlign: "right" }}>
-                        Period Total:
-                      </td>
-                      <td>{formatQty(activePart.totalQty)}</td>
-                      <td>{activePart.uom}</td>
-                      <td>Avg: ₹{formatExactRupees(activePart.avgRealizedRate)}</td>
-                      <td>₹{formatExactRupees(activePart.totalRevenue)}</td>
-                      <td>—</td>
-                      <td style={{ color: "#2563eb" }}>{formatLakhs(activePart.totalRevenue)}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {totalTxPages > 1 && (
-                <div className="pwh-pagination">
-                  <span>
-                    Showing {(txPage - 1) * txPageSize + 1} to{" "}
-                    {Math.min(txPage * txPageSize, partTransactions.length)} of {partTransactions.length} entries
-                  </span>
-                  <div className="pwh-page-btns">
-                    <button
-                      className="pwh-page-btn"
-                      disabled={txPage === 1}
-                      onClick={() => setTxPage((p) => Math.max(1, p - 1))}
-                    >
-                      Previous
-                    </button>
-                    {[...Array(totalTxPages)].map((_, i) => (
-                      <button
-                        key={i}
-                        className={`pwh-page-btn ${txPage === i + 1 ? "pwh-page-btn--active" : ""}`}
-                        onClick={() => setTxPage(i + 1)}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                    <button
-                      className="pwh-page-btn"
-                      disabled={txPage === totalTxPages}
-                      onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: COMPARISON & ELASTICITY */}
-          {activeTab === "comparison" && comparativeMetrics && (
-            <div>
-              <div className="pwh-comparison-grid">
-                <div className="pwh-comp-card">
-                  <div className="pwh-comp-card-head">
-                    <span className="pwh-comp-card-title">
-                      <Scale size={16} style={{ color: "#2563eb" }} />
-                      Part Benchmarks vs Company Sales Report
-                    </span>
-                    <span className="sa-badge sa-badge--blue">Variance Analytics</span>
-                  </div>
-
-                  <div className="pwh-comp-metric-row">
-                    <span className="pwh-comp-metric-label">Unit Selling Rate (₹)</span>
-                    <div className="pwh-comp-metric-values">
-                      <span className="pwh-comp-val-part">₹{formatExactRupees(activePart.activeRate)}</span>
-                      <span className="pwh-comp-val-global">
-                        vs Global Avg ₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}
-                      </span>
-                      <span
-                        className={`pwh-pill ${comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"
-                          }`}
-                      >
-                        {comparativeMetrics.rateDiffVsGlobal >= 0 ? "+" : ""}
-                        {comparativeMetrics.rateDiffVsGlobal}%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pwh-comp-metric-row">
-                    <span className="pwh-comp-metric-label">Period Revenue Contribution</span>
-                    <div className="pwh-comp-metric-values">
-                      <span className="pwh-comp-val-part">{comparativeMetrics.partRevenueShare}%</span>
-                      <span className="pwh-comp-val-global">of Total Company Turnover</span>
-                    </div>
-                  </div>
-
-                  <div className="pwh-comp-metric-row">
-                    <span className="pwh-comp-metric-label">Rate Spread & Volatility</span>
-                    <div className="pwh-comp-metric-values">
-                      <span className="pwh-comp-val-part">
-                        ₹{(activePart.maxRate - activePart.minRate).toFixed(2)} spread
-                      </span>
-                      <span className="pwh-pill pwh-pill--green">{comparativeMetrics.stabilityScore}% Stable</span>
-                    </div>
-                  </div>
-
-                  <div className="pwh-comp-metric-row">
-                    <span className="pwh-comp-metric-label">Customer Concentration</span>
-                    <div className="pwh-comp-metric-values">
-                      <span className="pwh-comp-val-part">{activePart.primaryCustomer}</span>
-                      <span className="pwh-comp-val-global">
-                        {activePart.customerList.length === 1 ? "100% Dedicated" : "Multi-client"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pwh-comp-card">
-                  <div className="pwh-comp-card-head">
-                    <span className="pwh-comp-card-title">
-                      <BarChart3 size={16} style={{ color: "#06b6d4" }} />
-                      Monthly Rate & Volume Momentum Matrix
-                    </span>
-                    <span className="sa-badge sa-badge--purple">Price Elasticity</span>
-                  </div>
-
-                  <div className="pwh-table-container" style={{ maxHeight: "210px" }}>
-                    <table className="pwh-table">
-                      <thead>
-                        <tr>
-                          <th>Month</th>
-                          <th>Invoiced Qty</th>
-                          <th>Avg Realized Rate</th>
-                          <th>Revenue (Lakhs)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {comparativeMetrics.monthlyRows.length > 0 ? (
-                          comparativeMetrics.monthlyRows.map((m, idx) => (
-                            <tr key={idx}>
-                              <td style={{ fontWeight: "700" }}>{m.month}</td>
-                              <td>{formatQty(m.qty)}</td>
-                              <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(m.avgRate)}</td>
-                              <td style={{ fontWeight: "700", color: "#059669" }}>₹{m.revenueLakhs}L</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} style={{ textAlign: "center", color: "#94a3b8" }}>
-                              Current period transactions mapped into unified monthly bucket
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pwh-insights-box">
-                <div className="pwh-insights-icon">
-                  <Zap size={20} />
-                </div>
-                <div className="pwh-insights-content">
-                  <h4>Management Pricing Insight for {activePart.partNo}</h4>
-                  <p>
-                    Part <strong>{activePart.partNo}</strong> ({activePart.description}) maintains an active rate of{" "}
-                    <strong>₹{formatExactRupees(activePart.activeRate)}</strong> with a stability rating of{" "}
-                    <strong>{comparativeMetrics.stabilityScore}%</strong>. Rate revisions have shown healthy absorption
-                    by {activePart.primaryCustomer} without adverse demand elasticity. The realization is{" "}
-                    <strong>
-                      {comparativeMetrics.isAboveGlobal ? `${comparativeMetrics.rateDiffVsGlobal}% above` : `${Math.abs(comparativeMetrics.rateDiffVsGlobal)}% below`}
-                    </strong>{" "}
-                    company blended selling benchmark (₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}), making it a key margin driver.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: MULTI-PART */}
+          {/* TAB 2: MULTI-PART */}
           {activeTab === "multipart" && (
             <div>
               <div className="pwh-multipart-picker">
