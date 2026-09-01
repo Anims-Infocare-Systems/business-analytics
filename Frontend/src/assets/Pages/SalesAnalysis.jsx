@@ -1393,7 +1393,7 @@ function PartWiseHistorySection({
   /* ── 7. Export Helpers ────────────────────────────────────── */
   function exportRevisionsCSV() {
     if (!rateRevisionData.revisions.length) return;
-    const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reason", "Reference Document", "Status"];
+    const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reference Document", "Status"];
     const rows = rateRevisionData.revisions.map((r) => [
       r.revNo,
       formatInvDate(r.effDate),
@@ -1402,7 +1402,6 @@ function PartWiseHistorySection({
       r.revisedRate.toFixed(2),
       r.diffVal.toFixed(2),
       `${r.diffPct.toFixed(1)}%`,
-      `"${r.reason}"`,
       `"${r.refDoc}"`,
       r.status,
     ]);
@@ -1791,7 +1790,6 @@ function PartWiseHistorySection({
                         >
                           {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
                         </div>
-                        <div className="pwh-timeline-reason">{step.reason}</div>
                       </div>
                     );
                   })}
@@ -1810,7 +1808,6 @@ function PartWiseHistorySection({
                       <th>Revised Rate</th>
                       <th>Rate Variance (₹)</th>
                       <th>Change (%)</th>
-                      <th>Revision Reason / Justification</th>
                       <th>Reference Doc</th>
                       <th>Status</th>
                     </tr>
@@ -1838,7 +1835,6 @@ function PartWiseHistorySection({
                             {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
                           </span>
                         </td>
-                        <td style={{ color: "#334155" }}>{rev.reason}</td>
                         <td style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#64748b" }}>
                           {rev.refDoc}
                         </td>
