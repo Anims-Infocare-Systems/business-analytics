@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings } from "react-icons/fi";
+import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings, FiCheck, FiChevronDown, FiSearch } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
@@ -100,7 +100,7 @@ const MANPOWER_DATA = [
   { operator: "Biswanath Dhungia", dept: "VMC", shifts: 7, totalTarget: 2485, totalOk: 2415, eff: 97.2, attendance: 100 },
 ];
 
-export function formatHoursMins(val) {
+function formatHoursMins(val) {
   if (val === null || val === undefined || val === "") return "00 hour 00 mins";
   if (typeof val === "string") {
     if (val.includes("hour") || val.includes("mins")) return val;
@@ -657,6 +657,23 @@ export default function ProductionAnalysis() {
   const [filterMacType, setFilterMacType] = useState("");
   const [filterMacGroup, setFilterMacGroup] = useState("");
   const [mounted, setMounted] = useState(false);
+
+  // ── Daily Production Details Local Filters ──
+  const [dailyPartFilter, setDailyPartFilter] = useState([]);
+  const [dailyMacFilter, setDailyMacFilter] = useState([]);
+  const [dailyOperatorFilter, setDailyOperatorFilter] = useState([]);
+
+  const [dailyPartDropdownOpen, setDailyPartDropdownOpen] = useState(false);
+  const [dailyMacDropdownOpen, setDailyMacDropdownOpen] = useState(false);
+  const [dailyOperatorDropdownOpen, setDailyOperatorDropdownOpen] = useState(false);
+
+  const [dailyPartSearch, setDailyPartSearch] = useState("");
+  const [dailyMacSearch, setDailyMacSearch] = useState("");
+  const [dailyOperatorSearch, setDailyOperatorSearch] = useState("");
+
+  const dailyPartRef = useRef(null);
+  const dailyMacRef = useRef(null);
+  const dailyOperatorRef = useRef(null);
   const [pvMode, setPvMode] = useState("machine"); // "machine" | "month"
   const [oeeMode, setOeeMode] = useState("machine"); // "machine" | "month"
   const [oeeTrend, setOeeTrend] = useState({ labels: [], data: [] });
@@ -1213,34 +1230,95 @@ export default function ProductionAnalysis() {
     },
   ];
 
-  const filteredTableData = tableData.filter(row => {
-    // 1. Search Query
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const part = (row.Part || "").toLowerCase();
-      const proc = (row.Process || "").toLowerCase();
-      const oper = (row.Operator || "").toLowerCase();
-      const mac = (row.Machine || "").toLowerCase();
-      if (!part.includes(q) && !proc.includes(q) && !oper.includes(q) && !mac.includes(q)) {
+  // ── Unique option lists for Daily Production Details ──
+  const dailyUniqueParts = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const p = (r.Part || "").trim();
+      if (p && p !== "—" && p !== "-") set.add(p);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyParts = useMemo(() => {
+    if (!dailyPartSearch.trim()) return dailyUniqueParts;
+    const q = dailyPartSearch.toLowerCase().trim();
+    return dailyUniqueParts.filter(p => p.toLowerCase().includes(q));
+  }, [dailyUniqueParts, dailyPartSearch]);
+
+  const dailyUniqueMacs = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const m = (r.Machine || "").trim();
+      if (m && m !== "—" && m !== "-") set.add(m);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyMacs = useMemo(() => {
+    if (!dailyMacSearch.trim()) return dailyUniqueMacs;
+    const q = dailyMacSearch.toLowerCase().trim();
+    return dailyUniqueMacs.filter(m => m.toLowerCase().includes(q));
+  }, [dailyUniqueMacs, dailyMacSearch]);
+
+  const dailyUniqueOperators = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const op = (r.Operator || "").trim();
+      if (op && op !== "—" && op !== "-") set.add(op);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyOperators = useMemo(() => {
+    if (!dailyOperatorSearch.trim()) return dailyUniqueOperators;
+    const q = dailyOperatorSearch.toLowerCase().trim();
+    return dailyUniqueOperators.filter(op => op.toLowerCase().includes(q));
+  }, [dailyUniqueOperators, dailyOperatorSearch]);
+
+  const filteredTableData = useMemo(() => {
+    return tableData.filter(row => {
+      // 1. Search Query
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const part = (row.Part || "").toLowerCase();
+        const proc = (row.Process || "").toLowerCase();
+        const oper = (row.Operator || "").toLowerCase();
+        const mac = (row.Machine || "").toLowerCase();
+        if (!part.includes(q) && !proc.includes(q) && !oper.includes(q) && !mac.includes(q)) {
+          return false;
+        }
+      }
+      // 2. Machine Name (Global)
+      if (filterMachine && filterMachine.length > 0 && !filterMachine.includes(row.Machine)) {
         return false;
       }
-    }
-    // 2. Machine Name
-    if (filterMachine && filterMachine.length > 0 && !filterMachine.includes(row.Machine)) {
-      return false;
-    }
-    // 3. Shift
-    if (filterShift && row.Shift !== filterShift) {
-      return false;
-    }
-    // 4. Operator
-    if (filterOperator && filterOperator.length > 0 && !filterOperator.includes(row.Operator)) {
-      return false;
-    }
-    // 5. Machine Type (handled server-side)
-    // 6. Machine Group (handled server-side)
-    return true;
-  });
+      // 3. Shift (Global)
+      if (filterShift && row.Shift !== filterShift) {
+        return false;
+      }
+      // 4. Operator (Global)
+      if (filterOperator && filterOperator.length > 0 && !filterOperator.includes(row.Operator)) {
+        return false;
+      }
+
+      // ── Local Daily Production Details Filters ──
+      // 5. Part Filter
+      if (dailyPartFilter.length > 0 && !dailyPartFilter.includes(row.Part)) {
+        return false;
+      }
+      // 6. Machine Filter
+      if (dailyMacFilter.length > 0 && !dailyMacFilter.includes(row.Machine)) {
+        return false;
+      }
+      // 7. Operator Filter
+      if (dailyOperatorFilter.length > 0 && !dailyOperatorFilter.includes(row.Operator)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [tableData, searchQuery, filterMachine, filterShift, filterOperator, dailyPartFilter, dailyMacFilter, dailyOperatorFilter]);
 
   const sortedTableData = useMemo(() => {
     if (!dailySortField) return filteredTableData;
@@ -2492,6 +2570,15 @@ export default function ProductionAnalysis() {
       }
       if (mhrFilterDropdownRef.current && !mhrFilterDropdownRef.current.contains(e.target)) {
         setMhrFilterOpen(false);
+      }
+      if (dailyPartRef.current && !dailyPartRef.current.contains(e.target)) {
+        setDailyPartDropdownOpen(false);
+      }
+      if (dailyMacRef.current && !dailyMacRef.current.contains(e.target)) {
+        setDailyMacDropdownOpen(false);
+      }
+      if (dailyOperatorRef.current && !dailyOperatorRef.current.contains(e.target)) {
+        setDailyOperatorDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutside);
@@ -4556,8 +4643,270 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
       </div>
 
       {/* ── DAILY PRODUCTION DETAILS ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
+      <div className="pa2-card pa2-anim" style={{ "--d": "80ms", overflow: "visible" }}>
         <SectionHeader icon={<FiTable size={16} />} title="Daily Production Details" sub={pageLoading ? "Loading…" : `${filteredTableData.length} shift record(s)`} />
+        
+        {/* Modern Dedicated Table Toolbar & Filters */}
+        <div className="pa2-daily-filter-toolbar">
+          {/* 1. Part No Wise Filter */}
+          <div className="pa2-daily-filter-group" ref={dailyPartRef}>
+            <span className="pa2-daily-filter-label">
+              <FiLayers size={13} style={{ color: "#2563eb" }} /> Part:
+            </span>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => { setDailyPartDropdownOpen(o => !o); setDailyMacDropdownOpen(false); setDailyOperatorDropdownOpen(false); }}
+                className={`pa2-daily-filter-btn ${dailyPartFilter.length > 0 ? "is-active" : ""}`}
+              >
+                <div className="pa2-daily-filter-btn-text">
+                  <span>
+                    {dailyPartFilter.length === 0
+                      ? "All Parts"
+                      : dailyPartFilter.length === 1
+                      ? dailyPartFilter[0]
+                      : `${dailyPartFilter.length} Parts Selected`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                  {dailyPartFilter.length > 1 && (
+                    <span className="pa2-daily-badge-counter">{dailyPartFilter.length}</span>
+                  )}
+                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyPartDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
+                </div>
+              </button>
+
+              {dailyPartDropdownOpen && (
+                <div className="pa2-daily-dropdown-panel" style={{ width: "280px" }}>
+                  <div className="pa2-daily-search-row">
+                    <FiSearch size={12} className="pa2-daily-search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search Part No..."
+                      value={dailyPartSearch}
+                      onChange={e => setDailyPartSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="pa2-daily-search-input"
+                      autoFocus
+                    />
+                    {dailyPartSearch && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyPartSearch(""); }} className="pa2-daily-search-clear">
+                        <FiX size={11} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="pa2-daily-list-scroll">
+                    <div
+                      className={`pa2-daily-item ${dailyPartFilter.length === 0 ? "is-active" : ""}`}
+                      onClick={() => setDailyPartFilter([])}
+                    >
+                      <div className={`pa2-daily-checkbox ${dailyPartFilter.length === 0 ? "checked" : ""}`}>
+                        {dailyPartFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
+                      </div>
+                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Parts</span>
+                      <span className="pa2-daily-item-count">{dailyUniqueParts.length}</span>
+                    </div>
+                    {filteredDailyParts.map((part, idx) => {
+                      const isSelected = dailyPartFilter.includes(part);
+                      return (
+                        <div
+                          key={idx}
+                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
+                          onClick={() => setDailyPartFilter(prev => prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part])}
+                        >
+                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
+                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
+                          </div>
+                          <span className="pa2-daily-item-title" title={part}>{part}</span>
+                        </div>
+                      );
+                    })}
+                    {filteredDailyParts.length === 0 && (
+                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching parts found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Machine Wise Filter */}
+          <div className="pa2-daily-filter-group" ref={dailyMacRef}>
+            <span className="pa2-daily-filter-label">
+              <FiCpu size={13} style={{ color: "#2563eb" }} /> Machine:
+            </span>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => { setDailyMacDropdownOpen(o => !o); setDailyPartDropdownOpen(false); setDailyOperatorDropdownOpen(false); }}
+                className={`pa2-daily-filter-btn ${dailyMacFilter.length > 0 ? "is-active" : ""}`}
+              >
+                <div className="pa2-daily-filter-btn-text">
+                  <span>
+                    {dailyMacFilter.length === 0
+                      ? "All Machines"
+                      : dailyMacFilter.length === 1
+                      ? dailyMacFilter[0]
+                      : `${dailyMacFilter.length} Machines Selected`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                  {dailyMacFilter.length > 1 && (
+                    <span className="pa2-daily-badge-counter">{dailyMacFilter.length}</span>
+                  )}
+                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyMacDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
+                </div>
+              </button>
+
+              {dailyMacDropdownOpen && (
+                <div className="pa2-daily-dropdown-panel" style={{ width: "270px" }}>
+                  <div className="pa2-daily-search-row">
+                    <FiSearch size={12} className="pa2-daily-search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search Machine..."
+                      value={dailyMacSearch}
+                      onChange={e => setDailyMacSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="pa2-daily-search-input"
+                      autoFocus
+                    />
+                    {dailyMacSearch && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyMacSearch(""); }} className="pa2-daily-search-clear">
+                        <FiX size={11} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="pa2-daily-list-scroll">
+                    <div
+                      className={`pa2-daily-item ${dailyMacFilter.length === 0 ? "is-active" : ""}`}
+                      onClick={() => setDailyMacFilter([])}
+                    >
+                      <div className={`pa2-daily-checkbox ${dailyMacFilter.length === 0 ? "checked" : ""}`}>
+                        {dailyMacFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
+                      </div>
+                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Machines</span>
+                      <span className="pa2-daily-item-count">{dailyUniqueMacs.length}</span>
+                    </div>
+                    {filteredDailyMacs.map((mac, idx) => {
+                      const isSelected = dailyMacFilter.includes(mac);
+                      return (
+                        <div
+                          key={idx}
+                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
+                          onClick={() => setDailyMacFilter(prev => prev.includes(mac) ? prev.filter(m => m !== mac) : [...prev, mac])}
+                        >
+                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
+                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
+                          </div>
+                          <span className="pa2-daily-item-title" title={mac}>{mac}</span>
+                        </div>
+                      );
+                    })}
+                    {filteredDailyMacs.length === 0 && (
+                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching machines found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Operator Wise Filter */}
+          <div className="pa2-daily-filter-group" ref={dailyOperatorRef}>
+            <span className="pa2-daily-filter-label">
+              <FiUser size={13} style={{ color: "#2563eb" }} /> Operator:
+            </span>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => { setDailyOperatorDropdownOpen(o => !o); setDailyPartDropdownOpen(false); setDailyMacDropdownOpen(false); }}
+                className={`pa2-daily-filter-btn ${dailyOperatorFilter.length > 0 ? "is-active" : ""}`}
+              >
+                <div className="pa2-daily-filter-btn-text">
+                  <span>
+                    {dailyOperatorFilter.length === 0
+                      ? "All Operators"
+                      : dailyOperatorFilter.length === 1
+                      ? dailyOperatorFilter[0]
+                      : `${dailyOperatorFilter.length} Operators Selected`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                  {dailyOperatorFilter.length > 1 && (
+                    <span className="pa2-daily-badge-counter">{dailyOperatorFilter.length}</span>
+                  )}
+                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyOperatorDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
+                </div>
+              </button>
+
+              {dailyOperatorDropdownOpen && (
+                <div className="pa2-daily-dropdown-panel" style={{ width: "280px" }}>
+                  <div className="pa2-daily-search-row">
+                    <FiSearch size={12} className="pa2-daily-search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search Operator..."
+                      value={dailyOperatorSearch}
+                      onChange={e => setDailyOperatorSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="pa2-daily-search-input"
+                      autoFocus
+                    />
+                    {dailyOperatorSearch && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyOperatorSearch(""); }} className="pa2-daily-search-clear">
+                        <FiX size={11} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="pa2-daily-list-scroll">
+                    <div
+                      className={`pa2-daily-item ${dailyOperatorFilter.length === 0 ? "is-active" : ""}`}
+                      onClick={() => setDailyOperatorFilter([])}
+                    >
+                      <div className={`pa2-daily-checkbox ${dailyOperatorFilter.length === 0 ? "checked" : ""}`}>
+                        {dailyOperatorFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
+                      </div>
+                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Operators</span>
+                      <span className="pa2-daily-item-count">{dailyUniqueOperators.length}</span>
+                    </div>
+                    {filteredDailyOperators.map((op, idx) => {
+                      const isSelected = dailyOperatorFilter.includes(op);
+                      return (
+                        <div
+                          key={idx}
+                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
+                          onClick={() => setDailyOperatorFilter(prev => prev.includes(op) ? prev.filter(o => o !== op) : [...prev, op])}
+                        >
+                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
+                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
+                          </div>
+                          <span className="pa2-daily-item-title" title={op}>{op}</span>
+                        </div>
+                      );
+                    })}
+                    {filteredDailyOperators.length === 0 && (
+                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching operators found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Clear Filters Button */}
+          {(dailyPartFilter.length > 0 || dailyMacFilter.length > 0 || dailyOperatorFilter.length > 0) && (
+            <button
+              type="button"
+              onClick={() => { setDailyPartFilter([]); setDailyMacFilter([]); setDailyOperatorFilter([]); }}
+              className="pa2-daily-clear-btn"
+              title="Clear all daily table filters"
+            >
+              <FiX size={12} strokeWidth={3} />
+              <span>Clear Filters</span>
+            </button>
+          )}
+        </div>
         <div className="pa2-table-wrap">
           <table className="pa2-table">
             <thead>

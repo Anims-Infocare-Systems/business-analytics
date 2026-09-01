@@ -4064,12 +4064,9 @@
 }
 
 .pwh-header {
-  padding: 1.4rem 1.75rem 1.1rem;
+  padding: 1.1rem 1.75rem;
   background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
   border-bottom: 1px solid rgba(45, 109, 232, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
 }
 
 .pwh-header-top {
@@ -4097,6 +4094,20 @@
   justify-content: center;
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
   flex-shrink: 0;
+}
+
+.pwh-react-icon {
+  animation: pwhReactSpin 16s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.4));
+}
+
+@keyframes pwhReactSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pwh-title-text h3 {
@@ -4784,10 +4795,28 @@
 
 .pwh-table-container {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 280px;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.pwh-table-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.pwh-table-container::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.pwh-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 .pwh-table {
@@ -4799,6 +4828,9 @@
 }
 
 .pwh-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #f1f5f9;
   color: #334155;
   font-weight: 700;

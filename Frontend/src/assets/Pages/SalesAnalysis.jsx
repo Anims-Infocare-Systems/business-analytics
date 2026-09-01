@@ -38,6 +38,7 @@ import {
   X,
   Zap
 } from "lucide-react";
+import { FaReact } from "react-icons/fa";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
 
@@ -1167,17 +1168,13 @@ function PartWiseHistorySection({
 
   /* ── 2. Component State ───────────────────────────────────── */
   const [selectedPartNo, setSelectedPartNo] = useState("");
-  const [activeTab, setActiveTab] = useState("revisions");
   const [searchQuery, setSearchQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const [multiPartSelected, setMultiPartSelected] = useState([]);
-
   useEffect(() => {
     if (partCatalog.length > 0 && (!selectedPartNo || !partCatalog.some((p) => p.partNo === selectedPartNo))) {
       setSelectedPartNo(partCatalog[0].partNo);
-      setMultiPartSelected(partCatalog.slice(0, 3).map((p) => p.partNo));
     }
   }, [partCatalog, selectedPartNo]);
 
@@ -1294,32 +1291,6 @@ function PartWiseHistorySection({
     };
   }, [activePart, dateRange]);
 
-  /* ── 5. Export Helpers ────────────────────────────────────── */
-  function exportRevisionsCSV() {
-    if (!rateRevisionData.revisions.length) return;
-    const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reference Document", "Status"];
-    const rows = rateRevisionData.revisions.map((r) => [
-      r.revNo,
-      formatInvDate(r.effDate),
-      `"${r.customer}"`,
-      r.prevRate.toFixed(2),
-      r.revisedRate.toFixed(2),
-      r.diffVal.toFixed(2),
-      `${r.diffPct.toFixed(1)}%`,
-      `"${r.refDoc}"`,
-      r.status,
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Rate_Revision_History_${activePart?.partNo || "Part"}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
   const filteredCatalog = useMemo(() => {
     if (!searchQuery.trim()) return partCatalog;
     const q = searchQuery.toLowerCase().trim();
@@ -1330,16 +1301,6 @@ function PartWiseHistorySection({
         p.primaryCustomer.toLowerCase().includes(q)
     );
   }, [partCatalog, searchQuery]);
-
-  const multiPartComparisonList = useMemo(() => {
-    return partCatalog.filter((p) => multiPartSelected.includes(p.partNo));
-  }, [partCatalog, multiPartSelected]);
-
-  function toggleMultiPart(pno) {
-    setMultiPartSelected((prev) =>
-      prev.includes(pno) ? prev.filter((p) => p !== pno) : prev.length < 5 ? [...prev, pno] : prev
-    );
-  }
 
   if (loading) {
     return (
@@ -1361,13 +1322,13 @@ function PartWiseHistorySection({
     <div className="pwh-root" id="sales-part-wise-history-section">
       <div className="pwh-card">
         {/* ═══════════════════════════════════════════════════════
-            1. SECTION HEADER & SEARCH TOOLBAR
+            1. SECTION HEADER & SEARCH (OPPOSITE TO TITLE)
         ═══════════════════════════════════════════════════════ */}
         <div className="pwh-header">
           <div className="pwh-header-top">
             <div className="pwh-title-group">
               <div className="pwh-title-icon">
-                <History size={24} />
+                <FaReact size={24} className="pwh-react-icon" />
               </div>
               <div className="pwh-title-text">
                 <h3>
@@ -1381,59 +1342,59 @@ function PartWiseHistorySection({
                 </p>
               </div>
             </div>
-          </div>
 
-          {/* Selector Bar */}
-          <div className="pwh-selector-bar">
-            <div className="pwh-search-box" ref={dropdownRef}>
-              <Search size={15} className="pwh-search-icon" />
-              <input
-                type="text"
-                className="pwh-search-input"
-                placeholder="Search Part No / Description..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setDropdownOpen(true);
-                }}
-                onFocus={() => setDropdownOpen(true)}
-              />
-              {searchQuery && (
-                <button className="pwh-search-clear" onClick={() => setSearchQuery("")}>
-                  <X size={14} />
-                </button>
-              )}
+            {/* Search Box opposite to title */}
+            <div className="pwh-header-actions">
+              <div className="pwh-search-box" ref={dropdownRef} style={{ width: "360px", minWidth: "260px" }}>
+                <Search size={15} className="pwh-search-icon" />
+                <input
+                  type="text"
+                  className="pwh-search-input"
+                  placeholder="Search Part No / Description..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setDropdownOpen(true);
+                  }}
+                  onFocus={() => setDropdownOpen(true)}
+                />
+                {searchQuery && (
+                  <button className="pwh-search-clear" onClick={() => setSearchQuery("")}>
+                    <X size={14} />
+                  </button>
+                )}
 
-              {dropdownOpen && (
-                <div className="pwh-dropdown-menu">
-                  {filteredCatalog.length === 0 ? (
-                    <div style={{ padding: "8px 12px", fontSize: "0.76rem", color: "#64748b" }}>
-                      No matching parts found
-                    </div>
-                  ) : (
-                    filteredCatalog.map((p) => (
-                      <div
-                        key={p.partNo}
-                        className={`pwh-dropdown-item ${p.partNo === selectedPartNo ? "pwh-dropdown-item--active" : ""}`}
-                        onClick={() => {
-                          setSelectedPartNo(p.partNo);
-                          setDropdownOpen(false);
-                          setSearchQuery("");
-                        }}
-                      >
-                        <div className="pwh-dropdown-item-main">
-                          <span className="pwh-dropdown-item-part">{p.partNo}</span>
-                          <span className="pwh-dropdown-item-desc">{p.description}</span>
-                        </div>
-                        <div className="pwh-dropdown-item-meta">
-                          <span className="pwh-dropdown-item-rate">₹{formatExactRupees(p.activeRate)}</span>
-                          <div className="pwh-dropdown-item-count">{p.txCount} invoices</div>
-                        </div>
+                {dropdownOpen && (
+                  <div className="pwh-dropdown-menu">
+                    {filteredCatalog.length === 0 ? (
+                      <div style={{ padding: "8px 12px", fontSize: "0.76rem", color: "#64748b" }}>
+                        No matching parts found
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
+                    ) : (
+                      filteredCatalog.map((p) => (
+                        <div
+                          key={p.partNo}
+                          className={`pwh-dropdown-item ${p.partNo === selectedPartNo ? "pwh-dropdown-item--active" : ""}`}
+                          onClick={() => {
+                            setSelectedPartNo(p.partNo);
+                            setDropdownOpen(false);
+                            setSearchQuery("");
+                          }}
+                        >
+                          <div className="pwh-dropdown-item-main">
+                            <span className="pwh-dropdown-item-part">{p.partNo}</span>
+                            <span className="pwh-dropdown-item-desc">{p.description}</span>
+                          </div>
+                          <div className="pwh-dropdown-item-meta">
+                            <span className="pwh-dropdown-item-rate">₹{formatExactRupees(p.activeRate)}</span>
+                            <div className="pwh-dropdown-item-count">{p.txCount} invoices</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1511,198 +1472,93 @@ function PartWiseHistorySection({
         )}
 
         {/* ═══════════════════════════════════════════════════════
-            3. WORKSPACE TAB NAVIGATION
+            3. RATE REVISION TIMELINE & LEDGER WORKSPACE
         ═══════════════════════════════════════════════════════ */}
-        <div className="pwh-tabs-bar">
-          <div className="pwh-tabs-nav">
-            <button
-              className={`pwh-tab-btn ${activeTab === "revisions" ? "pwh-tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("revisions")}
-            >
-              <GitCommit size={15} /> Rate Revision Details
-              <span className="pwh-tab-count">{rateRevisionData.revisions.length}</span>
-            </button>
-            <button
-              className={`pwh-tab-btn ${activeTab === "multipart" ? "pwh-tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("multipart")}
-            >
-              <Layers size={15} /> Multi-Part Rate Matrix
-              <span className="pwh-tab-count">{multiPartSelected.length}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════
-            5. TAB CONTENT WORKSPACE
-        ═══════════════════════════════════════════════════════ */}
-        <div className="pwh-tab-content">
-          {/* TAB 1: REVISIONS */}
-          {activeTab === "revisions" && (
-            <div>
-              <div className="pwh-timeline-wrap">
-                <div className="pwh-timeline-title">
-                  <Activity size={15} style={{ color: "#2563eb" }} />
-                  Chronological Rate Progression Timeline
-                </div>
-
-                <div className="pwh-timeline">
-                  {rateRevisionData.timeline.map((step, idx) => {
-                    const isLatest = idx === rateRevisionData.timeline.length - 1;
-                    return (
-                      <div key={idx} className={`pwh-timeline-step ${isLatest ? "pwh-timeline-step--latest" : ""}`}>
-                        <div className="pwh-timeline-node">
-                          {idx === 0 ? "B" : `#${idx}`}
-                        </div>
-                        <div className="pwh-timeline-date">{formatInvDate(step.effDate)}</div>
-                        <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
-                        <div
-                          className={`pwh-timeline-delta ${step.diffVal > 0
-                            ? "pwh-pill--green"
-                            : step.diffVal < 0
-                              ? "pwh-pill--red"
-                              : "pwh-pill--neutral"
-                            }`}
-                        >
-                          {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Rate Revision Ledger Table */}
-              <div className="pwh-table-container">
-                <table className="pwh-table">
-                  <thead>
-                    <tr>
-                      <th>Revision No</th>
-                      <th>Effective Date</th>
-                      <th>Customer Scope</th>
-                      <th>Previous Rate</th>
-                      <th>Revised Rate</th>
-                      <th>Rate Variance (₹)</th>
-                      <th>Change (%)</th>
-                      <th>Reference Doc</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rateRevisionData.revisions.map((rev, i) => (
-                      <tr key={i}>
-                        <td style={{ fontWeight: "700", color: "#1e293b" }}>{rev.revNo}</td>
-                        <td style={{ color: "#475569", fontWeight: "600" }}>{formatInvDate(rev.effDate)}</td>
-                        <td style={{ fontWeight: "600" }}>{rev.customer}</td>
-                        <td style={{ color: "#64748b" }}>₹{formatExactRupees(rev.prevRate)}</td>
-                        <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(rev.revisedRate)}</td>
-                        <td style={{ fontWeight: "700", color: rev.diffVal > 0 ? "#15803d" : rev.diffVal < 0 ? "#b91c1c" : "#64748b" }}>
-                          {rev.diffVal > 0 ? `+₹${rev.diffVal.toFixed(2)}` : rev.diffVal < 0 ? `-₹${Math.abs(rev.diffVal).toFixed(2)}` : "₹0.00"}
-                        </td>
-                        <td>
-                          <span
-                            className={`pwh-pill ${rev.diffPct > 0
-                              ? "pwh-pill--green"
-                              : rev.diffPct < 0
-                                ? "pwh-pill--red"
-                                : "pwh-pill--neutral"
-                              }`}
-                          >
-                            {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#64748b" }}>
-                          {rev.refDoc}
-                        </td>
-                        <td>
-                          <span className="pwh-pill pwh-pill--green">
-                            <CheckCircle2 size={11} /> {rev.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <div className="pwh-tab-content" style={{ borderTop: "1px solid #e2e8f0" }}>
+          <div className="pwh-timeline-wrap">
+            <div className="pwh-timeline-title">
+              <Activity size={15} style={{ color: "#2563eb" }} />
+              Chronological Rate Progression Timeline
             </div>
-          )}
 
-          {/* TAB 2: MULTI-PART */}
-          {activeTab === "multipart" && (
-            <div>
-              <div className="pwh-multipart-picker">
-                <span className="pwh-chips-label">Select Parts to Compare (up to 5):</span>
-                {partCatalog.slice(0, 10).map((p) => {
-                  const isSel = multiPartSelected.includes(p.partNo);
-                  return (
-                    <button
-                      key={p.partNo}
-                      className={`pwh-multipart-item ${isSel ? "pwh-multipart-item--selected" : ""}`}
-                      onClick={() => toggleMultiPart(p.partNo)}
+            <div className="pwh-timeline">
+              {rateRevisionData.timeline.map((step, idx) => {
+                const isLatest = idx === rateRevisionData.timeline.length - 1;
+                return (
+                  <div key={idx} className={`pwh-timeline-step ${isLatest ? "pwh-timeline-step--latest" : ""}`}>
+                    <div className="pwh-timeline-node">
+                      {idx === 0 ? "B" : `#${idx}`}
+                    </div>
+                    <div className="pwh-timeline-date">{formatInvDate(step.effDate)}</div>
+                    <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
+                    <div
+                      className={`pwh-timeline-delta ${step.diffVal > 0
+                        ? "pwh-pill--green"
+                        : step.diffVal < 0
+                          ? "pwh-pill--red"
+                          : "pwh-pill--neutral"
+                        }`}
                     >
-                      {isSel ? "✓ " : "+ "}
-                      {p.partNo} (₹{Math.round(p.activeRate)})
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="pwh-table-container">
-                <table className="pwh-table">
-                  <thead>
-                    <tr>
-                      <th>Part Number</th>
-                      <th>Description</th>
-                      <th>Primary Customer</th>
-                      <th>Active Rate (₹)</th>
-                      <th>Base Rate (₹)</th>
-                      <th>Revision Delta (%)</th>
-                      <th>Total Qty Sold</th>
-                      <th>Period Revenue (₹)</th>
-                      <th>Avg Realization</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {multiPartComparisonList.map((p) => {
-                      const deltaPct = p.baseRate > 0 ? ((p.activeRate - p.baseRate) / p.baseRate) * 100 : 0;
-                      return (
-                        <tr key={p.partNo}>
-                          <td style={{ fontWeight: "800", color: "#2563eb" }}>{p.partNo}</td>
-                          <td style={{ fontWeight: "600" }}>{p.description}</td>
-                          <td style={{ color: "#475569" }}>{p.primaryCustomer}</td>
-                          <td style={{ fontWeight: "800", color: "#0f172a" }}>₹{formatExactRupees(p.activeRate)}</td>
-                          <td style={{ color: "#64748b" }}>₹{formatExactRupees(p.baseRate)}</td>
-                          <td>
-                            <span
-                              className={`pwh-pill ${deltaPct > 0 ? "pwh-pill--green" : deltaPct < 0 ? "pwh-pill--red" : "pwh-pill--neutral"
-                                }`}
-                            >
-                              {deltaPct > 0 ? `+${deltaPct.toFixed(1)}%` : `${deltaPct.toFixed(1)}%`}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: "700" }}>{formatQty(p.totalQty)} {p.uom}</td>
-                          <td style={{ fontWeight: "800", color: "#059669" }}>{formatLakhs(p.totalRevenue)}</td>
-                          <td style={{ fontWeight: "700" }}>₹{formatExactRupees(p.avgRealizedRate)}</td>
-                          <td>
-                            <button
-                              className="sa-btn sa-btn--ghost"
-                              style={{ padding: "0.25rem 0.6rem", fontSize: "0.7rem" }}
-                              onClick={() => {
-                                setSelectedPartNo(p.partNo);
-                                setActiveTab("revisions");
-                              }}
-                            >
-                              Inspect →
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+
+          {/* Rate Revision Ledger Table */}
+          <div className="pwh-table-container">
+            <table className="pwh-table">
+              <thead>
+                <tr>
+                  {/* <th>Revision No</th> */}
+                  <th>Effective Date</th>
+                  <th>Customer Scope</th>
+                  <th>Previous Rate</th>
+                  <th>Revised Rate</th>
+                  <th>Rate Variance (₹)</th>
+                  <th>Change (%)</th>
+                  <th>PartNo</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rateRevisionData.revisions.map((rev, i) => (
+                  <tr key={i}>
+                    {/* <td style={{ fontWeight: "700", color: "#1e293b" }}>{rev.revNo}</td> */}
+                    <td style={{ color: "#475569", fontWeight: "600" }}>{formatInvDate(rev.effDate)}</td>
+                    <td style={{ fontWeight: "600" }}>{rev.customer}</td>
+                    <td style={{ color: "#64748b" }}>₹{formatExactRupees(rev.prevRate)}</td>
+                    <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(rev.revisedRate)}</td>
+                    <td style={{ fontWeight: "700", color: rev.diffVal > 0 ? "#15803d" : rev.diffVal < 0 ? "#b91c1c" : "#64748b" }}>
+                      {rev.diffVal > 0 ? `+₹${rev.diffVal.toFixed(2)}` : rev.diffVal < 0 ? `-₹${Math.abs(rev.diffVal).toFixed(2)}` : "₹0.00"}
+                    </td>
+                    <td>
+                      <span
+                        className={`pwh-pill ${rev.diffPct > 0
+                          ? "pwh-pill--green"
+                          : rev.diffPct < 0
+                            ? "pwh-pill--red"
+                            : "pwh-pill--neutral"
+                          }`}
+                      >
+                        {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
+                      </span>
+                    </td>
+                    <td style={{ fontFamily: "monospace", fontSize: "0.76rem", fontWeight: "700", color: "#1e40af" }}>
+                      {activePart?.partNo || rev.refDoc}
+                    </td>
+                    <td>
+                      <span className="pwh-pill pwh-pill--green">
+                        <CheckCircle2 size={11} /> {rev.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

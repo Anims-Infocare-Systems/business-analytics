@@ -29,7 +29,10 @@ import {
     Users,
     ChevronDown,
     PieChart,
-    Inbox
+    Inbox,
+    Check,
+    Building2,
+    RotateCcw
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -142,6 +145,7 @@ const getColStyle = (h) => {
         case "OK Qty":
         case "Mat Rej Qty":
         case "Mac Rej Qty":
+        case "Rej %":
         case "Rework Qty": return { width: "80px", textAlign: "right" };
         case "Insp By": return { width: "120px" };
         default: return {};
@@ -607,8 +611,16 @@ export default function QualityAnalysis() {
         product: "All Products", defectType: "All Defects",
     });
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCustomers, setSelectedCustomers] = useState([]);
+    const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState("");
+    const customerRef = useRef(null);
     const [selectedType, setSelectedType] = useState("ALL");
     const [tableInspNoSearch, setTableInspNoSearch] = useState("");
+    const [tableCustomerSearch, setTableCustomerSearch] = useState("");
+    const [tableSelectedCustomers, setTableSelectedCustomers] = useState([]);
+    const [tableCustomerDropdownOpen, setTableCustomerDropdownOpen] = useState(false);
+    const tableCustomerRef = useRef(null);
     const [tablePartNoDescSearch, setTablePartNoDescSearch] = useState("");
     const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
     const [selectedInspTypeFilter, setSelectedInspTypeFilter] = useState("ALL");
@@ -629,6 +641,26 @@ export default function QualityAnalysis() {
     const [selectedTraceInspNos, setSelectedTraceInspNos] = useState(null);
     const [selectedTraceMachineNos, setSelectedTraceMachineNos] = useState(null);
     const [selectedTracePartNos, setSelectedTracePartNos] = useState(null);
+
+    // Rejection Analytics Trend Filters (Customer & Part)
+    const [trendRejCustFilter, setTrendRejCustFilter] = useState([]);
+    const [trendRejCustDropdownOpen, setTrendRejCustDropdownOpen] = useState(false);
+    const [trendRejCustSearch, setTrendRejCustSearch] = useState("");
+    const trendRejCustRef = useRef(null);
+    const [trendRejPartFilter, setTrendRejPartFilter] = useState([]);
+    const [trendRejPartDropdownOpen, setTrendRejPartDropdownOpen] = useState(false);
+    const [trendRejPartSearch, setTrendRejPartSearch] = useState("");
+    const trendRejPartRef = useRef(null);
+
+    // Rework Analytics Trend Filters (Customer & Part)
+    const [trendRwkCustFilter, setTrendRwkCustFilter] = useState([]);
+    const [trendRwkCustDropdownOpen, setTrendRwkCustDropdownOpen] = useState(false);
+    const [trendRwkCustSearch, setTrendRwkCustSearch] = useState("");
+    const trendRwkCustRef = useRef(null);
+    const [trendRwkPartFilter, setTrendRwkPartFilter] = useState([]);
+    const [trendRwkPartDropdownOpen, setTrendRwkPartDropdownOpen] = useState(false);
+    const [trendRwkPartSearch, setTrendRwkPartSearch] = useState("");
+    const trendRwkPartRef = useRef(null);
 
     // API state data
     const [summaryData, setSummaryData] = useState(null);
@@ -747,8 +779,434 @@ export default function QualityAnalysis() {
         return Array.from(set).sort();
     }, [rawCustomerComplaints]);
 
+    const uniqueCustomerNames = useMemo(() => {
+        const set = new Set();
+        // Extract from inspection records
+        const records = recordsData?.inspection_records || [];
+        records.forEach(r => {
+            const name = (r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")).trim();
+            if (name && name !== "—" && name !== "-") set.add(name);
+        });
+        // Extract from customer complaints
+        rawCustomerComplaints.forEach(c => {
+            const name = (c.customer_name || "").trim();
+            if (name && name !== "—" && name !== "-") set.add(name);
+        });
+        // Extract from supplier rejections
+        rawSupplierRejections.forEach(s => {
+            const name = (s.supplier || "").trim();
+            if (name && name !== "—" && name !== "-") set.add(name);
+        });
+        return Array.from(set).sort();
+    }, [recordsData, rawCustomerComplaints, rawSupplierRejections]);
+
+    const filteredDropdownCustomers = useMemo(() => {
+        if (!customerSearch.trim()) return uniqueCustomerNames;
+        const q = customerSearch.toLowerCase().trim();
+        return uniqueCustomerNames.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueCustomerNames, customerSearch]);
+
+    const handleCustomerToggle = (cust) => {
+        setSelectedCustomers(prev => {
+            if (prev.includes(cust)) {
+                return prev.filter(c => c !== cust);
+            } else {
+                return [...prev, cust];
+            }
+        });
+    };
+
+    const uniqueTableCustomerNames = useMemo(() => {
+        const set = new Set();
+        (recordsData?.inspection_records || []).forEach(r => {
+            const name = (r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")).trim();
+            if (name && name !== "—" && name !== "-") set.add(name);
+        });
+        return Array.from(set).sort();
+    }, [recordsData]);
+
+    const filteredTableDropdownCustomers = useMemo(() => {
+        if (!tableCustomerSearch.trim()) return uniqueTableCustomerNames;
+        const q = tableCustomerSearch.toLowerCase().trim();
+        return uniqueTableCustomerNames.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueTableCustomerNames, tableCustomerSearch]);
+
+    const handleTableCustomerToggle = (cust) => {
+        setTableSelectedCustomers(prev =>
+            prev.includes(cust) ? prev.filter(c => c !== cust) : [...prev, cust]
+        );
+    };
+
+    const uniquePartOptions = useMemo(() => {
+        const set = new Set();
+        (recordsData?.inspection_records || []).forEach(r => {
+            const part = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+            if (part && part !== "—" && part !== "-") set.add(part);
+        });
+        (prodPerfData?.products || []).forEach(p => {
+            const part = (p.code || p.name || "").trim();
+            if (part && part !== "—" && part !== "-") set.add(part);
+        });
+        return Array.from(set).sort();
+    }, [recordsData, prodPerfData]);
+
+    const getWeekSlotKey = useCallback((dStr) => {
+        const d = parseDisplayDate(dStr);
+        if (!d || isNaN(d.getTime())) return null;
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const day = d.getDate();
+        const m = months[d.getMonth()];
+        let wn = 1;
+        if (day <= 7) wn = 1;
+        else if (day <= 14) wn = 2;
+        else if (day <= 21) wn = 3;
+        else if (day <= 28) wn = 4;
+        else wn = 5;
+        return `W${wn} ${m}`;
+    }, []);
+
+    // Rejection Trend Filter Memos
+    const filteredRejDropdownCustomers = useMemo(() => {
+        if (!trendRejCustSearch.trim()) return uniqueCustomerNames;
+        const q = trendRejCustSearch.toLowerCase().trim();
+        return uniqueCustomerNames.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueCustomerNames, trendRejCustSearch]);
+
+    const filteredRejDropdownParts = useMemo(() => {
+        if (!trendRejPartSearch.trim()) return uniquePartOptions;
+        const q = trendRejPartSearch.toLowerCase().trim();
+        return uniquePartOptions.filter(p => p.toLowerCase().includes(q));
+    }, [uniquePartOptions, trendRejPartSearch]);
+
+    const handleTrendRejCustToggle = (cust) => {
+        setTrendRejCustFilter(prev => prev.includes(cust) ? prev.filter(c => c !== cust) : [...prev, cust]);
+    };
+
+    const handleTrendRejPartToggle = (part) => {
+        setTrendRejPartFilter(prev => prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part]);
+    };
+
+    // Rework Trend Filter Memos
+    const filteredRwkDropdownCustomers = useMemo(() => {
+        if (!trendRwkCustSearch.trim()) return uniqueCustomerNames;
+        const q = trendRwkCustSearch.toLowerCase().trim();
+        return uniqueCustomerNames.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueCustomerNames, trendRwkCustSearch]);
+
+    const filteredRwkDropdownParts = useMemo(() => {
+        if (!trendRwkPartSearch.trim()) return uniquePartOptions;
+        const q = trendRwkPartSearch.toLowerCase().trim();
+        return uniquePartOptions.filter(p => p.toLowerCase().includes(q));
+    }, [uniquePartOptions, trendRwkPartSearch]);
+
+    const handleTrendRwkCustToggle = (cust) => {
+        setTrendRwkCustFilter(prev => prev.includes(cust) ? prev.filter(c => c !== cust) : [...prev, cust]);
+    };
+
+    const handleTrendRwkPartToggle = (part) => {
+        setTrendRwkPartFilter(prev => prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part]);
+    };
+
+    // hasNoData = true only when there's genuinely no data AND no search query is active.
+    // When a search query is active, even total_inspected=0 is a valid "no results" state
+    // and should show real filtered zeros (not mock/fallback data).
+    const hasNoData = !summaryLoading && !searchQuery && (
+        summaryData === null ||
+        summaryData.total_inspected === 0 ||
+        summaryData.total_inspected === "0" ||
+        !summaryData.total_inspected
+    );
+    // When search is active and data returned, treat loaded state as hasRealData regardless of qty
+    const hasSearchWithData = !!searchQuery && summaryData !== null;
+
+    const searchFilteredInspectionRows = useMemo(() => {
+        if (hasNoData) return [];
+        const records = recordsData?.inspection_records || [];
+        let raw = records.map(r => ({
+            ...r,
+            cname: r.cname || r.partyName || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
+            partyName: r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
+            routecardDetails: r.roucard || r.routecardDetails || r.routecard || "—"
+        }));
+
+        if (selectedCustomers.length > 0) {
+            raw = raw.filter(r => {
+                const name = (r.partyName || r.cname || "").trim();
+                return selectedCustomers.includes(name);
+            });
+        }
+
+        if (!searchQuery) return raw;
+        const q = searchQuery.toLowerCase().trim();
+        return raw.filter(r =>
+            (r.id && r.id.toLowerCase().includes(q)) ||
+            (r.partyName && r.partyName.toLowerCase().includes(q)) ||
+            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
+            (r.process && r.process.toLowerCase().includes(q)) ||
+            (r.inspBy && r.inspBy.toLowerCase().includes(q)) ||
+            (r.result && r.result.toLowerCase().includes(q)) ||
+            (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
+        );
+    }, [recordsData, hasNoData, searchQuery, selectedCustomers]);
+
+    const activeRejectionTrendData = useMemo(() => {
+        const trendLabels = chartsData?.trend?.labels || [];
+        const defaultRejDataset = chartsData?.trend?.datasets?.find(d =>
+            d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
+        );
+        const defaultPoints = defaultRejDataset ? defaultRejDataset.data : [];
+
+        const hasCustFilter = trendRejCustFilter.length > 0;
+        const hasPartFilter = trendRejPartFilter.length > 0;
+
+        // 1. Default: Week Wise
+        if (!hasCustFilter && !hasPartFilter) {
+            return {
+                axisType: "week",
+                labels: trendLabels,
+                points: defaultPoints,
+                rate: summaryData?.kpis?.rejection_rate_card?.value || "7.5% Rate"
+            };
+        }
+
+        // 2. Customer Wise Axis
+        if (hasCustFilter && !hasPartFilter) {
+            let totalInsp = 0;
+            let totalRej = 0;
+
+            const points = trendRejCustFilter.map(cust => {
+                let custInsp = 0;
+                let custRej = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const cName = (r.partyName || r.cname || "").trim();
+                    if (cName.toLowerCase() === cust.toLowerCase()) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const mat = parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0;
+                        const mac = parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0;
+                        custInsp += insp;
+                        custRej += (mat + mac);
+                    }
+                });
+                totalInsp += custInsp;
+                totalRej += custRej;
+                return custRej;
+            });
+
+            const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+            return {
+                axisType: "customer",
+                labels: trendRejCustFilter,
+                points: points,
+                rate: rateVal
+            };
+        }
+
+        // 3. PartNo Wise Axis
+        if (hasPartFilter && !hasCustFilter) {
+            let totalInsp = 0;
+            let totalRej = 0;
+
+            const points = trendRejPartFilter.map(part => {
+                let partInsp = 0;
+                let partRej = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+                    if (pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()))) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const mat = parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0;
+                        const mac = parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0;
+                        partInsp += insp;
+                        partRej += (mat + mac);
+                    }
+                });
+                totalInsp += partInsp;
+                totalRej += partRej;
+                return partRej;
+            });
+
+            const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+            return {
+                axisType: "part",
+                labels: trendRejPartFilter,
+                points: points,
+                rate: rateVal
+            };
+        }
+
+        // 4. Both Customer & PartNo Selected
+        let totalInsp = 0;
+        let totalRej = 0;
+        const labels = [];
+        const points = [];
+
+        trendRejCustFilter.forEach(cust => {
+            trendRejPartFilter.forEach(part => {
+                let comboInsp = 0;
+                let comboRej = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const cName = (r.partyName || r.cname || "").trim();
+                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+                    const matchC = cName.toLowerCase() === cust.toLowerCase();
+                    const matchP = pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()));
+                    if (matchC && matchP) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const mat = parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0;
+                        const mac = parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0;
+                        comboInsp += insp;
+                        comboRej += (mat + mac);
+                    }
+                });
+                totalInsp += comboInsp;
+                totalRej += comboRej;
+                labels.push(`${part} (${cust.length > 8 ? cust.substring(0, 8) + "…" : cust})`);
+                points.push(comboRej);
+            });
+        });
+
+        const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+        return {
+            axisType: "combo",
+            labels: labels,
+            points: points,
+            rate: rateVal
+        };
+    }, [chartsData, summaryData, trendRejCustFilter, trendRejPartFilter, searchFilteredInspectionRows]);
+
+    const activeReworkTrendData = useMemo(() => {
+        const trendLabels = chartsData?.trend?.labels || [];
+        const defaultRwkDataset = chartsData?.trend?.datasets?.find(d =>
+            d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
+        );
+        const defaultPoints = defaultRwkDataset ? defaultRwkDataset.data : [];
+
+        const hasCustFilter = trendRwkCustFilter.length > 0;
+        const hasPartFilter = trendRwkPartFilter.length > 0;
+
+        // 1. Default: Week Wise
+        if (!hasCustFilter && !hasPartFilter) {
+            return {
+                axisType: "week",
+                labels: trendLabels,
+                points: defaultPoints,
+                rate: summaryData?.kpis?.rework_rate_card?.value || "4.9% Rate"
+            };
+        }
+
+        // 2. Customer Wise Axis
+        if (hasCustFilter && !hasPartFilter) {
+            let totalInsp = 0;
+            let totalRwk = 0;
+
+            const points = trendRwkCustFilter.map(cust => {
+                let custInsp = 0;
+                let custRwk = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const cName = (r.partyName || r.cname || "").trim();
+                    if (cName.toLowerCase() === cust.toLowerCase()) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const rwk = parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0;
+                        custInsp += insp;
+                        custRwk += rwk;
+                    }
+                });
+                totalInsp += custInsp;
+                totalRwk += custRwk;
+                return custRwk;
+            });
+
+            const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+            return {
+                axisType: "customer",
+                labels: trendRwkCustFilter,
+                points: points,
+                rate: rateVal
+            };
+        }
+
+        // 3. PartNo Wise Axis
+        if (hasPartFilter && !hasCustFilter) {
+            let totalInsp = 0;
+            let totalRwk = 0;
+
+            const points = trendRwkPartFilter.map(part => {
+                let partInsp = 0;
+                let partRwk = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+                    if (pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()))) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const rwk = parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0;
+                        partInsp += insp;
+                        partRwk += rwk;
+                    }
+                });
+                totalInsp += partInsp;
+                totalRwk += partRwk;
+                return partRwk;
+            });
+
+            const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+            return {
+                axisType: "part",
+                labels: trendRwkPartFilter,
+                points: points,
+                rate: rateVal
+            };
+        }
+
+        // 4. Both Customer & PartNo Selected
+        let totalInsp = 0;
+        let totalRwk = 0;
+        const labels = [];
+        const points = [];
+
+        trendRwkCustFilter.forEach(cust => {
+            trendRwkPartFilter.forEach(part => {
+                let comboInsp = 0;
+                let comboRwk = 0;
+                searchFilteredInspectionRows.forEach(r => {
+                    const cName = (r.partyName || r.cname || "").trim();
+                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+                    const matchC = cName.toLowerCase() === cust.toLowerCase();
+                    const matchP = pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()));
+                    if (matchC && matchP) {
+                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                        const rwk = parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0;
+                        comboInsp += insp;
+                        comboRwk += rwk;
+                    }
+                });
+                totalInsp += comboInsp;
+                totalRwk += comboRwk;
+                labels.push(`${part} (${cust.length > 8 ? cust.substring(0, 8) + "…" : cust})`);
+                points.push(comboRwk);
+            });
+        });
+
+        const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
+
+        return {
+            axisType: "combo",
+            labels: labels,
+            points: points,
+            rate: rateVal
+        };
+    }, [chartsData, summaryData, trendRwkCustFilter, trendRwkPartFilter, searchFilteredInspectionRows]);
+
     const activeCustomerComplaints = useMemo(() => {
         let list = rawCustomerComplaints;
+
+        if (selectedCustomers.length > 0) {
+            list = list.filter(c => {
+                const name = (c.customer_name || "").trim();
+                return selectedCustomers.includes(name);
+            });
+        }
 
         if (searchQuery) {
             const q = searchQuery.toLowerCase().trim();
@@ -771,7 +1229,7 @@ export default function QualityAnalysis() {
             const matchProd = selectedComplaintProducts === null || selectedComplaintProducts.includes(c.product);
             return matchId && matchCust && matchProd;
         });
-    }, [rawCustomerComplaints, searchQuery, selectedComplaintIds, selectedComplaintCustomers, selectedComplaintProducts]);
+    }, [rawCustomerComplaints, selectedCustomers, searchQuery, selectedComplaintIds, selectedComplaintCustomers, selectedComplaintProducts]);
 
     const debounceRef = useRef(null);
 
@@ -825,6 +1283,24 @@ export default function QualityAnalysis() {
             }
             if (traceTypeDropdownRef.current && !traceTypeDropdownRef.current.contains(event.target)) {
                 setTraceTypeDropdownOpen(false);
+            }
+            if (customerRef.current && !customerRef.current.contains(event.target)) {
+                setCustomerDropdownOpen(false);
+            }
+            if (trendRejCustRef.current && !trendRejCustRef.current.contains(event.target)) {
+                setTrendRejCustDropdownOpen(false);
+            }
+            if (trendRejPartRef.current && !trendRejPartRef.current.contains(event.target)) {
+                setTrendRejPartDropdownOpen(false);
+            }
+            if (trendRwkCustRef.current && !trendRwkCustRef.current.contains(event.target)) {
+                setTrendRwkCustDropdownOpen(false);
+            }
+            if (trendRwkPartRef.current && !trendRwkPartRef.current.contains(event.target)) {
+                setTrendRwkPartDropdownOpen(false);
+            }
+            if (tableCustomerRef.current && !tableCustomerRef.current.contains(event.target)) {
+                setTableCustomerDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -885,16 +1361,8 @@ export default function QualityAnalysis() {
         const paretoData = chartsData?.pareto || { labels: [], datasets: [] };
 
         const trendLabels = trendData.labels || [];
-        const rejectDataset = trendData.datasets?.find(d =>
-            d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
-        );
-        const reworkDataset = trendData.datasets?.find(d =>
-            d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
-        );
-        const rejectDataPoints = rejectDataset ? rejectDataset.data : [];
-        const reworkDataPoints = reworkDataset ? reworkDataset.data : [];
-
-
+        const rejectDataPoints = activeRejectionTrendData.points || [];
+        const reworkDataPoints = activeReworkTrendData.points || [];
 
         // ── Rejection Gradient ──
         const rejectionCanvas = rejectionRef.current;
@@ -902,7 +1370,7 @@ export default function QualityAnalysis() {
         if (rejectionCanvas) {
             const ctx = rejectionCanvas.getContext("2d");
             if (ctx) {
-                const grad = ctx.createLinearGradient(0, 0, 0, 192);
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
                 grad.addColorStop(0, "rgba(239, 68, 68, 0.35)");
                 grad.addColorStop(1, "rgba(239, 68, 68, 0.0)");
                 rejectionGradient = grad;
@@ -915,7 +1383,7 @@ export default function QualityAnalysis() {
         if (reworkCanvas) {
             const ctx = reworkCanvas.getContext("2d");
             if (ctx) {
-                const grad = ctx.createLinearGradient(0, 0, 0, 192);
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
                 grad.addColorStop(0, "rgba(245, 166, 35, 0.35)");
                 grad.addColorStop(1, "rgba(245, 166, 35, 0.0)");
                 reworkGradient = grad;
@@ -1435,15 +1903,15 @@ export default function QualityAnalysis() {
         mk(paretoRef, paretoChart, finalParetoType, finalParetoData, finalParetoOptions);
 
         mk(rejectionRef, rejectionChart, "line", {
-            labels: trendLabels,
+            labels: activeRejectionTrendData.labels || trendLabels,
             datasets: [{
                 label: "Rejection Qty",
                 data: rejectDataPoints,
                 borderColor: "#ef4444",
                 backgroundColor: rejectionGradient,
-                tension: 0.4,
+                tension: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 0.2 : 0.4,
                 fill: true,
-                pointRadius: 4,
+                pointRadius: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 5 : 4,
                 pointBackgroundColor: "#ef4444",
                 pointBorderColor: "#fff",
                 pointBorderWidth: 2,
@@ -1471,21 +1939,30 @@ export default function QualityAnalysis() {
                 }
             },
             scales: {
-                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { ...fontBase, size: 9 },
+                        color: "#5a6a9a",
+                        autoSkip: false,
+                        maxRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 25 : 0,
+                        minRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 15 : 0
+                    }
+                },
                 y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
             },
         });
 
         mk(reworkRef, reworkChart, "line", {
-            labels: trendLabels,
+            labels: activeReworkTrendData.labels || trendLabels,
             datasets: [{
                 label: "Rework Qty",
                 data: reworkDataPoints,
                 borderColor: "#f97316",
                 backgroundColor: reworkGradient,
-                tension: 0.4,
+                tension: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 0.2 : 0.4,
                 fill: true,
-                pointRadius: 4,
+                pointRadius: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 5 : 4,
                 pointBackgroundColor: "#f97316",
                 pointBorderColor: "#fff",
                 pointBorderWidth: 2,
@@ -1513,7 +1990,16 @@ export default function QualityAnalysis() {
                 }
             },
             scales: {
-                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { ...fontBase, size: 9 },
+                        color: "#5a6a9a",
+                        autoSkip: false,
+                        maxRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 25 : 0,
+                        minRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 15 : 0
+                    }
+                },
                 y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
             },
         });
@@ -1593,13 +2079,15 @@ export default function QualityAnalysis() {
         return () => {
             [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart, supplierChart].forEach(c => c.current?.destroy());
         };
-    }, [chartsData, weeklyChartType, paretoChartType, supplierData, activeSupplierRejections]);
+    }, [chartsData, weeklyChartType, paretoChartType, supplierData, activeSupplierRejections, activeRejectionTrendData, activeReworkTrendData]);
 
     const resetFilters = () => {
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         setDateRange({ from: startOfMonth, to: endOfMonth });
+        setSelectedCustomers([]);
+        setSearchQuery("");
         setFilters({
             fromDate: formatYmd(startOfMonth),
             toDate: formatYmd(endOfMonth),
@@ -1610,42 +2098,7 @@ export default function QualityAnalysis() {
         });
     };
 
-    // hasNoData = true only when there's genuinely no data AND no search query is active.
-    // When a search query is active, even total_inspected=0 is a valid "no results" state
-    // and should show real filtered zeros (not mock/fallback data).
-    const hasNoData = !summaryLoading && !searchQuery && (
-        summaryData === null ||
-        summaryData.total_inspected === 0 ||
-        summaryData.total_inspected === "0" ||
-        !summaryData.total_inspected
-    );
-    // When search is active and data returned, treat loaded state as hasRealData regardless of qty
-    const hasSearchWithData = !!searchQuery && summaryData !== null;
-
-
     // ── Memoised derived data (avoids re-computation on unrelated renders) ─────
-
-    const searchFilteredInspectionRows = useMemo(() => {
-        if (hasNoData) return [];
-        const records = recordsData?.inspection_records || [];
-        const raw = records.map(r => ({
-            ...r,
-            cname: r.cname || r.partyName || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
-            partyName: r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : ""),
-            routecardDetails: r.roucard || r.routecardDetails || r.routecard || "—"
-        }));
-        if (!searchQuery) return raw;
-        const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r =>
-            (r.id && r.id.toLowerCase().includes(q)) ||
-            (r.partyName && r.partyName.toLowerCase().includes(q)) ||
-            (r.partNoDesc && r.partNoDesc.toLowerCase().includes(q)) ||
-            (r.process && r.process.toLowerCase().includes(q)) ||
-            (r.inspBy && r.inspBy.toLowerCase().includes(q)) ||
-            (r.result && r.result.toLowerCase().includes(q)) ||
-            (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
-        );
-    }, [recordsData, hasNoData, searchQuery]);
 
     const allTraceInspNoOptions = useMemo(() => {
         const set = new Set();
@@ -1761,6 +2214,13 @@ export default function QualityAnalysis() {
             rows = rows.filter(r => (r.id || "").toLowerCase().includes(q));
         }
 
+        if (tableSelectedCustomers.length > 0) {
+            rows = rows.filter(r => {
+                const cName = (r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")).trim();
+                return tableSelectedCustomers.some(c => c.toLowerCase() === cName.toLowerCase());
+            });
+        }
+
         if (tablePartNoDescSearch.trim()) {
             const q = tablePartNoDescSearch.toLowerCase().trim();
             rows = rows.filter(r => {
@@ -1770,7 +2230,7 @@ export default function QualityAnalysis() {
         }
 
         return rows;
-    }, [searchFilteredInspectionRows, selectedType, tableInspNoSearch, tablePartNoDescSearch]);
+    }, [searchFilteredInspectionRows, selectedType, tableInspNoSearch, tableSelectedCustomers, tablePartNoDescSearch]);
 
     const activeInspectionRowsTotals = useMemo(() => {
         let totalInsp = 0;
@@ -1793,11 +2253,15 @@ export default function QualityAnalysis() {
             totalRework += rework;
         });
 
+        const totalRej = totalMatRej + totalMacRej;
+        const totalRejPct = totalInsp > 0 ? ((totalRej / totalInsp) * 100).toFixed(1) : "0.0";
+
         return {
             insp: totalInsp,
             ok: totalOk,
             matRej: totalMatRej,
             macRej: totalMacRej,
+            rejPct: `${totalRejPct}%`,
             rework: totalRework
         };
     }, [activeInspectionRows]);
@@ -2214,6 +2678,118 @@ export default function QualityAnalysis() {
                             onChange={({ from, to }) => setDateRange({ from, to })}
                         />
                     </div>
+
+                    {/* Customer Name Filter Dropdown */}
+                    <div className="qa2-fg" style={{ width: '270px', flex: '0 0 auto', position: 'relative' }} ref={customerRef}>
+                        <label className="qa2-fl">Customer Name</label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                className={`qa2-cust-select-trigger${customerDropdownOpen ? " active" : ""}${selectedCustomers.length > 0 ? " has-filter" : ""}`}
+                                onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
+                                title="Filter by Customer Name"
+                            >
+                                <Users size={14} className="qa2-cust-trigger-icon" />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedCustomers.length === 0
+                                        ? "All Customers"
+                                        : selectedCustomers.length === 1
+                                        ? selectedCustomers[0]
+                                        : `${selectedCustomers.length} Customers`}
+                                </span>
+                                {selectedCustomers.length > 0 && (
+                                    <span className="qa2-cust-count-badge">{selectedCustomers.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${customerDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {customerDropdownOpen && (
+                                <div className="qa2-cust-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search customers..."
+                                            className="qa2-cust-search-input"
+                                            value={customerSearch}
+                                            onChange={(e) => setCustomerSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {customerSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setCustomerSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Customers Option */}
+                                        <div
+                                            className={`qa2-cust-item${selectedCustomers.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedCustomers([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-cust-check-box${selectedCustomers.length === 0 ? " checked" : ""}`}>
+                                                {selectedCustomers.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Customers</span>
+                                            <span className="qa2-cust-item-meta">{uniqueCustomerNames.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownCustomers.length === 0 ? (
+                                            <div className="qa2-cust-empty">
+                                                No customers found
+                                            </div>
+                                        ) : (
+                                            filteredDropdownCustomers.map((cust) => {
+                                                const isSelected = selectedCustomers.includes(cust);
+                                                return (
+                                                    <div
+                                                        key={cust}
+                                                        className={`qa2-cust-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleCustomerToggle(cust);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-cust-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={cust}>{cust}</span>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedCustomers.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCustomers([]);
+                                                }}
+                                            >
+                                                Reset to All Customers
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="qa2-fg" style={{ width: '240px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Search Records</label>
                         <div className="qa2-search-input-wrapper" style={{ position: 'relative', width: '100%' }}>
@@ -2252,6 +2828,19 @@ export default function QualityAnalysis() {
                             )}
                         </div>
                     </div>
+
+                    {(selectedCustomers.length > 0 || searchQuery) && (
+                        <div className="qa2-fg" style={{ flex: '0 0 auto' }}>
+                            <button
+                                type="button"
+                                className="qa2-reset-btn"
+                                onClick={resetFilters}
+                                title="Reset all filters"
+                            >
+                                <RotateCcw size={13} /> Reset Filters
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -2457,40 +3046,355 @@ export default function QualityAnalysis() {
 
             {/* ── Charts Row 3: Rejection & Rework Analytics ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                {/* Rejection Analytics Trend Card */}
+                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ overflow: "visible" }}>
                     <SectionHead
                         icon={AlertTriangle}
                         iconColor="#ef4444"
                         title="Rejection Analytics Trend"
-                        badge={summaryData?.kpis?.rejection_rate_card?.value || "7.5% Rate"}
+                        badge={activeRejectionTrendData.rate}
                         badgeCls="qa2-badge-red"
+                        extra={
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {/* Rejection Customer Filter */}
+                                <div style={{ position: 'relative' }} ref={trendRejCustRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn${trendRejCustDropdownOpen ? " active" : ""}${trendRejCustFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setTrendRejCustDropdownOpen(!trendRejCustDropdownOpen)}
+                                        title="Filter Rejection by Customer"
+                                    >
+                                        <Building2 size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {trendRejCustFilter.length === 0
+                                                ? "Customer: All"
+                                                : trendRejCustFilter.length === 1
+                                                ? trendRejCustFilter[0]
+                                                : `${trendRejCustFilter.length} Customers`}
+                                        </span>
+                                        {trendRejCustFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{trendRejCustFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${trendRejCustDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {trendRejCustDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel">
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search customer..."
+                                                    className="qa2-cust-search-input"
+                                                    value={trendRejCustSearch}
+                                                    onChange={(e) => setTrendRejCustSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {trendRejCustSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setTrendRejCustSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="qa2-cust-list-scroll">
+                                                <div
+                                                    className={`qa2-cust-item${trendRejCustFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setTrendRejCustFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${trendRejCustFilter.length === 0 ? " checked" : ""}`}>
+                                                        {trendRejCustFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: 600 }}>All Customers</span>
+                                                </div>
+                                                {filteredRejDropdownCustomers.map((cust, idx) => {
+                                                    const isChecked = trendRejCustFilter.includes(cust);
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => { e.stopPropagation(); handleTrendRejCustToggle(cust); }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={cust}>{cust}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Rejection Part No Filter */}
+                                <div style={{ position: 'relative' }} ref={trendRejPartRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn${trendRejPartDropdownOpen ? " active" : ""}${trendRejPartFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setTrendRejPartDropdownOpen(!trendRejPartDropdownOpen)}
+                                        title="Filter Rejection by Part No"
+                                    >
+                                        <Package size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {trendRejPartFilter.length === 0
+                                                ? "Part: All"
+                                                : trendRejPartFilter.length === 1
+                                                ? trendRejPartFilter[0]
+                                                : `${trendRejPartFilter.length} Parts`}
+                                        </span>
+                                        {trendRejPartFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{trendRejPartFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${trendRejPartDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {trendRejPartDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel">
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search part..."
+                                                    className="qa2-cust-search-input"
+                                                    value={trendRejPartSearch}
+                                                    onChange={(e) => setTrendRejPartSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {trendRejPartSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setTrendRejPartSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="qa2-cust-list-scroll">
+                                                <div
+                                                    className={`qa2-cust-item${trendRejPartFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setTrendRejPartFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${trendRejPartFilter.length === 0 ? " checked" : ""}`}>
+                                                        {trendRejPartFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: 600 }}>All Parts</span>
+                                                </div>
+                                                {filteredRejDropdownParts.map((part, idx) => {
+                                                    const isChecked = trendRejPartFilter.includes(part);
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => { e.stopPropagation(); handleTrendRejPartToggle(part); }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={part}>{part}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {(trendRejCustFilter.length > 0 || trendRejPartFilter.length > 0) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTrendRejCustFilter([]); setTrendRejPartFilter([]); }}
+                                        className="qa2-trend-reset-btn"
+                                        title="Reset Rejection Filters"
+                                    >
+                                        <RotateCcw size={11} />
+                                    </button>
+                                )}
+                            </div>
+                        }
                     />
                     {chartsLoading ? (
-                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "250px" }}>
                             <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
                         </div>
                     ) : (hasNoData || !chartsData?.trend) ? (
-                        <QualityEmptyState message="No Data found on this period" height="192px" />
+                        <QualityEmptyState message="No Data found on this period" height="250px" />
                     ) : (
-                        <div className="qa2-chart-wrap"><canvas ref={rejectionRef} /></div>
+                        <div className="qa2-chart-wrap" style={{ height: "250px" }}><canvas ref={rejectionRef} /></div>
                     )}
                 </div>
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+
+                {/* Rework Analytics Trend Card */}
+                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ overflow: "visible" }}>
                     <SectionHead
                         icon={Wrench}
                         iconColor="#f97316"
                         title="Rework Analytics Trend"
-                        badge={summaryData?.kpis?.rework_rate_card?.value || "4.9% Rate"}
+                        badge={activeReworkTrendData.rate}
                         badgeCls="qa2-badge-orange"
+                        extra={
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {/* Rework Customer Filter */}
+                                <div style={{ position: 'relative' }} ref={trendRwkCustRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn${trendRwkCustDropdownOpen ? " active" : ""}${trendRwkCustFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setTrendRwkCustDropdownOpen(!trendRwkCustDropdownOpen)}
+                                        title="Filter Rework by Customer"
+                                    >
+                                        <Building2 size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {trendRwkCustFilter.length === 0
+                                                ? "Customer: All"
+                                                : trendRwkCustFilter.length === 1
+                                                ? trendRwkCustFilter[0]
+                                                : `${trendRwkCustFilter.length} Customers`}
+                                        </span>
+                                        {trendRwkCustFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{trendRwkCustFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${trendRwkCustDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {trendRwkCustDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel">
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search customer..."
+                                                    className="qa2-cust-search-input"
+                                                    value={trendRwkCustSearch}
+                                                    onChange={(e) => setTrendRwkCustSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {trendRwkCustSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setTrendRwkCustSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="qa2-cust-list-scroll">
+                                                <div
+                                                    className={`qa2-cust-item${trendRwkCustFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setTrendRwkCustFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${trendRwkCustFilter.length === 0 ? " checked" : ""}`}>
+                                                        {trendRwkCustFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: 600 }}>All Customers</span>
+                                                </div>
+                                                {filteredRwkDropdownCustomers.map((cust, idx) => {
+                                                    const isChecked = trendRwkCustFilter.includes(cust);
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => { e.stopPropagation(); handleTrendRwkCustToggle(cust); }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={cust}>{cust}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Rework Part No Filter */}
+                                <div style={{ position: 'relative' }} ref={trendRwkPartRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn${trendRwkPartDropdownOpen ? " active" : ""}${trendRwkPartFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setTrendRwkPartDropdownOpen(!trendRwkPartDropdownOpen)}
+                                        title="Filter Rework by Part No"
+                                    >
+                                        <Package size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {trendRwkPartFilter.length === 0
+                                                ? "Part: All"
+                                                : trendRwkPartFilter.length === 1
+                                                ? trendRwkPartFilter[0]
+                                                : `${trendRwkPartFilter.length} Parts`}
+                                        </span>
+                                        {trendRwkPartFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{trendRwkPartFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${trendRwkPartDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {trendRwkPartDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel">
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search part..."
+                                                    className="qa2-cust-search-input"
+                                                    value={trendRwkPartSearch}
+                                                    onChange={(e) => setTrendRwkPartSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {trendRwkPartSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setTrendRwkPartSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="qa2-cust-list-scroll">
+                                                <div
+                                                    className={`qa2-cust-item${trendRwkPartFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setTrendRwkPartFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${trendRwkPartFilter.length === 0 ? " checked" : ""}`}>
+                                                        {trendRwkPartFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: 600 }}>All Parts</span>
+                                                </div>
+                                                {filteredRwkDropdownParts.map((part, idx) => {
+                                                    const isChecked = trendRwkPartFilter.includes(part);
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => { e.stopPropagation(); handleTrendRwkPartToggle(part); }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={part}>{part}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {(trendRwkCustFilter.length > 0 || trendRwkPartFilter.length > 0) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTrendRwkCustFilter([]); setTrendRwkPartFilter([]); }}
+                                        className="qa2-trend-reset-btn"
+                                        title="Reset Rework Filters"
+                                    >
+                                        <RotateCcw size={11} />
+                                    </button>
+                                )}
+                            </div>
+                        }
                     />
                     {chartsLoading ? (
-                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "192px" }}>
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "250px" }}>
                             <div className="qa2-skeleton qa2-shimmer" style={{ height: "100%", borderRadius: "8px" }} />
                         </div>
                     ) : (hasNoData || !chartsData?.trend) ? (
-                        <QualityEmptyState message="No Data found on this period" height="192px" />
+                        <QualityEmptyState message="No Data found on this period" height="250px" />
                     ) : (
-                        <div className="qa2-chart-wrap"><canvas ref={reworkRef} /></div>
+                        <div className="qa2-chart-wrap" style={{ height: "250px" }}><canvas ref={reworkRef} /></div>
                     )}
                 </div>
             </div>
@@ -2795,7 +3699,7 @@ export default function QualityAnalysis() {
             </div>
 
             {/* ── Full Inspection Table ── */}
-            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium" style={{ overflow: 'visible' }}>
                 <SectionHead
                     icon={FileText}
                     iconColor="#3b82f6"
@@ -2848,8 +3752,9 @@ export default function QualityAnalysis() {
                     }
                 />
                 {/* Table Head Filter Bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.65rem 1.25rem', borderBottom: '1px solid rgba(26,84,212,0.08)', background: '#f8fafc', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '0 0 auto', width: '220px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.65rem 1.25rem', borderBottom: '1px solid rgba(26,84,212,0.08)', background: '#f8fafc', flexWrap: 'wrap', position: 'relative', zIndex: 15 }}>
+                    {/* Insp No Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '0 0 auto', width: '200px' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Insp No:</span>
                         <div style={{ position: 'relative', width: '100%' }}>
                             <input
@@ -2873,7 +3778,81 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '1', minWidth: '260px' }}>
+                    {/* Customer Name Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '0 0 auto', width: '250px', position: 'relative' }} ref={tableCustomerRef}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Customer:</span>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <button
+                                type="button"
+                                className="qa2-trend-filter-btn"
+                                style={{ width: '100%', justifyContent: 'space-between', padding: '0.35rem 0.65rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #cbd5e1', height: '31px' }}
+                                onClick={() => setTableCustomerDropdownOpen(prev => !prev)}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <Building2 size={12} style={{ color: '#2d6de8', flexShrink: 0 }} />
+                                    <span style={{ fontSize: '0.73rem', fontWeight: 500, color: tableSelectedCustomers.length > 0 ? '#1e293b' : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {tableSelectedCustomers.length === 0
+                                            ? "All Customers"
+                                            : tableSelectedCustomers.length === 1
+                                            ? tableSelectedCustomers[0]
+                                            : `${tableSelectedCustomers.length} Customers`}
+                                    </span>
+                                </div>
+                                <ChevronDown size={12} style={{ color: '#94a3b8', flexShrink: 0, transform: tableCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                            </button>
+
+                            {tableCustomerDropdownOpen && (
+                                <div className="qa2-trend-dropdown-panel" style={{ width: '270px', top: '100%', marginTop: '4px', left: 0, zIndex: 50 }}>
+                                    <div className="qa2-cust-search-wrap">
+                                        <Search size={12} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search customer..."
+                                            className="qa2-cust-search-input"
+                                            value={tableCustomerSearch}
+                                            onChange={(e) => setTableCustomerSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {tableCustomerSearch && (
+                                            <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setTableCustomerSearch(""); }}>
+                                                <X size={11} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="qa2-cust-list-scroll" style={{ maxHeight: '200px' }}>
+                                        <div
+                                            className={`qa2-cust-item${tableSelectedCustomers.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => { e.stopPropagation(); setTableSelectedCustomers([]); }}
+                                        >
+                                            <div className={`qa2-cust-check-box${tableSelectedCustomers.length === 0 ? " checked" : ""}`}>
+                                                {tableSelectedCustomers.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title" style={{ fontWeight: 600 }}>All Customers</span>
+                                        </div>
+                                        {filteredTableDropdownCustomers.map((cust, idx) => {
+                                            const isChecked = tableSelectedCustomers.includes(cust);
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); handleTableCustomerToggle(cust); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                        {isChecked && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" title={cust}>{cust}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Part No – Description Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: '1', minWidth: '220px' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Part No – Description:</span>
                         <div style={{ position: 'relative', width: '100%' }}>
                             <input
@@ -2897,10 +3876,10 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
-                    {(tableInspNoSearch || tablePartNoDescSearch) && (
+                    {(tableInspNoSearch || tableSelectedCustomers.length > 0 || tablePartNoDescSearch) && (
                         <button
                             type="button"
-                            onClick={() => { setTableInspNoSearch(""); setTablePartNoDescSearch(""); }}
+                            onClick={() => { setTableInspNoSearch(""); setTableSelectedCustomers([]); setTablePartNoDescSearch(""); }}
                             style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.3rem 0.65rem', borderRadius: '5px', marginLeft: 'auto' }}
                         >
                             <X size={12} /> Clear Head Filters
@@ -2926,8 +3905,8 @@ export default function QualityAnalysis() {
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Type", "Insp No", "Insp Date", "Part No", "Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rework Qty", "Insp By"].map(h => (
-                                        <th key={h} className={h.includes("Qty") ? "qa2-td-r" : ""}>{h}</th>
+                                    {["Type", "Insp No", "Insp Date", "Part No", "Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rej %", "Rework Qty", "Insp By"].map(h => (
+                                        <th key={h} className={h.includes("Qty") || h.includes("%") ? "qa2-td-r" : ""}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -2945,6 +3924,9 @@ export default function QualityAnalysis() {
                                         const okQty = r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : "0"));
                                         const matRejQty = r.matRejQty || (r.result === "FAIL" && !r.product?.toLowerCase().includes("segment") ? r.qty : "0");
                                         const macRejQty = r.macRejQty || (r.result === "FAIL" && r.product?.toLowerCase().includes("segment") ? r.qty : "0");
+                                        const rowInspNum = parseFloat(String(inspQty || 0).replace(/,/g, "")) || 0;
+                                        const rowTotalRej = (parseFloat(String(matRejQty || 0).replace(/,/g, "")) || 0) + (parseFloat(String(macRejQty || 0).replace(/,/g, "")) || 0);
+                                        const rejPct = rowInspNum > 0 ? ((rowTotalRej / rowInspNum) * 100).toFixed(1) : "0.0";
                                         const reworkQty = r.reworkQty || (r.result === "REWORK" ? r.qty : "0");
                                         const inspBy = r.inspBy || getInspectorName(r.id);
 
@@ -2972,6 +3954,23 @@ export default function QualityAnalysis() {
                                                 <td className="qa2-td-r qa2-green" style={{ ...getColStyle("OK Qty"), fontWeight: 600 }}>{okQty}</td>
                                                 <td className="qa2-td-r qa2-red" style={getColStyle("Mat Rej Qty")}>{matRejQty}</td>
                                                 <td className="qa2-td-r qa2-red" style={getColStyle("Mac Rej Qty")}>{macRejQty}</td>
+                                                <td className="qa2-td-r" style={getColStyle("Rej %")}>
+                                                    {parseFloat(rejPct) > 0 ? (
+                                                        <span style={{
+                                                            display: "inline-block",
+                                                            padding: "2px 6px",
+                                                            borderRadius: "4px",
+                                                            fontSize: "0.74rem",
+                                                            fontWeight: 700,
+                                                            background: parseFloat(rejPct) > 5 ? "rgba(239, 68, 68, 0.1)" : "rgba(249, 115, 22, 0.1)",
+                                                            color: parseFloat(rejPct) > 5 ? "#dc2626" : "#ea580c"
+                                                        }}>
+                                                            {rejPct}%
+                                                        </span>
+                                                    ) : (
+                                                        <span className="qa2-muted" style={{ fontSize: "0.75rem", fontWeight: 500 }}>0.0%</span>
+                                                    )}
+                                                </td>
                                                 <td className="qa2-td-r qa2-orange" style={getColStyle("Rework Qty")}>{reworkQty}</td>
                                                 <td className="qa2-muted qa2-nowrap" style={getColStyle("Insp By")}>{inspBy}</td>
                                             </tr>
@@ -2979,7 +3978,7 @@ export default function QualityAnalysis() {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="12" style={{ padding: 0 }}>
+                                        <td colSpan="13" style={{ padding: 0 }}>
                                             <QualityEmptyState message="No Data found on this period" height="240px" />
                                         </td>
                                     </tr>
@@ -2992,6 +3991,7 @@ export default function QualityAnalysis() {
                                     <td className="qa2-td-r" style={getColStyle("OK Qty")}><span className="qa2-total-badge qa2-total-badge-green">{activeInspectionRowsTotals.ok.toLocaleString()}</span></td>
                                     <td className="qa2-td-r" style={getColStyle("Mat Rej Qty")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.matRej.toLocaleString()}</span></td>
                                     <td className="qa2-td-r" style={getColStyle("Mac Rej Qty")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.macRej.toLocaleString()}</span></td>
+                                    <td className="qa2-td-r" style={getColStyle("Rej %")}><span className="qa2-total-badge qa2-total-badge-red">{activeInspectionRowsTotals.rejPct}</span></td>
                                     <td className="qa2-td-r" style={getColStyle("Rework Qty")}><span className="qa2-total-badge qa2-total-badge-orange">{activeInspectionRowsTotals.rework.toLocaleString()}</span></td>
                                     <td style={getColStyle("Insp By")}></td>
                                 </tr>

@@ -322,6 +322,9 @@
 /* ── Filter Card ──────────────────────────────────────────── */
 .qa2-filter-card {
     margin-bottom: 1.3rem;
+    overflow: visible !important;
+    position: relative;
+    z-index: 60;
 }
 
 .qa2-filter-title {
@@ -1838,3 +1841,399 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODERN CUSTOMER DROPDOWN FILTER (Quality Analysis)
+   ═══════════════════════════════════════════════════════════════ */
+
+.qa2-cust-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    height: 39px;
+    padding: 0 12px;
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 9px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    color: #1a2a5e;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.qa2-cust-select-trigger:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(45, 109, 232, 0.08);
+}
+
+.qa2-cust-select-trigger.active {
+    background: #ffffff;
+    border-color: #2d6de8;
+    box-shadow: 0 0 0 3px rgba(45, 109, 232, 0.15);
+}
+
+.qa2-cust-select-trigger.has-filter {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.qa2-cust-trigger-icon {
+    color: #2d6de8;
+    flex-shrink: 0;
+}
+
+.qa2-cust-trigger-label {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.81rem;
+    color: #334155;
+}
+
+.qa2-cust-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.qa2-cust-arrow-icon {
+    color: #64748b;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.qa2-cust-arrow-icon.open {
+    transform: rotate(180deg);
+}
+
+.qa2-cust-dropdown-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 280px;
+    width: 100%;
+    max-width: 380px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    z-index: 1000;
+    padding: 8px;
+    animation: qa2-fadeUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+    box-sizing: border-box;
+}
+
+.qa2-cust-search-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+}
+
+.qa2-cust-search-icon {
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.qa2-cust-search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.76rem;
+    color: #0f172a;
+    outline: none;
+    font-family: inherit;
+    min-width: 0;
+}
+
+.qa2-cust-search-clear {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.qa2-cust-search-clear:hover {
+    color: #475569;
+    background: #e2e8f0;
+}
+
+.qa2-cust-list-scroll {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 2px;
+}
+
+.qa2-cust-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    user-select: none;
+}
+
+.qa2-cust-item:hover {
+    background: #f1f5f9;
+}
+
+.qa2-cust-item.is-active {
+    background: #eff6ff;
+}
+
+.qa2-cust-check-box {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.12s ease;
+    color: #ffffff;
+}
+
+.qa2-cust-check-box.checked {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+.qa2-cust-item-title {
+    flex: 1;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.qa2-cust-item.is-active .qa2-cust-item-title {
+    font-weight: 600;
+    color: #1d4ed8;
+}
+
+.qa2-cust-item-meta {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #64748b;
+    background: rgba(100, 116, 139, 0.1);
+    padding: 1px 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.qa2-cust-divider {
+    height: 1px;
+    background: #f1f5f9;
+    margin: 4px 0;
+}
+
+.qa2-cust-empty {
+    padding: 12px;
+    font-size: 0.74rem;
+    color: #94a3b8;
+    text-align: center;
+}
+
+.qa2-cust-footer {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 6px;
+    margin-top: 4px;
+}
+
+.qa2-cust-reset-btn {
+    width: 100%;
+    padding: 5px 8px;
+    border: none;
+    background: transparent;
+    color: #dc2626;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    text-align: center;
+    transition: background 0.12s ease;
+}
+
+.qa2-cust-reset-btn:hover {
+    background: #fef2f2;
+}
+
+.qa2-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 9px;
+    border: 1.5px solid rgba(239, 68, 68, 0.2);
+    background: #fef2f2;
+    color: #dc2626;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.qa2-reset-btn:hover {
+    background: #fee2e2;
+    border-color: rgba(239, 68, 68, 0.4);
+    transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODERN TREND FILTER BUTTONS & DROPDOWNS (Rejection & Rework)
+   ═══════════════════════════════════════════════════════════════ */
+
+.qa2-trend-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 29px;
+    padding: 0 9px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font-size: 0.73rem;
+    font-weight: 500;
+    font-family: inherit;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.qa2-trend-filter-btn:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.qa2-trend-filter-btn.active {
+    background: #ffffff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.15);
+}
+
+.qa2-trend-filter-btn.has-filter {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.qa2-trend-filter-icon {
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.qa2-trend-filter-btn.has-filter .qa2-trend-filter-icon {
+    color: #2563eb;
+}
+
+.qa2-trend-filter-label {
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.qa2-trend-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.qa2-trend-arrow {
+    color: #94a3b8;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+}
+
+.qa2-trend-arrow.open {
+    transform: rotate(180deg);
+}
+
+.qa2-trend-dropdown-panel {
+    position: absolute;
+    top: calc(100% + 5px);
+    right: 0;
+    min-width: 250px;
+    max-width: 320px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    z-index: 1200;
+    padding: 7px;
+    animation: qa2-fadeUp 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+    box-sizing: border-box;
+}
+
+.qa2-trend-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 29px;
+    height: 29px;
+    border-radius: 7px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    color: #ea580c;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.qa2-trend-reset-btn:hover {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #c2410c;
+    transform: rotate(-45deg);
+}
