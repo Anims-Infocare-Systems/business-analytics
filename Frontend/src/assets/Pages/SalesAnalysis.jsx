@@ -1390,150 +1390,7 @@ function PartWiseHistorySection({
     };
   }, [activePart, summary]);
 
-  /* ── 7. Chart.js Rate Trajectory Canvas ───────────────────── */
-  const chartCanvasRef = useRef(null);
-  const chartInstanceRef = useRef(null);
-
-  useEffect(() => {
-    if (!chartCanvasRef.current || !activePart) return;
-
-    if (chartInstanceRef.current) {
-      chartInstanceRef.current.destroy();
-      chartInstanceRef.current = null;
-    }
-
-    const ctx = chartCanvasRef.current.getContext("2d");
-    if (!ctx) return;
-
-    const txDates = [...activePart.transactions]
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
-      .map((t) => ({
-        date: formatInvDate(t.date),
-        rate: Number(t.rate || 0),
-        qty: Number(t.qty || 0),
-        amount: Number(t.amount || 0),
-      }));
-
-    const labels = txDates.map((d) => d.date);
-    const rateData = txDates.map((d) => d.rate);
-    const qtyData = txDates.map((d) => d.qty);
-
-    chartInstanceRef.current = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: labels.length ? labels : ["01/01/2026", "15/01/2026", "01/02/2026", "15/02/2026"],
-        datasets: [
-          {
-            type: "line",
-            label: "Invoiced Rate (₹)",
-            data: rateData.length ? rateData : [activePart.baseRate, activePart.baseRate, activePart.activeRate, activePart.activeRate],
-            borderColor: "#2563eb",
-            backgroundColor: "rgba(37, 99, 235, 0.08)",
-            borderWidth: 2.8,
-            pointBackgroundColor: "#2563eb",
-            pointBorderColor: "#ffffff",
-            pointBorderWidth: 2,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            stepped: "middle",
-            fill: true,
-            tension: 0,
-            yAxisID: "yRate",
-          },
-          {
-            type: "bar",
-            label: "Dispatch Volume (Units)",
-            data: qtyData.length ? qtyData : [120, 150, 200, 180],
-            backgroundColor: "rgba(6, 182, 212, 0.35)",
-            borderColor: "#06b6d4",
-            borderWidth: 1,
-            borderRadius: 6,
-            barThickness: 18,
-            yAxisID: "yQty",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false,
-        },
-        plugins: {
-          legend: {
-            position: "top",
-            labels: {
-              boxWidth: 12,
-              usePointStyle: true,
-              font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: "600" },
-            },
-          },
-          tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.92)",
-            titleFont: { size: 12, weight: "700" },
-            bodyFont: { size: 11 },
-            padding: 10,
-            cornerRadius: 8,
-            callbacks: {
-              label: function (ctx) {
-                if (ctx.dataset.yAxisID === "yRate") {
-                  return ` Rate: ₹${Number(ctx.raw).toFixed(2)}`;
-                }
-                return ` Dispatch: ${Number(ctx.raw).toLocaleString()} units`;
-              },
-            },
-          },
-          datalabels: {
-            display: false,
-          },
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { font: { size: 10, weight: "500" }, color: "#64748b" },
-          },
-          yRate: {
-            type: "linear",
-            position: "left",
-            title: {
-              display: true,
-              text: "Rate (₹)",
-              font: { size: 11, weight: "700" },
-              color: "#2563eb",
-            },
-            ticks: {
-              callback: (v) => `₹${v}`,
-              font: { size: 10 },
-              color: "#2563eb",
-            },
-            grid: { color: "rgba(226, 232, 240, 0.6)" },
-          },
-          yQty: {
-            type: "linear",
-            position: "right",
-            title: {
-              display: true,
-              text: "Dispatch Qty",
-              font: { size: 11, weight: "700" },
-              color: "#06b6d4",
-            },
-            ticks: { font: { size: 10 }, color: "#06b6d4" },
-            grid: { display: false },
-          },
-        },
-      },
-    });
-
-    return () => {
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy();
-        chartInstanceRef.current = null;
-      }
-    };
-  }, [activePart, activeTab]);
-
-  /* ── 8. Export Helpers ────────────────────────────────────── */
+  /* ── 7. Export Helpers ────────────────────────────────────── */
   function exportRevisionsCSV() {
     if (!rateRevisionData.revisions.length) return;
     const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reason", "Reference Document", "Status"];
@@ -1753,13 +1610,12 @@ function PartWiseHistorySection({
                 <span className="pwh-hero-current-rate">₹{formatExactRupees(activePart.activeRate)}</span>
                 {activePart.baseRate > 0 && (
                   <span
-                    className={`pwh-hero-diff-badge ${
-                      activePart.activeRate > activePart.baseRate
+                    className={`pwh-hero-diff-badge ${activePart.activeRate > activePart.baseRate
                         ? "pwh-hero-diff-badge--up"
                         : activePart.activeRate < activePart.baseRate
-                        ? "pwh-hero-diff-badge--down"
-                        : "pwh-hero-diff-badge--neutral"
-                    }`}
+                          ? "pwh-hero-diff-badge--down"
+                          : "pwh-hero-diff-badge--neutral"
+                      }`}
                   >
                     {activePart.activeRate > activePart.baseRate ? (
                       <TrendingUp size={12} />
@@ -1926,13 +1782,12 @@ function PartWiseHistorySection({
                         <div className="pwh-timeline-date">{formatInvDate(step.effDate)}</div>
                         <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
                         <div
-                          className={`pwh-timeline-delta ${
-                            step.diffVal > 0
+                          className={`pwh-timeline-delta ${step.diffVal > 0
                               ? "pwh-pill--green"
                               : step.diffVal < 0
-                              ? "pwh-pill--red"
-                              : "pwh-pill--neutral"
-                          }`}
+                                ? "pwh-pill--red"
+                                : "pwh-pill--neutral"
+                            }`}
                         >
                           {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
                         </div>
@@ -1940,20 +1795,6 @@ function PartWiseHistorySection({
                       </div>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Rate Trajectory Chart */}
-              <div className="pwh-chart-card">
-                <div className="pwh-chart-head">
-                  <span className="pwh-chart-title">
-                    <TrendingUp size={16} style={{ color: "#2563eb" }} />
-                    Rate Trajectory & Dispatch Volume Step Chart
-                  </span>
-                  <span className="sa-badge sa-badge--blue">Dual Axis: Rate (₹) vs Dispatch Qty</span>
-                </div>
-                <div className="pwh-chart-wrapper">
-                  <canvas ref={chartCanvasRef} />
                 </div>
               </div>
 
@@ -1987,13 +1828,12 @@ function PartWiseHistorySection({
                         </td>
                         <td>
                           <span
-                            className={`pwh-pill ${
-                              rev.diffPct > 0
+                            className={`pwh-pill ${rev.diffPct > 0
                                 ? "pwh-pill--green"
                                 : rev.diffPct < 0
-                                ? "pwh-pill--red"
-                                : "pwh-pill--neutral"
-                            }`}
+                                  ? "pwh-pill--red"
+                                  : "pwh-pill--neutral"
+                              }`}
                           >
                             {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
                           </span>
@@ -2236,9 +2076,8 @@ function PartWiseHistorySection({
                         vs Global Avg ₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}
                       </span>
                       <span
-                        className={`pwh-pill ${
-                          comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"
-                        }`}
+                        className={`pwh-pill ${comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"
+                          }`}
                       >
                         {comparativeMetrics.rateDiffVsGlobal >= 0 ? "+" : ""}
                         {comparativeMetrics.rateDiffVsGlobal}%
@@ -2386,9 +2225,8 @@ function PartWiseHistorySection({
                           <td style={{ color: "#64748b" }}>₹{formatExactRupees(p.baseRate)}</td>
                           <td>
                             <span
-                              className={`pwh-pill ${
-                                deltaPct > 0 ? "pwh-pill--green" : deltaPct < 0 ? "pwh-pill--red" : "pwh-pill--neutral"
-                              }`}
+                              className={`pwh-pill ${deltaPct > 0 ? "pwh-pill--green" : deltaPct < 0 ? "pwh-pill--red" : "pwh-pill--neutral"
+                                }`}
                             >
                               {deltaPct > 0 ? `+${deltaPct.toFixed(1)}%` : `${deltaPct.toFixed(1)}%`}
                             </span>
