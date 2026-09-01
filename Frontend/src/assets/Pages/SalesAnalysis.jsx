@@ -1294,31 +1294,7 @@ function PartWiseHistorySection({
     };
   }, [activePart, dateRange]);
 
-  /* ── 5. Comparative Sales Analysis Metrics ────────────────── */
-  const comparativeMetrics = useMemo(() => {
-    if (!activePart) return null;
-
-    const globalAvgSellingRate = Number(summary?.avg_selling_rate || 0);
-    const globalTurnover = Number(summary?.grand_total || (summary?.turn_over_lakhs ? summary.turn_over_lakhs * 100_000 : 0)) || 0;
-    const totalCatalogRev = partCatalog.reduce((sum, p) => sum + (p.totalRevenue || 0), 0);
-    const effectiveTotalTurnover = globalTurnover > 0 ? globalTurnover : (totalCatalogRev > 0 ? totalCatalogRev : activePart.totalRevenue);
-    const partRevenueShare = effectiveTotalTurnover > 0 ? ((activePart.totalRevenue / effectiveTotalTurnover) * 100) : 0;
-    const rateDiffVsGlobal = globalAvgSellingRate > 0 ? ((activePart.activeRate - globalAvgSellingRate) / globalAvgSellingRate) * 100 : 0;
-
-    const rateSpread = activePart.maxRate - activePart.minRate;
-    const volatilityPct = activePart.activeRate > 0 ? (rateSpread / activePart.activeRate) * 100 : 0;
-    const stabilityScore = Math.max(85, Math.min(100, 100 - volatilityPct)).toFixed(1);
-
-    return {
-      globalAvgSellingRate,
-      partRevenueShare: partRevenueShare.toFixed(2),
-      rateDiffVsGlobal: rateDiffVsGlobal.toFixed(1),
-      isAboveGlobal: rateDiffVsGlobal >= 0,
-      stabilityScore,
-    };
-  }, [activePart, summary, partCatalog]);
-
-  /* ── 6. Export Helpers ────────────────────────────────────── */
+  /* ── 5. Export Helpers ────────────────────────────────────── */
   function exportRevisionsCSV() {
     if (!rateRevisionData.revisions.length) return;
     const headers = ["Rev No", "Effective Date", "Customer", "Previous Rate (INR)", "Revised Rate (INR)", "Difference (INR)", "Variance (%)", "Reference Document", "Status"];
@@ -1535,78 +1511,7 @@ function PartWiseHistorySection({
         )}
 
         {/* ═══════════════════════════════════════════════════════
-            3. EXECUTIVE KPI ROW (4 STAT CARDS)
-        ═══════════════════════════════════════════════════════ */}
-        {activePart && comparativeMetrics && (
-          <div className="pwh-kpi-grid">
-            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#2563eb", "--kpi-bg": "#eff6ff" }}>
-              <div className="pwh-kpi-top">
-                <span className="pwh-kpi-label">Blended Realization Rate</span>
-                <div className="pwh-kpi-icon">
-                  <IndianRupee size={15} />
-                </div>
-              </div>
-              <div className="pwh-kpi-val">₹{formatExactRupees(activePart.avgRealizedRate)}</div>
-              <div className="pwh-kpi-bottom">
-                <span>Spread: ₹{formatExactRupees(activePart.minRate)} — ₹{formatExactRupees(activePart.maxRate)}</span>
-                <span className="pwh-pill pwh-pill--blue">Unit Average</span>
-              </div>
-            </div>
-
-            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#06b6d4", "--kpi-bg": "#ecfeff" }}>
-              <div className="pwh-kpi-top">
-                <span className="pwh-kpi-label">Revenue Share in Period</span>
-                <div className="pwh-kpi-icon">
-                  <Percent size={15} />
-                </div>
-              </div>
-              <div className="pwh-kpi-val" style={{ color: "#0891b2" }}>
-                {comparativeMetrics.partRevenueShare}%
-              </div>
-              <div className="pwh-kpi-bottom">
-                <span>Total: {formatLakhs(activePart.totalRevenue)}</span>
-                <span className="pwh-pill pwh-pill--green">Top Contributor</span>
-              </div>
-            </div>
-
-            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#8b5cf6", "--kpi-bg": "#f5f3ff" }}>
-              <div className="pwh-kpi-top">
-                <span className="pwh-kpi-label">Rate vs Company Avg Rate</span>
-                <div className="pwh-kpi-icon">
-                  <Scale size={15} />
-                </div>
-              </div>
-              <div className="pwh-kpi-val" style={{ color: "#7c3aed" }}>
-                {comparativeMetrics.rateDiffVsGlobal >= 0 ? `+${comparativeMetrics.rateDiffVsGlobal}%` : `${comparativeMetrics.rateDiffVsGlobal}%`}
-              </div>
-              <div className="pwh-kpi-bottom">
-                <span>Company Avg: ₹{formatExactRupees(comparativeMetrics.globalAvgSellingRate)}</span>
-                <span className={`pwh-pill ${comparativeMetrics.isAboveGlobal ? "pwh-pill--green" : "pwh-pill--amber"}`}>
-                  {comparativeMetrics.isAboveGlobal ? "Premium Realization" : "Standard Tier"}
-                </span>
-              </div>
-            </div>
-
-            <div className="pwh-kpi-card" style={{ "--kpi-accent": "#10b981", "--kpi-bg": "#ecfdf5" }}>
-              <div className="pwh-kpi-top">
-                <span className="pwh-kpi-label">Rate Stability Index</span>
-                <div className="pwh-kpi-icon">
-                  <ShieldCheck size={15} />
-                </div>
-              </div>
-              <div className="pwh-kpi-val" style={{ color: "#059669" }}>
-                {comparativeMetrics.stabilityScore}%
-              </div>
-              <div className="pwh-kpi-bottom">
-                <span>{rateRevisionData.revisions.length} Revision Log(s)</span>
-                <span className="pwh-pill pwh-pill--green">High Stability</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════
-            4. WORKSPACE TAB NAVIGATION
+            3. WORKSPACE TAB NAVIGATION
         ═══════════════════════════════════════════════════════ */}
         <div className="pwh-tabs-bar">
           <div className="pwh-tabs-nav">
