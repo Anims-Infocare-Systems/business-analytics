@@ -1347,8 +1347,10 @@ function PartWiseHistorySection({
     if (!activePart) return null;
 
     const globalAvgSellingRate = Number(summary?.avg_selling_rate || 0);
-    const globalTurnover = Number(summary?.grand_total || (summary?.turn_over_lakhs ? summary.turn_over_lakhs * 100_000 : 0)) || 1;
-    const partRevenueShare = (activePart.totalRevenue / globalTurnover) * 100;
+    const globalTurnover = Number(summary?.grand_total || (summary?.turn_over_lakhs ? summary.turn_over_lakhs * 100_000 : 0)) || 0;
+    const totalCatalogRev = partCatalog.reduce((sum, p) => sum + (p.totalRevenue || 0), 0);
+    const effectiveTotalTurnover = globalTurnover > 0 ? globalTurnover : (totalCatalogRev > 0 ? totalCatalogRev : activePart.totalRevenue);
+    const partRevenueShare = effectiveTotalTurnover > 0 ? ((activePart.totalRevenue / effectiveTotalTurnover) * 100) : 0;
     const rateDiffVsGlobal = globalAvgSellingRate > 0 ? ((activePart.activeRate - globalAvgSellingRate) / globalAvgSellingRate) * 100 : 0;
 
     const monthlyMap = new Map();
@@ -1597,8 +1599,6 @@ function PartWiseHistorySection({
     );
   }, [partCatalog, searchQuery]);
 
-  const topChips = useMemo(() => partCatalog.slice(0, 6), [partCatalog]);
-
   const multiPartComparisonList = useMemo(() => {
     return partCatalog.filter((p) => multiPartSelected.includes(p.partNo));
   }, [partCatalog, multiPartSelected]);
@@ -1719,21 +1719,6 @@ function PartWiseHistorySection({
                   )}
                 </div>
               )}
-            </div>
-
-            {/* Quick Pick Chips */}
-            <div className="pwh-chips-group">
-              <span className="pwh-chips-label">Quick Pick:</span>
-              {topChips.map((chip) => (
-                <button
-                  key={chip.partNo}
-                  className={`pwh-chip ${chip.partNo === selectedPartNo ? "pwh-chip--active" : ""}`}
-                  onClick={() => setSelectedPartNo(chip.partNo)}
-                >
-                  <span>{chip.partNo}</span>
-                  <span className="pwh-chip-badge">₹{Math.round(chip.activeRate)}</span>
-                </button>
-              ))}
             </div>
           </div>
         </div>

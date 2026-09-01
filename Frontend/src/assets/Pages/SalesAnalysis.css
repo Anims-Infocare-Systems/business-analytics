@@ -4171,8 +4171,8 @@
 .pwh-search-box {
   position: relative;
   flex: 1;
-  min-width: 260px;
-  max-width: 420px;
+  min-width: 280px;
+  max-width: 520px;
 }
 
 .pwh-search-icon {
