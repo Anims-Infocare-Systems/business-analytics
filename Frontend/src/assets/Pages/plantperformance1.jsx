@@ -16424,7 +16424,9 @@ function OtdReportBottomTable({ data, filters }) {
     "Delayed Del Qty",
     "OTD %",
     "Status",
-    "Value"
+    "Order Value",
+    "Delivered Value",
+    "Pending Value"
   ];
 
   const rows = React.useMemo(
@@ -16436,6 +16438,10 @@ function OtdReportBottomTable({ data, filters }) {
       const otdPctVal = isDelivered
         ? (r.otdPct != null ? Number(r.otdPct) : (r.status === "On Time" ? 100 : 85))
         : null;
+
+      const orderVal = r.orderValue != null ? Number(r.orderValue) : (r.value != null ? Number(r.value) : null);
+      const delVal = r.deliveredValue != null ? Number(r.deliveredValue) : null;
+      const pendVal = r.pendingValue != null ? Number(r.pendingValue) : null;
 
       return [
         String(idx + 1),
@@ -16451,7 +16457,9 @@ function OtdReportBottomTable({ data, filters }) {
         fmtNum(delayedDelQty),
         otdPctVal != null ? `${otdPctVal.toFixed(1)}%` : "—",
         r.status || "—",
-        r.value != null ? `₹${Number(r.value).toLocaleString("en-IN")}` : "—",
+        orderVal != null ? `₹${Number(orderVal).toLocaleString("en-IN")}` : "—",
+        delVal != null ? `₹${Number(delVal).toLocaleString("en-IN")}` : "—",
+        pendVal != null ? `₹${Number(pendVal).toLocaleString("en-IN")}` : "—",
       ];
     }),
     [sourceRows]

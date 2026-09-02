@@ -2748,6 +2748,113 @@
     color: #1d4ed8;
 }
 
+/* ── Purchase Order Details Table Sticky Footer & Badges ── */
+.pa2-po-tbl tfoot .pa2-po-total-tr {
+    background: linear-gradient(180deg, #f8faff 0%, #f1f5f9 100%) !important;
+    border-top: 2px solid rgba(45, 109, 232, 0.25) !important;
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.pa2-po-tbl tfoot .pa2-po-total-tr td {
+    padding: 9px 12px !important;
+    border-bottom: none !important;
+    font-size: 0.78rem;
+    vertical-align: middle;
+}
+
+.pa2-total-title {
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #334155;
+}
+
+.pa2-total-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    min-width: 50px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pa2-total-badge-blue {
+    background: rgba(45, 109, 232, 0.09);
+    color: #1d4ed8;
+    border: 1px solid rgba(45, 109, 232, 0.2);
+}
+
+.pa2-total-badge-purple {
+    background: rgba(139, 92, 246, 0.1);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.22);
+}
+
+/* ── Modern Compact UOM Cluster in Table Footers (Single Row Flow) ── */
+.pa2-uom-cluster {
+    display: inline-flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    white-space: nowrap;
+}
+
+.pa2-uom-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3.5px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(59, 130, 246, 0.12));
+    border: 1px solid rgba(37, 99, 235, 0.22);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.1px;
+    color: #1d4ed8;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.04);
+    transition: all 0.2s ease;
+}
+
+.pa2-uom-pill:hover {
+    background: rgba(37, 99, 235, 0.16);
+    border-color: rgba(37, 99, 235, 0.35);
+    transform: translateY(-1px);
+}
+
+.pa2-uom-prefix {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #3b82f6;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.pa2-uom-unit {
+    font-size: 0.68rem;
+    font-weight: 750;
+    color: #1e40af;
+    letter-spacing: 0.02em;
+}
+
+.pa2-uom-val {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
 /* ═══════════════════════════════════════════════
    PREMIUM "NO DATA" EMPTY STATE
    ═══════════════════════════════════════════════ */

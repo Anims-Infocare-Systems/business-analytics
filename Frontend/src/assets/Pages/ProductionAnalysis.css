@@ -3072,6 +3072,7 @@
 }
 .pa2-mhr-inputs-grid input[type=number] {
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 /* ── MHR Calculator Modal Split Layout ── */
@@ -3463,4 +3464,72 @@
     border-color: #fca5a5;
     color: #dc2626;
     transform: translateY(-1px);
+}
+
+/* ── Daily Production Details Sticky Table Footer & Total Badges ── */
+.pa2-daily-tfoot-row {
+    background: linear-gradient(180deg, #f8faff 0%, #f1f5f9 100%) !important;
+    border-top: 2px solid rgba(45, 109, 232, 0.25) !important;
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.pa2-daily-tfoot-row td {
+    padding: 8px 10px !important;
+    border-bottom: none !important;
+    vertical-align: middle;
+}
+
+.pa2-daily-tfoot-label {
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #334155;
+}
+
+.pa2-daily-total-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    min-width: 42px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pa2-daily-total-blue {
+    background: rgba(45, 109, 232, 0.09);
+    color: #1d4ed8;
+    border: 1px solid rgba(45, 109, 232, 0.2);
+}
+
+.pa2-daily-total-green {
+    background: rgba(16, 185, 129, 0.09);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.pa2-daily-total-red {
+    background: rgba(239, 68, 68, 0.09);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.22);
+}
+
+.pa2-daily-total-amber {
+    background: rgba(245, 158, 11, 0.09);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.pa2-daily-total-neutral {
+    background: rgba(100, 116, 139, 0.08);
+    color: #64748b;
+    border: 1px solid rgba(100, 116, 139, 0.18);
 }

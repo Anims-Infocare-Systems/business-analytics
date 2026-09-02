@@ -1847,15 +1847,85 @@
   width: 12%;
 }
 
-/* Totals Row */
+/* Totals Row & Modern Footer */
+.sa-proj-tfoot-row,
 .sa-proj-total-row {
-  background: rgba(139, 92, 246, 0.02) !important;
-  border-top: 2px solid rgba(139, 92, 246, 0.15);
-  font-weight: 700;
+  background: linear-gradient(180deg, #f8faff 0%, #f1f5f9 100%) !important;
+  border-top: 2px solid rgba(139, 92, 246, 0.25) !important;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.02);
+  font-weight: 750;
 }
 
+.sa-proj-tfoot-row td,
 .sa-proj-total-row td {
-  color: #1a2a5e !important;
+  padding: 10px 12px !important;
+  color: #1e293b !important;
+  border-bottom: none !important;
+  vertical-align: middle;
+}
+
+.sa-proj-tfoot-row td.sa-proj-total-label {
+  text-align: left !important;
+}
+
+.sa-proj-tfoot-row td.sa-num {
+  text-align: right !important;
+}
+
+.sa-proj-total-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #312e81;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Modern Total Badges */
+.sa-total-badge {
+  display: inline-block;
+  padding: 0.22rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  min-width: 48px;
+  text-align: right;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sa-total-badge-blue {
+  background: rgba(45, 109, 232, 0.09);
+  color: #1d4ed8;
+  border: 1px solid rgba(45, 109, 232, 0.2);
+}
+
+.sa-total-badge-purple {
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  border: 1px solid rgba(139, 92, 246, 0.22);
+}
+
+.sa-total-badge-green {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.sa-total-badge-orange {
+  background: rgba(249, 115, 22, 0.1);
+  color: #ea580c;
+  border: 1px solid rgba(249, 115, 22, 0.22);
+}
+
+.sa-total-badge-red {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.22);
 }
 
 /* Traceability Table Styling & Animations */
@@ -1986,6 +2056,116 @@
   max-width: 180px;
   white-space: normal;
   word-break: break-word;
+}
+
+/* ── Modern Purchase Order (PO) Ledger Table Styling ── */
+.sa-po-table {
+  width: 100%;
+  min-width: 1800px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: inherit;
+}
+
+.sa-po-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.sa-po-table th.sa-num,
+.sa-po-table td.sa-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sa-po-table td {
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.sa-po-table tbody tr {
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.sa-po-table tbody tr:hover {
+  background: rgba(236, 72, 153, 0.03) !important;
+}
+
+.sa-po-table .sa-po-cust-name {
+  font-weight: 600;
+  color: #1e293b;
+  display: block;
+  max-width: 210px;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.sa-po-table .sa-po-part-desc {
+  color: #475569;
+  display: block;
+  max-width: 260px;
+  white-space: normal;
+  line-height: 1.35;
+  font-size: 0.76rem;
+}
+
+.sa-po-table .sa-po-code {
+  color: #0f172a;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.sa-po-table .sa-po-apo-code,
+.sa-po-table .sa-po-dc-code {
+  font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.sa-po-table .sa-date {
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+/* PO Table Footer */
+.sa-po-table tfoot .sa-po-total-row {
+  background: linear-gradient(180deg, #f8faff 0%, #f1f5f9 100%) !important;
+  border-top: 2px solid rgba(236, 72, 153, 0.3) !important;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.02);
+  font-weight: 750;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+.sa-po-table tfoot .sa-po-total-row td {
+  padding: 10px 12px !important;
+  color: #1e293b !important;
+  border-bottom: none !important;
+  vertical-align: middle;
+}
+
+.sa-po-table tfoot .sa-po-total-row td.sa-proj-total-label {
+  text-align: left !important;
+}
+
+.sa-po-table tfoot .sa-po-total-row td.sa-num {
+  text-align: right !important;
 }
 
 /* Monthly Performance & Bill Type Analytics Section */
@@ -3724,6 +3904,181 @@
   padding: 3px 8px;
   border-radius: 6px;
   display: inline-block;
+}
+
+/* ── Despatch Planning Status Collapsible Group Headers & Badges ── */
+.sa-table-group-header.sa-despatch-collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e0effe 100%) !important;
+  border-top: 2px solid #bfdbfe !important;
+  border-bottom: 1.5px solid #bfdbfe !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sa-table-group-header.sa-despatch-collapsible-header:hover {
+  background: linear-gradient(135deg, #e0effe 0%, #dbeafe 100%) !important;
+  border-color: #93c5fd !important;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.08);
+}
+
+.sa-table-group-header.sa-despatch-collapsible-header.is-collapsed {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-color: #cbd5e1 !important;
+}
+
+.sa-table-group-header.sa-despatch-collapsible-header.is-collapsed:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+}
+
+.sa-despatch-group-title {
+  padding: 10px 18px !important;
+}
+
+.sa-despatch-group-title-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sa-despatch-group-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sa-despatch-chevron-box {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sa-despatch-chevron-box.is-collapsed {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+  transform: rotate(-90deg);
+}
+
+.sa-despatch-avatar-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
+}
+
+.sa-despatch-group-name {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.sa-despatch-group-count-badge {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sa-despatch-group-summary-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sa-despatch-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sa-despatch-chip strong {
+  font-weight: 750;
+}
+
+.sa-despatch-chip--val {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1e40af;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+}
+
+.sa-despatch-chip--plan {
+  background: rgba(139, 92, 246, 0.08);
+  color: #6d28d9;
+  border: 1px solid rgba(139, 92, 246, 0.18);
+}
+
+.sa-despatch-chip--disp {
+  background: rgba(16, 185, 129, 0.08);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.sa-despatch-chip--pend {
+  background: rgba(249, 115, 22, 0.08);
+  color: #9a3412;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+}
+
+.sa-despatch-collapse-hint {
+  font-size: 0.68rem;
+  color: #475569;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+/* Expand / Collapse All Button in Header Filters */
+.sa-despatch-collapse-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(45, 109, 232, 0.06);
+  color: #2563eb;
+  border: 1px solid rgba(45, 109, 232, 0.18);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sa-despatch-collapse-all-btn:hover {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.sa-despatch-row {
+  animation: sa-fade-in-blur 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Explicit column widths & alignments for Despatch Planning Status Table */

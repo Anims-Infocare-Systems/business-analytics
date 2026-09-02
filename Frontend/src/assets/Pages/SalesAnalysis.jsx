@@ -84,6 +84,16 @@ function safeToFixed(v, digits = 1) {
   return n.toFixed(digits);
 }
 
+function isCreditNoteType(btype, invNo) {
+  const bt = (btype || "").toLowerCase().trim();
+  const inv = (invNo || "").toUpperCase().trim();
+  return (
+    bt === "sales return" ||
+    (bt.includes("credit") && bt.includes("note")) ||
+    inv.startsWith("CN")
+  );
+}
+
 
 
 
@@ -1589,7 +1599,8 @@ export default function SalesAnalysis() {
   const [poLedger, setPoLedger] = useState([]);
   const [traceability, setTraceability] = useState([]);
   const [invoiceBtypes, setInvoiceBtypes] = useState([]);
-  const [invoiceBtype, setInvoiceBtype] = useState("");
+  const [selectedInvoiceTypes, setSelectedInvoiceTypes] = useState([]);
+  const [invoiceTypeSearch, setInvoiceTypeSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   useEffect(() => {
@@ -1632,8 +1643,29 @@ export default function SalesAnalysis() {
   const [despatchCustSearch, setDespatchCustSearch] = useState("");
   const [despatchPartSearch, setDespatchPartSearch] = useState("");
   const [despatchDateRange, setDespatchDateRange] = useState({ from: null, to: null });
+  const [collapsedDespatchGroups, setCollapsedDespatchGroups] = useState(new Set());
   const despatchCustRef = useRef(null);
   const despatchPartRef = useRef(null);
+
+  const toggleDespatchGroup = useCallback((customerName) => {
+    setCollapsedDespatchGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(customerName)) {
+        next.delete(customerName);
+      } else {
+        next.add(customerName);
+      }
+      return next;
+    });
+  }, []);
+
+  const collapseAllDespatchGroups = useCallback((groupKeys) => {
+    setCollapsedDespatchGroups(new Set(groupKeys));
+  }, []);
+
+  const expandAllDespatchGroups = useCallback(() => {
+    setCollapsedDespatchGroups(new Set());
+  }, []);
 
   const customerOptions = useMemo(() => {
     const customers = new Set();
@@ -1669,8 +1701,12 @@ export default function SalesAnalysis() {
   const [monthlyTaxData, setMonthlyTaxData] = useState(null);
   const [invoiceDropdownOpen, setInvoiceDropdownOpen] = useState(false);
   const invoiceDropdownRef = useRef(null);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
-  const optionsList = useMemo(() => ["", ...invoiceBtypes], [invoiceBtypes]);
+  const filteredInvoiceTypeOptions = useMemo(() => {
+    if (!invoiceTypeSearch) return invoiceBtypes;
+    return invoiceBtypes.filter((bt) =>
+      bt.toLowerCase().includes(invoiceTypeSearch.toLowerCase())
+    );
+  }, [invoiceBtypes, invoiceTypeSearch]);
   const filteredProjections = useMemo(() => {
     return projections.filter((r) => {
       if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) {
@@ -2070,11 +2106,12 @@ export default function SalesAnalysis() {
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
       (acc, row) => {
-        acc.planned += row.planQty;
-        acc.dispatched += row.dispatchQty;
+        acc.planned += Number(row.planQty || 0);
+        acc.available += Number(row.availableQty || 0);
+        acc.dispatched += Number(row.dispatchQty || 0);
         return acc;
       },
-      { planned: 0, dispatched: 0 }
+      { planned: 0, available: 0, dispatched: 0 }
     );
     const avgPct = totals.planned > 0 ? (totals.dispatched / totals.planned) * 100 : 0;
     return { ...totals, avgPct };
@@ -2176,12 +2213,9 @@ export default function SalesAnalysis() {
 
   useEffect(() => {
     if (!invoiceDropdownOpen) {
-      setFocusedIndex(-1);
-    } else {
-      const idx = optionsList.indexOf(invoiceBtype);
-      setFocusedIndex(idx >= 0 ? idx : 0);
+      setInvoiceTypeSearch("");
     }
-  }, [invoiceDropdownOpen, optionsList, invoiceBtype]);
+  }, [invoiceDropdownOpen]);
 
   useEffect(() => {
     if (!customerDropdownOpen) {
@@ -2231,6 +2265,11 @@ export default function SalesAnalysis() {
   const filteredInvoices = useMemo(() => {
     let list = invoiceRows.filter((r) => {
       if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) return false;
+      if (selectedInvoiceTypes.length > 0) {
+        let bt = r.btype || "";
+        if (isCreditNoteType(bt, r.invoice_no)) bt = "Credit Note";
+        if (!selectedInvoiceTypes.includes(bt) && !selectedInvoiceTypes.includes(r.btype)) return false;
+      }
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
@@ -2261,7 +2300,7 @@ export default function SalesAnalysis() {
       });
     }
     return list;
-  }, [invoiceRows, searchQuery, selectedCustomers, invSortConfig]);
+  }, [invoiceRows, searchQuery, selectedCustomers, selectedInvoiceTypes, invSortConfig]);
 
   const derivedSummary = useMemo(() => {
     if (!summary) return null;
@@ -2439,17 +2478,6 @@ export default function SalesAnalysis() {
   const jsRound = (val, decimals = 2) => {
     const multiplier = Math.pow(10, decimals);
     return Math.round((val + Number.EPSILON) * multiplier) / multiplier;
-  };
-
-  // Helper to determine if an invoice type is a credit note
-  const isCreditNoteType = (btype, invNo) => {
-    const bt = (btype || "").toLowerCase().trim();
-    const inv = (invNo || "").toUpperCase().trim();
-    return (
-      bt === "sales return" ||
-      (bt.includes("credit") && bt.includes("note")) ||
-      inv.startsWith("CN")
-    );
   };
 
   // Helper to calculate month slots between two dates
@@ -4313,7 +4341,9 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (invoiceBtype) params.set("btype", invoiceBtype);
+    if (selectedInvoiceTypes.length > 0) {
+      params.set("btype", selectedInvoiceTypes.join(","));
+    }
     if (debouncedSearchQuery) {
       params.set("search", debouncedSearchQuery);
     }
@@ -4563,7 +4593,7 @@ export default function SalesAnalysis() {
     });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
+  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
 
   useEffect(() => {
     let fromDate = dateRange.from;
@@ -4582,7 +4612,7 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (invoiceBtype) params.set("btype", invoiceBtype);
+    if (selectedInvoiceTypes.length > 0) params.set("btype", selectedInvoiceTypes.join(","));
     if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
     const ctrl = new AbortController();
 
@@ -4613,7 +4643,7 @@ export default function SalesAnalysis() {
       });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
+  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
 
   // ── Real-time Live Background Sync for Despatch Planning Status ──
   const fetchDespatchPlanLive = useCallback(async () => {
@@ -4629,7 +4659,7 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (invoiceBtype) params.set("btype", invoiceBtype);
+    if (selectedInvoiceTypes.length > 0) params.set("btype", selectedInvoiceTypes.join(","));
     if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
 
     try {
@@ -4652,7 +4682,7 @@ export default function SalesAnalysis() {
         console.warn("Live despatch poll skipped:", err);
       }
     }
-  }, [dateRange.from, dateRange.to, invoiceBtype, debouncedSearchQuery]);
+  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
 
   useEffect(() => {
     // Background polling every 3 seconds for near real-time live data
@@ -4679,7 +4709,8 @@ export default function SalesAnalysis() {
   const resetFilters = () => {
     setDateRange(getTodayMonthRange());
     setSearchQuery("");
-    setInvoiceBtype("");
+    setSelectedInvoiceTypes([]);
+    setInvoiceTypeSearch("");
     setSelectedCustomers([]);
     setFilters({ customer: "All Customers", product: "All Products", salesGroup: "Sales Group", rejection: "No" });
   };
@@ -4985,66 +5016,141 @@ export default function SalesAnalysis() {
         {/* Invoice Type */}
         <div className="sa-filter-item" ref={invoiceDropdownRef}>
           <span className="sa-filter-label">Invoice Type</span>
-          <div className={`sa-custom-select${invoiceDropdownOpen ? " sa-active" : ""}`}>
+          <div className={`sa-custom-select sa-custom-select--customer${invoiceDropdownOpen ? " sa-active" : ""}`}>
             <button
               type="button"
               className="sa-custom-select-trigger"
               disabled={loading}
               onClick={() => !loading && setInvoiceDropdownOpen(!invoiceDropdownOpen)}
-              onKeyDown={(e) => {
-                if (loading) return;
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  if (!invoiceDropdownOpen) {
-                    setInvoiceDropdownOpen(true);
-                    setFocusedIndex(0);
-                  } else {
-                    setFocusedIndex((prev) => (prev + 1) % optionsList.length);
-                  }
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  if (!invoiceDropdownOpen) {
-                    setInvoiceDropdownOpen(true);
-                    setFocusedIndex(optionsList.length - 1);
-                  } else {
-                    setFocusedIndex((prev) => (prev - 1 + optionsList.length) % optionsList.length);
-                  }
-                } else if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (invoiceDropdownOpen) {
-                    if (focusedIndex >= 0 && focusedIndex < optionsList.length) {
-                      setInvoiceBtype(optionsList[focusedIndex]);
-                      setInvoiceDropdownOpen(false);
-                    }
-                  } else {
-                    setInvoiceDropdownOpen(true);
-                  }
-                } else if (e.key === "Escape") {
-                  setInvoiceDropdownOpen(false);
-                }
-              }}
             >
-              <span>{invoiceBtype || "All Types"}</span>
+              <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedInvoiceTypes.length === 0
+                    ? "All Types"
+                    : selectedInvoiceTypes.length === 1
+                      ? selectedInvoiceTypes[0]
+                      : `${selectedInvoiceTypes.length} Types Selected`}
+                </span>
+                {selectedInvoiceTypes.length > 1 && (
+                  <span style={{
+                    background: "#2d6de8",
+                    color: "#fff",
+                    borderRadius: "50%",
+                    minWidth: "16px",
+                    height: "16px",
+                    fontSize: "0.62rem",
+                    fontWeight: "700",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginLeft: "6px",
+                    padding: "0 4px",
+                    flexShrink: 0
+                  }}>
+                    {selectedInvoiceTypes.length}
+                  </span>
+                )}
+              </span>
               <span className="sa-custom-select-arrow">
                 <ChevronDown size={14} />
               </span>
             </button>
             {invoiceDropdownOpen && (
-              <ul className="sa-custom-select-options">
-                {optionsList.map((opt, idx) => (
+              <div className="sa-custom-select-dropdown-container" style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: '#fff',
+                border: '1px solid rgba(45, 109, 232, 0.15)',
+                borderRadius: '8px',
+                marginTop: '4px',
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                zIndex: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
+              }}>
+                {invoiceBtypes.length > 4 && (
+                  <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
+                    <div className="sa-dropdown-search-wrapper">
+                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        className="sa-dropdown-search-input"
+                        placeholder="Search invoice type..."
+                        value={invoiceTypeSearch}
+                        onChange={(e) => setInvoiceTypeSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {invoiceTypeSearch && (
+                        <button
+                          type="button"
+                          className="sa-search-clear-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInvoiceTypeSearch("");
+                          }}
+                          title="Clear search"
+                        >
+                          <X size={10} strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <ul className="sa-custom-select-options" style={{
+                  position: 'static',
+                  boxShadow: 'none',
+                  border: 'none',
+                  animation: 'none',
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                  margin: 0,
+                  padding: '5px',
+                  listStyle: 'none'
+                }}>
                   <li
-                    key={opt || "all"}
-                    className={`sa-custom-select-option${!opt && !invoiceBtype ? " sa-selected" : invoiceBtype === opt ? " sa-selected" : ""}${focusedIndex === idx ? " sa-focused" : ""}`}
+                    className={`sa-custom-select-option${selectedInvoiceTypes.length === 0 ? " sa-multi-selected" : ""}`}
                     onClick={() => {
-                      setInvoiceBtype(opt);
+                      setSelectedInvoiceTypes([]);
                       setInvoiceDropdownOpen(false);
                     }}
-                    onMouseEnter={() => setFocusedIndex(idx)}
+                    style={{ display: 'flex', alignItems: 'center' }}
                   >
-                    {opt || "All Types"}
+                    <span className={`sa-checkbox-box${selectedInvoiceTypes.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                      {selectedInvoiceTypes.length === 0 && (
+                        <Check size={10} strokeWidth={3} />
+                      )}
+                    </span>
+                    All Types
                   </li>
-                ))}
-              </ul>
+                  {filteredInvoiceTypeOptions.map((opt) => {
+                    const isSelected = selectedInvoiceTypes.includes(opt);
+                    return (
+                      <li
+                        key={opt}
+                        className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                        onClick={() => {
+                          setSelectedInvoiceTypes((prev) => {
+                            const isSel = prev.includes(opt);
+                            return isSel ? prev.filter((t) => t !== opt) : [...prev, opt];
+                          });
+                        }}
+                        style={{ display: 'flex', alignItems: 'center' }}
+                      >
+                        <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                          {isSelected && (
+                            <Check size={10} strokeWidth={3} />
+                          )}
+                        </span>
+                        {opt}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         </div>
@@ -5607,6 +5713,31 @@ export default function SalesAnalysis() {
               )}
             </div>
 
+            {/* Collapse / Expand All Toggle */}
+            {Object.keys(groupedDespatchPlan).length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const keys = Object.keys(groupedDespatchPlan);
+                  const allCollapsed = keys.every(k => collapsedDespatchGroups.has(k));
+                  if (allCollapsed) {
+                    expandAllDespatchGroups();
+                  } else {
+                    collapseAllDespatchGroups(keys);
+                  }
+                }}
+                className="sa-despatch-collapse-all-btn"
+                title={Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k)) ? "Expand All Customer Groups" : "Collapse All Customer Groups"}
+              >
+                <Layers size={13} />
+                <span>
+                  {Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k))
+                    ? "Expand All"
+                    : "Collapse All"}
+                </span>
+              </button>
+            )}
+
             <button
               onClick={handleDespatchExport}
               className="sa-btn sa-btn--primary sa-po-export-btn"
@@ -5654,56 +5785,96 @@ export default function SalesAnalysis() {
                   </td>
                 </tr>
               ) : (
-                Object.entries(groupedDespatchPlan).map(([customerName, rows]) => (
-                  <Fragment key={customerName}>
-                    <tr className="sa-table-group-header">
-                      <td colSpan="9" className="sa-despatch-group-title">
-                        <div className="sa-despatch-group-title-content">
-                          <Building2 size={14} className="sa-despatch-group-icon" />
-                          <span className="sa-despatch-group-name">{customerName}</span>
-                          <span className="sa-despatch-group-count-badge">
-                            {rows.length} {rows.length === 1 ? "item" : "items"}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                    {rows.map((row, rowIdx) => (
-                      <tr key={`${customerName}-${rowIdx}`} style={{ animationDelay: `${rowIdx * 35}ms` }}>
-                        <td><span className="sa-part-no-tag">{row.partNo}</span></td>
-                        <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
-                        <td className="sa-num">
-                          <span className={Number(row.pendingPlannedQty) > 0 ? "sa-pending-qty-badge" : "sa-pending-qty-badge sa-pending-qty-badge--zero"}>
-                            {formatQty(row.pendingPlannedQty)}
-                          </span>
-                        </td>
-                        <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.plannedQty)}</td>
-                        <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.availableQty)}</td>
-                        <td className="sa-num">
-                          <span className={Number(row.despatchQty) > 0 ? "sa-despatch-qty-badge" : "sa-despatch-qty-badge sa-despatch-qty-badge--zero"}>
-                            {formatQty(row.despatchQty)}
-                          </span>
-                        </td>
-                        <td>
-                          {row.invNo && row.invNo !== "-" ? (
-                            <span className="sa-inv-tag">{row.invNo}</span>
-                          ) : (
-                            <span className="sa-inv-tag--none">-</span>
-                          )}
-                        </td>
-                        <td>
-                          {row.invDate && row.invDate !== "—" ? (
-                            <span className="sa-inv-date-tag">{row.invDate}</span>
-                          ) : (
-                            <span className="sa-inv-tag--none">-</span>
-                          )}
-                        </td>
-                        <td className="sa-num" style={{ fontWeight: 500 }}>
-                          {row.invValue != null && row.invValue !== "" && Number(row.invValue) > 0 ? `₹${formatExactRupees(row.invValue)}` : "—"}
+                Object.entries(groupedDespatchPlan).map(([customerName, rows]) => {
+                  const isCollapsed = collapsedDespatchGroups.has(customerName);
+                  const groupTotalInvVal = rows.reduce((s, r) => s + (Number(r.invValue) || 0), 0);
+                  const groupTotalDespatch = rows.reduce((s, r) => s + (Number(r.despatchQty) || 0), 0);
+                  const groupTotalPending = rows.reduce((s, r) => s + (Number(r.pendingPlannedQty) || 0), 0);
+                  const groupTotalPlanned = rows.reduce((s, r) => s + (Number(r.plannedQty) || 0), 0);
+
+                  return (
+                    <Fragment key={customerName}>
+                      <tr
+                        className={`sa-table-group-header sa-despatch-collapsible-header ${isCollapsed ? "is-collapsed" : ""}`}
+                        onClick={() => toggleDespatchGroup(customerName)}
+                        title={isCollapsed ? `Click to expand ${customerName}` : `Click to collapse ${customerName}`}
+                      >
+                        <td colSpan="9" className="sa-despatch-group-title">
+                          <div className="sa-despatch-group-title-content">
+                            <div className="sa-despatch-group-left">
+                              <span className={`sa-despatch-chevron-box ${isCollapsed ? "is-collapsed" : ""}`}>
+                                <ChevronDown size={13} />
+                              </span>
+                              <div className="sa-despatch-avatar-icon">
+                                <Building2 size={13} />
+                              </div>
+                              <span className="sa-despatch-group-name">{customerName}</span>
+                              <span className="sa-despatch-group-count-badge">
+                                {rows.length} {rows.length === 1 ? "part" : "parts"}
+                              </span>
+                            </div>
+
+                            {/* Summary Chips on Right */}
+                            <div className="sa-despatch-group-summary-chips">
+                              {groupTotalInvVal > 0 && (
+                                <span className="sa-despatch-chip sa-despatch-chip--val" title="Customer Total Invoice Value">
+                                  Inv: <strong>₹{formatExactRupees(groupTotalInvVal)}</strong>
+                                </span>
+                              )}
+                              <span className="sa-despatch-chip sa-despatch-chip--plan" title="Customer Planned Qty">
+                                Plan: <strong>{formatQty(groupTotalPlanned)}</strong>
+                              </span>
+                              <span className="sa-despatch-chip sa-despatch-chip--disp" title="Customer Despatch Qty">
+                                Despatched: <strong>{formatQty(groupTotalDespatch)}</strong>
+                              </span>
+                              <span className="sa-despatch-chip sa-despatch-chip--pend" title="Customer Pending Planned Qty">
+                                Pending: <strong>{formatQty(groupTotalPending)}</strong>
+                              </span>
+                              <span className="sa-despatch-collapse-hint">
+                                {isCollapsed ? "Expand ▾" : "Collapse ▴"}
+                              </span>
+                            </div>
+                          </div>
                         </td>
                       </tr>
-                    ))}
-                  </Fragment>
-                ))
+                      {!isCollapsed && rows.map((row, rowIdx) => (
+                        <tr key={`${customerName}-${rowIdx}`} className="sa-despatch-row" style={{ animationDelay: `${rowIdx * 30}ms` }}>
+                          <td><span className="sa-part-no-tag">{row.partNo}</span></td>
+                          <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
+                          <td className="sa-num">
+                            <span className={Number(row.pendingPlannedQty) > 0 ? "sa-pending-qty-badge" : "sa-pending-qty-badge sa-pending-qty-badge--zero"}>
+                              {formatQty(row.pendingPlannedQty)}
+                            </span>
+                          </td>
+                          <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.plannedQty)}</td>
+                          <td className="sa-num" style={{ fontWeight: 500 }}>{formatQty(row.availableQty)}</td>
+                          <td className="sa-num">
+                            <span className={Number(row.despatchQty) > 0 ? "sa-despatch-qty-badge" : "sa-despatch-qty-badge sa-despatch-qty-badge--zero"}>
+                              {formatQty(row.despatchQty)}
+                            </span>
+                          </td>
+                          <td>
+                            {row.invNo && row.invNo !== "-" ? (
+                              <span className="sa-inv-tag">{row.invNo}</span>
+                            ) : (
+                              <span className="sa-inv-tag--none">-</span>
+                            )}
+                          </td>
+                          <td>
+                            {row.invDate && row.invDate !== "—" ? (
+                              <span className="sa-inv-date-tag">{row.invDate}</span>
+                            ) : (
+                              <span className="sa-inv-tag--none">-</span>
+                            )}
+                          </td>
+                          <td className="sa-num" style={{ fontWeight: 500 }}>
+                            {row.invValue != null && row.invValue !== "" && Number(row.invValue) > 0 ? `₹${formatExactRupees(row.invValue)}` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -6239,22 +6410,49 @@ export default function SalesAnalysis() {
                       </td>
                     </tr>
                   ))}
-                  {/* Summary Row */}
-                  <tr className="sa-proj-total-row">
-                    <td colSpan={2}><strong>Total</strong></td>
-                    <td></td>
-                    <td className="sa-num"><strong>{projectionTotals.pos}</strong></td>
-                    <td className="sa-num"><strong>{formatQty(projectionTotals.totQty)}</strong></td>
-                    <td className="sa-num"><strong>₹{formatRupees(projectionTotals.totAmt)}</strong></td>
-                    <td></td>
-                    <td className="sa-num"><strong>{formatQty(projectionTotals.schdQty)}</strong></td>
-                    <td className="sa-num"><strong>{formatQty(projectionTotals.dispQty)}</strong></td>
-                    <td className="sa-num"><strong>{formatQty(projectionTotals.pendQty)}</strong></td>
-                    <td className="sa-num"><strong>₹{formatRupees(projectionTotals.pendVal)}</strong></td>
-                  </tr>
                 </>
               )}
+              {!loading && !sortedProjections.length && (
+                <tr>
+                  <td colSpan={11} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>No future projections found.</td>
+                </tr>
+              )}
             </tbody>
+            {!loading && sortedProjections.length > 0 && (
+              <tfoot>
+                <tr className="sa-proj-tfoot-row">
+                  <td></td>
+                  <td className="sa-proj-total-label">
+                    <span className="sa-proj-total-title">Total</span>
+                  </td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-blue" title="Total Quantity">
+                      {formatQty(projectionTotals.totQty)}
+                    </span>
+                  </td>
+                  <td></td>
+                  <td></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-purple" title="Scheduled Quantity">
+                      {formatQty(projectionTotals.schdQty)}
+                    </span>
+                  </td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-green" title="Dispatched Quantity">
+                      {formatQty(projectionTotals.dispQty)}
+                    </span>
+                  </td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-orange" title="Pending Quantity">
+                      {formatQty(projectionTotals.pendQty)}
+                    </span>
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -6288,10 +6486,13 @@ export default function SalesAnalysis() {
               <span className="sa-badge sa-badge--purple">
                 Total Planned: {formatQty(planTotals.planned)}
               </span>
+              <span className="sa-badge sa-badge--blue">
+                Total Available: {formatQty(planTotals.available)}
+              </span>
               <span className="sa-badge sa-badge--green">
                 Total Dispatched: {formatQty(planTotals.dispatched)}
               </span>
-              <span className="sa-badge sa-badge--blue">
+              <span className="sa-badge sa-badge--orange">
                 Avg Dispatch: {planTotals.avgPct.toFixed(1)}%
               </span>
             </div>
@@ -6392,6 +6593,34 @@ export default function SalesAnalysis() {
                 </tr>
               )}
             </tbody>
+            {!loading && sortedPlanVsActual.length > 0 && (
+              <tfoot>
+                <tr className="sa-proj-tfoot-row">
+                  <td></td>
+                  <td></td>
+                  <td className="sa-proj-total-label">
+                    <span className="sa-proj-total-title">Total</span>
+                  </td>
+                  <td></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-purple" title="Total Planned Quantity">
+                      {formatQty(planTotals.planned)}
+                    </span>
+                  </td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-blue" title="Total Available Quantity">
+                      {formatQty(planTotals.available)}
+                    </span>
+                  </td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-green" title="Total Dispatched Quantity">
+                      {formatQty(planTotals.dispatched)}
+                    </span>
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -6692,7 +6921,7 @@ export default function SalesAnalysis() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={18} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
+                  <td colSpan={20} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
                     No purchase orders found matching your search.
                   </td>
                 </tr>
@@ -6701,24 +6930,42 @@ export default function SalesAnalysis() {
             {paginatedPoLedger.length > 0 && (
               <tfoot>
                 <tr className="sa-po-total-row">
-                  <td><strong>Total</strong></td>
                   <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
+                  <td className="sa-proj-total-label">
+                    <span className="sa-proj-total-title">Total</span>
+                  </td>
                   <td></td>
                   <td></td>
-                  <td className="sa-num"><strong>{formatQty(poTotals.totQty)}</strong></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-blue" title="Total Quantity">
+                      {formatQty(poTotals.totQty)}
+                    </span>
+                  </td>
                   <td></td>
                   <td></td>
                   <td></td>
-                  <td className="sa-num"><strong>₹{formatExact(poTotals.totVal)}</strong></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-purple" title="Total Value">
+                      ₹{formatExact(poTotals.totVal)}
+                    </span>
+                  </td>
                   <td></td>
                   <td></td>
                   <td></td>
-                  <td className="sa-num"><strong>{formatQty(poTotals.totPendQty)}</strong></td>
-                  <td className="sa-num"><strong>₹{formatExact(poTotals.totPendVal)}</strong></td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-orange" title="Total Pending Qty">
+                      {formatQty(poTotals.totPendQty)}
+                    </span>
+                  </td>
+                  <td className="sa-num">
+                    <span className="sa-total-badge sa-total-badge-orange" title="Total Pending Value">
+                      ₹{formatExact(poTotals.totPendVal)}
+                    </span>
+                  </td>
                   <td></td>
                   <td></td>
                 </tr>

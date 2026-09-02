@@ -747,10 +747,12 @@ SALES_PROJECTIONS_SALES_SQL = f"""
 """
 
 SALES_PROJECTIONS_PO_SQL = """
-    SELECT SUM(tamt) AS total
-    FROM In_PoMas
-    WHERE deleted = 0
-      AND CAST(podt AS DATE) BETWEEN ? AND ?
+    SELECT SUM(ISNULL(PD.amt, 0) * CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END) AS total
+    FROM In_PoMas PM
+    INNER JOIN In_PoDet PD ON PM.PONO = PD.PONO
+    WHERE ISNULL(PM.deleted, 0) = 0
+      AND ISNULL(PD.deleted, 0) = 0
+      AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
 """
 
 PURCHASE_PROJECTIONS_SQL = """

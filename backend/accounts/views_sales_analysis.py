@@ -104,10 +104,25 @@ EXCLUDED_BTYPES_SQL = (
 )
 
 
+def _parse_btype_list(btype_filter):
+    if not btype_filter:
+        return []
+    if isinstance(btype_filter, (list, tuple, set)):
+        res = []
+        for x in btype_filter:
+            for part in str(x).split(","):
+                p = part.strip()
+                if p and p.lower() not in ("all", "all types", ""):
+                    res.append(p)
+        return res
+    if isinstance(btype_filter, str):
+        return [p.strip() for p in btype_filter.split(",") if p.strip() and p.strip().lower() not in ("all", "all types", "")]
+    return []
+
+
 def _btype_param(btype_filter):
-    if btype_filter and btype_filter.lower() not in ("all", ""):
-        return (btype_filter,)
-    return ()
+    items = _parse_btype_list(btype_filter)
+    return tuple(items)
 
 
 def _bill_mas_filters(alias="", btype_filter=""):
@@ -117,8 +132,12 @@ def _bill_mas_filters(alias="", btype_filter=""):
         f"AND ISNULL({p}btype, '') NOT IN ({EXCLUDED_BTYPES_SQL}) "
         f"AND CAST({p}invdt AS DATE) BETWEEN ? AND ?"
     )
-    if btype_filter and btype_filter.lower() not in ("all", ""):
+    items = _parse_btype_list(btype_filter)
+    if len(items) == 1:
         cond += f" AND LTRIM(RTRIM(ISNULL({p}btype, N''))) = ?"
+    elif len(items) > 1:
+        placeholders = ", ".join(["?"] * len(items))
+        cond += f" AND LTRIM(RTRIM(ISNULL({p}btype, N''))) IN ({placeholders})"
     return cond
 
 
@@ -129,9 +148,23 @@ def _bill_det_join_filters(btype_filter="", m_alias="m", d_alias="d"):
         f"AND ISNULL({m_alias}.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL}) "
         f"AND CAST({m_alias}.invdt AS DATE) BETWEEN ? AND ?"
     )
-    if btype_filter and btype_filter.lower() not in ("all", ""):
+    items = _parse_btype_list(btype_filter)
+    if len(items) == 1:
         cond += f" AND LTRIM(RTRIM(ISNULL({m_alias}.btype, N''))) = ?"
+    elif len(items) > 1:
+        placeholders = ", ".join(["?"] * len(items))
+        cond += f" AND LTRIM(RTRIM(ISNULL({m_alias}.btype, N''))) IN ({placeholders})"
     return cond
+
+
+def _btype_cond(m_alias="m", btype_filter=""):
+    items = _parse_btype_list(btype_filter)
+    if len(items) == 1:
+        return f" AND LTRIM(RTRIM(ISNULL({m_alias}.btype, N''))) = ?"
+    elif len(items) > 1:
+        placeholders = ", ".join(["?"] * len(items))
+        return f" AND LTRIM(RTRIM(ISNULL({m_alias}.btype, N''))) IN ({placeholders})"
+    return ""
 
 
 def _bill_mas_filters_invoice_status(alias=""):
@@ -488,7 +521,7 @@ def sales_analysis_summary_strip(request):
         else:
             qty_expr = "ISNULL(SUM(CAST(d.qty AS FLOAT)), 0)"
 
-        btype_qty_cond = " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?" if btype_p else ""
+        btype_qty_cond = _btype_cond("m", btype_filter)
 
         qty_excluded_btypes = (
             "'With Material Rejection', ' Raw Material Insp Rej', 'Raw Material Insp Rej', "
@@ -794,13 +827,13 @@ def _pie_slices(rows, total, label_key=0, value_key=1, top_n=None, others_label=
                 head.append((others_label, tail_sum))
         ranked = head
     labels = [x[0] for x in ranked]
-    values = [max(0.0, float(v)) for _, v in ranked]
+    values = [max(0.0, v) for _, v in ranked]
     val_sum = sum(values)
     if val_sum <= 0 or not values:
         return labels, [0.0] * len(labels)
 
     raw_tenths = [(v / val_sum) * 1000.0 for v in values]
-    floors = [int(math.floor(r)) for r in raw_tenths]
+    floors = [math.floor(r) for r in raw_tenths]
     diff = 1000 - sum(floors)
 
     remainders = [(raw_tenths[i] - floors[i], i) for i in range(len(values))]

@@ -4,6 +4,7 @@
 # Implementation is delegated to views_dashboard2.py (same ERP SQL, no duplication).
 #
 # Frontend: Dashboard3.jsx + Dashboard3ProductionDataView.jsx (+ card-specific views)
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 
@@ -2724,12 +2725,43 @@ WITH AllSchedules AS (
                TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
                CAST(p.podt AS DATE)
            ) AS targetdate,
-           YEAR(p.podt) AS PoYear, MONTH(p.podt) AS PoMonth
+           YEAR(COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           )) AS PoYear,
+           MONTH(COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           )) AS PoMonth
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
     LEFT JOIN CustMast cm ON p.cid = cm.Id
     LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
-    WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
+    WHERE COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           ) BETWEEN ? AND ?
       AND ISNULL(s.deleted, 0) = 0
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
 ),
@@ -2793,12 +2825,32 @@ WITH AllSchedules AS (
                TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
                CAST(p.podt AS DATE)
            ) AS targetdate,
-           MONTH(p.podt) AS PoMonth, p.pono, p.refno, p.cid
+           MONTH(COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           )) AS PoMonth, p.pono, p.refno, p.cid
     FROM In_PoDet_ShdQty s
     INNER JOIN In_PoMas p ON s.Apono = p.Apono
     LEFT JOIN CustMast cm ON p.cid = cm.Id
     LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
-    WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
+    WHERE COALESCE(
+               NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+               NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+               TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+               CAST(p.podt AS DATE)
+           ) BETWEEN ? AND ?
       AND ISNULL(s.deleted, 0) = 0
       AND ISNULL(p.deleted, 0) = 0{extra_sql}
 ),
@@ -2831,8 +2883,20 @@ SELECT TOP 5000
     LTRIM(RTRIM(CAST(ds.pono AS NVARCHAR(128)))) AS PONumber,
     LTRIM(RTRIM(CAST(ds.Apono AS NVARCHAR(128)))) AS PORefNumber,
     LTRIM(RTRIM(CAST(ds.partno AS NVARCHAR(128)))) AS PartNumber,
-    CAST(ds.shddate AS DATE) AS SchdDt,
-    CAST(ds.reqdate AS DATE) AS ReqDt,
+    COALESCE(
+        NULLIF(TRY_CAST(ds.shddate AS DATE), '1900-01-01'),
+        TRY_CONVERT(DATE, CAST(ds.shddate AS NVARCHAR(50)), 105),
+        TRY_CONVERT(DATE, CAST(ds.shddate AS NVARCHAR(50)), 103),
+        TRY_CONVERT(DATE, CAST(ds.shddate AS NVARCHAR(50)), 120),
+        ds.targetdate
+    ) AS SchdDt,
+    COALESCE(
+        NULLIF(TRY_CAST(ds.reqdate AS DATE), '1900-01-01'),
+        TRY_CONVERT(DATE, CAST(ds.reqdate AS NVARCHAR(50)), 105),
+        TRY_CONVERT(DATE, CAST(ds.reqdate AS NVARCHAR(50)), 103),
+        TRY_CONVERT(DATE, CAST(ds.reqdate AS NVARCHAR(50)), 120),
+        ds.targetdate
+    ) AS ReqDt,
     ISNULL(CAST(ds.shdQty AS FLOAT), 0) AS OrderQty,
     ISNULL(CAST(ds.TotalDelQty AS FLOAT), 0) AS DeliveryQty,
     CASE
@@ -2851,7 +2915,11 @@ SELECT TOP 5000
              WHERE DATEDIFF(DAY, ds.targetdate, ds.LastDelayedDcDate) BETWEEN r2.RatingFrom AND r2.RatingTo),
             0.0
         )
-    END AS OtdPct
+    END AS OtdPct,
+    ISNULL(CAST(pd.rate AS FLOAT), 0) AS PdRate,
+    ISNULL(CAST(pd.amt AS FLOAT), 0) AS PdAmt,
+    CASE WHEN ISNULL(pd.CurrRate, 0) = 0 THEN 1.0 ELSE CAST(pd.CurrRate AS FLOAT) END AS PdCurrRate,
+    ISNULL(CAST(pd.Qty AS FLOAT), 0) AS PdPoQty
 FROM DeliverySummary ds
 LEFT JOIN CustMast cm ON ds.cid = cm.Id
 LEFT JOIN CustAliasMast ca ON ds.cid = ca.Id
@@ -3029,6 +3097,7 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
         po_ref = str(row[2] or "").strip()
         if not po_ref:
             po_ref = "—"
+        order_qty = round(float(row[6] or 0), 2)
         del_qty = round(float(row[7] or 0), 2)
         status = str(row[8] or "—").strip()
         on_time_del_qty = round(float(row[10] or 0), 2) if len(row) > 10 else (del_qty if status == "On Time" else 0.0)
@@ -3041,6 +3110,25 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
         else:
             otd_pct = 100.0 if status == "On Time" else 85.0
 
+        pd_rate = float(row[13] or 0) if len(row) > 13 else 0.0
+        pd_amt = float(row[14] or 0) if len(row) > 14 else 0.0
+        pd_curr_rate = float(row[15] or 1.0) if len(row) > 15 and row[15] is not None else 1.0
+        if pd_curr_rate == 0:
+            pd_curr_rate = 1.0
+        pd_po_qty = float(row[16] or 0) if len(row) > 16 else 0.0
+
+        if pd_po_qty > 0 and pd_amt > 0:
+            effective_rate = (pd_amt * pd_curr_rate) / pd_po_qty
+        elif pd_amt > 0 and order_qty > 0 and pd_po_qty == 0:
+            effective_rate = (pd_amt * pd_curr_rate) / order_qty
+        else:
+            effective_rate = pd_rate * pd_curr_rate
+
+        order_val = round(order_qty * effective_rate, 2)
+        del_val = round(del_qty * effective_rate, 2)
+        pending_qty = max(0.0, order_qty - del_qty)
+        pending_val = round(pending_qty * effective_rate, 2)
+
         rows.append({
             "customerName": customer,
             "poNumber": str(row[1] or "—").strip(),
@@ -3049,13 +3137,16 @@ def _fetch_otd_registry_rows(conn, sql_start, sql_end, customer="", part=""):
             "partNumber": part,
             "schdDate": _format_otd_date(row[4]),
             "reqDate": _format_otd_date(row[5]),
-            "orderQty": round(float(row[6] or 0), 2),
+            "orderQty": order_qty,
             "deliveryQty": del_qty,
             "onTimeDelQty": on_time_del_qty,
             "delayedDelQty": delayed_del_qty,
             "otdPct": otd_pct,
             "status": status,
-            "value": round(float(row[9] or 0), 2),
+            "orderValue": order_val,
+            "deliveredValue": del_val,
+            "pendingValue": pending_val,
+            "value": order_val,
         })
     return rows, sorted(customers), sorted(parts)
 

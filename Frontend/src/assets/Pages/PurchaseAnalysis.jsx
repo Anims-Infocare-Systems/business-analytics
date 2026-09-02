@@ -43,6 +43,24 @@ Chart.register(...registerables, ChartDataLabels);
 
 const API_BASE = resolveApiBase();
 
+const normalizePoUom = (rawUom, rawStr) => {
+    let u = (rawUom || "").trim().toUpperCase();
+    if (!u && rawStr) {
+        u = String(rawStr).replace(/^[+-]?[\d,]+(\.\d+)?\s*/, "").trim().toUpperCase();
+    }
+    if (!u) return "NOS";
+    if (u === "NO" || u === "NOS" || u === "NUM" || u === "NUMBERS" || u === "NUMBER") return "NOS";
+    if (u === "MTR" || u === "MTRS" || u === "METER" || u === "METERS" || u === "M") return "MTRS";
+    if (u === "KG" || u === "KGS" || u === "KILOGRAM" || u === "KILOGRAMS") return "KGS";
+    if (u === "LTR" || u === "LTRS" || u === "LITER" || u === "LITERS" || u === "L") return "LTRS";
+    if (u === "SET" || u === "SETS") return "SETS";
+    if (u === "PKT" || u === "PKTS" || u === "PACKET" || u === "PACKETS") return "PKTS";
+    if (u === "BOX" || u === "BOXES") return "BOX";
+    if (u === "PCS" || u === "PIECES" || u === "PC") return "PCS";
+    if (u === "PAIR" || u === "PAIRS" || u === "PRS") return "PAIRS";
+    return u;
+};
+
 // ─────────────────────────────────────────────
 //  Premium "No Data Found" Empty State
 // ─────────────────────────────────────────────
@@ -487,6 +505,29 @@ export default function PurchaseAnalysis() {
         return sorted;
     }, [filteredPoRows, sortConfig]);
 
+    const poTableTotals = useMemo(() => {
+        let totalValue = 0;
+        const uomMap = {};
+        filteredPoRows.forEach(r => {
+            const rawStr = String(r.po_qty || "").trim();
+            const qtyMatch = rawStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const qty = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (parseFloat(rawStr.replace(/[^\d.]/g, "")) || 0);
+
+            if (qty > 0) {
+                const uom = normalizePoUom(r.uom || r.unit, rawStr);
+                if (!uomMap[uom]) uomMap[uom] = 0;
+                uomMap[uom] += qty;
+            }
+
+            const rawVal = Number(r.value || 0);
+            if (!isNaN(rawVal)) totalValue += rawVal;
+        });
+        return {
+            uomMap,
+            totalValue
+        };
+    }, [filteredPoRows]);
+
     const filteredAmendedPoRows = useMemo(() => {
         return amendedPoRows.filter(r => {
             const q = searchQuery.toLowerCase().trim();
@@ -511,6 +552,29 @@ export default function PurchaseAnalysis() {
             return true;
         });
     }, [amendedPoRows, searchQuery, filters.supplier, filters.status]);
+
+    const amendedPoTableTotals = useMemo(() => {
+        let totalValue = 0;
+        const uomMap = {};
+        filteredAmendedPoRows.forEach(r => {
+            const rawStr = String(r.po_qty || "").trim();
+            const qtyMatch = rawStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const qty = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (parseFloat(rawStr.replace(/[^\d.]/g, "")) || 0);
+
+            if (qty > 0) {
+                const uom = normalizePoUom(r.uom || r.unit, rawStr);
+                if (!uomMap[uom]) uomMap[uom] = 0;
+                uomMap[uom] += qty;
+            }
+
+            const rawVal = Number(r.value || 0);
+            if (!isNaN(rawVal)) totalValue += rawVal;
+        });
+        return {
+            uomMap,
+            totalValue
+        };
+    }, [filteredAmendedPoRows]);
 
     const uniqueAmendedPoCount = useMemo(() => {
         const uniqueKeys = new Set();
@@ -3621,8 +3685,8 @@ export default function PurchaseAnalysis() {
                                     {poTableDeptFilter.length === 0
                                         ? "All Departments"
                                         : poTableDeptFilter.length === 1
-                                        ? poTableDeptFilter[0]
-                                        : `${poTableDeptFilter.length} Depts Selected`}
+                                            ? poTableDeptFilter[0]
+                                            : `${poTableDeptFilter.length} Depts Selected`}
                                 </span>
                                 {poTableDeptFilter.length > 0 && (
                                     <span className="pa2-dept-count-badge">{poTableDeptFilter.length}</span>
@@ -3841,6 +3905,50 @@ export default function PurchaseAnalysis() {
                                 </tr>
                             ))}
                         </tbody>
+                        {!poLoading && sortedFilteredPoRows.length > 0 && (
+                            <tfoot>
+                                <tr className="pa2-po-total-tr">
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td pa2-po-total-label" style={{ fontWeight: "750", color: "#1e293b", textAlign: "right", whiteSpace: "nowrap" }}>
+                                        <span className="pa2-total-title">Total</span>
+                                    </td>
+                                    <td colSpan={2} className="pa2-po-td pa2-po-td--r" style={{ verticalAlign: "middle" }}>
+                                        <div className="pa2-uom-cluster">
+                                            {Object.entries(poTableTotals.uomMap).length === 0 ? (
+                                                <span className="pa2-uom-pill">
+                                                    <span className="pa2-uom-prefix">Tot</span>
+                                                    <span className="pa2-uom-unit">NOS:</span>
+                                                    <span className="pa2-uom-val">0</span>
+                                                </span>
+                                            ) : (
+                                                Object.entries(poTableTotals.uomMap).map(([uom, qty]) => (
+                                                    <span key={uom} className="pa2-uom-pill" title={`Total ${uom}`}>
+                                                        <span className="pa2-uom-prefix">Tot</span>
+                                                        <span className="pa2-uom-unit">{uom}:</span>
+                                                        <span className="pa2-uom-val">{qty.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                                                    </span>
+                                                ))
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td pa2-po-td--r">
+                                        <span className="pa2-total-badge pa2-total-badge-purple" title="Total Purchase Value">
+                                            ₹{poTableTotals.totalValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    </td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
                 </div>
             </div>
@@ -3936,6 +4044,47 @@ export default function PurchaseAnalysis() {
                                 </tr>
                             ))}
                         </tbody>
+                        {!amendedPoLoading && filteredAmendedPoRows.length > 0 && (
+                            <tfoot>
+                                <tr className="pa2-po-total-tr">
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td pa2-po-total-label" style={{ fontWeight: "750", color: "#1e293b", textAlign: "right", whiteSpace: "nowrap" }}>
+                                        <span className="pa2-total-title">Total</span>
+                                    </td>
+                                    <td colSpan={2} className="pa2-po-td pa2-po-td--r" style={{ verticalAlign: "middle" }}>
+                                        <div className="pa2-uom-cluster">
+                                            {Object.entries(amendedPoTableTotals.uomMap).length === 0 ? (
+                                                <span className="pa2-uom-pill">
+                                                    <span className="pa2-uom-prefix">Tot</span>
+                                                    <span className="pa2-uom-unit">NOS:</span>
+                                                    <span className="pa2-uom-val">0</span>
+                                                </span>
+                                            ) : (
+                                                Object.entries(amendedPoTableTotals.uomMap).map(([uom, qty]) => (
+                                                    <span key={uom} className="pa2-uom-pill" title={`Total ${uom}`}>
+                                                        <span className="pa2-uom-prefix">Tot</span>
+                                                        <span className="pa2-uom-unit">{uom}:</span>
+                                                        <span className="pa2-uom-val">{qty.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                                                    </span>
+                                                ))
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td pa2-po-td--r">
+                                        <span className="pa2-total-badge pa2-total-badge-purple" title="Total Amended Value">
+                                            ₹{amendedPoTableTotals.totalValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    </td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                    <td className="pa2-po-td"></td>
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
                 </div>
             </div>
@@ -3947,7 +4096,7 @@ export default function PurchaseAnalysis() {
                     <SectionHeader
                         icon={<CalendarRange size={17} style={{ color: "#2563eb" }} />}
                         title="PO Fulfillment Schedule"
-                        badge="Delivery Tracking & Balance Analytics"
+                        // badge="Delivery Tracking & Balance Analytics"
                         badgeCls="pa2-badge-blue"
                     />
 
@@ -3986,8 +4135,8 @@ export default function PurchaseAnalysis() {
                                     {fsSupplierFilter.length === 0
                                         ? "All Suppliers"
                                         : fsSupplierFilter.length === 1
-                                        ? fsSupplierFilter[0]
-                                        : `${fsSupplierFilter.length} Suppliers`}
+                                            ? fsSupplierFilter[0]
+                                            : `${fsSupplierFilter.length} Suppliers`}
                                 </span>
                                 {fsSupplierFilter.length > 0 && (
                                     <span className="pa2-dept-count-badge">{fsSupplierFilter.length}</span>
@@ -4094,8 +4243,8 @@ export default function PurchaseAnalysis() {
                                     {fsPartFilter.length === 0
                                         ? "All Parts"
                                         : fsPartFilter.length === 1
-                                        ? fsPartFilter[0]
-                                        : `${fsPartFilter.length} Parts`}
+                                            ? fsPartFilter[0]
+                                            : `${fsPartFilter.length} Parts`}
                                 </span>
                                 {fsPartFilter.length > 0 && (
                                     <span className="pa2-dept-count-badge">{fsPartFilter.length}</span>
@@ -4615,8 +4764,8 @@ export default function PurchaseAnalysis() {
                                             {ptTypeFilter.length === 0
                                                 ? "All Types"
                                                 : ptTypeFilter.length === 1
-                                                ? (ptTypeFilter[0] === "up" ? "↑ Up" : ptTypeFilter[0] === "down" ? "↓ Down" : "— Flat")
-                                                : `${ptTypeFilter.length} Types`}
+                                                    ? (ptTypeFilter[0] === "up" ? "↑ Up" : ptTypeFilter[0] === "down" ? "↓ Down" : "— Flat")
+                                                    : `${ptTypeFilter.length} Types`}
                                         </span>
                                         {ptTypeFilter.length > 0 && (
                                             <span className="pa2-dept-count-badge">{ptTypeFilter.length}</span>
@@ -4734,8 +4883,8 @@ export default function PurchaseAnalysis() {
                                             {ptSupplierFilter.length === 0
                                                 ? "All Suppliers"
                                                 : ptSupplierFilter.length === 1
-                                                ? ptSupplierFilter[0]
-                                                : `${ptSupplierFilter.length} Suppliers`}
+                                                    ? ptSupplierFilter[0]
+                                                    : `${ptSupplierFilter.length} Suppliers`}
                                         </span>
                                         {ptSupplierFilter.length > 0 && (
                                             <span className="pa2-dept-count-badge">{ptSupplierFilter.length}</span>
@@ -4843,8 +4992,8 @@ export default function PurchaseAnalysis() {
                                             {ptPartFilter.length === 0
                                                 ? "All Parts"
                                                 : ptPartFilter.length === 1
-                                                ? ptPartFilter[0]
-                                                : `${ptPartFilter.length} Parts`}
+                                                    ? ptPartFilter[0]
+                                                    : `${ptPartFilter.length} Parts`}
                                         </span>
                                         {ptPartFilter.length > 0 && (
                                             <span className="pa2-dept-count-badge">{ptPartFilter.length}</span>

@@ -836,7 +836,7 @@ export default function ProductionAnalysis() {
         const rate = (totalFixed + totalVariable) / hrs;
         return { name: mac, rate };
       }).sort((a, b) => b.rate - a.rate);
-      
+
       setMhrSelectedMachines(sorted.slice(0, 10).map(x => x.name));
       mhrInitializedRef.current = true;
     }
@@ -1319,6 +1319,35 @@ export default function ProductionAnalysis() {
       return true;
     });
   }, [tableData, searchQuery, filterMachine, filterShift, filterOperator, dailyPartFilter, dailyMacFilter, dailyOperatorFilter]);
+
+  const dailyTableTotals = useMemo(() => {
+    let totalTarget = 0;
+    let totalOkQty = 0;
+    let totalMatRej = 0;
+    let totalMacRej = 0;
+    let totalRwQty = 0;
+
+    filteredTableData.forEach(row => {
+      totalTarget += Number(row.Target || 0);
+      totalOkQty += Number(row.OKQty || 0);
+
+      const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
+      const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
+      const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
+
+      totalMatRej += Number(matRej || 0);
+      totalMacRej += Number(macRej || 0);
+      totalRwQty += Number(rwQty || 0);
+    });
+
+    return {
+      target: totalTarget,
+      okQty: totalOkQty,
+      matRej: totalMatRej,
+      macRej: totalMacRej,
+      rwQty: totalRwQty
+    };
+  }, [filteredTableData]);
 
   const sortedTableData = useMemo(() => {
     if (!dailySortField) return filteredTableData;
@@ -3166,7 +3195,7 @@ export default function ProductionAnalysis() {
                       const allMacs = macOptions.length > 1
                         ? macOptions.filter(opt => opt.value !== "").map(opt => opt.value)
                         : Object.keys(mhrMachinesInputs);
-                      
+
                       const displayedMacs = query
                         ? allMacs.filter(mac => mac.toLowerCase().includes(query))
                         : allMacs;
@@ -3217,7 +3246,7 @@ export default function ProductionAnalysis() {
                       });
                     })()}
                   </div>
-                  
+
                   <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f1f5f9", marginTop: "6px", paddingTop: "6px", paddingLeft: "4px", paddingRight: "4px" }}>
                     <button
                       type="button"
@@ -4645,7 +4674,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
       {/* ── DAILY PRODUCTION DETAILS ── */}
       <div className="pa2-card pa2-anim" style={{ "--d": "80ms", overflow: "visible" }}>
         <SectionHeader icon={<FiTable size={16} />} title="Daily Production Details" sub={pageLoading ? "Loading…" : `${filteredTableData.length} shift record(s)`} />
-        
+
         {/* Modern Dedicated Table Toolbar & Filters */}
         <div className="pa2-daily-filter-toolbar">
           {/* 1. Part No Wise Filter */}
@@ -4664,8 +4693,8 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     {dailyPartFilter.length === 0
                       ? "All Parts"
                       : dailyPartFilter.length === 1
-                      ? dailyPartFilter[0]
-                      : `${dailyPartFilter.length} Parts Selected`}
+                        ? dailyPartFilter[0]
+                        : `${dailyPartFilter.length} Parts Selected`}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
@@ -4746,8 +4775,8 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     {dailyMacFilter.length === 0
                       ? "All Machines"
                       : dailyMacFilter.length === 1
-                      ? dailyMacFilter[0]
-                      : `${dailyMacFilter.length} Machines Selected`}
+                        ? dailyMacFilter[0]
+                        : `${dailyMacFilter.length} Machines Selected`}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
@@ -4828,8 +4857,8 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     {dailyOperatorFilter.length === 0
                       ? "All Operators"
                       : dailyOperatorFilter.length === 1
-                      ? dailyOperatorFilter[0]
-                      : `${dailyOperatorFilter.length} Operators Selected`}
+                        ? dailyOperatorFilter[0]
+                        : `${dailyOperatorFilter.length} Operators Selected`}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
@@ -5038,6 +5067,49 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                 </>
               )}
             </tbody>
+            {!tableLoading && sortedTableData.length > 0 && (
+              <tfoot>
+                <tr className="pa2-daily-tfoot-row">
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td className="pa2-daily-tfoot-label" style={{ textAlign: "right", fontWeight: "800", color: "#334155" }}>
+                    Total
+                  </td>
+                  <td className="pa2-td-num">
+                    <span className="pa2-daily-total-badge pa2-daily-total-blue" title="Total Target">
+                      {dailyTableTotals.target.toLocaleString("en-IN")}
+                    </span>
+                  </td>
+                  <td className="pa2-td-num">
+                    <span className="pa2-daily-total-badge pa2-daily-total-green" title="Total OK Qty">
+                      {dailyTableTotals.okQty.toLocaleString("en-IN")}
+                    </span>
+                  </td>
+                  <td className="pa2-td-num">
+                    <span className={`pa2-daily-total-badge ${dailyTableTotals.matRej > 0 ? "pa2-daily-total-red" : "pa2-daily-total-neutral"}`} title="Total Material Rejection">
+                      {dailyTableTotals.matRej.toLocaleString("en-IN")}
+                    </span>
+                  </td>
+                  <td className="pa2-td-num">
+                    <span className={`pa2-daily-total-badge ${dailyTableTotals.macRej > 0 ? "pa2-daily-total-red" : "pa2-daily-total-neutral"}`} title="Total Machine Rejection">
+                      {dailyTableTotals.macRej.toLocaleString("en-IN")}
+                    </span>
+                  </td>
+                  <td className="pa2-td-num">
+                    <span className={`pa2-daily-total-badge ${dailyTableTotals.rwQty > 0 ? "pa2-daily-total-amber" : "pa2-daily-total-neutral"}`} title="Total Rework Qty">
+                      {dailyTableTotals.rwQty.toLocaleString("en-IN")}
+                    </span>
+                  </td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

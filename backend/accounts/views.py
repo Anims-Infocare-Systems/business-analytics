@@ -2527,12 +2527,43 @@ def otd_report(request):
                    TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
                    CAST(p.podt AS DATE)
                ) AS targetdate,
-               YEAR(p.podt) AS PoYear, MONTH(p.podt) AS PoMonth
+               YEAR(COALESCE(
+                   NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+                   NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+                   CAST(p.podt AS DATE)
+               )) AS PoYear,
+               MONTH(COALESCE(
+                   NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+                   NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+                   CAST(p.podt AS DATE)
+               )) AS PoMonth
         FROM In_PoDet_ShdQty s
         INNER JOIN In_PoMas p ON s.Apono = p.Apono
         LEFT JOIN CustMast cm ON p.cid = cm.Id
         LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
-        WHERE CAST(p.podt AS DATE) BETWEEN ? AND ?
+        WHERE COALESCE(
+                   NULLIF(TRY_CAST(s.shddate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.shddate AS NVARCHAR(50)), 120),
+                   NULLIF(TRY_CAST(s.reqdate AS DATE), '1900-01-01'),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 105),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 103),
+                   TRY_CONVERT(DATE, CAST(s.reqdate AS NVARCHAR(50)), 120),
+                   CAST(p.podt AS DATE)
+               ) BETWEEN ? AND ?
           AND ISNULL(s.deleted, 0) = 0
           AND ISNULL(p.deleted, 0) = 0
     ),

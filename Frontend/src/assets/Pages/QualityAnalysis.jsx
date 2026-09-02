@@ -1333,63 +1333,14 @@ export default function QualityAnalysis() {
         return () => clearTimeout(searchDebounceRef.current);
     }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    useEffect(() => {
-        const mk = (ref, holder, type, data, opts) => {
-            holder.current?.destroy();
-            if (ref.current) holder.current = new Chart(ref.current, { type, data, options: opts });
-        };
+    const fontBase = useMemo(() => ({ family: "Poppins" }), []);
 
-        const fontBase = { family: "Poppins" };
+    // ── 1. Weekly Inspection Trend Chart ──
+    useEffect(() => {
+        if (!trendRef.current) return;
+        trendChart.current?.destroy();
 
         const trendData = chartsData?.trend || { labels: [], datasets: [] };
-        const resultDonut = chartsData?.result_donut || { labels: [], datasets: [] };
-        const rawDefectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
-        const defectData = rawDefectDonut.datasets?.[0]?.data || [];
-        const defectTotal = defectData.reduce((a, b) => Number(a) + Number(b), 0);
-        const defectBaseNames = ["Material Rejection", "Machine Rejection", "Rework"];
-        const defectLabels = defectBaseNames.map((name, idx) => {
-            const rawVal = Number(defectData[idx]) || 0;
-            const pct = defectTotal > 0 ? ((rawVal / defectTotal) * 100).toFixed(1) : "0.0";
-            return `${name} (${pct}%)`;
-        });
-        const defectDonut = {
-            ...rawDefectDonut,
-            labels: defectLabels,
-            datasets: rawDefectDonut.datasets || []
-        };
-        const ppmData = chartsData?.mac_rejection_ppm || { labels: [], datasets: [] };
-        const paretoData = chartsData?.pareto || { labels: [], datasets: [] };
-
-        const trendLabels = trendData.labels || [];
-        const rejectDataPoints = activeRejectionTrendData.points || [];
-        const reworkDataPoints = activeReworkTrendData.points || [];
-
-        // ── Rejection Gradient ──
-        const rejectionCanvas = rejectionRef.current;
-        let rejectionGradient = "rgba(239, 68, 68, 0.1)";
-        if (rejectionCanvas) {
-            const ctx = rejectionCanvas.getContext("2d");
-            if (ctx) {
-                const grad = ctx.createLinearGradient(0, 0, 0, 260);
-                grad.addColorStop(0, "rgba(239, 68, 68, 0.35)");
-                grad.addColorStop(1, "rgba(239, 68, 68, 0.0)");
-                rejectionGradient = grad;
-            }
-        }
-
-        // ── Rework Gradient ──
-        const reworkCanvas = reworkRef.current;
-        let reworkGradient = "rgba(245, 166, 35, 0.1)";
-        if (reworkCanvas) {
-            const ctx = reworkCanvas.getContext("2d");
-            if (ctx) {
-                const grad = ctx.createLinearGradient(0, 0, 0, 260);
-                grad.addColorStop(0, "rgba(245, 166, 35, 0.35)");
-                grad.addColorStop(1, "rgba(245, 166, 35, 0.0)");
-                reworkGradient = grad;
-            }
-        }
-
         const labels = trendData.labels || [];
         const datasets = [];
 
@@ -1397,7 +1348,6 @@ export default function QualityAnalysis() {
         const reworkData = trendData.datasets?.[1]?.data || [];
         const rejectData = trendData.datasets?.[2]?.data || [];
 
-        // ── Weekly Trend Canvas Gradients ──
         const trendCanvas = trendRef.current;
         let passGrad = "rgba(16, 185, 129, 0.25)";
         let rewGrad = "rgba(245, 166, 35, 0.25)";
@@ -1406,19 +1356,16 @@ export default function QualityAnalysis() {
         if (trendCanvas) {
             const ctx = trendCanvas.getContext("2d");
             if (ctx) {
-                // Pass gradient (Green)
                 const g1 = ctx.createLinearGradient(0, 0, 0, 240);
                 g1.addColorStop(0, "rgba(16, 185, 129, 0.8)");
                 g1.addColorStop(1, "rgba(16, 185, 129, 0.15)");
                 passGrad = g1;
 
-                // Rework gradient (Amber)
                 const g2 = ctx.createLinearGradient(0, 0, 0, 240);
                 g2.addColorStop(0, "rgba(245, 166, 35, 0.8)");
                 g2.addColorStop(1, "rgba(245, 166, 35, 0.15)");
                 rewGrad = g2;
 
-                // Reject gradient (Red)
                 const g3 = ctx.createLinearGradient(0, 0, 0, 240);
                 g3.addColorStop(0, "rgba(239, 68, 68, 0.8)");
                 g3.addColorStop(1, "rgba(239, 68, 68, 0.15)");
@@ -1548,193 +1495,282 @@ export default function QualityAnalysis() {
             );
         }
 
-        mk(trendRef, trendChart, weeklyChartType === "stack" ? "bar" : "line", { labels, datasets }, {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-                duration: 1000,
-                easing: "easeOutQuart"
-            },
-            interaction: {
-                mode: "index",
-                intersect: false
-            },
-            layout: {
-                padding: {
-                    left: 15,
-                    right: 15,
-                    top: 12
-                }
-            },
-            plugins: {
-                legend: {
-                    position: "top",
-                    labels: {
-                        font: { family: "Poppins", size: 11, weight: "600" },
-                        boxWidth: 12,
-                        padding: 16,
-                        usePointStyle: true
-                    }
-                },
-                tooltip: {
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
-                    padding: 12,
-                    cornerRadius: 8,
-                    titleFont: { size: 11, weight: "700", family: "Poppins" },
-                    bodyFont: { size: 11, family: "Poppins" },
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderWidth: 1,
-                    callbacks: {
-                        label: (ctx) => `  ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} units`,
-                    }
-                },
-                datalabels: {
-                    display: true,
-                    anchor: "end",
-                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
-                    offset: (context) => (context.dataIndex === 0 ? 6 : 2),
-                    formatter: (value, context) => {
-                        if (weeklyChartType !== "stack") {
-                            return value > 0 ? value.toLocaleString() : "";
+        trendChart.current = new Chart(trendRef.current, {
+            type: weeklyChartType === "stack" ? "bar" : "line",
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 800, easing: "easeOutQuart" },
+                interaction: { mode: "index", intersect: false },
+                layout: { padding: { left: 15, right: 15, top: 12 } },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        labels: { font: { family: "Poppins", size: 11, weight: "600" }, boxWidth: 12, padding: 16, usePointStyle: true }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => `  ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} units`,
                         }
-                        const index = context.dataIndex;
-                        const datasets = context.chart.data.datasets;
-                        let topDatasetIndex = -1;
-                        for (let i = datasets.length - 1; i >= 0; i--) {
-                            if (datasets[i].data[index] > 0) {
-                                topDatasetIndex = i;
-                                break;
+                    },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                        offset: (context) => (context.dataIndex === 0 ? 6 : 2),
+                        formatter: (value, context) => {
+                            if (weeklyChartType !== "stack") {
+                                return value > 0 ? value.toLocaleString() : "";
+                            }
+                            const index = context.dataIndex;
+                            const dsets = context.chart.data.datasets;
+                            let topDatasetIndex = -1;
+                            for (let i = dsets.length - 1; i >= 0; i--) {
+                                if (dsets[i].data[index] > 0) {
+                                    topDatasetIndex = i;
+                                    break;
+                                }
+                            }
+                            if (context.datasetIndex === topDatasetIndex) {
+                                const total = dsets.reduce((sum, ds) => sum + (ds.data[index] || 0), 0);
+                                return total > 0 ? total.toLocaleString() : "";
+                            }
+                            return "";
+                        },
+                        font: { size: 9.5, weight: "750", family: "Poppins" },
+                        color: "#475569"
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: weeklyChartType === "stack",
+                        grid: { display: false },
+                        ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 }
+                    },
+                    y: {
+                        stacked: weeklyChartType === "stack",
+                        grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
+                        ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 },
+                        border: { dash: [4, 4], color: "transparent" }
+                    },
+                },
+            }
+        });
+
+        return () => trendChart.current?.destroy();
+    }, [chartsData?.trend, weeklyChartType]);
+
+    // ── 2. Inspection Results Split Donut Chart ──
+    useEffect(() => {
+        if (!resultRef.current) return;
+        resultChart.current?.destroy();
+
+        const resultDonut = chartsData?.result_donut || { labels: [], datasets: [] };
+
+        resultChart.current = new Chart(resultRef.current, {
+            type: "doughnut",
+            data: resultDonut,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { ...fontBase, size: 10, padding: 10, boxWidth: 10 } },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => {
+                                const rawLabel = ctx.label || "";
+                                const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
+                                const val = Number(ctx.parsed) || 0;
+                                const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
+                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
+                                return ` ${cleanLabel}: ${pct}%`;
                             }
                         }
-                        if (context.datasetIndex === topDatasetIndex) {
-                            const total = datasets.reduce((sum, ds) => sum + (ds.data[index] || 0), 0);
-                            return total > 0 ? total.toLocaleString() : "";
-                        }
-                        return "";
                     },
-                    font: { size: 9.5, weight: "750", family: "Poppins" },
-                    color: "#475569"
-                }
-            },
-            scales: {
-                x: {
-                    stacked: weeklyChartType === "stack",
-                    grid: { display: false },
-                    ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 }
+                    datalabels: {
+                        display: true,
+                        color: "#fff",
+                        font: { size: 10.5, weight: "700", family: "Poppins" },
+                        formatter: (value, context) => {
+                            const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
+                            const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
+                            return Number(pct) >= 1 ? `${pct}%` : "";
+                        }
+                    }
                 },
-                y: {
-                    stacked: weeklyChartType === "stack",
-                    grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
-                    ticks: { font: { family: "Poppins", size: 9.5 }, color: "#5a6a9a", padding: 6 },
-                    border: { dash: [4, 4], color: "transparent" }
-                },
-            },
+                cutout: "64%",
+            }
         });
 
-        const donut = {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { position: "bottom", labels: { font: { ...fontBase, size: 10 }, padding: 10, boxWidth: 10 } },
-                tooltip: {
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
-                    padding: 12,
-                    cornerRadius: 8,
-                    titleFont: { size: 11, weight: "700", family: "Poppins" },
-                    bodyFont: { size: 11, family: "Poppins" },
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderWidth: 1,
-                    callbacks: {
-                        label: (ctx) => {
-                            const rawLabel = ctx.label || "";
-                            const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
-                            const val = Number(ctx.parsed) || 0;
-                            const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                            return ` ${cleanLabel}: ${pct}%`;
-                        }
-                    }
-                },
-                datalabels: {
-                    display: true,
-                    color: "#fff",
-                    font: { size: 10.5, weight: "700", family: "Poppins" },
-                    formatter: (value, context) => {
-                        const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                        const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
-                        return Number(pct) >= 1 ? `${pct}%` : "";
-                    }
-                }
-            },
-            cutout: "64%",
+        return () => resultChart.current?.destroy();
+    }, [chartsData?.result_donut, fontBase]);
+
+    // ── 3. Defect Category Breakdown Donut Chart ──
+    useEffect(() => {
+        if (!defectRef.current) return;
+        defectChart.current?.destroy();
+
+        const rawDefectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
+        const defectData = rawDefectDonut.datasets?.[0]?.data || [];
+        const defectTotal = defectData.reduce((a, b) => Number(a) + Number(b), 0);
+        const defectBaseNames = ["Material Rejection", "Machine Rejection", "Rework"];
+        const defectLabels = defectBaseNames.map((name, idx) => {
+            const rawVal = Number(defectData[idx]) || 0;
+            const pct = defectTotal > 0 ? ((rawVal / defectTotal) * 100).toFixed(1) : "0.0";
+            return `${name} (${pct}%)`;
+        });
+        const defectDonut = {
+            ...rawDefectDonut,
+            labels: defectLabels,
+            datasets: rawDefectDonut.datasets || []
         };
-        mk(resultRef, resultChart, "doughnut", resultDonut, donut);
-        mk(defectRef, defectChart, "doughnut", defectDonut, donut);
 
-        mk(ppmRef, ppmChart, "line", ppmData, {
-            responsive: true, maintainAspectRatio: false,
-            layout: {
-                padding: { left: 15, right: 15, top: 16 }
-            },
-            plugins: {
-                legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
-                title: {
-                    display: true,
-                    text: ppmData.fy ? `Internal Mac Rejection PPM — ${ppmData.fy}` : "Internal Mac Rejection PPM",
-                    font: { ...fontBase, size: 12, weight: 600 },
-                    color: "#5a6a9a",
-                    padding: { bottom: 8 }
-                },
-                tooltip: {
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
-                    padding: 12,
-                    cornerRadius: 8,
-                    titleFont: { size: 11, weight: "700", family: "Poppins" },
-                    bodyFont: { size: 11, family: "Poppins" },
-                    borderColor: "rgba(255, 255, 255, 0.1)",
-                    borderWidth: 1,
-                    callbacks: {
-                        label: (ctx) => {
-                            const val = Number(ctx.parsed.y) || 0;
-                            const val2 = (Math.floor(val * 100) / 100).toFixed(2);
-                            return ` ${ctx.dataset.label || "Actual PPM"}: ${val2} PPM`;
+        defectChart.current = new Chart(defectRef.current, {
+            type: "doughnut",
+            data: defectDonut,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { ...fontBase, size: 10, padding: 10, boxWidth: 10 } },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => {
+                                const rawLabel = ctx.label || "";
+                                const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
+                                const val = Number(ctx.parsed) || 0;
+                                const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
+                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
+                                return ` ${cleanLabel}: ${pct}%`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        color: "#fff",
+                        font: { size: 10.5, weight: "700", family: "Poppins" },
+                        formatter: (value, context) => {
+                            const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
+                            const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
+                            return Number(pct) >= 1 ? `${pct}%` : "";
                         }
                     }
                 },
-                datalabels: {
-                    display: true,
-                    anchor: "end",
-                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
-                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
-                    formatter: (v) => {
-                        const val = Number(v) || 0;
-                        if (val <= 0) return "";
-                        const val2 = (Math.floor(val * 100) / 100).toFixed(2);
-                        return `${val2} PPM`;
-                    },
-                    font: { size: 9, weight: "700", family: "Poppins" },
-                    color: "#f97316",
-                    backgroundColor: "#ffffff",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
-                    borderWidth: 1,
-                    borderColor: "rgba(249, 115, 22, 0.25)"
-                }
-            },
-            scales: {
-                x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
-                y: {
-                    beginAtZero: true,
-                    grace: "15%",
-                    grid: { color: "rgba(26,84,212,0.07)" },
-                    ticks: {
-                        font: { ...fontBase, size: 9 },
-                        color: "#5a6a9a",
-                        callback: v => v.toLocaleString() + ' PPM'
-                    },
-                    border: { dash: [4, 4] }
-                },
-            },
+                cutout: "64%",
+            }
         });
+
+        return () => defectChart.current?.destroy();
+    }, [chartsData?.defect_donut, fontBase]);
+
+    // ── 4. Internal Mac Rejection PPM Chart ──
+    useEffect(() => {
+        if (!ppmRef.current) return;
+        ppmChart.current?.destroy();
+
+        const ppmData = chartsData?.mac_rejection_ppm || { labels: [], datasets: [] };
+
+        ppmChart.current = new Chart(ppmRef.current, {
+            type: "line",
+            data: ppmData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { left: 15, right: 15, top: 16 } },
+                plugins: {
+                    legend: { labels: { ...fontBase, size: 11, weight: 600, boxWidth: 12, padding: 14 } },
+                    title: {
+                        display: true,
+                        text: ppmData.fy ? `Internal Mac Rejection PPM — ${ppmData.fy}` : "Internal Mac Rejection PPM",
+                        font: { ...fontBase, size: 12, weight: 600 },
+                        color: "#5a6a9a",
+                        padding: { bottom: 8 }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (ctx) => {
+                                const val = Number(ctx.parsed.y) || 0;
+                                const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                                return ` ${ctx.dataset.label || "Actual PPM"}: ${val2} PPM`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                        offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                        formatter: (v) => {
+                            const val = Number(v) || 0;
+                            if (val <= 0) return "";
+                            const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                            return `${val2} PPM`;
+                        },
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#f97316",
+                        backgroundColor: "#ffffff",
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                        borderWidth: 1,
+                        borderColor: "rgba(249, 115, 22, 0.25)"
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { ...fontBase, size: 9, color: "#5a6a9a" } },
+                    y: {
+                        beginAtZero: true,
+                        grace: "15%",
+                        grid: { color: "rgba(26,84,212,0.07)" },
+                        ticks: {
+                            ...fontBase,
+                            size: 9,
+                            color: "#5a6a9a",
+                            callback: v => v.toLocaleString() + ' PPM'
+                        },
+                        border: { dash: [4, 4] }
+                    },
+                },
+            }
+        });
+
+        return () => ppmChart.current?.destroy();
+    }, [chartsData?.mac_rejection_ppm, fontBase]);
+
+    // ── 5. Top Defect Causes (Pareto) Chart ──
+    useEffect(() => {
+        if (!paretoRef.current) return;
+        paretoChart.current?.destroy();
+
+        const paretoData = chartsData?.pareto || { labels: [], datasets: [] };
 
         let finalParetoType = "bar";
         let finalParetoData = { ...paretoData };
@@ -1772,7 +1808,7 @@ export default function QualityAnalysis() {
             finalParetoOptions = {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { font: { ...fontBase, size: 11, weight: 600 }, boxWidth: 12, padding: 14 } },
+                    legend: { labels: { ...fontBase, size: 11, weight: 600, boxWidth: 12, padding: 14 } },
                     tooltip: {
                         backgroundColor: "rgba(15, 23, 42, 0.9)",
                         padding: 12,
@@ -1815,9 +1851,9 @@ export default function QualityAnalysis() {
                     }
                 },
                 scales: {
-                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
-                    y2: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a", callback: v => v + "%" } },
-                    x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { ...fontBase, size: 9, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                    y2: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { ...fontBase, size: 9, color: "#5a6a9a", callback: v => v + "%" } },
+                    x: { grid: { display: false }, ticks: { ...fontBase, size: 9, color: "#5a6a9a" } },
                 }
             };
         } else if (paretoChartType === "count") {
@@ -1847,8 +1883,8 @@ export default function QualityAnalysis() {
                     }
                 },
                 scales: {
-                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
-                    x: { grid: { display: false }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" } },
+                    y: { beginAtZero: true, grid: { color: "rgba(26,84,212,0.07)" }, ticks: { ...fontBase, size: 9, color: "#5a6a9a" }, border: { dash: [4, 4] } },
+                    x: { grid: { display: false }, ticks: { ...fontBase, size: 9, color: "#5a6a9a" } },
                 }
             };
         } else if (paretoChartType === "distribution") {
@@ -1868,7 +1904,7 @@ export default function QualityAnalysis() {
                 responsive: true, maintainAspectRatio: false,
                 cutout: "60%",
                 plugins: {
-                    legend: { position: "right", labels: { font: { ...fontBase, size: 10, weight: 600 }, boxWidth: 10, padding: 8 } },
+                    legend: { position: "right", labels: { ...fontBase, size: 10, weight: 600, boxWidth: 10, padding: 8 } },
                     tooltip: {
                         backgroundColor: "rgba(15, 23, 42, 0.9)",
                         padding: 12,
@@ -1891,7 +1927,7 @@ export default function QualityAnalysis() {
                         color: "#fff",
                         font: { size: 9.5, weight: "750", family: "Poppins" },
                         formatter: (value, context) => {
-                            const sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
                             const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
                             return pct > 3 ? `${pct}%` : "";
                         }
@@ -1900,109 +1936,187 @@ export default function QualityAnalysis() {
             };
         }
 
-        mk(paretoRef, paretoChart, finalParetoType, finalParetoData, finalParetoOptions);
-
-        mk(rejectionRef, rejectionChart, "line", {
-            labels: activeRejectionTrendData.labels || trendLabels,
-            datasets: [{
-                label: "Rejection Qty",
-                data: rejectDataPoints,
-                borderColor: "#ef4444",
-                backgroundColor: rejectionGradient,
-                tension: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 0.2 : 0.4,
-                fill: true,
-                pointRadius: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 5 : 4,
-                pointBackgroundColor: "#ef4444",
-                pointBorderColor: "#fff",
-                pointBorderWidth: 2,
-            }]
-        }, {
-            responsive: true, maintainAspectRatio: false,
-            layout: {
-                padding: { left: 15, right: 15, top: 16 }
-            },
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    display: true,
-                    anchor: "end",
-                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
-                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
-                    formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
-                    font: { size: 9, weight: "700", family: "Poppins" },
-                    color: "#ef4444",
-                    backgroundColor: "#ffffff",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
-                    borderWidth: 1,
-                    borderColor: "rgba(239, 68, 68, 0.25)"
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: {
-                        font: { ...fontBase, size: 9 },
-                        color: "#5a6a9a",
-                        autoSkip: false,
-                        maxRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 25 : 0,
-                        minRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 15 : 0
-                    }
-                },
-                y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
-            },
+        paretoChart.current = new Chart(paretoRef.current, {
+            type: finalParetoType,
+            data: finalParetoData,
+            options: finalParetoOptions
         });
 
-        mk(reworkRef, reworkChart, "line", {
-            labels: activeReworkTrendData.labels || trendLabels,
-            datasets: [{
-                label: "Rework Qty",
-                data: reworkDataPoints,
-                borderColor: "#f97316",
-                backgroundColor: reworkGradient,
-                tension: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 0.2 : 0.4,
-                fill: true,
-                pointRadius: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 5 : 4,
-                pointBackgroundColor: "#f97316",
-                pointBorderColor: "#fff",
-                pointBorderWidth: 2,
-            }]
-        }, {
-            responsive: true, maintainAspectRatio: false,
-            layout: {
-                padding: { left: 15, right: 15, top: 16 }
+        return () => paretoChart.current?.destroy();
+    }, [chartsData?.pareto, paretoChartType, fontBase]);
+
+    // ── 6. Rejection Analytics Trend Chart ──
+    useEffect(() => {
+        if (!rejectionRef.current) return;
+        rejectionChart.current?.destroy();
+
+        const trendLabels = chartsData?.trend?.labels || [];
+        const rejectDataPoints = activeRejectionTrendData.points || [];
+
+        const rejectionCanvas = rejectionRef.current;
+        let rejectionGradient = "rgba(239, 68, 68, 0.1)";
+        if (rejectionCanvas) {
+            const ctx = rejectionCanvas.getContext("2d");
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
+                grad.addColorStop(0, "rgba(239, 68, 68, 0.35)");
+                grad.addColorStop(1, "rgba(239, 68, 68, 0.0)");
+                rejectionGradient = grad;
+            }
+        }
+
+        rejectionChart.current = new Chart(rejectionRef.current, {
+            type: "line",
+            data: {
+                labels: activeRejectionTrendData.labels || trendLabels,
+                datasets: [{
+                    label: "Rejection Qty",
+                    data: rejectDataPoints,
+                    borderColor: "#ef4444",
+                    backgroundColor: rejectionGradient,
+                    tension: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 0.2 : 0.4,
+                    fill: true,
+                    pointRadius: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 5 : 4,
+                    pointBackgroundColor: "#ef4444",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                }]
             },
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    display: true,
-                    anchor: "end",
-                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
-                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
-                    formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
-                    font: { size: 9, weight: "700", family: "Poppins" },
-                    color: "#f97316",
-                    backgroundColor: "#ffffff",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
-                    borderWidth: 1,
-                    borderColor: "rgba(249, 115, 22, 0.25)"
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: {
-                        font: { ...fontBase, size: 9 },
-                        color: "#5a6a9a",
-                        autoSkip: false,
-                        maxRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 25 : 0,
-                        minRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 15 : 0
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { left: 15, right: 15, top: 16 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                        offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                        formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#ef4444",
+                        backgroundColor: "#ffffff",
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                        borderWidth: 1,
+                        borderColor: "rgba(239, 68, 68, 0.25)"
                     }
                 },
-                y: { beginAtZero: true, grace: "15%", grid: { color: "rgba(26,84,212,0.07)" }, ticks: { font: { ...fontBase, size: 9 }, color: "#5a6a9a" }, border: { dash: [4, 4] } },
-            },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            ...fontBase,
+                            size: 9,
+                            color: "#5a6a9a",
+                            autoSkip: false,
+                            maxRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 25 : 0,
+                            minRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 15 : 0
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grace: "15%",
+                        grid: { color: "rgba(26,84,212,0.07)" },
+                        ticks: { ...fontBase, size: 9, color: "#5a6a9a" },
+                        border: { dash: [4, 4] }
+                    },
+                }
+            }
         });
+
+        return () => rejectionChart.current?.destroy();
+    }, [activeRejectionTrendData, chartsData?.trend?.labels, fontBase]);
+
+    // ── 7. Rework Analytics Trend Chart ──
+    useEffect(() => {
+        if (!reworkRef.current) return;
+        reworkChart.current?.destroy();
+
+        const trendLabels = chartsData?.trend?.labels || [];
+        const reworkDataPoints = activeReworkTrendData.points || [];
+
+        const reworkCanvas = reworkRef.current;
+        let reworkGradient = "rgba(245, 166, 35, 0.1)";
+        if (reworkCanvas) {
+            const ctx = reworkCanvas.getContext("2d");
+            if (ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
+                grad.addColorStop(0, "rgba(245, 166, 35, 0.35)");
+                grad.addColorStop(1, "rgba(245, 166, 35, 0.0)");
+                reworkGradient = grad;
+            }
+        }
+
+        reworkChart.current = new Chart(reworkRef.current, {
+            type: "line",
+            data: {
+                labels: activeReworkTrendData.labels || trendLabels,
+                datasets: [{
+                    label: "Rework Qty",
+                    data: reworkDataPoints,
+                    borderColor: "#f97316",
+                    backgroundColor: reworkGradient,
+                    tension: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 0.2 : 0.4,
+                    fill: true,
+                    pointRadius: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 5 : 4,
+                    pointBackgroundColor: "#f97316",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { left: 15, right: 15, top: 16 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                        offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                        formatter: (v) => (v > 0 ? v.toLocaleString() : ""),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#f97316",
+                        backgroundColor: "#ffffff",
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                        borderWidth: 1,
+                        borderColor: "rgba(249, 115, 22, 0.25)"
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            ...fontBase,
+                            size: 9,
+                            color: "#5a6a9a",
+                            autoSkip: false,
+                            maxRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 25 : 0,
+                            minRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 15 : 0
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grace: "15%",
+                        grid: { color: "rgba(26,84,212,0.07)" },
+                        ticks: { ...fontBase, size: 9, color: "#5a6a9a" },
+                        border: { dash: [4, 4] }
+                    },
+                }
+            }
+        });
+
+        return () => reworkChart.current?.destroy();
+    }, [activeReworkTrendData, chartsData?.trend?.labels, fontBase]);
+
+    // ── 8. Supplier Rejections Chart ──
+    useEffect(() => {
+        if (!supplierRef.current) return;
+        supplierChart.current?.destroy();
 
         const suppMap = {};
         activeSupplierRejections.forEach(r => {
@@ -2022,64 +2136,66 @@ export default function QualityAnalysis() {
         const supplierMatRej = supplierLabels.map(l => suppMap[l].matRej);
         const supplierMacRej = supplierLabels.map(l => suppMap[l].macRej);
 
-        mk(supplierRef, supplierChart, "bar", {
-            labels: supplierLabels,
-            datasets: [
-                {
-                    label: "Material Rej",
-                    data: supplierMatRej,
-                    backgroundColor: "rgba(139, 92, 246, 0.75)",
-                    borderColor: "#8b5cf6",
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    hoverBackgroundColor: "rgba(139, 92, 246, 0.95)",
-                },
-                {
-                    label: "Machine Rej",
-                    data: supplierMacRej,
-                    backgroundColor: "rgba(244, 63, 94, 0.75)",
-                    borderColor: "#f43f5e",
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    hoverBackgroundColor: "rgba(244, 63, 94, 0.95)",
-                }
-            ]
-        }, {
-            indexAxis: "y",
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: "top",
-                    labels: { font: { family: "Poppins", size: 10 }, color: "#5a6a9a" }
-                },
-                datalabels: {
-                    display: true,
-                    anchor: "end",
-                    align: "right",
-                    formatter: (v) => (v > 0 ? v : ""),
-                    font: { size: 9, weight: "700", family: "Poppins" },
-                    color: "#475569"
-                }
+        supplierChart.current = new Chart(supplierRef.current, {
+            type: "bar",
+            data: {
+                labels: supplierLabels,
+                datasets: [
+                    {
+                        label: "Material Rej",
+                        data: supplierMatRej,
+                        backgroundColor: "rgba(139, 92, 246, 0.75)",
+                        borderColor: "#8b5cf6",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        hoverBackgroundColor: "rgba(139, 92, 246, 0.95)",
+                    },
+                    {
+                        label: "Machine Rej",
+                        data: supplierMacRej,
+                        backgroundColor: "rgba(244, 63, 94, 0.75)",
+                        borderColor: "#f43f5e",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        hoverBackgroundColor: "rgba(244, 63, 94, 0.95)",
+                    }
+                ]
             },
-            scales: {
-                x: {
-                    stacked: true,
-                    grid: { color: "rgba(26,84,212,0.07)" },
-                    ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: "top",
+                        labels: { font: { family: "Poppins", size: 10 }, color: "#5a6a9a" }
+                    },
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "right",
+                        formatter: (v) => (v > 0 ? v : ""),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#475569"
+                    }
                 },
-                y: {
-                    stacked: true,
-                    grid: { display: false },
-                    ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(26,84,212,0.07)" },
+                        ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { font: { family: "Poppins", size: 9 }, color: "#5a6a9a" }
+                    }
                 }
             }
         });
 
-        return () => {
-            [trendChart, resultChart, defectChart, ppmChart, paretoChart, rejectionChart, reworkChart, supplierChart].forEach(c => c.current?.destroy());
-        };
-    }, [chartsData, weeklyChartType, paretoChartType, supplierData, activeSupplierRejections, activeRejectionTrendData, activeReworkTrendData]);
+        return () => supplierChart.current?.destroy();
+    }, [activeSupplierRejections]);
 
     const resetFilters = () => {
         const today = new Date();
