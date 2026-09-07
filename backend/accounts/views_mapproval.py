@@ -124,7 +124,7 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
         RM.roucardno                              AS [Route Card No],
         RM.roucarddt                              AS [Route Card Date],
         RM.IsApproved                             AS [IsApproved],
-        C.CName                                   AS [Customer Name],
+        COALESCE(C.CName, CA.CName, '')           AS [Customer Name],
         RM.partno                                 AS [Part No],
         RM.description                            AS [Description],
 
@@ -139,7 +139,7 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
         ------------------------------
         -- Raw Material & Supplier DC
         ------------------------------
-        S.CName                                   AS [Supplier Name],
+        COALESCE(S.CName, SA.CName, '')           AS [Supplier Name],
         RG.rmname                                 AS [RM Code],
         RG.mattype                                AS [RM Description],
         RG.grnno                                  AS [GRN No],
@@ -161,6 +161,11 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
 
     LEFT JOIN CustMast C
            ON RM.cid = C.Id
+          AND ISNULL(C.Deleted, 0) = 0
+
+    LEFT JOIN CustAliasMast CA
+           ON RM.cid = CA.Id
+          AND ISNULL(CA.Deleted, 0) = 0
 
     LEFT JOIN RouCardWaitAppr_Det PD
            ON RM.roucardno = PD.roucardno
@@ -177,6 +182,11 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
 
     LEFT JOIN CustMast S
            ON RG.cid = S.Id
+          AND ISNULL(S.Deleted, 0) = 0
+
+    LEFT JOIN CustAliasMast SA
+           ON RG.cid = SA.Id
+          AND ISNULL(SA.Deleted, 0) = 0
 
     LEFT JOIN RouCard_HeatNoDet H
            ON RM.roucardno = H.roucardno
@@ -382,7 +392,7 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
 
             SELECT
                 R.cid                                        AS [cid],
-                C.CName                                      AS [CName],
+                COALESCE(C.CName, CA.CName, '')              AS [CName],
                 R.PartNo                                     AS [PartNo],
                 R.Description                                AS [Description],
                 R.Process                                    AS [ProcessCode],
@@ -408,6 +418,10 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
             FROM VenPrdPrcRate_Mast R
             LEFT JOIN CustMast C
                    ON R.cid = C.Id
+                  AND ISNULL(C.Deleted, 0) = 0
+            LEFT JOIN CustAliasMast CA
+                   ON R.cid = CA.Id
+                  AND ISNULL(CA.Deleted, 0) = 0
             LEFT JOIN ProcessDet IP
                    ON R.Process = IP.pcode
                   AND ISNULL(IP.deleted, 0) = 0
@@ -639,7 +653,7 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                 M.tariffheading                              AS [tariffheading],
                 M.IsActive                                   AS [IsActive],
                 M.cid                                        AS [cid],
-                C.CName                                      AS [CName],
+                COALESCE(C.CName, CA.CName, '')              AS [CName],
                 M.delivterms                                 AS [delivterms],
                 M.payterms                                   AS [payterms],
                 M.splins                                     AS [splins],
@@ -666,6 +680,10 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
             FROM Commer_Mas M
             LEFT JOIN CustMast C
                    ON M.cid = C.Id
+                  AND ISNULL(C.Deleted, 0) = 0
+            LEFT JOIN CustAliasMast CA
+                   ON M.cid = CA.Id
+                  AND ISNULL(CA.Deleted, 0) = 0
              WHERE ISNULL(M.deleted, 0) = 0
                {f"AND (LTRIM(RTRIM(M.cmno)) = '{single_cmno}' OR M.cmno = '{single_cmno}')" if single_cmno else "AND CAST(M.UsedDate AS DATE) BETWEEN @FromDate AND @ToDate"}
             ORDER BY M.UsedDate DESC, M.cmno DESC
@@ -933,9 +951,10 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                 # 5. Fetch Commer_CustDet (Supplier Details for Raw Material)
                 try:
                     cust_query = """
-                        SELECT D.cmno, D.PartNo, D.cid, D.BaseRate, D.Beffdt, D.NetRate, D.Neffdt, C.CName
+                        SELECT D.cmno, D.PartNo, D.cid, D.BaseRate, D.Beffdt, D.NetRate, D.Neffdt, COALESCE(C.CName, CA.CName, '') AS CName
                         FROM Commer_CustDet D
-                        LEFT JOIN CustMast C ON D.cid = C.Id
+                        LEFT JOIN CustMast C ON D.cid = C.Id AND ISNULL(C.Deleted, 0) = 0
+                        LEFT JOIN CustAliasMast CA ON D.cid = CA.Id AND ISNULL(CA.Deleted, 0) = 0
                         WHERE D.cmno = ? AND ISNULL(D.deleted, 0) = 0
                     """
                     cust_rows = []
@@ -1412,9 +1431,10 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
                 M.podt,
                 M.type,
                 M.cid,
-                C.CName AS CustomerName
+                COALESCE(C.CName, CA.CName, '') AS CustomerName
             FROM In_PoMas M
             LEFT JOIN CustMast C ON M.cid = C.Id AND ISNULL(C.Deleted, 0) = 0
+            LEFT JOIN CustAliasMast CA ON M.cid = CA.Id AND ISNULL(CA.Deleted, 0) = 0
             WHERE ISNULL(M.deleted, 0) = 0
         """
         
@@ -1592,13 +1612,312 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
         print("Error fetching customer POs:", e)
         return []
 
+def fetch_alternate_raw_materials(request=None, single_key=None):
+    """
+    SQL query handler for Alternate Raw Material from AlternateRawmatmas,
+    joining CustMast / CustAliasMast for Customer Name and
+    WithMatMas / CustJobRawMat for Standard Raw Material specs.
+    Works across all records without a date filter.
+    Only runs when IsApproveAltRawMat = True in CompanySetting / CompanySettingFeatures.
+    """
+    # Check IsApproveAltRawMat setting in CompanySetting / CompanySettingFeatures table
+    is_alt_rm_approve = False
+    try:
+        setting_query = "SELECT TOP 1 IsApproveAltRawMat FROM CompanySetting"
+        setting_rows = []
+        if request:
+            try:
+                conn, _ = get_tenant_connection(request)
+                cursor = conn.cursor()
+                cursor.execute(setting_query)
+                setting_rows = cursor.fetchall()
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+        if not setting_rows:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(setting_query)
+                    setting_rows = cursor.fetchall()
+            except Exception:
+                pass
+
+        if not setting_rows:
+            feat_query = "SELECT TOP 1 IsApproveAltRawMat FROM CompanySettingFeatures"
+            if request:
+                try:
+                    conn, _ = get_tenant_connection(request)
+                    cursor = conn.cursor()
+                    cursor.execute(feat_query)
+                    setting_rows = cursor.fetchall()
+                    cursor.close()
+                    conn.close()
+                except Exception:
+                    pass
+            if not setting_rows:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(feat_query)
+                        setting_rows = cursor.fetchall()
+                except Exception:
+                    pass
+
+        if setting_rows and setting_rows[0][0]:
+            val = setting_rows[0][0]
+            if isinstance(val, bool):
+                is_alt_rm_approve = val
+            elif isinstance(val, (int, float)):
+                is_alt_rm_approve = (val != 0)
+            else:
+                is_alt_rm_approve = str(val).strip().upper() in ("1", "Y", "YES", "TRUE", "T")
+    except Exception as e:
+        print("[M-APPROVAL] Warning querying CompanySetting.IsApproveAltRawMat:", e)
+
+    if not is_alt_rm_approve:
+        return []
+
+    try:
+        query = """
+            SELECT
+                arm.Cid                                                      AS [Cid],
+                arm.SNo                                                      AS [SNo],
+                arm.PartNo                                                   AS [PartNo],
+                arm.Description                                              AS [Description],
+                arm.uom                                                      AS [PartUom],
+                arm.RmName                                                   AS [AltRmName],
+                arm.MatType                                                  AS [AltMatType],
+                arm.Rmuom                                                    AS [AltRmUom],
+                arm.Dia                                                      AS [AltDia],
+                arm.MmLength                                                 AS [AltMmLength],
+                arm.TotMmLength                                              AS [AltTotMmLength],
+                arm.CuttingAllow                                             AS [AltCuttingAllow],
+                arm.Rod                                                      AS [AltRod],
+                arm.Casting                                                  AS [AltCasting],
+                arm.WtQty                                                    AS [AltWtQty],
+                arm.Location                                                 AS [AltLocation],
+                arm.ROL                                                      AS [AltROL],
+                arm.MinOrder                                                 AS [AltMinOrder],
+                arm.MaxOrder                                                 AS [AltMaxOrder],
+                arm.SheetCut                                                 AS [AltSheetCut],
+                arm.IsApproved                                               AS [IsApproved],
+                arm.Deleted                                                  AS [Deleted],
+
+                COALESCE(cm.CName, cam.CName, arm.Cid, '—')                 AS [CustomerName],
+
+                COALESCE(wmm.RmName, cjrm.rmname, '—')                       AS [StdRmName],
+                COALESCE(wmm.MatType, cjrm.mattype, wmm.Description, cjrm.description, '—') AS [StdRmDesc],
+                COALESCE(wmm.Dia, cjrm.dia, 0.0)                             AS [StdDia],
+                COALESCE(wmm.Rmuom, cjrm.Rmuom, wmm.uom, cjrm.uom, 'NOS')   AS [StdRmUom],
+                COALESCE(wmm.MmLength, cjrm.mmlength, wmm.TotMmLength, cjrm.TotMmLength, 0.0) AS [StdCuttingLength],
+                COALESCE(wmm.WtQty, cjrm.WtQty, 0.0)                         AS [StdWtQty],
+                COALESCE(wmm.CuttingAllow, cjrm.CuttingAllow, 0.0)           AS [StdCuttingAllow],
+                COALESCE(wmm.TotMmLength, cjrm.TotMmLength, 0.0)             AS [StdTotMmLength],
+                COALESCE(wmm.Rod, cjrm.rod, 0)                               AS [StdRod],
+                COALESCE(wmm.Casting, cjrm.casting, 0)                       AS [StdCasting]
+
+            FROM AlternateRawmatmas arm
+
+            LEFT JOIN CustMast cm
+                   ON arm.Cid = cm.Id
+                  AND ISNULL(cm.Deleted, 0) = 0
+
+            LEFT JOIN CustAliasMast cam
+                   ON arm.Cid = cam.Id
+                  AND ISNULL(cam.Deleted, 0) = 0
+
+            LEFT JOIN WithMatMas wmm
+                   ON arm.PartNo = wmm.PartNo
+                  AND ISNULL(wmm.Deleted, 0) = 0
+
+            LEFT JOIN CustJobRawMat cjrm
+                   ON arm.PartNo = cjrm.partno
+                  AND ISNULL(cjrm.deleted, 0) = 0
+
+            WHERE ISNULL(arm.Deleted, 0) = 0
+        """
+        params = []
+        if single_key:
+            clean_k = single_key.replace("alt_rm:", "").strip()
+            if "|" in clean_k:
+                parts = clean_k.split("|")
+                p_no = parts[0]
+                c_id = parts[1] if len(parts) > 1 and parts[1] != "" else None
+                r_name = parts[2] if len(parts) > 2 and parts[2] != "" else None
+                
+                query += " AND arm.PartNo = ?"
+                params.append(p_no)
+                if c_id:
+                    query += " AND arm.Cid = ?"
+                    params.append(c_id)
+                if r_name:
+                    query += " AND arm.RmName = ?"
+                    params.append(r_name)
+            else:
+                query += " AND (arm.PartNo = ? OR LTRIM(RTRIM(arm.PartNo)) = ?)"
+                params.extend([clean_k, clean_k])
+
+        query += " ORDER BY arm.PartNo, arm.SNo"
+
+        raw_rows = []
+        columns = []
+
+        if request:
+            try:
+                conn, _ = get_tenant_connection(request)
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                description = cursor.description or []
+                columns = [col[0] for col in description]
+                raw_rows = cursor.fetchall()
+                cursor.close()
+                conn.close()
+            except Exception as ex:
+                print("[M-APPROVAL] Tenant DB fetch warning (Alternate Raw Material):", ex)
+
+        if not raw_rows:
+            try:
+                with connection.cursor() as cursor:
+                    db_vendor = connection.vendor
+                    local_query = query
+                    if db_vendor != 'microsoft':
+                        local_query = query.replace('?', '%s')
+                    cursor.execute(local_query, params)
+                    description = cursor.description or []
+                    columns = [col[0] for col in description]
+                    raw_rows = cursor.fetchall()
+            except Exception as e:
+                print("[M-APPROVAL] Fallback DB fetch warning (Alternate Raw Material):", e)
+
+        # Batch fetch approvals to prevent N+1 queries
+        approvals_map = {}
+        try:
+            from .models import TenantApproval
+            from django.utils import timezone
+            appr_list = TenantApproval.objects.filter(formname="Mapproval")
+            for app in list(appr_list):
+                app_dt_str = timezone.localtime(app.datetime).strftime("%d/%m/%Y %I:%M %p") if app.datetime else None
+                approvals_map[app.transactionno] = {
+                    "approvedby": app.approvedby or "Manager",
+                    "datetime": app_dt_str
+                }
+        except Exception as e:
+            print("[M-APPROVAL] Warning batch fetching TenantApprovals for Alternate RM:", e)
+
+        cards = []
+        for row_tuple in raw_rows:
+            r = dict(zip(columns, row_tuple))
+            part_no = str(r.get("PartNo") or "").strip()
+            cid = str(r.get("Cid") or "").strip()
+            alt_rm_name = str(r.get("AltRmName") or "").strip()
+            sno = r.get("SNo") or 1
+            if not part_no:
+                continue
+
+            card_key = f"{part_no}|{cid}|{alt_rm_name}"
+            is_appr = bool(r.get("IsApproved"))
+
+            appr_by_str = None
+            appr_dt_str = None
+            if is_appr:
+                appr_info = approvals_map.get(card_key) or approvals_map.get(part_no) or approvals_map.get(f"alt_rm:{card_key}")
+                if appr_info:
+                    appr_by_str = appr_info["approvedby"]
+                    appr_dt_str = appr_info["datetime"]
+                if not appr_by_str:
+                    appr_by_str = "Manager"
+
+            std_rm_name = str(r.get("StdRmName") or "—").strip()
+            std_rm_desc = str(r.get("StdRmDesc") or "—").strip()
+            std_dia = float(r.get("StdDia") or 0.0)
+            std_rm_uom = str(r.get("StdRmUom") or "NOS").strip()
+            std_cutting_len = float(r.get("StdCuttingLength") or 0.0)
+            std_wt_qty = float(r.get("StdWtQty") or 0.0)
+
+            alt_rm_desc = str(r.get("AltMatType") or r.get("Description") or "—").strip()
+            alt_dia = float(r.get("AltDia") or 0.0)
+            alt_rm_uom = str(r.get("AltRmUom") or "NOS").strip()
+            alt_cutting_len = float(r.get("AltMmLength") or r.get("AltTotMmLength") or 0.0)
+            alt_wt_qty = float(r.get("AltWtQty") or 0.0)
+
+            part_desc = str(r.get("Description") or "—").strip()
+            customer_name = str(r.get("CustomerName") or "—").strip()
+
+            cards.append({
+                "id": f"alt_rm:{card_key}",
+                "poNo": card_key,
+                "rawPartNo": part_no,
+                "cid": cid,
+                "poDate": "—",
+                "type": "Alternate Raw Material",
+                "status": "Approved" if is_appr else "Pending",
+                "vendor": customer_name,
+                "countLabel": "Standard vs Alternate",
+                "countVal": f"{std_rm_name} ➔ {alt_rm_name}",
+                "docKind": "alt_rm",
+                "approvedBy": appr_by_str,
+                "approvedDateTime": appr_dt_str,
+                
+                # Part details
+                "partNo": part_no,
+                "description": part_desc,
+                
+                # Standard RM Specs (Current)
+                "rawMaterialName": std_rm_name,
+                "rawMaterialDescription": std_rm_desc,
+                "dia": std_dia,
+                "rmUom": std_rm_uom,
+                "cuttingLength": std_cutting_len,
+                "wtQty": std_wt_qty,
+                
+                # Proposed Alternate RM Specs
+                "altRmName": alt_rm_name,
+                "altRmDescription": alt_rm_desc,
+                "altDia": alt_dia,
+                "altRmUom": alt_rm_uom,
+                "altCuttingLength": alt_cutting_len,
+                "altWtQty": alt_wt_qty,
+
+                # Additional Specs
+                "altLocation": str(r.get("AltLocation") or "—"),
+                "altRol": float(r.get("AltROL") or 0.0),
+                "altMinOrder": float(r.get("AltMinOrder") or 0.0),
+                "altMaxOrder": float(r.get("AltMaxOrder") or 0.0),
+                
+                # 14-Column Table items breakdown
+                "items": [
+                    {
+                        "sNo": sno,
+                        "partNo": part_no,
+                        "description": part_desc,
+                        "rawMaterialName": std_rm_name,
+                        "rawMaterialDescription": std_rm_desc,
+                        "dia": std_dia,
+                        "rmUom": std_rm_uom,
+                        "cuttingLength": std_cutting_len,
+                        "wtQty": std_wt_qty,
+                        "altRmName": alt_rm_name,
+                        "altRmDescription": alt_rm_desc,
+                        "altDia": alt_dia,
+                        "altRmUom": alt_rm_uom,
+                        "altCuttingLength": alt_cutting_len,
+                        "altWtQty": alt_wt_qty
+                    }
+                ]
+            })
+
+        return cards
+    except Exception as e:
+        print("[M-APPROVAL] Error fetching alternate raw materials:", e)
+        return []
+
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def mapproval_list(request):
     """
     M-Approval List Endpoint
-    Returns Product Route Cards, Vendor Rate Masters, Commercial Masters, Vendor Masters & Customer POs with date range and search filtering.
+    Returns Product Route Cards, Vendor Rate Masters, Commercial Masters, Vendor Masters, Customer POs & Alternate Raw Materials with search filtering.
     """
     from_date = request.GET.get('from_date') or request.GET.get('from') or '2026-08-01'
     to_date = request.GET.get('to_date') or request.GET.get('to') or '2026-08-31'
@@ -1610,7 +1929,8 @@ def mapproval_list(request):
     vendor_cards = fetch_vendor_masters(request, from_date, to_date)
     cust_cards = fetch_customer_pos(request, from_date, to_date)
     indent_cards = fetch_purchase_indents(request, from_date, to_date)
-    all_cards = (sql_cards if sql_cards else []) + (rate_cards if rate_cards else []) + (comm_cards if comm_cards else []) + (vendor_cards if vendor_cards else []) + (cust_cards if cust_cards else []) + (indent_cards if indent_cards else [])
+    alt_cards = fetch_alternate_raw_materials(request)
+    all_cards = (sql_cards if sql_cards else []) + (rate_cards if rate_cards else []) + (comm_cards if comm_cards else []) + (vendor_cards if vendor_cards else []) + (cust_cards if cust_cards else []) + (indent_cards if indent_cards else []) + (alt_cards if alt_cards else [])
 
     if search:
         filtered = []
@@ -1618,7 +1938,12 @@ def mapproval_list(request):
             po_no = str(c.get("poNo") or "").lower()
             vendor = str(c.get("vendor") or "").lower()
             card_type = str(c.get("type") or "").lower()
-            if search in po_no or search in vendor or search in card_type:
+            part_no = str(c.get("partNo") or "").lower()
+            desc = str(c.get("description") or "").lower()
+            rm_name = str(c.get("rawMaterialName") or "").lower()
+            alt_rm = str(c.get("altRmName") or "").lower()
+            if (search in po_no or search in vendor or search in card_type or 
+                search in part_no or search in desc or search in rm_name or search in alt_rm):
                 filtered.append(c)
         all_cards = filtered
 
@@ -1642,7 +1967,8 @@ def mapproval_stats(request):
     vendor_cards = fetch_vendor_masters(request, from_date, to_date)
     cust_cards = fetch_customer_pos(request, from_date, to_date)
     indent_cards = fetch_purchase_indents(request, from_date, to_date)
-    cards = (sql_cards if sql_cards else []) + (rate_cards if rate_cards else []) + (comm_cards if comm_cards else []) + (vendor_cards if vendor_cards else []) + (cust_cards if cust_cards else []) + (indent_cards if indent_cards else [])
+    alt_cards = fetch_alternate_raw_materials(request)
+    cards = (sql_cards if sql_cards else []) + (rate_cards if rate_cards else []) + (comm_cards if comm_cards else []) + (vendor_cards if vendor_cards else []) + (cust_cards if cust_cards else []) + (indent_cards if indent_cards else []) + (alt_cards if alt_cards else [])
 
     total = len(cards)
     approved = 0
@@ -1942,10 +2268,13 @@ def mapproval_detail(request):
                     "datetime": card.get("poDate") + " 10:00 AM",
                     "remarks": "Initial Release"
                 }]
+    elif doc_kind == 'alt_rm' or invno.startswith("alt_rm:"):
+        clean_alt_key = invno.replace("alt_rm:", "").strip()
+        cards = fetch_alternate_raw_materials(request, single_key=clean_alt_key)
     else:
         cards = fetch_product_route_cards(request, single_roucardno=invno)
 
-    found = next((c for c in cards if str(c.get("poNo")) == invno or str(c.get("id")) == f"{doc_kind}:{invno}" or str(c.get("id")) == invno or (doc_kind == 'customer_po' and c.get("apoNo") == invno.replace("customer_po:", ""))), None)
+    found = next((c for c in cards if str(c.get("poNo")) == invno or str(c.get("id")) == f"{doc_kind}:{invno}" or str(c.get("id")) == invno or (doc_kind == 'customer_po' and c.get("apoNo") == invno.replace("customer_po:", "")) or (doc_kind == 'alt_rm' and (c.get("partNo") == invno or c.get("poNo") == invno.replace("alt_rm:", "")))), None)
 
     if not found:
         return Response({
@@ -1964,7 +2293,7 @@ def mapproval_detail(request):
 def mapproval_approve(request):
     """
     M-Approval Approve Endpoint
-    Updates RouCardWaitAppr_Mas.IsApproved = 1 OR VenPrdPrcRate_Mast.IsApproved = 1 in SQL Server ERP DB
+    Updates RouCardWaitAppr_Mas.IsApproved = 1, VenPrdPrcRate_Mast.IsApproved = 1, OR AlternateRawmatmas.IsApproved = 1 in SQL Server ERP DB
     and logs approval record in tenants_approvals cloud DB table.
     """
     invno = str(request.data.get('invno') or request.data.get('roucardno') or request.data.get('poNo') or request.data.get('dcno') or request.data.get('retissno') or "").strip()
@@ -1972,18 +2301,19 @@ def mapproval_approve(request):
     if not invno:
         return Response({"success": False, "message": "Document No is required"}, status=400)
 
-    clean_rc = invno.replace("vendor_rate:", "").replace("route_card:", "").replace("commercial:", "").replace("vendor_master:", "").replace("customer_po:", "").replace("purchase_indent:", "").strip()
+    clean_rc = invno.replace("vendor_rate:", "").replace("route_card:", "").replace("commercial:", "").replace("vendor_master:", "").replace("customer_po:", "").replace("purchase_indent:", "").replace("alt_rm:", "").strip()
     is_vendor_rate = (doc_kind == "vendor_rate" or clean_rc.startswith("APL"))
     is_commercial = (doc_kind == "commercial" or invno.startswith("commercial:"))
     is_vendor_master = (doc_kind == "vendor_master" or invno.startswith("vendor_master:"))
     is_customer_po = (doc_kind == "customer_po" or invno.startswith("customer_po:"))
     is_purchase_indent = (doc_kind == "purchase_indent" or invno.startswith("purchase_indent:"))
+    is_alt_rm = (doc_kind == "alt_rm" or invno.startswith("alt_rm:"))
 
     cid = None
     part_no = None
     proc_code = None
 
-    if "|" in clean_rc:
+    if "|" in clean_rc and not is_alt_rm:
         parts = clean_rc.split("|")
         clean_rc = parts[0]
         cid = parts[1]
@@ -1994,7 +2324,7 @@ def mapproval_approve(request):
     company_code = None
     user_name = "Manager"
     rc_date = None
-    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else "Product Route Card"))))
+    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
 
     updated = False
     # 1) Attempt update via active tenant DB connection (pyodbc / SQL Server ERP DB)
@@ -2097,6 +2427,36 @@ def mapproval_approve(request):
                 "UPDATE POInd_Mas SET IsApprovePoInd = 1 WHERE LTRIM(RTRIM(pino)) = ? OR pino = ?",
                 [clean_rc, clean_rc]
             )
+        elif is_alt_rm:
+            alt_part_no = clean_rc
+            alt_cid = None
+            alt_rm_name = None
+            if "|" in clean_rc:
+                parts = clean_rc.split("|")
+                alt_part_no = parts[0]
+                alt_cid = parts[1] if len(parts) > 1 and parts[1] != "" else None
+                alt_rm_name = parts[2] if len(parts) > 2 and parts[2] != "" else None
+
+            if alt_cid and alt_rm_name:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = ? AND Cid = ? AND RmName = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_cid, alt_rm_name]
+                )
+            elif alt_cid:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = ? AND Cid = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_cid]
+                )
+            elif alt_rm_name:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = ? AND RmName = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_rm_name]
+                )
+            else:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no]
+                )
         else:
             try:
                 cursor.execute("SELECT roucarddt FROM RouCardWaitAppr_Mas WHERE LTRIM(RTRIM(roucardno)) = ? OR roucardno = ?", [clean_rc, clean_rc])
@@ -2211,6 +2571,36 @@ def mapproval_approve(request):
                         "UPDATE POInd_Mas SET IsApprovePoInd = 1 WHERE LTRIM(RTRIM(pino)) = %s OR pino = %s",
                         [clean_rc, clean_rc]
                     )
+                elif is_alt_rm:
+                    alt_part_no = clean_rc
+                    alt_cid = None
+                    alt_rm_name = None
+                    if "|" in clean_rc:
+                        parts = clean_rc.split("|")
+                        alt_part_no = parts[0]
+                        alt_cid = parts[1] if len(parts) > 1 and parts[1] != "" else None
+                        alt_rm_name = parts[2] if len(parts) > 2 and parts[2] != "" else None
+
+                    if alt_cid and alt_rm_name:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = %s AND Cid = %s AND RmName = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_cid, alt_rm_name]
+                        )
+                    elif alt_cid:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = %s AND Cid = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_cid]
+                        )
+                    elif alt_rm_name:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = %s AND RmName = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_rm_name]
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 1 WHERE PartNo = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no]
+                        )
                 else:
                     cursor.execute(
                         "UPDATE RouCardWaitAppr_Mas SET IsApproved = 1 WHERE LTRIM(RTRIM(roucardno)) = %s OR roucardno = %s",
@@ -2306,7 +2696,7 @@ def mapproval_approve(request):
 def mapproval_modify(request):
     """
     M-Approval Modify Endpoint
-    Updates RouCardWaitAppr_Mas.IsApproved = 0 OR VenPrdPrcRate_Mast.IsApproved = 0 in SQL Server ERP DB
+    Updates RouCardWaitAppr_Mas.IsApproved = 0, VenPrdPrcRate_Mast.IsApproved = 0, OR AlternateRawmatmas.IsApproved = 0 in SQL Server ERP DB
     and removes approval record from tenants_approvals cloud DB table.
     """
     invno = str(request.data.get('invno') or request.data.get('roucardno') or request.data.get('poNo') or request.data.get('dcno') or request.data.get('retissno') or "").strip()
@@ -2314,25 +2704,26 @@ def mapproval_modify(request):
     if not invno:
         return Response({"success": False, "message": "Document No is required"}, status=400)
 
-    clean_rc = invno.replace("vendor_rate:", "").replace("route_card:", "").replace("commercial:", "").replace("vendor_master:", "").replace("customer_po:", "").replace("purchase_indent:", "").strip()
+    clean_rc = invno.replace("vendor_rate:", "").replace("route_card:", "").replace("commercial:", "").replace("vendor_master:", "").replace("customer_po:", "").replace("purchase_indent:", "").replace("alt_rm:", "").strip()
     is_vendor_rate = (doc_kind == "vendor_rate" or clean_rc.startswith("APL"))
     is_commercial = (doc_kind == "commercial" or invno.startswith("commercial:"))
     is_vendor_master = (doc_kind == "vendor_master" or invno.startswith("vendor_master:"))
     is_customer_po = (doc_kind == "customer_po" or invno.startswith("customer_po:"))
     is_purchase_indent = (doc_kind == "purchase_indent" or invno.startswith("purchase_indent:"))
+    is_alt_rm = (doc_kind == "alt_rm" or invno.startswith("alt_rm:"))
 
     cid = None
     part_no = None
     proc_code = None
 
-    if "|" in clean_rc:
+    if "|" in clean_rc and not is_alt_rm:
         parts = clean_rc.split("|")
         clean_rc = parts[0]
         cid = parts[1]
         part_no = parts[2]
         proc_code = parts[3]
 
-    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else "Product Route Card"))))
+    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
 
     tenant_id = None
     company_code = None
@@ -2423,6 +2814,36 @@ def mapproval_modify(request):
                 "UPDATE POInd_Mas SET IsApprovePoInd = 0 WHERE LTRIM(RTRIM(pino)) = ? OR pino = ?",
                 [clean_rc, clean_rc]
             )
+        elif is_alt_rm:
+            alt_part_no = clean_rc
+            alt_cid = None
+            alt_rm_name = None
+            if "|" in clean_rc:
+                parts = clean_rc.split("|")
+                alt_part_no = parts[0]
+                alt_cid = parts[1] if len(parts) > 1 and parts[1] != "" else None
+                alt_rm_name = parts[2] if len(parts) > 2 and parts[2] != "" else None
+
+            if alt_cid and alt_rm_name:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = ? AND Cid = ? AND RmName = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_cid, alt_rm_name]
+                )
+            elif alt_cid:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = ? AND Cid = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_cid]
+                )
+            elif alt_rm_name:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = ? AND RmName = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no, alt_rm_name]
+                )
+            else:
+                cursor.execute(
+                    "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = ? AND ISNULL(Deleted, 0) = 0",
+                    [alt_part_no]
+                )
         else:
             try:
                 cursor.execute("SELECT roucarddt FROM RouCardWaitAppr_Mas WHERE LTRIM(RTRIM(roucardno)) = ? OR roucardno = ?", [clean_rc, clean_rc])
@@ -2520,6 +2941,36 @@ def mapproval_modify(request):
                         "UPDATE POInd_Mas SET IsApprovePoInd = 0 WHERE LTRIM(RTRIM(pino)) = %s OR pino = %s",
                         [clean_rc, clean_rc]
                     )
+                elif is_alt_rm:
+                    alt_part_no = clean_rc
+                    alt_cid = None
+                    alt_rm_name = None
+                    if "|" in clean_rc:
+                        parts = clean_rc.split("|")
+                        alt_part_no = parts[0]
+                        alt_cid = parts[1] if len(parts) > 1 and parts[1] != "" else None
+                        alt_rm_name = parts[2] if len(parts) > 2 and parts[2] != "" else None
+
+                    if alt_cid and alt_rm_name:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = %s AND Cid = %s AND RmName = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_cid, alt_rm_name]
+                        )
+                    elif alt_cid:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = %s AND Cid = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_cid]
+                        )
+                    elif alt_rm_name:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = %s AND RmName = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no, alt_rm_name]
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE AlternateRawmatmas SET IsApproved = 0 WHERE PartNo = %s AND ISNULL(Deleted, 0) = 0",
+                            [alt_part_no]
+                        )
                 else:
                     cursor.execute(
                         "UPDATE RouCardWaitAppr_Mas SET IsApproved = 0 WHERE LTRIM(RTRIM(roucardno)) = %s OR roucardno = %s",

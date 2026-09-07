@@ -25,7 +25,8 @@ from .views_plantperformance import (
     plant_performance_store_stock_value, plant_performance_target_criteria
 )
 from .views_eapproval import (
-    eapproval_list, eapproval_stats, eapproval_detail, eapproval_approve, eapproval_modify,
+    eapproval_list, eapproval_stats, eapproval_detail, eapproval_approve, eapproval_modify, eapproval_save_comment, eapproval_delete_comment,
+    eapproval_user_limits,
 )
 from .views_tapproval import (
     tapproval_list, tapproval_stats, tapproval_detail, tapproval_approve, tapproval_modify,
@@ -42,7 +43,7 @@ from .views_sales_analysis import (
     sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
     sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
-    sales_analysis_traceability, sales_analysis_avg_rate_cards,
+    sales_analysis_traceability, sales_analysis_avg_rate_cards, sales_analysis_part_rate_history,
 )
 from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
@@ -52,6 +53,7 @@ from .views_production_analysis import (
 )
 from .views_purchaseanalysis import (
     purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table, purchase_analysis_supplier_rating,
+    purchase_analysis_fulfillment_schedule,
 )
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
@@ -195,6 +197,7 @@ urlpatterns = [
     path('sales-analysis/po-ledger/', sales_analysis_po_ledger, name='sales_analysis_po_ledger'),
     path('sales-analysis/traceability/', sales_analysis_traceability, name='sales_analysis_traceability'),
     path('sales-analysis/avg-rate-cards/', sales_analysis_avg_rate_cards, name='sales_analysis_avg_rate_cards'),
+    path('sales-analysis/part-rate-history/', sales_analysis_part_rate_history, name='sales_analysis_part_rate_history'),
 
     # ── Idle Time Report ──────────────────────────────────────────────
     path('idle-time-report/', idle_time_report, name='idle_time_report'),
@@ -227,6 +230,7 @@ urlpatterns = [
     path('purchase-analysis/management-alerts/', purchase_analysis_management_alerts, name='purchase_analysis_management_alerts'),
     path('purchase-analysis/traceability-table/', purchase_analysis_traceability_table, name='purchase_analysis_traceability_table'),
     path('purchase-analysis/supplier-rating/', purchase_analysis_supplier_rating, name='purchase_analysis_supplier_rating'),
+    path('purchase-analysis/fulfillment-schedule/', purchase_analysis_fulfillment_schedule, name='purchase_analysis_fulfillment_schedule'),
 
     # ── Quality Analysis ──────────────────────────────────────────────
     path('quality-analysis/summary/', quality_analysis_summary, name='quality_analysis_summary'),
@@ -244,6 +248,9 @@ urlpatterns = [
     path('eapproval/detail/', eapproval_detail, name='eapproval_detail'),
     path('eapproval/approve/', eapproval_approve, name='eapproval_approve'),
     path('eapproval/modify/', eapproval_modify, name='eapproval_modify'),
+    path('eapproval/comment/', eapproval_save_comment, name='eapproval_save_comment'),
+    path('eapproval/comment/delete/', eapproval_delete_comment, name='eapproval_delete_comment'),
+    path('eapproval/user-limits/', eapproval_user_limits, name='eapproval_user_limits'),
 
     # ── T-Approval Module ─────────────────────────────────────────────
     path('tapproval/list/', tapproval_list, name='tapproval_list'),

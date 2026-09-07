@@ -355,6 +355,7 @@
     cursor: not-allowed;
     border-color: #e2e8f0;
 }
+
 .eap-type-dd__trigger[disabled] {
     background: #f8fafc !important;
     border-color: #cbd5e1 !important;
@@ -362,6 +363,7 @@
     cursor: not-allowed !important;
     opacity: 0.8;
 }
+
 .eap-filter__btn:disabled,
 .eap-filter__reset-btn:disabled {
     opacity: 0.6;
@@ -1109,7 +1111,7 @@
     background: #ffffff;
     border-radius: 20px;
     width: 100%;
-    max-width: 920px;
+    max-width: 1040px;
     max-height: 92vh;
     display: flex;
     flex-direction: column;
@@ -1304,7 +1306,7 @@
 .eap-prev__body {
     flex: 1;
     min-height: 0;
-    overflow-y: hidden;
+    overflow-y: auto;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
@@ -1349,8 +1351,9 @@
     width: 100%;
     overflow-x: auto;
     overflow-y: auto;
-    flex: 0 1 auto;
-    max-height: 245px;
+    flex-shrink: 0;
+    min-height: 140px;
+    max-height: 260px;
     -webkit-overflow-scrolling: touch;
     border: 1.5px solid #e2e8f2;
     border-radius: 12px;
@@ -1377,7 +1380,8 @@
 .eap-prev__table {
     width: 100%;
     min-width: 700px;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
     font-size: .8rem;
     display: table;
@@ -1386,14 +1390,23 @@
 
 .eap-prev__table thead {
     display: table-header-group;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .eap-prev__table thead tr {
+    background: #eef2ff;
     background: linear-gradient(135deg, #eef2ff, #e8edff);
     display: table-row;
 }
 
 .eap-prev__table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #eef2ff;
+    background: linear-gradient(135deg, #eef2ff, #e8edff);
     display: table-cell;
     padding: .82rem 1rem;
     text-align: left;
@@ -1404,6 +1417,7 @@
     letter-spacing: .55px;
     white-space: nowrap;
     border-bottom: 2px solid #c7d2fe;
+    box-shadow: 0 1px 3px rgba(79, 70, 229, .08);
 }
 
 .eap-prev__table tbody {
@@ -1478,18 +1492,198 @@
     font-weight: 700;
 }
 
+/* ── Two Column Bottom Grid: Comments (Left) vs Financial Summary (Right) ── */
+.eap-prev__bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 390px;
+    gap: 1.25rem;
+    /* align-items: end; */
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+    flex-shrink: 0;
+}
+
+@media (max-width: 960px) {
+    .eap-prev__bottom-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        align-items: stretch;
+    }
+}
+
+/* ── Comment Box Left Column (Compact & Neat) ── */
+.eap-prev__comments-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    align-self: flex-end;
+}
+
+.eap-prev__comment-box {
+    display: flex;
+    flex-direction: column;
+    background: #fafbff;
+    border: 1.5px solid #e2e8f2;
+    border-radius: 12px;
+    padding: 0.75rem 0.9rem;
+    gap: 0.45rem;
+    box-sizing: border-box;
+    box-shadow: 0 1px 4px rgba(99, 102, 241, 0.05);
+    transition: all 0.2s ease;
+}
+
+.eap-prev__comment-box:focus-within {
+    border-color: #6366f1;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* ── Comment Textarea Composer ── */
+.eap-prev__comment-input-wrap {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.eap-prev__comment-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0.15rem 0;
+    font-size: 0.81rem;
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    color: #1e293b;
+    resize: none;
+    outline: none;
+    min-height: 85px;
+    max-height: 130px;
+    line-height: 1.45;
+}
+
+.eap-prev__comment-textarea::placeholder {
+    color: #94a3b8;
+    font-size: 0.76rem;
+}
+
+/* ── Comment Action Bar ── */
+.eap-prev__comment-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid #edf2f7;
+}
+
+.eap-prev__comment-meta-left {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.eap-prev__comment-char-count {
+    font-size: 0.67rem;
+    font-weight: 600;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+}
+
+.eap-prev__comment-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.eap-prev__comment-clear-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.71rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.2rem 0.45rem;
+    border-radius: 5px;
+    transition: all 0.15s ease;
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+}
+
+.eap-prev__comment-clear-btn:hover {
+    color: #64748b;
+    background: #e2e8f0;
+}
+
+.eap-prev__comment-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 0.71rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 5px;
+    transition: all 0.15s ease;
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+}
+
+.eap-prev__comment-delete-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.eap-prev__comment-delete-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.eap-prev__comment-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #ffffff;
+    border: none;
+    border-radius: 7px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.22);
+}
+
+.eap-prev__comment-add-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.32);
+}
+
+.eap-prev__comment-add-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
 /* ── Financial Summary ── */
 .eap-prev__summary-wrap {
-    display: block;
+    display: flex;
+    flex-direction: column;
     margin-bottom: .25rem;
     flex-shrink: 0;
+    height: 100%;
 }
 
 .eap-prev__summary {
     display: block;
     width: 100%;
-    max-width: 390px;
-    margin-left: auto;
+    max-width: 100%;
     background: #fafbff;
     border: 1.5px solid #e2e8f2;
     border-radius: 12px;
@@ -1560,13 +1754,26 @@
 .eap-prev__footer {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: .75rem;
     padding: .95rem 1.8rem;
     border-top: 1.5px solid #eef2ff;
     background: #fafbff;
     flex-shrink: 0;
     flex-wrap: wrap;
+}
+
+.eap-prev__footer-left {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.eap-prev__footer-right {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-left: auto;
 }
 
 .eap-prev-btn {
@@ -1594,6 +1801,36 @@
     background: #e8ecf4;
     border-color: #cbd5e1;
     transform: translateY(-1px);
+}
+
+.eap-prev-btn--pdf {
+    background: linear-gradient(135deg, #ffffff, #f5f7ff);
+    color: #4338ca;
+    border: 1.5px solid #c7d2fe;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, .15);
+    position: relative;
+    overflow: hidden;
+}
+
+.eap-prev-btn--pdf svg {
+    color: #4f46e5;
+    transition: transform .25s ease;
+}
+
+.eap-prev-btn--pdf:hover {
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    border-color: #6366f1;
+    color: #3730a3;
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 18px rgba(99, 102, 241, .28);
+}
+
+.eap-prev-btn--pdf:hover svg {
+    transform: scale(1.15) rotate(-3deg);
+}
+
+.eap-prev-btn--pdf:active {
+    transform: translateY(0);
 }
 
 .eap-prev-btn--print {
@@ -1666,6 +1903,28 @@
     .eap-grid {
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     }
+
+    .eap-preview-box {
+        max-width: 95vw;
+        max-height: 94vh;
+    }
+
+    .eap-prev__bottom-grid {
+        grid-template-columns: 1fr 340px;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 860px) {
+    .eap-prev__bottom-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .eap-prev__comments-wrap {
+        align-self: stretch;
+    }
 }
 
 @media (max-width: 768px) {
@@ -1698,29 +1957,103 @@
     }
 
     .eap-preview-box {
+        max-width: 100%;
         max-height: 95vh;
         border-radius: 16px;
     }
 
     .eap-prev__hd {
-        padding: 1rem 1.2rem .9rem;
+        padding: 0.9rem 1.1rem;
+        gap: 0.65rem;
+    }
+
+    .eap-prev__hd-icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .eap-prev__hd-title {
+        font-size: 1rem;
     }
 
     .eap-prev__meta {
-        padding: .85rem 1.2rem;
-        gap: 1rem;
+        padding: 0.75rem 1.1rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 0.75rem;
     }
 
     .eap-prev__body {
-        padding: 1rem 1.2rem 1.4rem;
+        padding: 0.9rem 1.1rem 1.2rem;
+        gap: 0.4rem;
     }
 
-    .eap-prev__footer {
-        padding: .85rem 1.2rem;
+    .eap-prev__table-wrap {
+        max-height: 220px;
+        margin-bottom: 0.65rem;
+    }
+
+    .eap-prev__table {
+        min-width: 620px;
+        font-size: 0.78rem;
+    }
+
+    .eap-prev__table thead th {
+        padding: 0.65rem 0.8rem;
+        font-size: 0.64rem;
+    }
+
+    .eap-prev__table tbody td {
+        padding: 0.65rem 0.8rem;
+        font-size: 0.78rem;
+    }
+
+    .eap-prev__bottom-grid {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+        margin-top: 0.4rem;
+    }
+
+    .eap-prev__comment-box {
+        padding: 0.7rem 0.8rem;
+    }
+
+    .eap-prev__comment-textarea {
+        min-height: 70px;
+        font-size: 0.78rem;
     }
 
     .eap-prev__summary {
         max-width: 100%;
+    }
+
+    .eap-prev__sum-row {
+        padding: 0.55rem 0.95rem;
+    }
+
+    .eap-prev__sum-row--grand {
+        padding: 0.8rem 0.95rem;
+    }
+
+    .eap-prev__footer {
+        padding: 0.75rem 1.1rem;
+        flex-direction: column-reverse;
+        gap: 0.6rem;
+    }
+
+    .eap-prev__footer-left,
+    .eap-prev__footer-right {
+        width: 100%;
+        display: flex;
+        gap: 0.5rem;
+        margin-left: 0;
+    }
+
+    .eap-prev-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.65rem 0.9rem;
+        font-size: 0.8rem;
     }
 }
 
@@ -1740,26 +2073,189 @@
     }
 
     .eap-preview-box {
-        border-radius: 22px 22px 0 0;
-        max-height: 95vh;
-        animation: eap-slide-up .3s cubic-bezier(.23, 1, .32, 1) both;
+        border-radius: 20px 20px 0 0;
+        max-height: 94vh;
+        width: 100%;
+        animation: eap-slide-up .28s cubic-bezier(.23, 1, .32, 1) both;
+    }
+
+    .eap-prev__hd {
+        padding: 0.75rem 0.9rem;
+        gap: 0.5rem;
+    }
+
+    .eap-prev__hd-left {
+        gap: 0.6rem;
+    }
+
+    .eap-prev__hd-icon {
+        width: 34px;
+        height: 34px;
     }
 
     .eap-prev__hd-title {
-        font-size: .96rem;
+        font-size: 0.92rem;
+    }
+
+    .eap-prev__hd-sub {
+        font-size: 0.67rem;
+    }
+
+    .eap-prev__badge {
+        padding: 0.22rem 0.6rem;
+        font-size: 0.65rem;
+    }
+
+    .eap-prev__close {
+        width: 28px;
+        height: 28px;
+    }
+
+    .eap-prev__meta {
+        padding: 0.6rem 0.9rem;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
     }
 
     .eap-prev__meta-item {
-        min-width: 110px;
+        min-width: 0;
+        gap: 0.15rem;
+    }
+
+    .eap-prev__meta-label {
+        font-size: 0.6rem;
+    }
+
+    .eap-prev__meta-val {
+        font-size: 0.78rem;
+    }
+
+    .eap-prev__meta-val-badge {
+        padding: 0.15rem 0.45rem;
+        font-size: 0.72rem;
+    }
+
+    .eap-prev__body {
+        padding: 0.75rem 0.9rem 1rem;
+        gap: 0.35rem;
+    }
+
+    .eap-prev__section-label {
+        font-size: 0.65rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .eap-prev__table-wrap {
+        flex-shrink: 0;
+        min-height: 125px;
+        max-height: 190px;
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+    }
+
+    .eap-prev__table {
+        min-width: 520px;
+        font-size: 0.72rem;
+    }
+
+    .eap-prev__table thead th {
+        padding: 0.5rem 0.65rem;
+        font-size: 0.6rem;
+    }
+
+    .eap-prev__table tbody td {
+        padding: 0.5rem 0.65rem;
+        font-size: 0.72rem;
+    }
+
+    .eap-prev__comment-box {
+        padding: 0.55rem 0.7rem;
+        border-radius: 8px;
+    }
+
+    .eap-prev__comment-textarea {
+        min-height: 55px;
+        font-size: 0.75rem;
+    }
+
+    .eap-prev__summary {
+        border-radius: 8px;
+    }
+
+    .eap-prev__sum-row {
+        padding: 0.45rem 0.8rem;
+        font-size: 0.74rem;
+    }
+
+    .eap-prev__sum-row--grand {
+        padding: 0.7rem 0.8rem;
+    }
+
+    .eap-prev__sum-row--grand .eap-prev__sum-label {
+        font-size: 0.76rem;
+    }
+
+    .eap-prev__sum-row--grand .eap-prev__sum-val {
+        font-size: 0.95rem;
     }
 
     .eap-prev__footer {
-        gap: .5rem;
+        padding: 0.65rem 0.9rem;
+        gap: 0.45rem;
+    }
+
+    .eap-prev__footer-left,
+    .eap-prev__footer-right {
+        gap: 0.4rem;
     }
 
     .eap-prev-btn {
-        padding: .62rem .95rem;
-        font-size: .79rem;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.76rem;
+        border-radius: 8px;
+    }
+}
+
+@media (max-width: 360px) {
+    .eap-prev__meta {
+        grid-template-columns: 1fr;
+    }
+
+    .eap-prev__footer-right {
+        flex-direction: column;
+    }
+}
+
+/* Short height viewports / mobile landscape */
+@media screen and (max-height: 700px) {
+    .eap-preview-box {
+        max-height: 98vh;
+    }
+
+    .eap-prev__hd {
+        padding: 0.55rem 1rem 0.45rem;
+    }
+
+    .eap-prev__meta {
+        padding: 0.45rem 1rem;
+        gap: 0.5rem;
+    }
+
+    .eap-prev__body {
+        padding: 0.55rem 1rem 0.8rem;
+    }
+
+    .eap-prev__table-wrap {
+        max-height: 140px;
+    }
+
+    .eap-prev__comment-textarea {
+        min-height: 48px;
+    }
+
+    .eap-prev__footer {
+        padding: 0.5rem 1rem;
     }
 }
 

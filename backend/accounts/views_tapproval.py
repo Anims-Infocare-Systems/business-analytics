@@ -93,18 +93,44 @@ _CUST_JOIN_BILL_SQL = """
     LEFT JOIN CustMast C ON
         LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(C.Id, N''))))
         = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(B.cid, N''))))
+        AND ISNULL(C.Deleted, 0) = 0
+    LEFT JOIN CustAliasMast CA ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CA.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(B.cid, N''))))
+        AND ISNULL(CA.Deleted, 0) = 0
 """
 
 _CUST_JOIN_DC_SQL = """
     LEFT JOIN CustMast C ON
         LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(C.Id, N''))))
         = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(D.cid, N''))))
+        AND ISNULL(C.Deleted, 0) = 0
+    LEFT JOIN CustAliasMast CA ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CA.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(D.cid, N''))))
+        AND ISNULL(CA.Deleted, 0) = 0
 """
 
 _CUST_JOIN_RET_DC_SQL = """
     LEFT JOIN CustMast C ON
         LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(C.Id, N''))))
         = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(R.cid, N''))))
+        AND ISNULL(C.Deleted, 0) = 0
+    LEFT JOIN CustAliasMast CA ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CA.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(R.cid, N''))))
+        AND ISNULL(CA.Deleted, 0) = 0
+"""
+
+_CUST_JOIN_JOB_SQL = """
+    LEFT JOIN CustMast C ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(C.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(J.cid, N''))))
+        AND ISNULL(C.Deleted, 0) = 0
+    LEFT JOIN CustAliasMast CA ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CA.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(J.cid, N''))))
+        AND ISNULL(CA.Deleted, 0) = 0
 """
 
 _IS_APPROVED_BILL_SQL = """
@@ -119,6 +145,10 @@ _IS_APPROVED_RET_DC_SQL = """
     CASE WHEN ISNULL(CAST(R.IsApproved AS INT), 0) <> 0 THEN 1 ELSE 0 END
 """
 
+_IS_APPROVED_JOB_SQL = """
+    CASE WHEN ISNULL(CAST(J.IsApproveJbDcPrt AS INT), 0) <> 0 THEN 1 ELSE 0 END
+"""
+
 _RET_DC_DISPLAY_AMOUNT_SQL = """
     CASE
         WHEN ISNULL(R.namt, 0) = 0 THEN ISNULL(R.tamt, 0)
@@ -126,15 +156,35 @@ _RET_DC_DISPLAY_AMOUNT_SQL = """
     END
 """
 
+_JOB_DISPLAY_AMOUNT_SQL = """
+    CASE
+        WHEN ISNULL(J.namt, 0) = 0 THEN ISNULL(J.tamt, 0)
+        ELSE ISNULL(J.namt, 0)
+    END
+"""
+
 _RET_DC_IN_SCOPE_SQL = """
-    (
-        LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) = N'material issue'
-        OR (
-            LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) LIKE N'%material%'
-            AND LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) LIKE N'%issue%'
-        )
-    )
-    AND ISNULL(CAST(R.IsReturnable AS INT), 0) <> 0
+    ISNULL(CAST(R.IsReturnable AS INT), 0) <> 0
+"""
+
+_CANON_RET_DC_TYPE_SQL = """
+    CASE
+        WHEN LTRIM(RTRIM(ISNULL(R.dtype, N''))) <> N''
+          THEN N'Returnable DC - ' + LTRIM(RTRIM(R.dtype))
+        ELSE N'Returnable DC - Material Issue'
+    END
+"""
+
+_CANON_JOB_TYPE_SQL = """
+    CASE
+        WHEN LTRIM(RTRIM(ISNULL(J.dtype, N''))) <> N'' AND LTRIM(RTRIM(ISNULL(J.jbtype, N''))) <> N''
+            THEN LTRIM(RTRIM(J.dtype)) + N' - ' + LTRIM(RTRIM(J.jbtype))
+        WHEN LTRIM(RTRIM(ISNULL(J.dtype, N''))) <> N''
+            THEN LTRIM(RTRIM(J.dtype))
+        WHEN LTRIM(RTRIM(ISNULL(J.jbtype, N''))) <> N''
+            THEN N'Job Order Issue - ' + LTRIM(RTRIM(J.jbtype))
+        ELSE N'Job Order Issue - Job Order'
+    END
 """
 
 _DC_DISPLAY_AMOUNT_SQL = """
@@ -209,14 +259,93 @@ def _is_approved(val) -> bool:
 def _line_description(item: dict) -> str:
     """Merge itdesc + process (Returnable DC) into a single description for the UI."""
     desc = str(item.get("description", "") or "").strip()
-    proc = str(item.get("process_raw", "") or "").strip()
-    if proc:
+    proc = str(item.get("process_raw", "") or item.get("process", "") or "").strip()
+    if proc and not desc.endswith(proc):
         return f"{desc} — {proc}" if desc else proc
     return desc
 
 
-def _combined_docs_cte_sql() -> str:
-    """Single CTE merging invoice + DC + Returnable DC rows (two date params per branch)."""
+def _get_is_trns_apl(conn) -> int:
+    """Read IsTrnsApl (0, 1, 2, or 3) from CompanySettingFeatures or CompanySetting. Defaults to 0."""
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT TOP 1 IsTrnsApl FROM CompanySettingFeatures")
+            row = cursor.fetchone()
+            if row is not None and row[0] is not None:
+                cursor.close()
+                return int(row[0])
+        except Exception:
+            pass
+        try:
+            cursor.execute("SELECT TOP 1 IsTrnsApl FROM CompanySetting")
+            row = cursor.fetchone()
+            if row is not None and row[0] is not None:
+                cursor.close()
+                return int(row[0])
+        except Exception:
+            pass
+        cursor.close()
+    except Exception:
+        pass
+    return 0
+
+
+def _combined_docs_cte_sql(is_trns_apl: int = 0) -> str:
+    """
+    Dynamic CTE merging invoice + DC + Returnable DC + (optionally) Job Order Issue rows
+    based on CompanySettingFeatures.IsTrnsApl:
+      - 0: DC (all 3), Invoice (all 4), RDC (Material Issue only), Job Order Issue disabled
+      - 1: DC (all 3), Invoice (all 4), RDC (all 4 types),        Job Order Issue disabled
+      - 2: DC (all 3), Invoice (all 4), RDC (Material Issue only), Job Order Issue (all types)
+      - 3: DC (all 3), Invoice (all 4), RDC (all 4 types),        Job Order Issue (all types)
+    """
+    if is_trns_apl in (0, 2):
+        rdc_filter_clause = """
+            AND (
+                LTRIM(RTRIM(ISNULL(R.dtype, N''))) = N''
+                OR LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) LIKE N'%material%issue%'
+                OR LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) = N'general'
+            )
+        """
+        rdc_canon_expr = "N'Returnable DC - Material Issue'"
+    else:
+        rdc_filter_clause = ""
+        rdc_canon_expr = _CANON_RET_DC_TYPE_SQL.strip()
+
+    include_jo = is_trns_apl in (2, 3)
+
+    job_order_cte = ""
+    docs_union = """
+            SELECT * FROM inv
+            UNION ALL
+            SELECT * FROM dc
+            UNION ALL
+            SELECT * FROM ret_dc
+    """
+
+    if include_jo:
+        job_order_cte = f""",
+        job_order AS (
+            SELECT
+                J.jbno                                               AS doc_no,
+                J.jbdate                                             AS doc_date,
+                LTRIM(RTRIM(ISNULL(J.jbtype, N'')))                  AS type_raw,
+                {_JOB_DISPLAY_AMOUNT_SQL.strip()}                    AS display_amt,
+                {_IS_APPROVED_JOB_SQL.strip()}                       AS is_approved,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS customer_name,
+                {_CANON_JOB_TYPE_SQL.strip()}                        AS canon_type,
+                N'job_order_issue'                                   AS doc_kind
+            FROM Job_mas J
+            {_CUST_JOIN_JOB_SQL.strip()}
+            WHERE ISNULL(J.deleted, 0) = 0
+              AND CAST(J.jbdate AS DATE) BETWEEN ? AND ?
+        )"""
+        docs_union += """
+            UNION ALL
+            SELECT * FROM job_order
+        """
+
     return f"""
         WITH inv AS (
             SELECT
@@ -225,7 +354,7 @@ def _combined_docs_cte_sql() -> str:
                 LTRIM(RTRIM(ISNULL(B.btype, N'')))                  AS type_raw,
                 ISNULL(B.namt, 0)                                    AS display_amt,
                 {_IS_APPROVED_BILL_SQL.strip()}                      AS is_approved,
-                LTRIM(RTRIM(ISNULL(C.CName, N'')))                  AS customer_name,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS customer_name,
                 {_CANON_INVOICE_TYPE_SQL.strip()}                    AS canon_type,
                 N'invoice'                                           AS doc_kind
             FROM Bill_Mas B
@@ -241,7 +370,7 @@ def _combined_docs_cte_sql() -> str:
                 LTRIM(RTRIM(ISNULL(D.dtype, N'')))                  AS type_raw,
                 {_DC_DISPLAY_AMOUNT_SQL.strip()}                     AS display_amt,
                 {_IS_APPROVED_DC_SQL.strip()}                        AS is_approved,
-                LTRIM(RTRIM(ISNULL(C.CName, N'')))                  AS customer_name,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS customer_name,
                 {_CANON_DC_TYPE_SQL.strip()}                         AS canon_type,
                 N'dc'                                                AS doc_kind
             FROM DC_Mas D
@@ -257,21 +386,18 @@ def _combined_docs_cte_sql() -> str:
                 LTRIM(RTRIM(ISNULL(R.dtype, N'')))                  AS type_raw,
                 {_RET_DC_DISPLAY_AMOUNT_SQL.strip()}                 AS display_amt,
                 {_IS_APPROVED_RET_DC_SQL.strip()}                    AS is_approved,
-                LTRIM(RTRIM(ISNULL(C.CName, N'')))                  AS customer_name,
-                N'Returnable DC - Material Issue'                    AS canon_type,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS customer_name,
+                {rdc_canon_expr}                                     AS canon_type,
                 N'ret_dc'                                            AS doc_kind
             FROM ReturnableDcIss_Mas R
             {_CUST_JOIN_RET_DC_SQL.strip()}
             WHERE ISNULL(R.deleted, 0) = 0
               AND CAST(R.retissdt AS DATE) BETWEEN ? AND ?
               AND {_RET_DC_IN_SCOPE_SQL.strip()}
-        ),
+              {rdc_filter_clause}
+        ){job_order_cte},
         docs AS (
-            SELECT * FROM inv
-            UNION ALL
-            SELECT * FROM dc
-            UNION ALL
-            SELECT * FROM ret_dc
+            {docs_union.strip()}
         )
     """
 
@@ -360,12 +486,15 @@ def tapproval_list(request):
     except ValueError:
         page_size = 200
 
-    params: list = [start_date, end_date, start_date, end_date, start_date, end_date]
+    is_trns_apl = _get_is_trns_apl(conn)
+    include_jo = is_trns_apl in (2, 3)
+    branch_count = 4 if include_jo else 3
+    params: list = [start_date, end_date] * branch_count
     filt = _list_filter_sql(type_filter, status_filter, search_q, params)
     offset = (page - 1) * page_size
 
     sql_combined = f"""
-        {_combined_docs_cte_sql().strip()}
+        {_combined_docs_cte_sql(is_trns_apl).strip()}
         , numbered AS (
             SELECT docs.*,
                    ROW_NUMBER() OVER (ORDER BY docs.doc_date DESC, docs.doc_no DESC) AS _rn,
@@ -424,7 +553,11 @@ def tapproval_list(request):
             "type": rec["canon_type"] or (
                 "Invoice - General"
                 if doc_kind == "invoice"
-                else ("Returnable DC - Material Issue" if doc_kind == "ret_dc" else "DC - General")
+                else (
+                    f"Returnable DC - {rec.get('type_raw', '').strip()}"
+                    if doc_kind == "ret_dc" and rec.get("type_raw")
+                    else ("Returnable DC - Material Issue" if doc_kind == "ret_dc" else ("Job Order Issue - Job Order" if doc_kind == "job_order_issue" else "DC - General"))
+                )
             ),
             "status": status,
             "vendor": rec["customer_name"] or "Unknown Customer",
@@ -443,6 +576,7 @@ def tapproval_list(request):
         "page": page,
         "page_size": page_size,
         "total": total_count,
+        "is_trns_apl": is_trns_apl,
         "cards": cards,
     })
 
@@ -459,8 +593,12 @@ def tapproval_stats(request):
 
     start_date, end_date = parse_date_range(request)
 
+    is_trns_apl = _get_is_trns_apl(conn)
+    include_jo = is_trns_apl in (2, 3)
+    stat_params = [start_date, end_date] * (4 if include_jo else 3)
+
     sql = f"""
-        {_combined_docs_cte_sql().strip()}
+        {_combined_docs_cte_sql(is_trns_apl).strip()}
         SELECT
             docs.canon_type,
             docs.is_approved,
@@ -473,7 +611,7 @@ def tapproval_stats(request):
 
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, [start_date, end_date, start_date, end_date, start_date, end_date])
+        cursor.execute(sql, stat_params)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -486,12 +624,15 @@ def tapproval_stats(request):
 
     for canon, is_appr, doc_kind, cnt, total_amt in rows:
         doc_kind = (doc_kind or "invoice").strip().lower()
-        if doc_kind == "dc":
-            canon = canon or "DC - General"
-        elif doc_kind == "ret_dc":
-            canon = canon or "Returnable DC - Material Issue"
-        else:
-            canon = canon or "Invoice - General"
+        if not canon:
+            if doc_kind == "dc":
+                canon = "DC - General"
+            elif doc_kind == "ret_dc":
+                canon = "Returnable DC - Material Issue"
+            elif doc_kind == "job_order_issue":
+                canon = "Job Order Issue - Job Order"
+            else:
+                canon = "Invoice - General"
         bucket = type_buckets.setdefault(
             canon, {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
         )
@@ -517,6 +658,7 @@ def tapproval_stats(request):
         "success": True,
         "from": str(start_date),
         "to": str(end_date),
+        "is_trns_apl": is_trns_apl,
         "stats": [
             {
                 "label": "Total Documents",
@@ -557,7 +699,7 @@ def _detail_invoice(conn, invno: str, start_date, end_date):
             ISNULL(B.RoundOff, 0) AS round_off,
             ISNULL(B.namt, 0) AS namt,
             B.IsApproved AS is_approve_raw,
-            LTRIM(RTRIM(ISNULL(C.CName, N''))) AS customer_name,
+            LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N''))) AS customer_name,
             {_CANON_INVOICE_TYPE_SQL.strip()} AS canon_type
         FROM Bill_Mas B
         {_CUST_JOIN_BILL_SQL.strip()}
@@ -572,6 +714,7 @@ def _detail_invoice(conn, invno: str, start_date, end_date):
             ) AS sno,
             ISNULL(D.itcode, N'') AS code_no,
             ISNULL(D.itdesc, N'') AS description,
+            N'' AS process,
             ISNULL(D.uom, N'') AS uom,
             ISNULL(D.qty, 0) AS qty,
             ISNULL(D.QtyKgs, 0) AS qty_kgs,
@@ -615,7 +758,7 @@ def _detail_dc(conn, dcno: str, start_date, end_date):
             ISNULL(D.roundoff, 0) AS round_off,
             ISNULL(D.namt, 0) AS namt,
             D.IsApproved AS is_approve_raw,
-            LTRIM(RTRIM(ISNULL(C.CName, N''))) AS customer_name,
+            LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N''))) AS customer_name,
             {_CANON_DC_TYPE_SQL.strip()} AS canon_type
         FROM DC_Mas D
         {_CUST_JOIN_DC_SQL.strip()}
@@ -630,6 +773,7 @@ def _detail_dc(conn, dcno: str, start_date, end_date):
             ) AS sno,
             ISNULL(DD.partno, N'') AS code_no,
             ISNULL(DD.description, N'') AS description,
+            N'' AS process,
             ISNULL(DD.uom, N'') AS uom,
             ISNULL(DD.okqty, 0) + ISNULL(DD.matrej, 0) + ISNULL(DD.macrej, 0) AS qty,
             ISNULL(DD.wgt, 0) AS qty_kgs,
@@ -663,6 +807,7 @@ def _detail_dc(conn, dcno: str, start_date, end_date):
 
 def _detail_returnable_dc(conn, retissno: str, start_date, end_date):
     in_scope = _RET_DC_IN_SCOPE_SQL.strip()
+    canon_expr = _CANON_RET_DC_TYPE_SQL.strip()
     batch_sql = f"""
         SELECT
             R.retissno,
@@ -673,8 +818,8 @@ def _detail_returnable_dc(conn, retissno: str, start_date, end_date):
             ISNULL(R.roundoff, 0) AS round_off,
             ISNULL(R.namt, 0) AS namt,
             R.IsApproved AS is_approve_raw,
-            LTRIM(RTRIM(ISNULL(C.CName, N''))) AS customer_name,
-            N'Returnable DC - Material Issue' AS canon_type
+            LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N''))) AS customer_name,
+            {canon_expr} AS canon_type
         FROM ReturnableDcIss_Mas R
         {_CUST_JOIN_RET_DC_SQL.strip()}
         WHERE ISNULL(R.deleted, 0) = 0
@@ -688,7 +833,7 @@ def _detail_returnable_dc(conn, retissno: str, start_date, end_date):
             ) AS sno,
             ISNULL(DD.itcode, N'') AS code_no,
             ISNULL(DD.itdesc, N'') AS description,
-            ISNULL(DD.process, N'') AS process_raw,
+            ISNULL(DD.process, N'') AS process,
             ISNULL(DD.uom, N'') AS uom,
             ISNULL(DD.qty, 0) AS qty,
             CAST(0 AS FLOAT) AS qty_kgs,
@@ -720,6 +865,87 @@ def _detail_returnable_dc(conn, retissno: str, start_date, end_date):
     return cursor, "ret_dc"
 
 
+def _detail_job_order(conn, jbno: str, start_date, end_date):
+    canon_expr = _CANON_JOB_TYPE_SQL.strip()
+    batch_sql = f"""
+        SELECT
+            J.jbno,
+            J.jbdate,
+            LTRIM(RTRIM(ISNULL(J.jbtype, N''))) AS type_raw,
+            ISNULL(J.tamt, 0) AS tamt,
+            CAST(0 AS FLOAT) AS disamt,
+            ISNULL(J.roundoff, 0) AS round_off,
+            ISNULL(J.namt, 0) AS namt,
+            J.IsApproveJbDcPrt AS is_approve_raw,
+            LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N''))) AS customer_name,
+            {canon_expr} AS canon_type
+        FROM Job_mas J
+        {_CUST_JOIN_JOB_SQL.strip()}
+        WHERE ISNULL(J.deleted, 0) = 0
+          AND J.jbno = ?
+          AND CAST(J.jbdate AS DATE) BETWEEN ? AND ?;
+
+        SELECT
+            ROW_NUMBER() OVER (
+                ORDER BY JD.rpartno, JD.rmname
+            ) AS sno,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(J.jbtype, N''))) = N'Raw Material'
+                    THEN ISNULL(JD.rmname, N'')
+                ELSE ISNULL(JD.rpartno, N'')
+            END AS code_no,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(J.jbtype, N''))) = N'Raw Material'
+                    THEN ISNULL(JD.mattype, N'')
+                ELSE ISNULL(JD.description, N'')
+            END AS description,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(J.jbtype, N''))) = N'Raw Material'
+                    THEN N'Raw Material'
+                ELSE COALESCE(P.process, JD.process, N'')
+            END AS process,
+            ISNULL(JD.uom, N'') AS uom,
+            ISNULL(JD.qty, 0) AS qty,
+            CAST(0 AS FLOAT) AS qty_kgs,
+            COALESCE(JR.rate, JD.rate, 0) AS rate,
+            COALESCE(JR.amount, (ISNULL(JD.qty, 0) * ISNULL(COALESCE(JR.rate, JD.rate, 0), 0)), 0) AS amount
+        FROM Job_Det JD
+        INNER JOIN Job_mas J ON J.jbno = JD.jbno AND ISNULL(J.deleted, 0) = 0
+        LEFT JOIN ProcessDet P ON
+            LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(P.pcode, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(JD.process, N''))))
+            AND ISNULL(P.deleted, 0) = 0
+        LEFT JOIN Job_RateDet JR ON
+            JR.jbno = JD.jbno
+            AND (
+                (LTRIM(RTRIM(ISNULL(J.jbtype, N''))) = N'Raw Material' AND LTRIM(RTRIM(ISNULL(JR.rmname, N''))) = LTRIM(RTRIM(ISNULL(JD.rmname, N''))))
+                OR (LTRIM(RTRIM(ISNULL(J.jbtype, N''))) <> N'Raw Material' AND (
+                    LTRIM(RTRIM(ISNULL(JR.partno, N''))) = LTRIM(RTRIM(ISNULL(JD.rpartno, N'')))
+                    OR LTRIM(RTRIM(ISNULL(JR.rtnpartno, N''))) = LTRIM(RTRIM(ISNULL(JD.rpartno, N'')))
+                    OR LTRIM(RTRIM(ISNULL(JR.rmname, N''))) = LTRIM(RTRIM(ISNULL(JD.rmname, N'')))
+                ))
+            )
+            AND ISNULL(JR.deleted, 0) = 0
+        WHERE ISNULL(JD.deleted, 0) = 0
+          AND JD.jbno = ?;
+
+        SELECT
+            ISNULL(T.ttype, N'') AS ttype,
+            ISNULL(T.tp, 0) AS tp,
+            ISNULL(T.txamt, 0) AS tx_amt
+        FROM Job_Tax T
+        WHERE ISNULL(T.deleted, 0) = 0
+          AND T.jbno = ?
+        ORDER BY ISNULL(T.nos, 0), T.ttype;
+
+        SELECT
+            CAST(0 AS FLOAT) AS before_tax_pf,
+            CAST(0 AS FLOAT) AS after_tax_pf;
+    """
+    cursor = conn.cursor()
+    cursor.execute(batch_sql, [jbno, start_date, end_date, jbno, jbno])
+    return cursor, "job_order_issue"
+
+
 @api_view(["GET"])
 def tapproval_detail(request):
     try:
@@ -728,7 +954,8 @@ def tapproval_detail(request):
         return Response({"error": str(e)}, status=401)
 
     doc_no = (
-        request.GET.get("retissno")
+        request.GET.get("jbno")
+        or request.GET.get("retissno")
         or request.GET.get("invno")
         or request.GET.get("dcno")
         or request.GET.get("recno")
@@ -736,14 +963,16 @@ def tapproval_detail(request):
     ).strip()
     if not doc_no:
         return Response({
-            "error": "Query parameter 'invno', 'dcno', or 'retissno' is required.",
+            "error": "Query parameter 'jbno', 'invno', 'dcno', or 'retissno' is required.",
         }, status=400)
 
     doc_kind = (request.GET.get("doc_kind") or request.GET.get("docKind") or "").strip().lower()
     start_date, end_date = parse_date_range(request)
 
     try:
-        if doc_kind == "ret_dc":
+        if doc_kind in ("job_order_issue", "job_order"):
+            cursor, resolved_kind = _detail_job_order(conn, doc_no, start_date, end_date)
+        elif doc_kind == "ret_dc":
             cursor, resolved_kind = _detail_returnable_dc(conn, doc_no, start_date, end_date)
         elif doc_kind == "dc":
             cursor, resolved_kind = _detail_dc(conn, doc_no, start_date, end_date)
@@ -751,26 +980,33 @@ def tapproval_detail(request):
             cursor, resolved_kind = _detail_invoice(conn, doc_no, start_date, end_date)
 
         hrow = cursor.fetchone()
-        if not hrow and doc_kind not in ("dc", "ret_dc"):
+        if not hrow and doc_kind not in ("dc", "ret_dc", "job_order_issue", "job_order"):
             cursor.close()
             cursor, resolved_kind = _detail_dc(conn, doc_no, start_date, end_date)
             hrow = cursor.fetchone()
-        if not hrow and doc_kind not in ("dc", "ret_dc"):
+        if not hrow and doc_kind not in ("dc", "ret_dc", "job_order_issue", "job_order"):
             cursor.close()
             cursor, resolved_kind = _detail_returnable_dc(conn, doc_no, start_date, end_date)
             hrow = cursor.fetchone()
+        if not hrow and doc_kind not in ("dc", "ret_dc", "job_order_issue", "job_order"):
+            cursor.close()
+            cursor, resolved_kind = _detail_job_order(conn, doc_no, start_date, end_date)
+            hrow = cursor.fetchone()
+
         if not hrow:
             cursor.close()
             conn.close()
             label = (
-                "Returnable DC"
-                if resolved_kind == "ret_dc"
-                else ("DC" if resolved_kind == "dc" else "Invoice")
+                "Job Order Issue"
+                if resolved_kind in ("job_order_issue", "job_order")
+                else ("Returnable DC" if resolved_kind == "ret_dc" else ("DC" if resolved_kind == "dc" else "Invoice"))
             )
             return Response({"error": f"{label} '{doc_no}' not found."}, status=404)
         hcols = [d[0] for d in cursor.description]
         header = dict(zip(hcols, hrow))
-        if resolved_kind == "ret_dc":
+        if resolved_kind in ("job_order_issue", "job_order"):
+            doc_no_key, doc_date_key = "jbno", "jbdate"
+        elif resolved_kind == "ret_dc":
             doc_no_key, doc_date_key = "retissno", "retissdt"
         elif resolved_kind == "dc":
             doc_no_key, doc_date_key = "dcno", "dcdate"
@@ -805,7 +1041,9 @@ def tapproval_detail(request):
         line_items.append({
             "sNo": int(item.get("sno", 0)) or len(line_items) + 1,
             "codeNo": str(item.get("code_no", "")).strip(),
-            "description": _line_description(item),
+            "description": str(item.get("description", "")).strip() if resolved_kind in ("job_order_issue", "job_order") else _line_description(item),
+            "process": str(item.get("process", "")).strip(),
+            "process_raw": str(item.get("process", "")).strip(),
             "uom": str(item.get("uom", "")).strip(),
             "qty": _safe_float(item.get("qty", 0)),
             "qtyOthers": _safe_float(item.get("qty_kgs", 0)),
@@ -855,6 +1093,9 @@ def tapproval_detail(request):
     elif resolved_kind == "ret_dc":
         canon = header.get("canon_type") or "Returnable DC - Material Issue"
         display_amt = grand_total if grand_total else tamt
+    elif resolved_kind in ("job_order_issue", "job_order"):
+        canon = header.get("canon_type") or "Job Order Issue - Job Order"
+        display_amt = grand_total if grand_total else tamt
     else:
         canon = header.get("canon_type") or _canonical_invoice_type(header.get("type_raw", ""))
         display_amt = grand_total
@@ -888,7 +1129,11 @@ def tapproval_detail(request):
             else (
                 "Returnable DC - Material Issue"
                 if resolved_kind == "ret_dc"
-                else "DC - General"
+                else (
+                    "Job Order Issue - Job Order"
+                    if resolved_kind in ("job_order_issue", "job_order")
+                    else "DC - General"
+                )
             )
         ),
         "status": status,
@@ -924,7 +1169,8 @@ def tapproval_approve(request):
         return Response({"error": str(e)}, status=401)
 
     doc_no = (
-        request.data.get("retissno")
+        request.data.get("jbno")
+        or request.data.get("retissno")
         or request.data.get("invno")
         or request.data.get("dcno")
         or request.data.get("recno")
@@ -932,11 +1178,14 @@ def tapproval_approve(request):
     ).strip()
     if not doc_no:
         return Response({
-            "error": "Field 'invno', 'dcno', or 'retissno' is required.",
+            "error": "Field 'jbno', 'invno', 'dcno', or 'retissno' is required.",
         }, status=400)
 
     doc_kind = (request.data.get("doc_kind") or request.data.get("docKind") or "invoice").strip().lower()
-    if doc_kind == "dc":
+    if doc_kind in ("job_order_issue", "job_order"):
+        update_sql = "UPDATE Job_mas SET IsApproveJbDcPrt = 1 WHERE ISNULL(deleted, 0) = 0 AND jbno = ?"
+        doc_label = "Job Order Issue"
+    elif doc_kind == "dc":
         update_sql = "UPDATE DC_Mas SET IsApproved = 1 WHERE ISNULL(deleted, 0) = 0 AND dcno = ?"
         doc_label = "DC"
     elif doc_kind == "ret_dc":
@@ -956,7 +1205,22 @@ def tapproval_approve(request):
         doc_date = None
         doc_type = "General"
         try:
-            if doc_kind == "dc":
+            if doc_kind in ("job_order_issue", "job_order"):
+                cursor.execute("SELECT jbdate, dtype, jbtype FROM Job_mas WHERE ISNULL(deleted, 0) = 0 AND jbno = ?", [doc_no])
+                d_row = cursor.fetchone()
+                if d_row:
+                    doc_date = d_row[0]
+                    dt = (d_row[1] or "").strip()
+                    jt = (d_row[2] or "").strip()
+                    if dt and jt:
+                        doc_type = f"{dt} - {jt}"
+                    elif dt:
+                        doc_type = dt
+                    elif jt:
+                        doc_type = f"Job Order Issue - {jt}"
+                    else:
+                        doc_type = "Job Order Issue - Job Order"
+            elif doc_kind == "dc":
                 cursor.execute("SELECT dcdate, dtype FROM DC_Mas WHERE ISNULL(deleted, 0) = 0 AND dcno = ?", [doc_no])
                 d_row = cursor.fetchone()
                 if d_row:
@@ -967,7 +1231,8 @@ def tapproval_approve(request):
                 d_row = cursor.fetchone()
                 if d_row:
                     doc_date = d_row[0]
-                    doc_type = "Returnable DC"
+                    ret_dtype = (d_row[1] or "").strip()
+                    doc_type = f"Returnable DC - {ret_dtype}" if ret_dtype else "Returnable DC - Material Issue"
             else:
                 cursor.execute("SELECT invdt, btype FROM Bill_Mas WHERE ISNULL(deleted, 0) = 0 AND invno = ?", [doc_no])
                 d_row = cursor.fetchone()
@@ -1016,6 +1281,7 @@ def tapproval_approve(request):
 
     return Response({
         "success": True,
+        "jbno": doc_no,
         "invno": doc_no,
         "dcno": doc_no,
         "retissno": doc_no,
@@ -1040,7 +1306,8 @@ def tapproval_modify(request):
         return Response({"error": str(e)}, status=401)
 
     doc_no = (
-        request.data.get("retissno")
+        request.data.get("jbno")
+        or request.data.get("retissno")
         or request.data.get("invno")
         or request.data.get("dcno")
         or request.data.get("recno")
@@ -1048,19 +1315,17 @@ def tapproval_modify(request):
     ).strip()
     if not doc_no:
         return Response({
-            "error": "Field 'invno', 'dcno', or 'retissno' is required.",
+            "error": "Field 'jbno', 'invno', 'dcno', or 'retissno' is required.",
         }, status=400)
 
     doc_kind = (request.data.get("doc_kind") or request.data.get("docKind") or "invoice").strip().lower()
-    if doc_kind == "dc":
-        update_sql = "UPDATE DC_Mas SET IsApproved = 0 WHERE ISNULL(deleted, 0) = 0 AND dcno = ?"
-        doc_label = "DC"
-    elif doc_kind == "ret_dc":
-        update_sql = (
-            "UPDATE ReturnableDcIss_Mas SET IsApproved = 0 "
-            "WHERE ISNULL(deleted, 0) = 0 AND retissno = ?"
-        )
-        doc_label = "Returnable DC"
+    if doc_kind in ("dc", "ret_dc"):
+        return Response({
+            "error": "Modify Open is disabled for Delivery Challan (DC) documents."
+        }, status=400)
+    elif doc_kind in ("job_order_issue", "job_order"):
+        update_sql = "UPDATE Job_mas SET IsApproveJbDcPrt = 0 WHERE ISNULL(deleted, 0) = 0 AND jbno = ?"
+        doc_label = "Job Order Issue"
     else:
         update_sql = "UPDATE Bill_Mas SET IsApproved = 0, IsModifyOpen = 1 WHERE ISNULL(deleted, 0) = 0 AND invno = ?"
         doc_label = "Invoice"
@@ -1098,6 +1363,7 @@ def tapproval_modify(request):
 
     return Response({
         "success": True,
+        "jbno": doc_no,
         "invno": doc_no,
         "dcno": doc_no,
         "retissno": doc_no,
@@ -1105,3 +1371,4 @@ def tapproval_modify(request):
         "modified_in_erp": modified_in_erp,
         "message": message,
     })
+

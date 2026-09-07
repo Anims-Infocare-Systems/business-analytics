@@ -85,6 +85,65 @@ def _part_rate_expr(part_col, process_col):
     )"""
 
 
+def _cust_expr_injob(mas_alias="m", det_alias="d"):
+    return f"""COALESCE(
+        (SELECT TOP 1 CM.CName FROM CustMast CM WHERE CM.Id = {mas_alias}.cid AND ISNULL(CM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE CAM.Id = {mas_alias}.cid AND ISNULL(CAM.deleted, 0) = 0),
+        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = {det_alias}.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = {det_alias}.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
+        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = {det_alias}.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = {det_alias}.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
+        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = {det_alias}.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = {det_alias}.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
+        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = {det_alias}.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = {det_alias}.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
+        N'—'
+    )"""
+
+
+def _cust_expr_part(partno_col):
+    return f"""COALESCE(
+        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = {partno_col} AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = {partno_col} AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
+        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = {partno_col} AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = {partno_col} AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
+        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = {partno_col} AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = {partno_col} AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
+        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = {partno_col} AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
+        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = {partno_col} AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
+        (SELECT TOP 1 cust_c.CName FROM Commer_Mas com_c INNER JOIN CustMast cust_c ON com_c.cid = cust_c.Id WHERE com_c.PartNo = {partno_col} AND ISNULL(com_c.deleted, 0) = 0 AND ISNULL(cust_c.deleted, 0) = 0),
+        (SELECT TOP 1 cust_ca.CorpName FROM Commer_Mas com_ca INNER JOIN CustAliasMast cust_ca ON com_ca.cid = cust_ca.Id WHERE com_ca.PartNo = {partno_col} AND ISNULL(com_ca.deleted, 0) = 0 AND ISNULL(cust_ca.deleted, 0) = 0),
+        N'—'
+    )"""
+
+
+def _part_name_expr(tbl_alias):
+    return f"""COALESCE(
+        NULLIF(LTRIM(RTRIM({tbl_alias}.description)), ''),
+        (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = {tbl_alias}.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
+        (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = {tbl_alias}.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
+        (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = {tbl_alias}.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
+        (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = {tbl_alias}.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
+        N''
+    )"""
+
+
+def _fetch_all_customers(cursor):
+    customers = []
+    if table_exists(cursor, "CustMast") or table_exists(cursor, "CustAliasMast"):
+        try:
+            cursor.execute("""
+                SELECT DISTINCT LTRIM(RTRIM(CName)) AS CustomerName FROM CustMast WHERE ISNULL(deleted, 0) = 0 AND CName IS NOT NULL AND LTRIM(RTRIM(CName)) <> ''
+                UNION
+                SELECT DISTINCT LTRIM(RTRIM(CorpName)) AS CustomerName FROM CustAliasMast WHERE ISNULL(deleted, 0) = 0 AND CorpName IS NOT NULL AND LTRIM(RTRIM(CorpName)) <> ''
+                ORDER BY CustomerName
+            """)
+            customers = [r[0] for r in cursor.fetchall() if r[0]]
+        except Exception:
+            customers = []
+    return customers
+
+
 def _fetch_quality_inspection_rows(cursor, start_date, end_date):
     """Unified inspection rows with rejection + rework qty from ERP tables."""
     if not all(
@@ -99,8 +158,8 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         return []
 
     has_process_det = table_exists(cursor, "ProcessDet")
-    has_commer = table_exists(cursor, "Commer_Mas")
-    has_cust = table_exists(cursor, "CustMast")
+    has_final_rej_org = table_exists(cursor, "FinalInspRejectionEntryOrg")
+    has_inter_rej = table_exists(cursor, "Insp_RejectionEntry")
 
     pd_join = (
         "LEFT JOIN ProcessDet pd ON d.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0"
@@ -121,47 +180,17 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
     process_int = "ISNULL(pd.process, ISNULL(i.process, N''))" if has_process_det else "ISNULL(i.process, N'')"
     process_fin = "ISNULL(pd.process, ISNULL(f.process, N''))" if has_process_det else "ISNULL(f.process, N'')"
 
-    cust_inj = (
-        "LTRIM(RTRIM(ISNULL(cust.CName, N'—')))"
-        if has_cust
-        else "N'—'"
-    )
-    cust_int = (
-        """LTRIM(RTRIM(ISNULL(cust_i.CName, N'—')))"""
-        if has_cust and has_commer
-        else "N'—'"
-    )
-    cust_fin = cust_int.replace("cust_i", "cust_f").replace("com_i", "com_f")
-
-    com_join_i = (
-        "LEFT JOIN Commer_Mas com_i ON i.partno = com_i.PartNo AND ISNULL(com_i.deleted, 0) = 0"
-        if has_commer
-        else ""
-    )
-    com_join_f = (
-        "LEFT JOIN Commer_Mas com_f ON f.partno = com_f.PartNo AND ISNULL(com_f.deleted, 0) = 0"
-        if has_commer
-        else ""
-    )
-    cust_join_inj = (
-        "LEFT JOIN CustMast cust ON m.cid = cust.Id AND ISNULL(cust.deleted, 0) = 0"
-        if has_cust
-        else ""
-    )
-    cust_join_i = (
-        "LEFT JOIN CustMast cust_i ON com_i.cid = cust_i.Id AND ISNULL(cust_i.deleted, 0) = 0"
-        if has_cust and has_commer
-        else ""
-    )
-    cust_join_f = (
-        "LEFT JOIN CustMast cust_f ON com_f.cid = cust_f.Id AND ISNULL(cust_f.deleted, 0) = 0"
-        if has_cust and has_commer
-        else ""
-    )
+    cust_inj = _cust_expr_injob("m", "d")
+    cust_int = _cust_expr_part("i.partno")
+    cust_fin = _cust_expr_part("f.partno")
 
     rate_inj = _part_rate_expr("d.partno", process_inj)
     rate_int = _part_rate_expr("i.partno", process_int)
     rate_fin = _part_rate_expr("f.partno", process_fin)
+
+    part_name_inj = _part_name_expr("d")
+    part_name_int = _part_name_expr("i")
+    part_name_fin = _part_name_expr("f")
 
     reason_inj = """ISNULL((
         SELECT STUFF((
@@ -173,7 +202,26 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     ), N'')"""
 
-    reason_int = """ISNULL((
+    reason_int = """COALESCE(
+        NULLIF((
+            SELECT STUFF((
+                SELECT ', ' + ir.rejection
+                FROM Insp_RejectionEntry ir
+                WHERE ir.inter_inspno = i.inter_inspno AND ISNULL(ir.deleted, 0) = 0
+                FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        ), ''),
+        (
+            SELECT STUFF((
+                SELECT ', ' + r.rejection
+                FROM RejDetail_Table rd
+                INNER JOIN Rejection r ON rd.RejCode = r.rcode
+                WHERE rd.ins_Dc = i.inter_inspno AND rd.PartNo = i.partno AND ISNULL(rd.deleted, 0) = 0
+                FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        ),
+        N''
+    )""" if has_inter_rej else """ISNULL((
         SELECT STUFF((
             SELECT ', ' + r.rejection
             FROM RejDetail_Table rd
@@ -183,7 +231,26 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     ), N'')"""
 
-    reason_fin = """ISNULL((
+    reason_fin = """COALESCE(
+        NULLIF((
+            SELECT STUFF((
+                SELECT ', ' + fr.rejection
+                FROM FinalInspRejectionEntryOrg fr
+                WHERE fr.finspno = f.finspno AND ISNULL(fr.deleted, 0) = 0
+                FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        ), ''),
+        (
+            SELECT STUFF((
+                SELECT ', ' + r.rejection
+                FROM RejDetail_Table rd
+                INNER JOIN Rejection r ON rd.RejCode = r.rcode
+                WHERE rd.ins_Dc = f.finspno AND rd.PartNo = f.partno AND ISNULL(rd.deleted, 0) = 0
+                FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        ),
+        N''
+    )""" if has_final_rej_org else """ISNULL((
         SELECT STUFF((
             SELECT ', ' + r.rejection
             FROM RejDetail_Table rd
@@ -192,6 +259,22 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             FOR XML PATH(''), TYPE
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     ), N'')"""
+
+    rej_qty_fin = """CAST(ISNULL((
+        SELECT SUM(ISNULL(fr.qty, 0))
+        FROM FinalInspRejectionEntryOrg fr
+        WHERE fr.finspno = f.finspno AND ISNULL(fr.deleted, 0) = 0
+    ), ISNULL(f.rejqty, 0)) AS FLOAT)""" if has_final_rej_org else "CAST(ISNULL(f.rejqty, 0) AS FLOAT)"
+
+    rej_qty_int = """CAST(CASE 
+        WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+        THEN ISNULL((
+            SELECT SUM(ISNULL(r.qty, 0))
+            FROM Insp_RejectionEntry r
+            WHERE r.inter_inspno = i.inter_inspno AND ISNULL(r.deleted, 0) = 0
+        ), 0)
+        ELSE ISNULL(i.rejqty, 0) + ISNULL(i.matrejqty, 0)
+    END AS FLOAT)""" if has_inter_rej else "CAST(ISNULL(i.rejqty, 0) + ISNULL(i.matrejqty, 0) AS FLOAT)"
 
     rework_reason_inj = """ISNULL((
         SELECT STUFF((
@@ -238,7 +321,7 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             {cust_inj} AS VendorName,
             CAST(N'' AS NVARCHAR(256)) AS SupplierName,
             LTRIM(RTRIM(CAST(d.partno AS NVARCHAR(128)))) AS PartNo,
-            LTRIM(RTRIM(CAST(ISNULL(d.description, N'') AS NVARCHAR(512)))) AS PartName,
+            LTRIM(RTRIM(CAST({part_name_inj} AS NVARCHAR(512)))) AS PartName,
             LTRIM(RTRIM(CAST({process_inj} AS NVARCHAR(256)))) AS ProcessLine,
             LTRIM(RTRIM(CAST(ISNULL(m.inspby, N'') AS NVARCHAR(256)))) AS OperatorName,
             LTRIM(RTRIM(CAST(ISNULL(m.inspby, N'') AS NVARCHAR(256)))) AS InspectorName,
@@ -252,7 +335,6 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
         FROM InJob_Mas m
         INNER JOIN InJob_Det d ON m.inspno = d.inspno
         {pd_join}
-        {cust_join_inj}
         WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
           AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
           AND (
@@ -268,25 +350,23 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             CAST(N'' AS NVARCHAR(256)) AS VendorName,
             CAST(N'' AS NVARCHAR(256)) AS SupplierName,
             LTRIM(RTRIM(CAST(i.partno AS NVARCHAR(128)))) AS PartNo,
-            LTRIM(RTRIM(CAST(ISNULL(i.description, N'') AS NVARCHAR(512)))) AS PartName,
+            LTRIM(RTRIM(CAST({part_name_int} AS NVARCHAR(512)))) AS PartName,
             LTRIM(RTRIM(CAST({process_int} AS NVARCHAR(256)))) AS ProcessLine,
             LTRIM(RTRIM(CAST(ISNULL(i.inspby, N'') AS NVARCHAR(256)))) AS OperatorName,
             LTRIM(RTRIM(CAST(ISNULL(i.inspby, N'') AS NVARCHAR(256)))) AS InspectorName,
             LTRIM(RTRIM(CAST(ISNULL(i.inter_inspno, N'') AS NVARCHAR(64)))) AS InspNo,
             {reason_int} AS Reason,
-            CAST(ISNULL(i.rejqty, 0) AS FLOAT) AS RejQty,
+            {rej_qty_int} AS RejQty,
             CAST(ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM Insp_ReworkEntry rw WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted, 0) = 0), 0) AS FLOAT) AS ReworkQty,
             CAST(ISNULL(i.inspqty, 0) AS FLOAT) AS InspQty,
             CAST(ISNULL({rate_int}, 0) AS FLOAT) AS UnitRate,
             {rework_reason_int} AS ReworkReason
         FROM InterInspectionEntry i
         {pd_join_i}
-        {com_join_i}
-        {cust_join_i}
         WHERE ISNULL(i.deleted, 0) = 0
           AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
           AND (
-              CAST(ISNULL(i.rejqty, 0) AS FLOAT) > 0
+              {rej_qty_int} > 0
               OR ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM Insp_ReworkEntry rw WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted, 0) = 0), 0) > 0
           )
     """, f"""
@@ -298,25 +378,23 @@ def _fetch_quality_inspection_rows(cursor, start_date, end_date):
             CAST(N'' AS NVARCHAR(256)) AS VendorName,
             CAST(N'' AS NVARCHAR(256)) AS SupplierName,
             LTRIM(RTRIM(CAST(f.partno AS NVARCHAR(128)))) AS PartNo,
-            LTRIM(RTRIM(CAST(ISNULL(f.description, N'') AS NVARCHAR(512)))) AS PartName,
+            LTRIM(RTRIM(CAST({part_name_fin} AS NVARCHAR(512)))) AS PartName,
             LTRIM(RTRIM(CAST({process_fin} AS NVARCHAR(256)))) AS ProcessLine,
             LTRIM(RTRIM(CAST(ISNULL(f.inspby, N'') AS NVARCHAR(256)))) AS OperatorName,
             LTRIM(RTRIM(CAST(ISNULL(f.inspby, N'') AS NVARCHAR(256)))) AS InspectorName,
             LTRIM(RTRIM(CAST(ISNULL(f.finspno, N'') AS NVARCHAR(64)))) AS InspNo,
             {reason_fin} AS Reason,
-            CAST(ISNULL(f.rejqty, 0) AS FLOAT) AS RejQty,
+            {rej_qty_fin} AS RejQty,
             CAST(ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM FinalInspReworkEntryOrg rw WHERE rw.finspno = f.finspno AND rw.partno = f.partno AND ISNULL(rw.deleted, 0) = 0), 0) AS FLOAT) AS ReworkQty,
             CAST(ISNULL(f.totqty, 0) AS FLOAT) AS InspQty,
             CAST(ISNULL({rate_fin}, 0) AS FLOAT) AS UnitRate,
             {rework_reason_fin} AS ReworkReason
         FROM FinalInspectionEntry f
         {pd_join_f}
-        {com_join_f}
-        {cust_join_f}
         WHERE ISNULL(f.deleted, 0) = 0
           AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
           AND (
-              CAST(ISNULL(f.rejqty, 0) AS FLOAT) > 0
+              {rej_qty_fin} > 0
               OR ISNULL((SELECT SUM(ISNULL(rw.qty, 0)) FROM FinalInspReworkEntryOrg rw WHERE rw.finspno = f.finspno AND rw.partno = f.partno AND ISNULL(rw.deleted, 0) = 0), 0) > 0
           )
     """]
@@ -341,16 +419,29 @@ def _fetch_supplier_iqc_rows(cursor, start_date, end_date):
     if not all(table_exists(cursor, t) for t in ("grn_mas", "inspmas", "inspdet")):
         return []
     try:
-        sql = """
+        cust_iqc = """COALESCE(
+            (SELECT TOP 1 CM.CName FROM CustMast CM WHERE CM.Id = GM.cid AND ISNULL(CM.deleted, 0) = 0),
+            (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE CAM.Id = GM.cid AND ISNULL(CAM.deleted, 0) = 0),
+            N'—'
+        )"""
+        part_name_iqc = """COALESCE(
+            NULLIF(LTRIM(RTRIM(D.description)), ''),
+            (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = D.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
+            (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = D.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
+            (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = D.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
+            (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = D.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
+            N''
+        )"""
+        sql = f"""
         SELECT
             CAST(IM.irdate AS DATE) AS EntryDate,
             N'Supplier' AS InspSource,
             CAST(0 AS INT) AS IsVendorJob,
-            LTRIM(RTRIM(ISNULL(CM.CName, N'—'))) AS CustomerName,
+            {cust_iqc} AS CustomerName,
             CAST(N'' AS NVARCHAR(256)) AS VendorName,
-            LTRIM(RTRIM(ISNULL(CM.CName, N'—'))) AS SupplierName,
+            {cust_iqc} AS SupplierName,
             LTRIM(RTRIM(CAST(ISNULL(D.partno, N'') AS NVARCHAR(128)))) AS PartNo,
-            LTRIM(RTRIM(CAST(ISNULL(D.description, N'') AS NVARCHAR(512)))) AS PartName,
+            LTRIM(RTRIM(CAST({part_name_iqc} AS NVARCHAR(512)))) AS PartName,
             CAST(N'' AS NVARCHAR(256)) AS ProcessLine,
             CAST(N'' AS NVARCHAR(256)) AS OperatorName,
             CAST(N'' AS NVARCHAR(256)) AS InspectorName,
@@ -369,7 +460,6 @@ def _fetch_supplier_iqc_rows(cursor, start_date, end_date):
         FROM grn_mas GM
         INNER JOIN inspmas IM ON GM.grnno = IM.grnno AND ISNULL(IM.deleted, 0) = 0
         INNER JOIN inspdet D ON IM.irno = D.irno AND ISNULL(D.deleted, 0) = 0
-        LEFT JOIN CustMast CM ON GM.cid = CM.Id AND ISNULL(CM.deleted, 0) = 0
         WHERE ISNULL(GM.deleted, 0) = 0
           AND CAST(IM.irdate AS DATE) BETWEEN ? AND ?
           AND CAST(ISNULL(D.matrej, 0) + ISNULL(D.macrej, 0) AS FLOAT) > 0
@@ -604,6 +694,11 @@ def build_rejection_compare_payload(cursor, start_date, end_date, load_full_fy=T
     rows = [_row_to_dict(r, matrej_map) for r in raw_rows]
     month_labels = _month_labels_for_payload(rows, start_date, end_date, query_start, query_end)
 
+    filter_opts = _filter_options_from_rows(rows, reason_key="reason")
+    all_custs = _fetch_all_customers(cursor)
+    if all_custs:
+        filter_opts["customers"] = sorted(set(filter_opts.get("customers", [])).union(set(all_custs)))
+
     return {
         "from": str(start_date),
         "to": str(end_date),
@@ -613,7 +708,7 @@ def build_rejection_compare_payload(cursor, start_date, end_date, load_full_fy=T
         "monthLabels": month_labels,
         "monthwise": _monthwise_rejection(rows, month_labels),
         "kpis": _compute_rejection_kpis(rows, start_date, end_date),
-        "filterOptions": _filter_options_from_rows(rows, reason_key="reason"),
+        "filterOptions": filter_opts,
     }
 
 
@@ -638,6 +733,11 @@ def build_rework_compare_payload(cursor, start_date, end_date, load_full_fy=True
     rows = [_row_to_dict(r, matrej_map) for r in raw_rows]
     month_labels = _month_labels_for_payload(rows, start_date, end_date, query_start, query_end)
 
+    filter_opts = _filter_options_from_rows(rows, reason_key="reworkReason")
+    all_custs = _fetch_all_customers(cursor)
+    if all_custs:
+        filter_opts["customers"] = sorted(set(filter_opts.get("customers", [])).union(set(all_custs)))
+
     return {
         "from": str(start_date),
         "to": str(end_date),
@@ -647,5 +747,5 @@ def build_rework_compare_payload(cursor, start_date, end_date, load_full_fy=True
         "monthLabels": month_labels,
         "monthwise": _monthwise_rework(rows, month_labels),
         "kpis": _compute_rework_kpis(rows, start_date, end_date),
-        "filterOptions": _filter_options_from_rows(rows, reason_key="reworkReason"),
+        "filterOptions": filter_opts,
     }

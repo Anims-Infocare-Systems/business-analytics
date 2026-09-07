@@ -2779,3 +2779,263 @@ def sales_analysis_avg_rate_cards(request):
         "per_month":     per_month,
         "per_year":      per_year,
     })
+
+
+# ════════════════════════════════════════════
+#  Part-wise Rate History & Intelligence
+# ════════════════════════════════════════════
+
+@api_view(["GET"])
+def sales_analysis_part_rate_history(request):
+    """
+    Returns Part-wise Rate Revision History and Billing Intelligence
+    based on the exact SQL Query across Commer_BaseRateDet, Commer_Mas,
+    CustMast/CustAliasMast, and Bill_Det/Bill_Mas.
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    part_no = (request.GET.get("part_no") or request.GET.get("partNo") or "").strip()
+
+    catalog = []
+    history_rows = []
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+
+        # 1. Fetch the part catalog (distinct Customer Products in Commer_BaseRateDet)
+        cat_sql = """
+        SELECT
+            D.PartNo,
+            MAX(M.Description) AS Description,
+            MAX(M.Uom) AS Uom,
+            MAX(COALESCE(CA.CName, CM.CName)) AS CName,
+            MAX(D.BaseRate) AS LatestRate
+        FROM Commer_BaseRateDet AS D
+        INNER JOIN Commer_Mas AS M
+            ON D.cmno = M.cmno
+        LEFT JOIN CustAliasMast AS CA
+            ON M.Cid = CA.Id
+            AND CA.Deleted = 0
+        LEFT JOIN CustMast AS CM
+            ON M.Cid = CM.Id
+            AND CM.Deleted = 0
+        WHERE M.btype = 'Customer Product'
+          AND D.deleted = 0
+          AND M.deleted = 0
+        GROUP BY D.PartNo
+        ORDER BY D.PartNo;
+        """
+        cursor.execute(cat_sql)
+        for row in cursor.fetchall() or []:
+            p_no = str(row[0] or "").strip()
+            p_desc = str(row[1] or "").strip() or p_no
+            p_uom = str(row[2] or "").strip() or "NOS"
+            p_cust = str(row[3] or "").strip() or "—"
+            p_rate = float(row[4] or 0.0)
+            if p_no:
+                catalog.append({
+                    "partNo": p_no,
+                    "description": p_desc,
+                    "uom": p_uom,
+                    "customer": p_cust,
+                    "latestRate": p_rate,
+                })
+
+        # If no specific part_no provided, default to the first one in catalog
+        if not part_no and catalog:
+            part_no = catalog[0]["partNo"]
+
+        # 2. If we have a part_no, run the user's rate history & billing intelligence query
+        if part_no:
+            history_sql = """
+            ;WITH RateHistory AS
+            (
+                SELECT
+                    COALESCE(CA.CName, CM.CName) AS CName,
+                    D.PartNo,
+                    M.Description,
+                    M.Uom,
+                    M.btype,
+                    D.BaseRate,
+                    D.BReffdt,
+                    M.Cid,
+
+                    LAG(D.BaseRate) OVER
+                    (
+                        PARTITION BY D.PartNo, M.Cid
+                        ORDER BY D.BReffdt
+                    ) AS PreviousRate
+
+                FROM Commer_BaseRateDet AS D
+
+                INNER JOIN Commer_Mas AS M
+                    ON D.cmno = M.cmno
+
+                LEFT JOIN CustAliasMast AS CA
+                    ON M.Cid = CA.Id
+                    AND CA.Deleted = 0
+
+                LEFT JOIN CustMast AS CM
+                    ON M.Cid = CM.Id
+                    AND CM.Deleted = 0
+
+                WHERE M.btype = 'Customer Product'
+                  AND D.deleted = 0
+                  AND M.deleted = 0
+                  AND D.PartNo = ?
+            ),
+
+            BillingData AS
+            (
+                SELECT
+                    BD.itcode AS PartNo,
+
+                    SUM(ISNULL(BD.qty, 0)) AS InvoicedQty,
+
+                    SUM(ISNULL(BD.amt, 0)) AS TotalRevenue,
+
+                    COUNT(DISTINCT BD.invno) AS InvoiceCount,
+
+                    MAX(BM.invdt) AS LastDispatchedDate
+
+                FROM Bill_Det AS BD
+
+                INNER JOIN Bill_Mas AS BM
+                    ON BD.invno = BM.invno
+
+                WHERE BM.deleted = 0
+                  AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                  AND BD.deleted = 0
+                  AND BD.itcode = ?
+
+                GROUP BY
+                    BD.itcode
+            )
+
+            SELECT
+                RH.CName,
+                RH.PartNo,
+                RH.Description,
+                RH.Uom,
+                RH.btype,
+
+                RH.PreviousRate,
+                RH.BaseRate AS RevisedRate,
+
+                RH.BaseRate - ISNULL(RH.PreviousRate, RH.BaseRate)
+                    AS RateVariance,
+
+                CASE
+                    WHEN ISNULL(RH.PreviousRate, 0) = 0 THEN 0
+                    ELSE
+                        (
+                            (RH.BaseRate - RH.PreviousRate)
+                            / RH.PreviousRate
+                        ) * 100
+                END AS ChangePercent,
+
+                RH.BReffdt AS EffectiveDate,
+
+                BD.InvoicedQty,
+                BD.TotalRevenue,
+                BD.InvoiceCount,
+                BD.LastDispatchedDate,
+
+                RH.Cid
+
+            FROM RateHistory AS RH
+
+            LEFT JOIN BillingData AS BD
+                ON RH.PartNo = BD.PartNo
+
+            ORDER BY
+                RH.BReffdt;
+            """
+            cursor.execute(history_sql, [part_no, start_date, end_date, part_no])
+            for r in cursor.fetchall() or []:
+                cname = str(r[0] or "").strip()
+                p_no = str(r[1] or "").strip()
+                desc = str(r[2] or "").strip()
+                uom = str(r[3] or "").strip()
+                btype = str(r[4] or "").strip()
+                prev_rate = float(r[5]) if r[5] is not None else None
+                revised_rate = float(r[6] or 0.0)
+                rate_variance = float(r[7] or 0.0)
+                change_percent = float(r[8] or 0.0)
+                eff_date = str(r[9])[:10] if r[9] else ""
+                invoiced_qty = float(r[10] or 0.0)
+                total_revenue = float(r[11] or 0.0)
+                invoice_count = int(r[12] or 0)
+                last_dispatched = str(r[13])[:10] if r[13] else ""
+                cid = str(r[14] or "")
+
+                history_rows.append({
+                    "cname": cname,
+                    "partNo": p_no,
+                    "description": desc,
+                    "uom": uom,
+                    "btype": btype,
+                    "previousRate": prev_rate,
+                    "revisedRate": revised_rate,
+                    "rateVariance": rate_variance,
+                    "changePercent": change_percent,
+                    "effectiveDate": eff_date,
+                    "invoicedQty": invoiced_qty,
+                    "totalRevenue": total_revenue,
+                    "invoiceCount": invoice_count,
+                    "lastDispatchedDate": last_dispatched,
+                    "cid": cid,
+                })
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    hero = None
+    if history_rows:
+        latest = history_rows[-1]
+        earliest = history_rows[0]
+        base_rate = earliest["previousRate"] if earliest["previousRate"] is not None else earliest["revisedRate"]
+        active_rate = latest["revisedRate"]
+        rate_diff = active_rate - (base_rate or active_rate)
+        pct_diff = ((rate_diff / base_rate) * 100) if base_rate and base_rate > 0 else 0.0
+
+        hero = {
+            "partNo": latest["partNo"],
+            "description": latest["description"],
+            "uom": latest["uom"],
+            "customer": latest["cname"],
+            "activeRate": active_rate,
+            "baseRate": base_rate,
+            "rateVariance": rate_diff,
+            "changePercent": round(pct_diff, 1),
+            "invoicedQty": latest["invoicedQty"],
+            "totalRevenue": latest["totalRevenue"],
+            "invoiceCount": latest["invoiceCount"],
+            "lastDispatchedDate": latest["lastDispatchedDate"],
+        }
+
+    return Response({
+        "part_no": part_no,
+        "from": str(start_date),
+        "to": str(end_date),
+        "catalog": catalog,
+        "history": history_rows,
+        "hero": hero,
+    })
+

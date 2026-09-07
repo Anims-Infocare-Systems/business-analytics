@@ -325,16 +325,19 @@ export default function PurchaseAnalysis() {
     const [fsSortConfig, setFsSortConfig] = useState({ key: "schd_dt", direction: "desc" });
     const fsChartCanvasRef = useRef(null);
     const fsChartInstanceRef = useRef(null);
+    const [fulfillmentScheduleRows, setFulfillmentScheduleRows] = useState([]);
+    const [fsLoading, setFsLoading] = useState(false);
 
     const pendingCounts = useMemo(() => {
         let piCount = 0;
         let poCount = 0;
         let grnCount = 0;
         poRows.forEach(r => {
-            const hasPi = !!(r.pi_no && r.pi_no !== "–" && r.pi_no !== "-" && r.pi_no.trim() !== "");
-            const hasGrn = !!(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
-            if (!hasPi) piCount++;
-            if (!hasGrn) {
+            const isPiPending = Boolean(r.is_pi_pending || !r.po_number || r.po_number === "–" || r.po_number === "-" || r.po_number.trim() === "");
+            const hasGrn = Boolean(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
+            if (isPiPending) {
+                piCount++;
+            } else if (!hasGrn) {
                 poCount++;
                 grnCount++;
             }
@@ -408,15 +411,13 @@ export default function PurchaseAnalysis() {
     const filteredPoRows = useMemo(() => {
         return poRows.filter(r => {
             if (poTablePendingFilter && poTablePendingFilter !== "All") {
+                const isPiPending = Boolean(r.is_pi_pending || !r.po_number || r.po_number === "–" || r.po_number === "-" || r.po_number.trim() === "");
+                const isGrn = Boolean(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
+
                 if (poTablePendingFilter === "PI Pending") {
-                    const hasPi = !!(r.pi_no && r.pi_no !== "–" && r.pi_no !== "-" && r.pi_no.trim() !== "");
-                    if (hasPi) return false;
-                } else if (poTablePendingFilter === "PO Pending") {
-                    const isGrn = !!(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
-                    if (isGrn) return false;
-                } else if (poTablePendingFilter === "GRN Pending") {
-                    const isGrn = !!(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
-                    if (isGrn) return false;
+                    if (!isPiPending) return false;
+                } else if (poTablePendingFilter === "PO Pending" || poTablePendingFilter === "GRN Pending") {
+                    if (isPiPending || isGrn) return false;
                 }
             }
             if (poTableDeptFilter.length > 0) {
@@ -588,90 +589,7 @@ export default function PurchaseAnalysis() {
         return uniqueKeys.size;
     }, [amendedPoRows]);
 
-    // ── PO Fulfillment Schedule Data Derivation ──
-    const fulfillmentScheduleRows = useMemo(() => {
-        if (!poRows || poRows.length === 0) return [];
-        const rows = [];
-        poRows.forEach((r, idx) => {
-            const poDateStr = r.po_date || "2026-07-01";
-            const poDate = new Date(poDateStr);
-            const poQtyNum = parseFloat(String(r.po_qty || 0).replace(/[^\d.]/g, "")) || 100;
-            const uom = String(r.po_qty || "").replace(/[\d.\s]/g, "") || "NOS";
-            const rate = parseFloat(String(r.rate || 0).replace(/[^\d.]/g, "")) || 150;
-            const isGrnDone = !!(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-");
-
-            // Split into 1 or 2 milestone delivery lots
-            const lotsCount = poQtyNum > 250 ? 2 : 1;
-            for (let lot = 1; lot <= lotsCount; lot++) {
-                const dayOffset = lot === 1 ? (7 + (idx % 14)) : (21 + (idx % 14));
-                const schdDateObj = new Date(poDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-                const schdDtStr = !isNaN(schdDateObj.getTime())
-                    ? schdDateObj.toISOString().split("T")[0]
-                    : poDateStr;
-
-                const schdQty = lotsCount === 1 ? poQtyNum : Math.round(poQtyNum / 2);
-                let grnQty = 0;
-                if (isGrnDone) {
-                    grnQty = lot === 1 ? schdQty : (idx % 2 === 0 ? schdQty : Math.round(schdQty * 0.65));
-                } else {
-                    grnQty = idx % 4 === 0 ? Math.round(schdQty * 0.5) : 0;
-                }
-
-                const balQty = Math.max(0, schdQty - grnQty);
-                const balVal = balQty * rate;
-
-                // Calculate Aging Days
-                const todayRef = new Date("2026-09-01");
-                const diffTime = todayRef.getTime() - schdDateObj.getTime();
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                const ageDays = Math.max(0, diffDays);
-
-                let status = "On Track";
-                if (balQty === 0) {
-                    status = "Delivered";
-                } else if (ageDays > 30) {
-                    status = "Overdue";
-                } else if (ageDays > 15) {
-                    status = "Due Soon";
-                } else {
-                    status = "On Track";
-                }
-
-                let partNo = r.material_code || "";
-                let desc = r.material || "";
-                if (!partNo && desc.includes("-")) {
-                    const parts = desc.split("-");
-                    partNo = parts[0].trim();
-                    desc = parts.slice(1).join("-").trim();
-                }
-
-                rows.push({
-                    id: `${r.po_number || "po"}-${idx + 1}-lot-${lot}`,
-                    sno: rows.length + 1,
-                    po_number: r.po_number || `PO-${1000 + idx}`,
-                    po_date: poDateStr,
-                    supplier: r.vendor_name || "DHARMARAJ HARDWARES",
-                    part_no: partNo || "GEN-PART",
-                    description: desc || r.material || "Item Component",
-                    po_qty: `${poQtyNum} ${uom}`,
-                    po_qty_num: poQtyNum,
-                    schd_dt: schdDtStr,
-                    schd_qty: `${schdQty} ${uom}`,
-                    schd_qty_num: schdQty,
-                    grn_qty: `${grnQty} ${uom}`,
-                    grn_qty_num: grnQty,
-                    bal_qty: `${balQty} ${uom}`,
-                    bal_qty_num: balQty,
-                    bal_val: balVal,
-                    rate: rate,
-                    uom: uom,
-                    age_days: ageDays,
-                    status: status
-                });
-            }
-        });
-        return rows;
-    }, [poRows]);
+    // ── PO Fulfillment Schedule Data (Fetched directly from backend API) ──
 
     const uniqueFsSuppliers = useMemo(() => {
         const set = new Set();
@@ -697,10 +615,11 @@ export default function PurchaseAnalysis() {
     const uniqueFsParts = useMemo(() => {
         const set = new Set();
         fulfillmentScheduleRows.forEach(r => {
+            if (fsSupplierFilter.length > 0 && !fsSupplierFilter.includes(r.supplier)) return;
             if (r.part_no && r.part_no !== "–" && r.part_no !== "-") set.add(r.part_no);
         });
         return Array.from(set).sort();
-    }, [fulfillmentScheduleRows]);
+    }, [fulfillmentScheduleRows, fsSupplierFilter]);
 
     const filteredDropdownFsParts = useMemo(() => {
         const q = fsPartSearchQuery.toLowerCase().trim();
@@ -715,16 +634,14 @@ export default function PurchaseAnalysis() {
         });
     };
 
-    const filteredFsRows = useMemo(() => {
+    // Scoped rows based on supplier, part, and search (for status pill counts)
+    const fsScopedRows = useMemo(() => {
         return fulfillmentScheduleRows.filter(r => {
-            if (fsStatusFilter !== "All" && r.status !== fsStatusFilter) {
+            if (fsSupplierFilter.length > 0 && !fsSupplierFilter.includes(r.supplier)) {
                 return false;
             }
-            if (fsSupplierFilter.length > 0) {
-                if (!fsSupplierFilter.includes(r.supplier)) return false;
-            }
-            if (fsPartFilter.length > 0) {
-                if (!fsPartFilter.includes(r.part_no)) return false;
+            if (fsPartFilter.length > 0 && !fsPartFilter.includes(r.part_no)) {
+                return false;
             }
             if (fsSearchQuery.trim()) {
                 const q = fsSearchQuery.toLowerCase().trim();
@@ -738,7 +655,36 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [fulfillmentScheduleRows, fsStatusFilter, fsSupplierFilter, fsPartFilter, fsSearchQuery]);
+    }, [fulfillmentScheduleRows, fsSupplierFilter, fsPartFilter, fsSearchQuery]);
+
+    // Status pill counts based on active supplier, part, and search filters
+    const fsStatusCounts = useMemo(() => {
+        let onTrack = 0;
+        let dueSoon = 0;
+        let overdue = 0;
+        let delivered = 0;
+
+        fsScopedRows.forEach(r => {
+            if (r.status === "Delivered") delivered++;
+            else if (r.status === "Overdue") overdue++;
+            else if (r.status === "Due Soon") dueSoon++;
+            else onTrack++;
+        });
+
+        return {
+            all: fsScopedRows.length,
+            onTrack,
+            dueSoon,
+            overdue,
+            delivered
+        };
+    }, [fsScopedRows]);
+
+    // Fully filtered rows (including status pill selection)
+    const filteredFsRows = useMemo(() => {
+        if (fsStatusFilter === "All") return fsScopedRows;
+        return fsScopedRows.filter(r => r.status === fsStatusFilter);
+    }, [fsScopedRows, fsStatusFilter]);
 
     const sortedFsRows = useMemo(() => {
         const sorted = [...filteredFsRows];
@@ -757,6 +703,7 @@ export default function PurchaseAnalysis() {
     }, [filteredFsRows, fsSortConfig]);
 
     const fsTotals = useMemo(() => {
+        let totalPoQty = 0;
         let totalSchdQty = 0;
         let totalGrnQty = 0;
         let totalBalQty = 0;
@@ -766,7 +713,8 @@ export default function PurchaseAnalysis() {
         let overdueCount = 0;
         let deliveredCount = 0;
 
-        fulfillmentScheduleRows.forEach(r => {
+        filteredFsRows.forEach(r => {
+            totalPoQty += r.po_qty_num || 0;
             totalSchdQty += r.schd_qty_num || 0;
             totalGrnQty += r.grn_qty_num || 0;
             totalBalQty += r.bal_qty_num || 0;
@@ -777,8 +725,9 @@ export default function PurchaseAnalysis() {
             else onTrackCount++;
         });
 
-        const fulfillmentPct = totalSchdQty > 0 ? ((totalGrnQty / totalSchdQty) * 100).toFixed(1) : 0;
+        const fulfillmentPct = totalSchdQty > 0 ? ((totalGrnQty / totalSchdQty) * 100).toFixed(1) : "0.0";
         return {
+            totalPoQty,
             totalSchdQty,
             totalGrnQty,
             totalBalQty,
@@ -788,9 +737,9 @@ export default function PurchaseAnalysis() {
             dueSoonCount,
             overdueCount,
             deliveredCount,
-            totalLots: fulfillmentScheduleRows.length
+            totalLots: filteredFsRows.length
         };
-    }, [fulfillmentScheduleRows]);
+    }, [filteredFsRows]);
 
     const handleFsSort = (key) => {
         let direction = "asc";
@@ -1417,6 +1366,45 @@ export default function PurchaseAnalysis() {
             })
             .catch(err => {
                 if (err.name !== "AbortError") setTraceLoading(false);
+            });
+        return () => ctrl.abort();
+    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+
+    // ── Fetch PO Fulfillment Schedule ────────────────────────────
+    useEffect(() => {
+        if (!dateRange.from || !dateRange.to) return;
+        const toIso = d => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+        };
+        const params = new URLSearchParams({
+            from: toIso(dateRange.from),
+            to: toIso(dateRange.to),
+        });
+        if (filters.poType && filters.poType !== "All Types") {
+            params.set("dtype", filters.poType);
+        }
+        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
+            params.set("supplier", filters.supplier.join(","));
+        }
+        if (debouncedSearchQuery) {
+            params.set("search", debouncedSearchQuery);
+        }
+        const ctrl = new AbortController();
+        setFsLoading(true);
+        fetch(`${API_BASE}/purchase-analysis/fulfillment-schedule/?${params}`, {
+            credentials: "include",
+            signal: ctrl.signal,
+        })
+            .then(r => r.json())
+            .then(data => {
+                setFulfillmentScheduleRows(data?.rows ?? []);
+                setFsLoading(false);
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") setFsLoading(false);
             });
         return () => ctrl.abort();
     }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
@@ -2549,7 +2537,14 @@ export default function PurchaseAnalysis() {
         });
     };
 
-    const isGlobalLoading = poLoading || supplierRatingLoading || summaryLoading || trendLoading || chartsLoading;
+    const isGlobalLoading = poLoading || supplierRatingLoading || summaryLoading || trendLoading || chartsLoading || amendedPoLoading || shortCloseLoading || priceTrendLoading || alertsLoading || traceLoading || fsLoading;
+
+    useEffect(() => {
+        if (isGlobalLoading) {
+            setPoDropdownOpen(false);
+            setSupplierDropdownOpen(false);
+        }
+    }, [isGlobalLoading]);
 
     const getKpiIcon = (label) => {
         switch (label) {
@@ -2589,7 +2584,7 @@ export default function PurchaseAnalysis() {
             const monthMap = {};
             const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-            fulfillmentScheduleRows.forEach(r => {
+            filteredFsRows.forEach(r => {
                 // PO Month aggregation
                 if (r.po_date) {
                     const pD = new Date(r.po_date);
@@ -2612,18 +2607,28 @@ export default function PurchaseAnalysis() {
                 }
             });
 
-            let sortedKeys = Object.keys(monthMap).sort();
-            if (sortedKeys.length === 0) {
-                sortedKeys = ["2026-06", "2026-07", "2026-08", "2026-09"];
-                sortedKeys.forEach(k => {
-                    const [y, m] = k.split("-");
-                    monthMap[k] = { label: `${monthNames[parseInt(m, 10) - 1]} ${y}`, poVal: 1500000, schdVal: 1200000 };
-                });
-            }
-
+            const sortedKeys = Object.keys(monthMap).sort();
             const labels = sortedKeys.map(k => monthMap[k].label);
-            const poValLakhs = sortedKeys.map(k => Number((monthMap[k].poVal / 100000).toFixed(2)));
-            const schdValLakhs = sortedKeys.map(k => Number((monthMap[k].schdVal / 100000).toFixed(2)));
+            const poVals = sortedKeys.map(k => Math.round(monthMap[k].poVal || 0));
+            const schdVals = sortedKeys.map(k => Math.round(monthMap[k].schdVal || 0));
+
+            const formatVal = (v) => {
+                if (!v || v === 0) return "";
+                if (Math.abs(v) >= 100000) {
+                    const lakhs = v / 100000;
+                    return `₹${Number(lakhs.toFixed(4))}L`;
+                }
+                return `₹${Math.round(v).toLocaleString("en-IN")}`;
+            };
+
+            const formatTooltipVal = (v) => {
+                if (!v || v === 0) return "₹0";
+                if (Math.abs(v) >= 100000) {
+                    const lakhs = v / 100000;
+                    return `₹${Number(lakhs.toFixed(4))}L`;
+                }
+                return `₹${Math.round(v).toLocaleString("en-IN")}`;
+            };
 
             fsChartInstanceRef.current = new Chart(ctx, {
                 type: "bar",
@@ -2632,8 +2637,8 @@ export default function PurchaseAnalysis() {
                     datasets: [
                         {
                             type: "bar",
-                            label: "PO Value (₹ L)",
-                            data: poValLakhs,
+                            label: "PO Value",
+                            data: poVals,
                             backgroundColor: "rgba(37, 99, 235, 0.85)",
                             borderColor: "#1d4ed8",
                             borderWidth: 1.5,
@@ -2646,13 +2651,13 @@ export default function PurchaseAnalysis() {
                                 anchor: "end",
                                 color: "#1e293b",
                                 font: { size: 10, weight: "700", family: "Poppins" },
-                                formatter: v => (v > 0 ? `₹${v}L` : "")
+                                formatter: v => formatVal(v)
                             }
                         },
                         {
                             type: "bar",
-                            label: "Schd Value (₹ L)",
-                            data: schdValLakhs,
+                            label: "Schd Value",
+                            data: schdVals,
                             backgroundColor: "rgba(16, 185, 129, 0.85)",
                             borderColor: "#059669",
                             borderWidth: 1.5,
@@ -2665,7 +2670,7 @@ export default function PurchaseAnalysis() {
                                 anchor: "end",
                                 color: "#059669",
                                 font: { size: 10, weight: "700", family: "Poppins" },
-                                formatter: v => (v > 0 ? `₹${v}L` : "")
+                                formatter: v => formatVal(v)
                             }
                         }
                     ]
@@ -2687,7 +2692,7 @@ export default function PurchaseAnalysis() {
                             titleFont: { size: 12, weight: "600", family: "Poppins" },
                             bodyFont: { size: 11, family: "Poppins" },
                             callbacks: {
-                                label: (context) => ` ${context.dataset.label}: ₹${context.raw} Lakhs`
+                                label: (context) => ` ${context.dataset.label}: ${formatTooltipVal(context.raw)}`
                             }
                         }
                     },
@@ -2699,9 +2704,9 @@ export default function PurchaseAnalysis() {
                         y: {
                             beginAtZero: true,
                             grid: { color: "rgba(226, 232, 240, 0.8)" },
-                            title: { display: true, text: "Value (₹ in Lakhs)", font: { size: 10.5, family: "Poppins", weight: "600" } },
+                            title: { display: true, text: "Value (₹)", font: { size: 10.5, family: "Poppins", weight: "600" } },
                             ticks: {
-                                callback: v => `₹${v}L`,
+                                callback: v => (v >= 100000 ? `₹${(v / 100000).toFixed(2)}L` : (v > 0 ? `₹${v.toLocaleString("en-IN")}` : "0")),
                                 font: { size: 10, family: "Poppins" }
                             }
                         }
@@ -2745,7 +2750,7 @@ export default function PurchaseAnalysis() {
             });
         } else if (fsChartType === "supplier") {
             const supMap = {};
-            fulfillmentScheduleRows.forEach(r => {
+            filteredFsRows.forEach(r => {
                 const s = r.supplier.length > 20 ? r.supplier.substring(0, 18) + "…" : r.supplier;
                 if (!supMap[s]) supMap[s] = { schd: 0, grn: 0 };
                 supMap[s].schd += r.schd_qty_num || 0;
@@ -2800,7 +2805,7 @@ export default function PurchaseAnalysis() {
                 fsChartInstanceRef.current = null;
             }
         };
-    }, [fsChartType, fulfillmentScheduleRows, fsTotals]);
+    }, [fsChartType, filteredFsRows, fsTotals]);
 
     const renderAlertIcon = (urgency) => {
         switch (urgency) {
@@ -2828,16 +2833,32 @@ export default function PurchaseAnalysis() {
 
             {/* ── Filters ── */}
             <div className={`pa2-card pa2-filter-card pa2-animate pa2-delay-1 ${isGlobalLoading ? "pa2-filter-card--loading" : ""}`}>
-                <div className="pa2-filter-bar-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Settings className="pa2-pulse-loader" size={16} style={{ color: "#2d6de8" }} /> Report Filters
+                <div className="pa2-filter-bar-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Settings className="pa2-pulse-loader" size={16} style={{ color: "#2d6de8" }} /> Report Filters
+                    </div>
+                    {isGlobalLoading && (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.72rem", color: "#2d6de8", fontWeight: 600 }}>
+                            <span className="pa2-pulse-dot" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#2d6de8", display: "inline-block" }} />
+                            Updating data...
+                        </div>
+                    )}
                 </div>
-                <div className="pa2-filter-grid">
+                <div
+                    className="pa2-filter-grid"
+                    style={{
+                        pointerEvents: isGlobalLoading ? "none" : "auto",
+                        opacity: isGlobalLoading ? 0.72 : 1,
+                        transition: "opacity 0.2s ease"
+                    }}
+                >
                     <div className="pa2-filter-group">
                         <label className="pa2-filter-label">Date Range</label>
                         <PurchaseAnalysisDatePicker
                             from={dateRange.from}
                             to={dateRange.to}
-                            onChange={({ from, to }) => setDateRange({ from, to })}
+                            onChange={({ from, to }) => !isGlobalLoading && setDateRange({ from, to })}
+                            disabled={isGlobalLoading}
                         />
                     </div>
                     <div className="pa2-filter-group">
@@ -2847,16 +2868,22 @@ export default function PurchaseAnalysis() {
                             <input
                                 type="text"
                                 className="pa2-search-input"
-                                placeholder="Search RM Name"
+                                placeholder={isGlobalLoading ? "Loading data..." : "Search RM Name"}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{ paddingRight: searchQuery ? "2rem" : "0.85rem" }}
+                                disabled={isGlobalLoading}
+                                style={{
+                                    paddingRight: searchQuery ? "2rem" : "0.85rem",
+                                    cursor: isGlobalLoading ? "not-allowed" : "text",
+                                    background: isGlobalLoading ? "#f8fafc" : undefined
+                                }}
                             />
-                            {searchQuery && (
+                            {searchQuery && !isGlobalLoading && (
                                 <button
                                     type="button"
                                     className="pa2-search-clear-btn"
                                     onClick={() => setSearchQuery("")}
+                                    disabled={isGlobalLoading}
                                     style={{
                                         position: "absolute",
                                         right: "10px",
@@ -2878,12 +2905,15 @@ export default function PurchaseAnalysis() {
                     </div>
                     <div className="pa2-filter-group" ref={poDropdownRef} style={{ minWidth: "180px" }}>
                         <label className="pa2-filter-label">PO Type</label>
-                        <div className={`pa2-custom-select${poDropdownOpen ? " pa2-active" : ""}`}>
+                        <div className={`pa2-custom-select${poDropdownOpen && !isGlobalLoading ? " pa2-active" : ""}${isGlobalLoading ? " pa2-disabled" : ""}`}>
                             <button
                                 type="button"
                                 className="pa2-custom-select-trigger"
-                                onClick={() => setPoDropdownOpen(!poDropdownOpen)}
+                                disabled={isGlobalLoading}
+                                onClick={() => !isGlobalLoading && setPoDropdownOpen(!poDropdownOpen)}
+                                style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.65, background: "#f1f5f9" } : {}}
                                 onKeyDown={(e) => {
+                                    if (isGlobalLoading) return;
                                     if (e.key === "ArrowDown") {
                                         e.preventDefault();
                                         if (!poDropdownOpen) {
@@ -2920,7 +2950,7 @@ export default function PurchaseAnalysis() {
                                     <ChevronDown size={14} />
                                 </span>
                             </button>
-                            {poDropdownOpen && (
+                            {poDropdownOpen && !isGlobalLoading && (
                                 <ul className="pa2-custom-select-options">
                                     {poTypes.map((opt, idx) => (
                                         <li
@@ -2941,12 +2971,15 @@ export default function PurchaseAnalysis() {
                     </div>
                     <div className="pa2-filter-group" ref={supplierDropdownRef} style={{ minWidth: "300px" }}>
                         <label className="pa2-filter-label">Supplier</label>
-                        <div className={`pa2-custom-select${supplierDropdownOpen ? " pa2-active" : ""}`}>
+                        <div className={`pa2-custom-select${supplierDropdownOpen && !isGlobalLoading ? " pa2-active" : ""}${isGlobalLoading ? " pa2-disabled" : ""}`}>
                             <button
                                 type="button"
                                 className="pa2-custom-select-trigger"
-                                onClick={() => setSupplierDropdownOpen(!supplierDropdownOpen)}
+                                disabled={isGlobalLoading}
+                                onClick={() => !isGlobalLoading && setSupplierDropdownOpen(!supplierDropdownOpen)}
+                                style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.65, background: "#f1f5f9" } : {}}
                                 onKeyDown={(e) => {
+                                    if (isGlobalLoading) return;
                                     if (e.key === "ArrowDown") {
                                         e.preventDefault();
                                         if (!supplierDropdownOpen) {
@@ -2991,7 +3024,7 @@ export default function PurchaseAnalysis() {
                                     <ChevronDown size={14} />
                                 </span>
                             </button>
-                            {supplierDropdownOpen && (
+                            {supplierDropdownOpen && !isGlobalLoading && (
                                 <ul className="pa2-custom-select-options">
                                     <div className="pa2-dropdown-search-wrapper">
                                         <Search size={12} className="pa2-dropdown-search-icon" />
@@ -3043,7 +3076,9 @@ export default function PurchaseAnalysis() {
                     <button
                         type="button"
                         className="pa2-btn-reset"
-                        onClick={resetFilters}
+                        disabled={isGlobalLoading}
+                        onClick={() => !isGlobalLoading && resetFilters()}
+                        style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.55, pointerEvents: "none" } : {}}
                     >
                         <RotateCcw className="pa2-btn-reset-icon" size={14} />
                         Reset Filters
@@ -3862,7 +3897,9 @@ export default function PurchaseAnalysis() {
                                             ? (r.pi_date || r.indent_date || r.ind_date).split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `)
                                             : <span className="pa2-po-dash">–</span>}
                                     </td>
-                                    <td className="pa2-po-td pa2-po-link">{r.po_number}</td>
+                                    <td className={`pa2-po-td ${r.po_number && r.po_number !== "–" && r.po_number !== "-" ? "pa2-po-link" : "pa2-po-dash"}`}>
+                                        {r.po_number && r.po_number !== "–" && r.po_number !== "-" ? r.po_number : "–"}
+                                    </td>
                                     <td className="pa2-po-td pa2-po-date">
                                         {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
                                     </td>
@@ -4104,11 +4141,11 @@ export default function PurchaseAnalysis() {
                         {/* Status Quick Pill Filters */}
                         <div className="pa2-fs-status-pills">
                             {[
-                                { id: "All", label: "All Schedules", count: fsTotals.totalLots },
-                                { id: "On Track", label: "On Track", count: fsTotals.onTrackCount, color: "blue" },
-                                { id: "Due Soon", label: "Due Soon (15-30d)", count: fsTotals.dueSoonCount, color: "amber" },
-                                { id: "Overdue", label: "Overdue (>30d)", count: fsTotals.overdueCount, color: "red" },
-                                { id: "Delivered", label: "Delivered", count: fsTotals.deliveredCount, color: "green" }
+                                { id: "All", label: "All Schedules", count: fsStatusCounts.all },
+                                { id: "On Track", label: "On Track", count: fsStatusCounts.onTrack, color: "blue" },
+                                { id: "Due Soon", label: "Due Soon (15-30d)", count: fsStatusCounts.dueSoon, color: "amber" },
+                                { id: "Overdue", label: "Overdue (>30d)", count: fsStatusCounts.overdue, color: "red" },
+                                { id: "Delivered", label: "Delivered", count: fsStatusCounts.delivered, color: "green" }
                             ].map(pill => (
                                 <button
                                     key={pill.id}
@@ -4481,21 +4518,39 @@ export default function PurchaseAnalysis() {
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedFsRows.length === 0 ? (
+                            {fsLoading && (
+                                Array.from({ length: 6 }).map((_, i) => (
+                                    <tr key={i} className="pa2-po-tr">
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "24px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "160px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                    </tr>
+                                ))
+                            )}
+                            {!fsLoading && sortedFsRows.length === 0 && (
                                 <tr>
                                     <td colSpan={12} className="pa2-nodata-td-wrap">
                                         <PaNoData icon={<CalendarRange size={16} style={{ color: "#2563eb" }} />} compact message="No fulfillment schedules found" />
                                     </td>
                                 </tr>
-                            ) : (
-                                sortedFsRows.map((r, i) => (
+                            )}
+                            {!fsLoading && sortedFsRows.map((r, i) => (
                                     <tr key={r.id || i} className="pa2-po-tr">
                                         <td className="pa2-po-td" style={{ fontWeight: "600", color: "#64748b", width: "42px" }}>{i + 1}</td>
                                         <td className="pa2-po-td pa2-po-link" style={{ fontWeight: "700" }}>{r.po_number}</td>
                                         <td className="pa2-po-td pa2-po-date">
                                             {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
                                         </td>
-                                        <td className="pa2-po-td pa2-po-vendor" style={{ maxWidth: "200px" }}>{r.supplier}</td>
+                                        <td className="pa2-po-td pa2-po-vendor pa2-fs-vendor" style={{ minWidth: "160px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" }}>{r.supplier}</td>
                                         <td className="pa2-po-td pa2-po-material">
                                             <span className="pa2-fs-part-badge">{r.part_no}</span>
                                             <span className="pa2-fs-part-desc">{r.description}</span>
@@ -4536,8 +4591,7 @@ export default function PurchaseAnalysis() {
                                             )}
                                         </td>
                                     </tr>
-                                ))
-                            )}
+                                ))}
                         </tbody>
                         {sortedFsRows.length > 0 && (
                             <tfoot>
@@ -4546,7 +4600,7 @@ export default function PurchaseAnalysis() {
                                         Total Schedule Summary:
                                     </td>
                                     <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
-                                        {fsTotals.totalSchdQty.toLocaleString("en-IN")}
+                                        {fsTotals.totalPoQty.toLocaleString("en-IN")}
                                     </td>
                                     <td></td>
                                     <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
@@ -4652,7 +4706,7 @@ export default function PurchaseAnalysis() {
                                     <td className="pa2-po-td">
                                         <span className="pa2-po-type-badge" style={{ background: "rgba(45, 109, 232, 0.08)", border: "1px solid rgba(45, 109, 232, 0.15)", color: "#2d6de8", fontWeight: "700" }}>{row.poType}</span>
                                     </td>
-                                    <td className="pa2-po-td pa2-po-vendor" style={{ whiteSpace: "nowrap" }}>{row.supplierName}</td>
+                                    <td className="pa2-po-td pa2-po-vendor" style={{ minWidth: "160px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35", overflow: "visible", textOverflow: "unset" }}>{row.supplierName}</td>
                                     <td className="pa2-po-td pa2-po-material" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.material}</td>
                                     <td className="pa2-po-td pa2-po-td--r">{row.poQty.toLocaleString()}</td>
                                     <td className="pa2-po-td pa2-po-td--r">₹{row.poRate}</td>

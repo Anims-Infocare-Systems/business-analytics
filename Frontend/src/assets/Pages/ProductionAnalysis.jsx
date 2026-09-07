@@ -272,11 +272,15 @@ function readFilterSession(key, defaults) {
     return { ...defaults, ...p };
   } catch { return defaults; }
 }
-function PremiumSelect({ label, value, options, onChange, placeholder = "Select..." }) {
+function PremiumSelect({ label, value, options, onChange, placeholder = "Select...", disabled = false }) {
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef(null);
   const itemRefs = useRef([]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -304,6 +308,7 @@ function PremiumSelect({ label, value, options, onChange, placeholder = "Select.
   }, [focusedIndex, open]);
 
   const handleKeyDown = (e) => {
+    if (disabled) return;
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -337,15 +342,16 @@ function PremiumSelect({ label, value, options, onChange, placeholder = "Select.
       <div className="pa2-ps-wrap">
         <button
           type="button"
-          className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value ? "pa2-ps-trigger--selected" : ""}`}
-          onClick={() => setOpen(o => !o)}
+          className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value ? "pa2-ps-trigger--selected" : ""} ${disabled ? "pa2-ps-trigger--disabled" : ""}`}
+          onClick={() => !disabled && setOpen(o => !o)}
+          disabled={disabled}
         >
           <span className="pa2-ps-txt">{activeLabel}</span>
           <svg className="pa2-ps-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        {open && (
+        {open && !disabled && (
           <div className="pa2-ps-menu">
             {options.map((opt, idx) => (
               <button
@@ -368,10 +374,17 @@ function PremiumSelect({ label, value, options, onChange, placeholder = "Select.
   );
 }
 
-function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Select..." }) {
+function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Select...", disabled = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+      setSearch("");
+    }
+  }, [disabled]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -385,6 +398,7 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
   }, []);
 
   const toggleOption = (optVal) => {
+    if (disabled) return;
     if (!optVal) {
       onChange([]);
       return;
@@ -420,8 +434,9 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
       <div className="pa2-ps-wrap">
         <button
           type="button"
-          className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value.length > 0 ? "pa2-ps-trigger--selected" : ""}`}
-          onClick={() => setOpen(o => !o)}
+          className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value.length > 0 ? "pa2-ps-trigger--selected" : ""} ${disabled ? "pa2-ps-trigger--disabled" : ""}`}
+          onClick={() => !disabled && setOpen(o => !o)}
+          disabled={disabled}
           style={{ width: '100%' }}
         >
           <span className="pa2-ps-txt" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '145px' }}>
@@ -431,7 +446,7 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        {open && (
+        {open && !disabled && (
           <div className="pa2-ps-menu" style={{ width: '220px', padding: '8px', zIndex: 999, minWidth: '220px' }}>
             <div style={{ position: 'relative', marginBottom: '8px' }}>
               <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
@@ -734,6 +749,7 @@ export default function ProductionAnalysis() {
   const [tableData, setTableData] = useState([]);
   const [tableLoading, setTableLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const isGlobalLoading = pageLoading || tableLoading;
 
   // Dynamic filter options states loaded from ERP database
   const [macOptions, setMacOptions] = useState([
@@ -2616,12 +2632,32 @@ export default function ProductionAnalysis() {
 
   return (
     <div className={`pa2-wrap ${mounted ? "pa2-wrap--in" : ""}`}>
+      {/* ── Global Top Loading Progress Bar (YouTube Style) ── */}
+      <div className={`pa2-global-progress-bar ${isGlobalLoading ? "pa2-global-progress-bar--active" : ""}`} />
+
+      {/* ── Page Hero ── */}
+      <div className="pa2-page-hero">
+        {/* Spacing consistent with Sales Analysis & Purchase Analysis */}
+      </div>
+
       {/* ── FILTERS ──────────────────────────────────── */}
-      <div className="pa2-card pa2-filters pa2-anim" style={{ "--d": "0ms" }}>
-        <div className="pa2-filters-grid">
+      <div className={`pa2-card pa2-filters pa2-anim ${isGlobalLoading ? "pa2-filters--loading" : ""}`} style={{ "--d": "0ms" }}>
+        <div
+          className="pa2-filters-grid"
+          style={{
+            pointerEvents: isGlobalLoading ? "none" : "auto",
+            opacity: isGlobalLoading ? 0.72 : 1,
+            transition: "opacity 0.2s ease"
+          }}
+        >
           <div className="pa2-fg">
             <label>Date Range</label>
-            <ProductionAnalysisDatePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+            <ProductionAnalysisDatePicker
+              from={dateRange.from}
+              to={dateRange.to}
+              onChange={(r) => !isGlobalLoading && setDateRange(r)}
+              disabled={isGlobalLoading}
+            />
           </div>
           <div className="pa2-fg">
             <label>Search</label>
@@ -2631,15 +2667,21 @@ export default function ProductionAnalysis() {
               </svg>
               <input
                 type="text"
-                placeholder="Search Partno"
+                placeholder={isGlobalLoading ? "Loading..." : "Search Partno"}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                disabled={isGlobalLoading}
+                style={{
+                  cursor: isGlobalLoading ? "not-allowed" : "text",
+                  background: isGlobalLoading ? "#f8fafc" : undefined
+                }}
               />
-              {searchQuery && (
+              {searchQuery && !isGlobalLoading && (
                 <button
                   type="button"
                   className="pa2-search-clear-btn"
                   onClick={() => setSearchQuery("")}
+                  disabled={isGlobalLoading}
                   aria-label="Clear search"
                 >
                   <FiX size={14} style={{ strokeWidth: 3 }} />
@@ -2650,47 +2692,54 @@ export default function ProductionAnalysis() {
           <PremiumSelectMulti
             label="Mac Name"
             value={filterMachine}
-            onChange={setFilterMachine}
+            onChange={(v) => !isGlobalLoading && setFilterMachine(v)}
             placeholder="All Machines"
             options={macOptions}
+            disabled={isGlobalLoading}
           />
           <PremiumSelect
             label="Shift"
             value={filterShift}
-            onChange={setFilterShift}
+            onChange={(v) => !isGlobalLoading && setFilterShift(v)}
             placeholder="All Shifts"
             options={shiftOptions}
+            disabled={isGlobalLoading}
           />
           <PremiumSelectMulti
             label="Operator"
             value={filterOperator}
-            onChange={setFilterOperator}
+            onChange={(v) => !isGlobalLoading && setFilterOperator(v)}
             placeholder="All Operators"
             options={operatorOptions}
+            disabled={isGlobalLoading}
           />
           <PremiumSelect
             label="Mac Type"
             value={filterMacType}
-            onChange={setFilterMacType}
+            onChange={(v) => !isGlobalLoading && setFilterMacType(v)}
             placeholder="All Types"
             options={[
               { value: "", label: "All Types" },
               { value: "CNC", label: "CNC" },
               { value: "CON", label: "CON" },
             ]}
+            disabled={isGlobalLoading}
           />
           <PremiumSelect
             label="Mac Group"
             value={filterMacGroup}
-            onChange={setFilterMacGroup}
+            onChange={(v) => !isGlobalLoading && setFilterMacGroup(v)}
             placeholder="All Groups"
             options={macGroupOptions}
+            disabled={isGlobalLoading}
           />
           <div className="pa2-fg-reset">
             <button
               type="button"
               className="pa2-filter-reset-btn"
-              onClick={handleResetFilters}
+              onClick={() => !isGlobalLoading && handleResetFilters()}
+              disabled={isGlobalLoading}
+              style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.55, pointerEvents: "none" } : {}}
               title="Reset all filters"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

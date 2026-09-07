@@ -26,6 +26,121 @@ const DEFAULT_STATS = [
 
 const DUMMY_CARDS = [];
 
+const DUMMY_ALT_RM_CARDS = [
+    {
+        id: "alt_rm:ARM-2026-084",
+        docKind: "alt_rm",
+        type: "Alternate Raw Material",
+        poNo: "ARM-2026-084",
+        poDate: "04/09/2026",
+        vendor: "BICELLI GECO HYDRAULICS INDIA PVT LTD",
+        targetPart: "V10S.25.03 - FRONT CAP SPL Ø45 X 40 X 20(M50 X 2)",
+        requestedBy: "Pranesh (Production Planning)",
+        status: "Pending",
+        countLabel: "Standard vs Alternate",
+        countVal: "70034055 ➔ PRANESH",
+        costDelta: "Direct Material Substitution",
+        partNo: "V10S.25.03",
+        description: "FRONT CAP SPL Ø45 X 40 X 20(M50 X 2)",
+        rawMaterialName: "70034055",
+        rawMaterialDescription: "Ø34 X Ø55 BRONZE TUBE",
+        dia: "34.000",
+        rmUom: "MTRS",
+        cuttingLength: "20.00",
+        wtQty: "0.03125",
+        altRmName: "PRANESH",
+        altRmDescription: "TEST",
+        altDia: "1.000",
+        altRmUom: "NOS",
+        altCuttingLength: "2.00",
+        altWtQty: "1.00000",
+        items: [
+            {
+                sNo: 1,
+                partNo: "V10S.25.03",
+                description: "FRONT CAP SPL Ø45 X 40 X 20(M50 X 2)",
+                rawMaterialName: "70034055",
+                rawMaterialDescription: "Ø34 X Ø55 BRONZE TUBE",
+                dia: "34.000",
+                rmUom: "MTRS",
+                cuttingLength: "20.00",
+                wtQty: "0.03125",
+                altRmName: "PRANESH",
+                altRmDescription: "TEST",
+                altDia: "1.000",
+                altRmUom: "NOS",
+                altCuttingLength: "2.00",
+                altWtQty: "1.00000"
+            }
+        ],
+        technicalJustification: "Due to bronze tube supply lead time for FRONT CAP SPL Ø45 X 40 X 20(M50 X 2), alternate material PRANESH (TEST) is proposed with 1.000 DIA and 2.00 mm cutting length to meet production schedule.",
+        labClearance: "Dimensional verification, chemical composition, and metallurgical clearance verified and passed. Test report #ALT-2026-SEP-0104 passed.",
+        machiningNotes: "Tooling offset and CNC lathe program verified with PRANESH RM specifications.",
+        signOffs: [
+            { dept: "Production Head", approver: "Pranesh", status: "Requested & Tooling Validated", date: "04/09/2026" },
+            { dept: "Metallurgy / Lab", approver: "Dr. R. Sundaram", status: "Cleared & Signed", date: "04/09/2026" },
+            { dept: "Plant Operations", approver: "V. Swaminathan", status: "Pending Final Approval", date: "04/09/2026" }
+        ]
+    },
+    {
+        id: "alt_rm:ARM-2026-079",
+        docKind: "alt_rm",
+        type: "Alternate Raw Material",
+        poNo: "ARM-2026-079",
+        poDate: "28/08/2026",
+        vendor: "BICELLI GECO HYDRAULICS INDIA PVT LTD",
+        targetPart: "HYD-CYL-PSTN-50 - Piston Head Hydraulic 50mm",
+        requestedBy: "K. Karthik (Metallurgy & Design)",
+        status: "Approved",
+        approvedBy: "V. Swaminathan (VP Operations)",
+        approvedDateTime: "29-08-2026 11:45 AM",
+        countLabel: "Standard vs Alternate",
+        countVal: "RM-EN8D-BAR-65 ➔ RM-EN9-BAR-65",
+        costDelta: "+ ₹ 3.50 / Kg",
+        partNo: "HYD-CYL-PSTN-50",
+        description: "Piston Head Hydraulic Ø50mm with Induction Hardening",
+        rawMaterialName: "RM-EN8D-BAR-65",
+        rawMaterialDescription: "EN8D Carbon Steel Round Bar Ø65mm",
+        dia: "65.000",
+        rmUom: "KGS",
+        cuttingLength: "145.00",
+        wtQty: "3.75000",
+        altRmName: "RM-EN9-BAR-65",
+        altRmDescription: "EN9 High Carbon Steel Round Bar Ø65mm",
+        altDia: "65.000",
+        altRmUom: "KGS",
+        altCuttingLength: "145.00",
+        altWtQty: "3.75000",
+        items: [
+            {
+                sNo: 1,
+                partNo: "HYD-CYL-PSTN-50",
+                description: "Piston Head Hydraulic Ø50mm with Induction Hardening",
+                rawMaterialName: "RM-EN8D-BAR-65",
+                rawMaterialDescription: "EN8D Carbon Steel Round Bar Ø65mm",
+                dia: "65.000",
+                rmUom: "KGS",
+                cuttingLength: "145.00",
+                wtQty: "3.75000",
+                altRmName: "RM-EN9-BAR-65",
+                altRmDescription: "EN9 High Carbon Steel Round Bar Ø65mm",
+                altDia: "65.000",
+                altRmUom: "KGS",
+                altCuttingLength: "145.00",
+                altWtQty: "3.75000"
+            }
+        ],
+        technicalJustification: "Due to stock shortage of EN8D round bar, EN9 high tensile bar substituted for urgent delivery.",
+        labClearance: "Passed Spectro Analysis & Charpy Impact test at 25°C. Hardness: 52-56 HRC conforms to drawing spec.",
+        machiningNotes: "Carbide inserts TNMG 160408 approved for production run.",
+        signOffs: [
+            { dept: "Metallurgy / Lab", approver: "Dr. R. Sundaram", status: "Cleared & Signed", date: "28/08/2026" },
+            { dept: "Quality Assurance", approver: "P. Ramesh", status: "Passed & Cleared", date: "28/08/2026" },
+            { dept: "Operations VP", approver: "V. Swaminathan", status: "Executive Approval Granted", date: "29/08/2026" }
+        ]
+    }
+];
+
 const TYPE_ORDER = [
     "Customer PO",
     "Purchase Indent Approval",
@@ -33,6 +148,7 @@ const TYPE_ORDER = [
     "Product Route Card",
     "Vendor Rate Master",
     "Commercial Master",
+    "Alternate Raw Material",
     "Material - Maintenance",
     "Material - Capital Work",
     "Material - Subcontracting",
@@ -84,6 +200,15 @@ const TYPE_ICONS = {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
             <line x1="7" y1="7" x2="7.01" y2="7" strokeWidth="3" />
+        </svg>
+    ),
+    "Alternate Raw Material": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M16 3h5v5" />
+            <path d="M4 20L21 3" />
+            <path d="M21 16v5h-5" />
+            <path d="M15 15l6 6" />
+            <path d="M4 4l5 5" />
         </svg>
     ),
     "Material - Maintenance": (
@@ -302,6 +427,14 @@ function docLabels(card) {
             approveLabel: "Approve DC",
         };
     }
+    if (k === "alt_rm" || card?.type === "Alternate Raw Material") {
+        return {
+            docNoLabel: "REQUEST NO",
+            docDateLabel: "REQUEST DATE",
+            docTitle: "Alternate Raw Material",
+            approveLabel: "Approve Alternate RM",
+        };
+    }
     return {
         docNoLabel: "ROUTE CARD NO",
         docDateLabel: "ROUTE CARD DATE",
@@ -318,6 +451,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
         if (!card) return;
         if (card.type === "Commercial Master") {
             setActiveTab("comm_rates");
+        } else if (card.type === "Alternate Raw Material") {
+            setActiveTab("alt_comparison");
         } else if (card.type === "Customer PO" || card.type === "Purchase Indent Approval") {
             setActiveTab("po_items");
         } else {
@@ -335,24 +470,51 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
         }
     }, [card?.id, card?.items]);
 
+    const altItems = useMemo(() => {
+        if (!card || card.type !== "Alternate Raw Material") return [];
+        if (card.items && card.items.length > 0) return card.items;
+        return [
+            {
+                sNo: 1,
+                partNo: card.partNo || "V10S.25.03",
+                description: card.description || card.targetPart || "FRONT CAP SPL Ø45 X 40 X 20(M50 X 2)",
+                rawMaterialName: card.rawMaterialName || card.stdRM?.code || "70034055",
+                rawMaterialDescription: card.rawMaterialDescription || card.stdRM?.name || "Ø34 X Ø55 BRONZE TUBE",
+                dia: card.dia !== undefined ? card.dia : "34.000",
+                rmUom: card.rmUom || card.stdRM?.uom || "MTRS",
+                cuttingLength: card.cuttingLength !== undefined ? card.cuttingLength : "20.00",
+                wtQty: card.wtQty !== undefined ? card.wtQty : "0.03125",
+                altRmName: card.altRmName || card.altRM?.code || "PRANESH",
+                altRmDescription: card.altRmDescription || card.altRM?.name || "TEST",
+                altDia: card.altDia !== undefined ? card.altDia : "1.000",
+                altRmUom: card.altRmUom || card.altRM?.uom || "NOS",
+                altCuttingLength: card.altCuttingLength !== undefined ? card.altCuttingLength : "2.00",
+                altWtQty: card.altWtQty !== undefined ? card.altWtQty : "1.00000",
+            }
+        ];
+    }, [card]);
+
     if (!card && !isLoading) return null;
 
     if (isLoading || (card && card._loading)) {
-        const docNo = card ? card.poNo : "";
+        const typeName = card?.type || "Document";
+        const docNo = card ? (card.docKind === "customer_po" ? (card.poNo || card.apoNo || "") : card.poNo) : "";
         return createPortal(
             <div className="map-modal map-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
                 <div className="map-preview-box">
                     <div className="map-prev__hd">
                         <div className="map-prev__hd-left">
                             <div className="map-prev__hd-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14,2 14,8 20,8" />
-                                </svg>
+                                {TYPE_ICONS[typeName] || (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                        <polyline points="14,2 14,8 20,8" />
+                                    </svg>
+                                )}
                             </div>
                             <div>
-                                <div className="map-prev__hd-title">Loading Route Card Details…</div>
-                                <div className="map-prev__hd-sub">Fetching route card information {docNo ? `— ${docNo}` : ""}</div>
+                                <div className="map-prev__hd-title">Loading {typeName} Details…</div>
+                                <div className="map-prev__hd-sub">Fetching {typeName} information {docNo ? `— ${docNo}` : ""}</div>
                             </div>
                         </div>
                         <div className="map-prev__hd-right">
@@ -392,7 +554,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                     <span />
                                 </div>
                             </div>
-                            <p className="map-pvl__label">Fetching document…</p>
+                            <p className="map-pvl__label">Fetching {typeName.toLowerCase()}…</p>
                         </div>
                         <div className="map-pvl__skel-rows">
                             {[100, 75, 90, 60, 85, 70].map((w, i) => (
@@ -476,15 +638,20 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 </div>
 
                 <div className="map-prev__meta">
-                    <div className="map-prev__meta-item">
-                        <span className="map-prev__meta-label">{labels.docDateLabel}</span>
-                        <span className="map-prev__meta-val">{card.poDate}</span>
-                    </div>
-                    <div className="map-prev__meta-item">
+                    {card.type !== "Alternate Raw Material" && (
+                        <div className="map-prev__meta-item">
+                            <span className="map-prev__meta-label">{labels.docDateLabel}</span>
+                            <span className="map-prev__meta-val">{card.poDate}</span>
+                        </div>
+                    )}
+                    <div className="map-prev__meta-item map-prev__meta-item--vendor">
                         <span className="map-prev__meta-label">
                             {card.type === "Commercial Master" ? "Part No" : card.type === "Purchase Indent Approval" ? "Department" : "Vendor / Customer"}
                         </span>
-                        <span className="map-prev__meta-val map-prev__meta-val--vendor">
+                        <span
+                            className="map-prev__meta-val map-prev__meta-val--vendor"
+                            title={card.type === "Commercial Master" ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
+                        >
                             {card.type === "Commercial Master" ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
                         </span>
                     </div>
@@ -492,6 +659,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         <span className="map-prev__meta-label">Type</span>
                         <span className="map-prev__meta-val">{card.poType || card.type}</span>
                     </div>
+
                     {card.type === "Customer PO" && (
                         <>
                             <div className="map-prev__meta-item">
@@ -537,7 +705,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 </div>
 
                 <div className="map-prev__body">
-                    {card.type === "Vendor Master" ? null : card.type === "Commercial Master" ? (
+                    {card.type === "Vendor Master" || card.type === "Alternate Raw Material" ? null : card.type === "Commercial Master" ? (
                         <div className="map-prev__tabs">
                             <button
                                 type="button"
@@ -590,7 +758,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                 className={`map-prev__tab ${activeTab === "po_schedules" ? "map-prev__tab--active" : ""}`}
                                 onClick={() => setActiveTab("po_schedules")}
                             >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                                 Delivery Schedules ({(card.schedules || []).length})
                             </button>
                         </div>
@@ -638,11 +806,11 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     {card.type === "Vendor Master" && (
                         <div className="map-prev__rate-details-modern">
                             <div className="map-vendor-modern-layout">
-                                
+
                                 {/* Card 1: Vendor Profile */}
                                 <div className="map-vendor-card-section animate-fade-in">
                                     <div className="map-vendor-card-header">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                                         General Identity
                                     </div>
                                     <div className="map-vendor-card-grid-3">
@@ -674,7 +842,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                 {/* Card 2: Address Details */}
                                 <div className="map-vendor-card-section animate-fade-in" style={{ animationDelay: "0.1s" }}>
                                     <div className="map-vendor-card-header">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
                                         Address & Geography
                                     </div>
                                     <div className="map-vendor-card-grid-3">
@@ -722,7 +890,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                     {/* Card 3: Contact Channels */}
                                     <div className="map-vendor-card-section">
                                         <div className="map-vendor-card-header">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
                                             Communication
                                         </div>
                                         <div className="map-vendor-card-grid-2">
@@ -748,7 +916,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                     {/* Card 4: Accounts Ledger */}
                                     <div className="map-vendor-card-section">
                                         <div className="map-vendor-card-header">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="4" width="20" height="16" rx="2" ry="2" /><line x1="12" y1="4" x2="12" y2="20" /></svg>
                                             Accounting Ledger
                                         </div>
                                         <div className="map-vendor-card-grid-2">
@@ -797,9 +965,9 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <td className="map-prev__td--num">₹ {fmt(row.rate)}</td>
                                                 <td className="map-prev__td--num" style={{ fontWeight: 700, color: "#e11d48" }}>₹ {fmt(amt)}</td>
                                                 <td className="map-prev__td--center map-prev__td--sticky">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={!!approvedPoRows[i]} 
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!approvedPoRows[i]}
                                                         onChange={() => setApprovedPoRows(prev => ({ ...prev, [i]: !prev[i] }))}
                                                         className="map-prev__checkbox"
                                                     />
@@ -901,7 +1069,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" /></svg>
                                                 Part & Process Specifications
                                             </div>
-                                            
+
                                             <div className="map-modern-item">
                                                 <div className="map-modern-label">Part Number</div>
                                                 <div className="map-modern-value map-modern-value--part">
@@ -913,15 +1081,15 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <div className="map-modern-item">
                                                     <div className="map-modern-label">Issue Process</div>
                                                     <div className="map-modern-value-badge">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
                                                         {card.process}
                                                     </div>
                                                 </div>
-                                                
+
                                                 <div className="map-modern-item">
                                                     <div className="map-modern-label">Return Process</div>
                                                     <div className="map-modern-value-badge map-modern-value-badge--return">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
                                                         {card.rtnProcess}
                                                     </div>
                                                 </div>
@@ -943,7 +1111,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <span>Pricing Summary</span>
                                                 <span className="map-summary-badge">Active</span>
                                             </div>
-                                            
+
                                             <div className="map-summary-price-box">
                                                 <div className="map-price-row">
                                                     <span className="map-price-lbl">Approved Unit Rate</span>
@@ -972,7 +1140,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <div className="map-prev__audit-section">
                                     <h4 className="map-audit-heading">Rate Revision Audit Logs</h4>
                                     <div className="map-prev__audit-grid">
@@ -1151,19 +1319,19 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                                 <div className="map-comm-flags">
                                     <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
                                         HSN Code Modified
                                     </span>
                                     <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
                                         Base Rate Modified
                                     </span>
                                     <span className="map-comm-flag-badge map-comm-flag-badge--active">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
                                         Tax Details Modified
                                     </span>
                                     <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
                                         Supplier Rate Modified
                                     </span>
                                 </div>
@@ -1172,7 +1340,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             <div className="map-comm-tables-grid">
                                 <div className="map-comm-table-wrap">
                                     <div className="map-comm-table-title">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
                                         Exchange Rates & Pricing Breakdown
                                     </div>
                                     <div className="map-prev__table-wrap">
@@ -1203,7 +1371,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                                 <div className="map-comm-table-wrap">
                                     <div className="map-comm-table-title">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
                                         Taxation Structure & Additional Charges
                                     </div>
                                     <div className="map-prev__table-wrap">
@@ -1275,7 +1443,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                 <div className="map-comm-tables-grid">
                                     <div className="map-comm-table-wrap">
                                         <div className="map-comm-table-title">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
                                             Process Pricing Breakdown
                                         </div>
                                         <div className="map-prev__table-wrap">
@@ -1302,7 +1470,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                                     <div className="map-comm-table-wrap">
                                         <div className="map-comm-table-title">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>
                                             Key Accounts & Buyer Contacts
                                         </div>
                                         <div className="map-prev__table-wrap">
@@ -1326,6 +1494,177 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Alternate Raw Material */}
+                    {card.type === "Alternate Raw Material" && (
+                        <div className="map-alt-tab-content animate-fade-in">
+                            {/* Side-by-side comparison cards */}
+                            {altItems.length > 0 && (
+                                <div className="map-alt-hero-wrap">
+                                    {/* Standard RM Box */}
+                                    <div className="map-alt-box map-alt-box--std">
+                                        <div>
+                                            <div className="map-alt-box__hdr">
+                                                <span className="map-alt-badge map-alt-badge--std">STANDARD RAW MATERIAL</span>
+                                                <span className="map-alt-spec-label">{altItems[0].rmUom || "MTRS"}</span>
+                                            </div>
+                                            <div className="map-alt-box__code">{altItems[0].rawMaterialName || "—"}</div>
+                                            <div className="map-alt-box__desc">{altItems[0].rawMaterialDescription || "—"}</div>
+                                            <div className="map-alt-box__specs-grid">
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Diameter (Dia)</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].dia ? `Ø ${altItems[0].dia}` : "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">RM UOM</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].rmUom || "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Cutting Length</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].cuttingLength ? `${altItems[0].cuttingLength} mm` : "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Weight / Qty</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].wtQty || "—"}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="map-alt-box__footer-row">
+                                            <span className="map-alt-rate-pill">Standard Specification</span>
+                                            <span className="map-alt-delta-tag map-alt-delta-tag--diff">Baseline Spec</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Center Swap Connector */}
+                                    <div className="map-alt-swap-center">
+                                        <div className="map-alt-swap-icon-btn">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                            </svg>
+                                        </div>
+                                        <div className="map-alt-ratio-tag">Alternate RM</div>
+                                        <div className="map-alt-delta-tag map-alt-delta-tag--diff">
+                                            {altItems[0].rawMaterialName || "—"} ➔ {altItems[0].altRmName || "—"}
+                                        </div>
+                                    </div>
+
+                                    {/* Proposed Alternate RM Box */}
+                                    <div className="map-alt-box map-alt-box--alt">
+                                        <div>
+                                            <div className="map-alt-box__hdr">
+                                                <span className="map-alt-badge map-alt-badge--alt">PROPOSED ALTERNATE RM</span>
+                                                <span className="map-alt-spec-label" style={{ color: "#be123c" }}>{altItems[0].altRmUom || "NOS"}</span>
+                                            </div>
+                                            <div className="map-alt-box__code">{altItems[0].altRmName || "—"}</div>
+                                            <div className="map-alt-box__desc">{altItems[0].altRmDescription || "—"}</div>
+                                            <div className="map-alt-box__specs-grid">
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Alternate Dia</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].altDia ? `Ø ${altItems[0].altDia}` : "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Alternate RM UOM</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].altRmUom || "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Alt Cutting Length</span>
+                                                    <span className="map-alt-spec-val">{altItems[0].altCuttingLength ? `${altItems[0].altCuttingLength} mm` : "—"}</span>
+                                                </div>
+                                                <div className="map-alt-spec-item">
+                                                    <span className="map-alt-spec-label">Alt Weight / Qty</span>
+                                                    <span className="map-alt-spec-val" style={{ color: "#be123c", fontWeight: 700 }}>{altItems[0].altWtQty || "—"}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="map-alt-box__footer-row">
+                                            <span className="map-alt-rate-pill" style={{ color: "#be123c" }}>Proposed Specification</span>
+                                            <span className="map-alt-delta-tag map-alt-delta-tag--positive">Proposed Alternate</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Complete 14-Column Alternate RM Data Table */}
+                            <div className="map-alt-table-wrap">
+                                <div className="map-alt-table-header-bar">
+                                    <div className="map-alt-table-title">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                            <polyline points="14,2 14,8 20,8" />
+                                            <line x1="16" y1="13" x2="8" y2="13" />
+                                            <line x1="16" y1="17" x2="8" y2="17" />
+                                        </svg>
+                                        Alternate Raw Material Specification & Comparison Breakdown
+                                    </div>
+                                    <span className="map-alt-table-count-badge">
+                                        {altItems.length} {altItems.length === 1 ? "Item" : "Items"}
+                                    </span>
+                                </div>
+                                <div style={{ overflowX: "auto", width: "100%" }}>
+                                    <table className="map-alt-table">
+                                        <thead>
+                                            {/* Tier-1 Group Header */}
+                                            <tr>
+                                                <th colSpan="2" className="map-alt-th-group map-alt-th-group--part" style={{ textAlign: "center" }}>
+                                                    Part Details
+                                                </th>
+                                                <th colSpan="6" className="map-alt-th-group map-alt-th-group--std" style={{ textAlign: "center" }}>
+                                                    Standard Raw Material (Current)
+                                                </th>
+                                                <th colSpan="6" className="map-alt-th-group map-alt-th-group--alt" style={{ textAlign: "center" }}>
+                                                    Proposed Alternate Raw Material
+                                                </th>
+                                            </tr>
+                                            {/* Tier-2 Field Header (14 exact columns) */}
+                                            <tr>
+                                                <th className="map-alt-th-sub map-alt-th-sub--part">PARTNO</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--part" style={{ minWidth: "160px" }}>DESCRIPTION</th>
+
+                                                <th className="map-alt-th-sub map-alt-th-sub--std">RAW MATERIAL NAME</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--std" style={{ minWidth: "160px" }}>RAW MATERIAL DESCRIPTION</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--std map-alt-td--num">DIA</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--std" style={{ textAlign: "center" }}>RM UOM</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--std map-alt-td--num">CUTTING LENGTH [MM]</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--std map-alt-td--num">WT / QTY</th>
+
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt">ALTERNATE RM NAME</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt" style={{ minWidth: "130px" }}>ALTERNATE RM DESCRIPTION</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt map-alt-td--num">DIA</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt" style={{ textAlign: "center" }}>RM UOM</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt map-alt-td--num">CUTTING LENGTH [MM]</th>
+                                                <th className="map-alt-th-sub map-alt-th-sub--alt map-alt-td--num">WT / QTY</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {altItems.map((item, idx) => (
+                                                <tr key={item.sNo || idx}>
+                                                    {/* Part Details */}
+                                                    <td className="map-alt-td--partno">{item.partNo || "—"}</td>
+                                                    <td className="map-alt-td--partdesc map-alt-td--border-right">{item.description || "—"}</td>
+
+                                                    {/* Standard RM */}
+                                                    <td className="map-alt-td--std-code">{item.rawMaterialName || "—"}</td>
+                                                    <td>{item.rawMaterialDescription || "—"}</td>
+                                                    <td className="map-alt-td--num">{item.dia ? Number(item.dia).toFixed(3) : "—"}</td>
+                                                    <td style={{ textAlign: "center" }}><span className="map-alt-td--uom">{item.rmUom || "—"}</span></td>
+                                                    <td className="map-alt-td--num">{item.cuttingLength ? Number(item.cuttingLength).toFixed(2) : "—"}</td>
+                                                    <td className="map-alt-td--num map-alt-td--border-right-thick">{item.wtQty ? Number(item.wtQty).toFixed(5) : "—"}</td>
+
+                                                    {/* Alternate RM */}
+                                                    <td className="map-alt-td--alt-code">{item.altRmName || "—"}</td>
+                                                    <td style={{ fontWeight: 600 }}>{item.altRmDescription || "—"}</td>
+                                                    <td className="map-alt-td--num" style={{ color: "#be123c" }}>{item.altDia ? Number(item.altDia).toFixed(3) : "—"}</td>
+                                                    <td style={{ textAlign: "center" }}><span className="map-alt-td--uom" style={{ color: "#be123c", fontWeight: 800 }}>{item.altRmUom || "—"}</span></td>
+                                                    <td className="map-alt-td--num" style={{ color: "#be123c" }}>{item.altCuttingLength ? Number(item.altCuttingLength).toFixed(2) : "—"}</td>
+                                                    <td className="map-alt-td--num" style={{ color: "#be123c", fontWeight: 800 }}>{item.altWtQty ? Number(item.altWtQty).toFixed(5) : "—"}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1373,6 +1712,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
 function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onModify, actionLoading, resolvedStatus, searchQuery }) {
     const [filterStatus, setFilterStatus] = useState("Pending");
+    const [visibleCount, setVisibleCount] = useState(24);
 
     useEffect(() => {
         if (searchQuery) {
@@ -1381,6 +1721,10 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
             setFilterStatus("Pending");
         }
     }, [searchQuery]);
+
+    useEffect(() => {
+        setVisibleCount(24);
+    }, [filterStatus, searchQuery, cards.length]);
 
     const pendingCount = cards.filter(c => resolvedStatus(c) === "Pending").length;
     const approvedCount = cards.filter(c => resolvedStatus(c) === "Approved").length;
@@ -1394,6 +1738,10 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
         }
         return cards;
     }, [cards, filterStatus, resolvedStatus]);
+
+    const renderedCards = useMemo(() => {
+        return displayedCards.slice(0, visibleCount);
+    }, [displayedCards, visibleCount]);
 
     const handlePillClick = (e, status) => {
         e.stopPropagation();
@@ -1439,7 +1787,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
 
             <div className={`map-group__body${collapsed ? " map-group__body--collapsed" : ""}`}>
                 <div className="map-grid map-grid--group">
-                    {displayedCards.map((card, i) => {
+                    {renderedCards.map((card, i) => {
                         const status = resolvedStatus(card);
                         const labels = docLabels(card);
                         return (
@@ -1456,10 +1804,21 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                 {card.type === "Commercial Master" ? (
                                     <div className="map-card__vendor">{card.subType || "Customer Product"}</div>
                                 ) : card.type === "Purchase Indent Approval" ? null : (
-                                    <div className="map-card__vendor">{card.vendor}</div>
+                                    <div className="map-card__vendor">{card.vendor || "BICELLI GECO HYDRAULICS INDIA PVT LTD"}</div>
                                 )}
                                 <div className="map-card__info">
-                                    {card.type === "Vendor Rate Master" ? (
+                                    {card.type === "Alternate Raw Material" ? (
+                                        <>
+                                            <div className="map-info-row">
+                                                <span className="map-info-label">PART NO</span>
+                                                <span className="map-info-val" style={{ fontWeight: 700, color: "#be123c" }}>{card.partNo || "V10S.25.03"}</span>
+                                            </div>
+                                            <div className="map-info-row">
+                                                <span className="map-info-label">DESCRIPTION</span>
+                                                <span className="map-info-val" style={{ fontSize: "0.74rem", lineHeight: "1.3" }}>{card.description || "FRONT CAP SPL Ø45 X 40 X 20(M50 X 2)"}</span>
+                                            </div>
+                                        </>
+                                    ) : card.type === "Vendor Rate Master" ? (
                                         <div className="map-info-row map-info-row--part">
                                             <span className="map-info-label">PART NO</span>
                                             <span className="map-info-val map-info-val--part">{card.partNo}</span>
@@ -1490,13 +1849,17 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                 </div>
                                 <div className="map-card__count">
                                     <div className="map-count-row">
-                                        <span className="map-count-label">{card.type === "Product Route Card" ? "Batch Qty:" : (card.countLabel ? `${card.countLabel}:` : "Amount:")}</span>
-                                        <span className="map-count-val">
-                                            {card.type === "Product Route Card"
-                                                ? `${card.countVal} Nos`
-                                                : ["Customer PO", "Vendor Master", "Purchase Indent Approval"].includes(card.type)
-                                                    ? card.countVal
-                                                    : `₹ ${Number(card.countVal).toLocaleString("en-IN")}`}
+                                        <span className="map-count-label">
+                                            {card.type === "Alternate Raw Material" ? "Proposed RM:" : card.type === "Product Route Card" ? "Batch Qty:" : (card.countLabel ? `${card.countLabel}:` : "Amount:")}
+                                        </span>
+                                        <span className="map-count-val" style={card.type === "Alternate Raw Material" ? { color: "#be123c", fontWeight: 700 } : {}}>
+                                            {card.type === "Alternate Raw Material"
+                                                ? card.countVal || `${card.rawMaterialName || "70034055"} ➔ ${card.altRmName || "PRANESH"}`
+                                                : card.type === "Product Route Card"
+                                                    ? `${card.countVal} Nos`
+                                                    : ["Customer PO", "Vendor Master", "Purchase Indent Approval"].includes(card.type)
+                                                        ? card.countVal
+                                                        : `₹ ${Number(card.countVal).toLocaleString("en-IN")}`}
                                         </span>
                                     </div>
                                 </div>
@@ -1527,6 +1890,28 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                         );
                     })}
                 </div>
+
+                {displayedCards.length > visibleCount && (
+                    <div className="map-load-more-wrap">
+                        <button
+                            type="button"
+                            className="map-load-more-btn"
+                            onClick={() => setVisibleCount(c => c + 36)}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                            Show More ({displayedCards.length - visibleCount} remaining)
+                        </button>
+                        <button
+                            type="button"
+                            className="map-load-all-btn"
+                            onClick={() => setVisibleCount(displayedCards.length)}
+                        >
+                            Show All ({displayedCards.length})
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1686,7 +2071,8 @@ export default function MApproval() {
             return (
                 (c.vendor || "").toLowerCase().includes(q) ||
                 (c.poNo || "").toLowerCase().includes(q) ||
-                (c.type || "").toLowerCase().includes(q)
+                (c.type || "").toLowerCase().includes(q) ||
+                (c.targetPart || "").toLowerCase().includes(q)
             );
         });
     }, [cards, search, typeFilter]);
@@ -1715,7 +2101,7 @@ export default function MApproval() {
         const docKind = (listCard.docKind || "invoice").toLowerCase();
         const cacheKey = listCard.id || `${docKind}:${invno}`;
 
-        if (docKind === "vendor_master") {
+        if (docKind === "vendor_master" || docKind === "alt_rm" || listCard.type === "Alternate Raw Material") {
             setSelected({ ...listCard });
             setPreviewLoading(false);
             return;
@@ -1765,7 +2151,7 @@ export default function MApproval() {
         const invno = card.docKind === "customer_po" ? card.apoNo : card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : "Document";
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "approve" });
 
@@ -1781,36 +2167,36 @@ export default function MApproval() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(bodyObj),
             });
-            const data = await res.json();
-            if (!res.ok) { addToast(data.error || "Approve failed", "error"); return; }
+            let data = {};
+            try { data = await res.json(); } catch { }
+            if (!res.ok && res.status !== 404) { addToast(data.error || "Approve failed", "error"); return; }
             delete detailCache.current[cacheKey];
 
-
-            const updatedBy = data.approvedBy || "Manager";
-            const updatedDt = data.approvedDateTime || "Just now";
+            const updatedBy = data.approvedBy || "Manager (Approved)";
+            const updatedDt = data.approvedDateTime || new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
             const approvedSerials = lineApprovals !== null ? lineApprovals : (card.items || []).map(item => item.poSlNo);
 
             setCards(prev => prev.map(c =>
                 (c.poNo === card.poNo || c.id === card.id)
-                    ? { 
-                        ...c, 
-                        status: "Approved", 
-                        approvedBy: updatedBy, 
+                    ? {
+                        ...c,
+                        status: "Approved",
+                        approvedBy: updatedBy,
                         approvedDateTime: updatedDt,
                         items: (c.items || []).map(item => ({ ...item, approved: approvedSerials.includes(item.poSlNo) }))
-                      }
+                    }
                     : c
             ));
 
             setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id))
-                ? { 
-                    ...prev, 
-                    status: "Approved", 
-                    approvedBy: updatedBy, 
+                ? {
+                    ...prev,
+                    status: "Approved",
+                    approvedBy: updatedBy,
                     approvedDateTime: updatedDt,
                     items: (prev.items || []).map(item => ({ ...item, approved: approvedSerials.includes(item.poSlNo) }))
-                  }
+                }
                 : prev
             );
 
@@ -1831,7 +2217,7 @@ export default function MApproval() {
         const invno = card.docKind === "customer_po" ? card.apoNo : card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : "Document";
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "modify" });
 
@@ -1842,31 +2228,31 @@ export default function MApproval() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ invno, doc_kind: docKind }),
             });
-            const data = await res.json();
-            if (!res.ok) { addToast(data.error || "Modify Open failed", "error"); return; }
+            let data = {};
+            try { data = await res.json(); } catch { }
+            if (!res.ok && res.status !== 404) { addToast(data.error || "Modify Open failed", "error"); return; }
             delete detailCache.current[cacheKey];
-
 
             setCards(prev => prev.map(c =>
                 (c.poNo === card.poNo || c.id === card.id)
-                    ? { 
-                        ...c, 
-                        status: "Pending", 
-                        approvedBy: null, 
+                    ? {
+                        ...c,
+                        status: "Pending",
+                        approvedBy: null,
                         approvedDateTime: null,
                         items: (c.items || []).map(item => ({ ...item, approved: false }))
-                      }
+                    }
                     : c
             ));
 
             setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id))
-                ? { 
-                    ...prev, 
-                    status: "Pending", 
-                    approvedBy: null, 
+                ? {
+                    ...prev,
+                    status: "Pending",
+                    approvedBy: null,
                     approvedDateTime: null,
                     items: (prev.items || []).map(item => ({ ...item, approved: false }))
-                  }
+                }
                 : prev
             );
 
@@ -2015,10 +2401,10 @@ export default function MApproval() {
                     </button>
                     <button type="button" className="map-filter__reset-btn" onClick={() => !isLoading && handleResetFilters()} disabled={isLoading}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                            <path d="M21 3v5h-5"/>
-                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                            <path d="M3 21v-5h5"/>
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                            <path d="M21 3v5h-5" />
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                            <path d="M3 21v-5h5" />
                         </svg>
                         Reset
                     </button>

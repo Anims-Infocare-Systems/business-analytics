@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import "./EApproval.css";
 import DateRangePicker from "./DateRangePicker";
+import EApprovalPdfModal from "./EApprovalPdfModal";
 import { resolveApiBase } from "../../apiBase";
 
 const API = resolveApiBase();
@@ -141,7 +142,18 @@ function legacyFinancialFromCard(card) {
 }
 
 // ─── Detail Preview Modal (original financial layout) ─────────
-function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onModify }) {
+function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onModify, onShowPdf, onSaveComment, onDeleteComment }) {
+    // ── Comment & Approval Remarks State ──
+    const [commentText, setCommentText] = useState(card?.pocomment || "");
+    const [isSending, setIsSending] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    useEffect(() => {
+        if (card) {
+            setCommentText(card.pocomment || "");
+        }
+    }, [card?.id, card?.poNo, card?.pocomment]);
+
     if (!card && !isLoading) return null;
 
     // ── Skeleton body shown while fetching detail ──
@@ -231,6 +243,39 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     const items = card.items || [];
     const approvedBy = card.approvedBy || "—";
     const approvedDateTime = card.approvedDateTime || "—";
+
+    const handleSend = async () => {
+        if (!commentText.trim() || isSending || isDeleting || (card?.pocomment && commentText.trim() === card.pocomment.trim())) return;
+        setIsSending(true);
+        try {
+            if (onSaveComment) {
+                const ok = await onSaveComment(card, commentText);
+                if (ok && card) {
+                    card.pocomment = commentText.trim();
+                }
+            }
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!card?.pocomment || isDeleting || isSending) return;
+        setIsDeleting(true);
+        try {
+            if (onDeleteComment) {
+                const ok = await onDeleteComment(card);
+                if (ok) {
+                    setCommentText("");
+                    if (card) {
+                        card.pocomment = "";
+                    }
+                }
+            }
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     return createPortal(
         <div className="eap-modal eap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -348,78 +393,177 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         </table>
                     </div>
 
-                    <div className="eap-prev__summary-wrap">
-                        <div className="eap-prev__section-label">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                            Financial Summary
-                        </div>
-                        <div className="eap-prev__summary">
-                            {financial?.summaryRows && financial.summaryRows.length > 0 ? (
-                                financial.summaryRows.map(r => (
-                                    <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}${r.grand ? " eap-prev__sum-row--grand" : ""}`}>
-                                        <span className="eap-prev__sum-label">{r.label}</span>
-                                        <span className="eap-prev__sum-val">
-                                            {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : fmt(r.value)}
-                                        </span>
+                    {/* ── Two Column Bottom Layout: Comments on Left, Financial Summary on Right ── */}
+                    <div className="eap-prev__bottom-grid">
+
+                        {/* ── Left Column: Comment & Approval Remarks Box ── */}
+                        <div className="eap-prev__comments-wrap">
+                            <div className="eap-prev__section-label">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                </svg>
+                                Approval Remarks & Notes
+                            </div>
+
+                            <div className="eap-prev__comment-box">
+                                {/* Textarea Input */}
+                                <div className="eap-prev__comment-input-wrap">
+                                    <textarea
+                                        className="eap-prev__comment-textarea"
+                                        placeholder="Add approval remarks, terms, delivery instructions, or notes for the team..."
+                                        maxLength={500}
+                                        value={commentText}
+                                        onChange={e => setCommentText(e.target.value)}
+                                    />
+                                </div>
+
+                                {/* Composer Action Footer */}
+                                <div className="eap-prev__comment-action-bar">
+                                    <div className="eap-prev__comment-meta-left">
+                                        <span className="eap-prev__comment-char-count">{commentText.length}/500</span>
                                     </div>
-                                ))
-                            ) : (
-                                <>
-                                    {[
-                                        { label: "Total Amount", val: fmt(totalAmount), sub: false },
-                                        { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
-                                        { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
-                                        { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
-                                        { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
-                                        { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
-                                        { label: "Round Off", val: fmt(0), sub: true },
-                                    ].map(r => (
-                                        <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
+                                    <div className="eap-prev__comment-meta-right">
+                                        {card?.pocomment && (
+                                            <button
+                                                type="button"
+                                                className="eap-prev__comment-delete-btn"
+                                                disabled={isDeleting || isSending}
+                                                onClick={handleDelete}
+                                                title="Delete this comment"
+                                            >
+                                                {isDeleting ? (
+                                                    <BtnSpinner />
+                                                ) : (
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                                        <polyline points="3 6 5 6 21 6"/>
+                                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                                        <line x1="10" y1="11" x2="10" y2="17"/>
+                                                        <line x1="14" y1="11" x2="14" y2="17"/>
+                                                    </svg>
+                                                )}
+                                                {isDeleting ? "Deleting…" : "Delete"}
+                                            </button>
+                                        )}
+                                        {commentText && !card?.pocomment && (
+                                            <button
+                                                type="button"
+                                                className="eap-prev__comment-clear-btn"
+                                                onClick={() => setCommentText("")}
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            className="eap-prev__comment-add-btn"
+                                            disabled={!commentText.trim() || isSending || isDeleting || Boolean(card?.pocomment && commentText.trim() === (card.pocomment || "").trim())}
+                                            onClick={handleSend}
+                                        >
+                                            {isSending ? (
+                                                <BtnSpinner />
+                                            ) : (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                            )}
+                                            {isSending ? "Sending…" : "Send"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ── Right Column: Financial Summary ── */}
+                        <div className="eap-prev__summary-wrap">
+                            <div className="eap-prev__section-label">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                Financial Summary
+                            </div>
+                            <div className="eap-prev__summary">
+                                {financial?.summaryRows && financial.summaryRows.length > 0 ? (
+                                    financial.summaryRows.map(r => (
+                                        <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}${r.grand ? " eap-prev__sum-row--grand" : ""}`}>
                                             <span className="eap-prev__sum-label">{r.label}</span>
-                                            <span className="eap-prev__sum-val">{r.val}</span>
+                                            <span className="eap-prev__sum-val">
+                                                {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : fmt(r.value)}
+                                            </span>
                                         </div>
-                                    ))}
-                                    <div className="eap-prev__sum-row eap-prev__sum-row--grand">
-                                        <span className="eap-prev__sum-label">Grand Total</span>
-                                        <span className="eap-prev__sum-val">₹ {fmt(grandTotal)}</span>
-                                    </div>
-                                </>
-                            )}
+                                    ))
+                                ) : (
+                                    <>
+                                        {[
+                                            { label: "Total Amount", val: fmt(totalAmount), sub: false },
+                                            { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
+                                            { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
+                                            { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
+                                            { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
+                                            { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
+                                            { label: "Round Off", val: fmt(0), sub: true },
+                                        ].map(r => (
+                                            <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
+                                                <span className="eap-prev__sum-label">{r.label}</span>
+                                                <span className="eap-prev__sum-val">{r.val}</span>
+                                            </div>
+                                        ))}
+                                        <div className="eap-prev__sum-row eap-prev__sum-row--grand">
+                                            <span className="eap-prev__sum-label">Grand Total</span>
+                                            <span className="eap-prev__sum-val">₹ {fmt(grandTotal)}</span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
+
                     </div>
                 </div>
 
                 {/* ── Footer actions ── */}
                 <div className="eap-prev__footer">
-                    <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        Close
-                    </button>
-                    {card.status === "Approved" ? (
+                    <div className="eap-prev__footer-left">
                         <button
                             type="button"
-                            className="eap-prev-btn eap-prev-btn--modify"
-                            disabled={!!actionLoading}
-                            onClick={() => onModify(card)}
+                            className="eap-prev-btn eap-prev-btn--pdf"
+                            onClick={() => onShowPdf(card)}
                         >
-                            {actionLoading?.cardId === card.id && actionLoading?.type === "modify"
-                                ? <><BtnSpinner /> Modifying…</>
-                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modify Open</>
-                            }
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <line x1="10" y1="9" x2="8" y2="9"/>
+                            </svg>
+                            Show as PDF
                         </button>
-                    ) : (
-                        <button
-                            type="button"
-                            className="eap-prev-btn eap-prev-btn--approve"
-                            disabled={!!actionLoading}
-                            onClick={() => onApprove(card)}
-                        >
-                            {actionLoading?.cardId === card.id && actionLoading?.type === "approve"
-                                ? <><BtnSpinner /> Approving…</>
-                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg> Approve Order</>
-                            }
+                    </div>
+                    <div className="eap-prev__footer-right">
+                        <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Close
                         </button>
-                    )}
+                        {card.status === "Approved" ? (
+                            <button
+                                type="button"
+                                className="eap-prev-btn eap-prev-btn--modify"
+                                disabled={!!actionLoading}
+                                onClick={() => onModify(card)}
+                            >
+                                {actionLoading?.cardId === card.id && actionLoading?.type === "modify"
+                                    ? <><BtnSpinner /> Modifying…</>
+                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modify Open</>
+                                }
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="eap-prev-btn eap-prev-btn--approve"
+                                disabled={!!actionLoading}
+                                onClick={() => onApprove(card)}
+                            >
+                                {actionLoading?.cardId === card.id && actionLoading?.type === "approve"
+                                    ? <><BtnSpinner /> Approving…</>
+                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg> Approve Order</>
+                                }
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>,
@@ -604,6 +748,7 @@ export default function EApproval() {
     const [search, setSearch] = useState(_savedEap.search || "");
     const [cards, setCards] = useState([]);
     const [selected, setSelected] = useState(null);
+    const [pdfModalCard, setPdfModalCard] = useState(null);
     const [approved, setApproved] = useState([]);
     const [dateRange, setDateRange] = useState({ from: _savedEap.from, to: _savedEap.to });
     const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -782,6 +927,9 @@ export default function EApproval() {
         if (detailCache.current[cacheKey] && detailCache.current[cacheKey].items?.length > 0) {
             const cached = { ...detailCache.current[cacheKey] };
             cached.status = approved.includes(listCard.id) ? "Approved" : cached.status;
+            if (listCard.pocomment) {
+                cached.pocomment = listCard.pocomment;
+            }
             setSelected(cached);
             return;
         }
@@ -798,7 +946,11 @@ export default function EApproval() {
             const res  = await fetch(`${API}/eapproval/detail/?${qs}`, { credentials: "include" });
             const data = await res.json();
             if (res.ok && data.success && data.card) {
-                const merged = { ...data.card, id: listCard.id };
+                const merged = {
+                    ...data.card,
+                    id: listCard.id,
+                    pocomment: data.card.pocomment || listCard.pocomment || "",
+                };
                 merged.status = approved.includes(listCard.id) ? "Approved" : merged.status;
                 if (merged.items?.length > 0) {
                     detailCache.current[cacheKey] = merged; // store in cache only if valid items
@@ -874,6 +1026,82 @@ export default function EApproval() {
             setActionLoading(null);
         }
     }, [actionLoading, addToast]);
+
+    const handleSendComment = useCallback(async (card, pocomment) => {
+        const pono = card.poNo;
+        if (!pono || !pocomment?.trim()) return false;
+        try {
+            let currentUser = {};
+            try {
+                currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+            } catch {
+                currentUser = {};
+            }
+            const userName = currentUser.username || currentUser.name || "Admin";
+
+            const res = await fetch(`${API}/eapproval/comment/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    pono,
+                    podate: card.poDate || null,
+                    potype: card.type || "General",
+                    custname: card.vendor || "",
+                    pocomment: pocomment.trim(),
+                    user: userName,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                addToast(`Comment save failed: ${data.error || res.statusText}`, "error");
+                return false;
+            }
+            const trimmedComment = pocomment.trim();
+            setSelected(prev => (prev ? { ...prev, pocomment: trimmedComment } : prev));
+            setCards(prev => prev.map(c => (c.id === card.id || c.poNo === pono ? { ...c, pocomment: trimmedComment } : c)));
+            const cacheKey = card.id || `${card.docKind || 'po'}:${pono}:${card.amdNo || ''}`;
+            if (detailCache.current[cacheKey]) {
+                detailCache.current[cacheKey].pocomment = trimmedComment;
+            }
+            addToast(`Remark for PO ${pono} saved successfully`, "success-approve");
+            return true;
+        } catch (e) {
+            addToast("Network error saving comment — please try again", "error");
+            console.error(e);
+            return false;
+        }
+    }, [addToast]);
+
+    const handleDeleteComment = useCallback(async (card) => {
+        const pono = card.poNo;
+        if (!pono) return false;
+        try {
+            const res = await fetch(`${API}/eapproval/comment/delete/`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pono }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                addToast(`Delete failed: ${data.error || res.statusText}`, "error");
+                return false;
+            }
+            setSelected(prev => (prev ? { ...prev, pocomment: "" } : prev));
+            setCards(prev => prev.map(c => (c.id === card.id || c.poNo === pono ? { ...c, pocomment: "" } : c)));
+            const cacheKey = card.id || `${card.docKind || 'po'}:${pono}:${card.amdNo || ''}`;
+            if (detailCache.current[cacheKey]) {
+                detailCache.current[cacheKey].pocomment = "";
+            }
+            addToast(`Remark for PO ${pono} deleted successfully`, "success-modify");
+            return true;
+        } catch (e) {
+            addToast("Network error deleting comment — please try again", "error");
+            console.error(e);
+            return false;
+        }
+    }, [addToast]);
 
     return (
         <div className="eap-root">
@@ -1097,7 +1325,18 @@ export default function EApproval() {
                 onClose={() => { setSelected(null); setPreviewLoading(false); }}
                 onApprove={handleApprove}
                 onModify={handleModify}
+                onShowPdf={(c) => setPdfModalCard(c)}
+                onSaveComment={handleSendComment}
+                onDeleteComment={handleDeleteComment}
             />
+
+            {/* ── Interactive PDF Modal ── */}
+            {pdfModalCard && (
+                <EApprovalPdfModal
+                    card={pdfModalCard}
+                    onClose={() => setPdfModalCard(null)}
+                />
+            )}
 
             {/* ── Toast Notifications ── */}
             <Toast toasts={toasts} />

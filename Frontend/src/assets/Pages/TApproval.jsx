@@ -24,6 +24,46 @@ const DEFAULT_STATS = [
     { label: "Pending", value: "—", change: "" },
 ];
 
+const DUMMY_JOB_ORDER_CARDS = [
+    {
+        id: "job_order_issue:JB260973",
+        poNo: "JB260973",
+        poDate: "04/09/2026",
+        type: "Job Order Issue - Job Order",
+        status: "Pending",
+        vendor: "SHREE AYYAPPAN ENGINEERING",
+        countLabel: "Amount",
+        countVal: 0,
+        btypeRaw: "Job Order",
+        docKind: "job_order_issue",
+        approvedBy: null,
+        approvedDateTime: null,
+        items: [
+            {
+                sNo: 1,
+                codeNo: "K11000388028",
+                description: "PISTON LOCK NUT",
+                process: "CNC TURNING I",
+                process_raw: "CNC TURNING I",
+                uom: "NOS",
+                qty: 2,
+                qtyOthers: 0,
+                rate: 0,
+                amount: 0,
+            }
+        ],
+        financial: {
+            totalAmount: 0,
+            discount: 0,
+            beforeTaxPF: 0,
+            afterTaxPF: 0,
+            roundOff: 0,
+            grandTotal: 0,
+            taxes: [],
+        },
+    }
+];
+
 const TYPE_ORDER = [
     "Invoice - General",
     "Invoice - General Labour",
@@ -33,6 +73,22 @@ const TYPE_ORDER = [
     "DC - General Labour",
     "DC - Customer Rework",
     "Returnable DC - Material Issue",
+    "Returnable DC - Party Material Return",
+    "Returnable DC - Calibration Issue",
+    "Returnable DC - Calibration issue",
+    "Returnable DC - Service Issue",
+    "Returnable DC - service issue",
+    "Returnable DC - Rework Issue",
+    "Returnable DC - General",
+    "Job Order Issue - Job Order",
+    "Job Order Issue - Rework",
+    "Job Order Issue - Job Order Raw Material",
+    "Job Order Issue - Raw Material",
+    "Job Order Issue - Job Order Raw Material Process",
+    "Job Order Issue - Raw Material Process",
+    "Job Order Issue - Job Order Multiple output partno",
+    "Job Order Issue - Job Order Assembly spares",
+    "Job Order Issue",
 ];
 
 const TYPE_ICONS = {
@@ -84,6 +140,27 @@ const TYPE_ICONS = {
             <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
         </svg>
     ),
+    "Job Order Issue": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            <path d="M9 14l2 2 4-4" />
+        </svg>
+    ),
+    "Job Order Issue - Job Order": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            <path d="M9 14l2 2 4-4" />
+        </svg>
+    ),
+    "Job Order Issue - Rework": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="1,4 1,10 7,10" />
+            <polyline points="23,20 23,14 17,14" />
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+        </svg>
+    ),
     "Returnable DC - Material Issue": (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -92,6 +169,46 @@ const TYPE_ICONS = {
         </svg>
     ),
 };
+
+function getTypeIcon(type) {
+    if (!type) return TYPE_ICONS["Invoice - General"];
+    if (TYPE_ICONS[type]) return TYPE_ICONS[type];
+    if (type.startsWith("Job Order") || type.startsWith("Job Order Issue")) {
+        return (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                <path d="M9 14l2 2 4-4" />
+            </svg>
+        );
+    }
+    if (type.startsWith("Returnable DC")) {
+        return (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+        );
+    }
+    if (type.startsWith("DC")) {
+        return (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="1" y="3" width="15" height="13" rx="1" />
+                <path d="M16 8h4l3 3v5h-7V8z" />
+                <circle cx="5.5" cy="18.5" r="2.5" />
+                <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>
+        );
+    }
+    return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+    );
+}
 
 const BtnSpinner = () => (
     <svg className="tap-btn-spin" viewBox="0 0 24 24" fill="none">
@@ -204,28 +321,44 @@ function formatSummaryRows(fin, fmt) {
 
 function docLabels(card) {
     const k = (card?.docKind || "").toLowerCase();
+    const t = (card?.type || "").toLowerCase();
+    if (k === "job_order_issue" || k === "job_order" || t.includes("job order")) {
+        return {
+            docNoLabel: "JO Issue No",
+            docDateLabel: "Issue Date",
+            docTitle: card?.type || "Job Order Issue",
+            approveLabel: `Approve ${card?.type || "Job Order Issue"}`,
+        };
+    }
     if (k === "ret_dc") {
         return {
             docNoLabel: "Ret. Issue No",
             docDateLabel: "Issue Date",
-            docTitle: "Returnable DC",
-            approveLabel: "Approve Returnable DC",
+            docTitle: card?.type || "Returnable DC",
+            approveLabel: `Approve ${card?.type || "Returnable DC"}`,
         };
     }
     if (k === "dc") {
         return {
             docNoLabel: "DC No",
             docDateLabel: "DC Date",
-            docTitle: "DC",
-            approveLabel: "Approve DC",
+            docTitle: card?.type || "DC",
+            approveLabel: `Approve ${card?.type || "DC"}`,
         };
     }
     return {
         docNoLabel: "Invoice No",
         docDateLabel: "Invoice Date",
-        docTitle: "Invoice",
-        approveLabel: "Approve Invoice",
+        docTitle: card?.type || "Invoice",
+        approveLabel: `Approve ${card?.type || "Invoice"}`,
     };
+}
+
+function isDcDoc(card) {
+    if (!card) return false;
+    const k = (card.docKind || "").toLowerCase();
+    const t = (card.type || "").toLowerCase();
+    return k === "dc" || k === "ret_dc" || k === "job_order_issue" || k === "job_order" || t.includes("dc") || t.includes("job order");
 }
 
 function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onModify }) {
@@ -238,14 +371,16 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="tap-prev__hd">
                         <div className="tap-prev__hd-left">
                             <div className="tap-prev__hd-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14,2 14,8 20,8" />
-                                </svg>
+                                {card?.type ? getTypeIcon(card.type) : (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                        <polyline points="14,2 14,8 20,8" />
+                                    </svg>
+                                )}
                             </div>
                             <div>
-                                <div className="tap-prev__hd-title">Loading document…</div>
-                                <div className="tap-prev__hd-sub">Fetching invoice / DC details</div>
+                                <div className="tap-prev__hd-title">Loading {card?.type ? `${card.type} Details…` : "Document Details…"}</div>
+                                <div className="tap-prev__hd-sub">Fetching {card?.type || "document"} information {card?.poNo ? `— ${card.poNo}` : ""}</div>
                             </div>
                         </div>
                         <div className="tap-prev__hd-right">
@@ -322,6 +457,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     const approvedBy = card.approvedBy || "—";
     const approvedDateTime = card.approvedDateTime || "—";
 
+    const isJobOrder = (card?.docKind || "").toLowerCase().includes("job") || (card?.type || "").toLowerCase().includes("job order");
+
     return createPortal(
         <div className="tap-modal tap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="tap-preview-box">
@@ -388,26 +525,50 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                     <th>S.No</th>
                                     <th>Code No</th>
                                     <th className="tap-prev__td--desc">Description</th>
+                                    {isJobOrder && <th className="tap-prev__td--desc">Process</th>}
                                     <th>UOM</th>
                                     <th className="tap-prev__td--num">Qty</th>
-                                    <th className="tap-prev__td--num">Qty Others</th>
+                                    {!isJobOrder && <th className="tap-prev__td--num">Qty Others</th>}
                                     <th className="tap-prev__td--num">Rate (₹)</th>
                                     <th className="tap-prev__td--num">Amount (₹)</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {items.map((row, i) => (
-                                    <tr key={i}>
-                                        <td className="tap-prev__td--center">{row.sNo}</td>
-                                        <td><span className="tap-prev__code">{row.codeNo}</span></td>
-                                        <td className="tap-prev__td--desc">{row.description}</td>
-                                        <td className="tap-prev__td--center">{row.uom}</td>
-                                        <td className="tap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
-                                        <td className="tap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
-                                        <td className="tap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
-                                        <td className="tap-prev__td--num tap-prev__td--amt">{fmt(row.amount)}</td>
-                                    </tr>
-                                ))}
+                                {items.map((row, i) => {
+                                    let rowDesc = row.description || "—";
+                                    let rowProc = row.process || row.process_raw || "—";
+                                    if (isJobOrder && (!row.process && !row.process_raw) && row.description && row.description.includes("—")) {
+                                        const parts = row.description.split("—");
+                                        rowDesc = parts[0].trim();
+                                        rowProc = parts.slice(1).join("—").trim();
+                                    } else if (isJobOrder && (row.process || row.process_raw) && row.description && row.description.includes("—")) {
+                                        const parts = row.description.split("—");
+                                        rowDesc = parts[0].trim();
+                                    }
+                                    return (
+                                        <tr key={i}>
+                                            <td className="tap-prev__td--center">{row.sNo}</td>
+                                            <td><span className="tap-prev__code">{row.codeNo}</span></td>
+                                            <td className="tap-prev__td--desc">{rowDesc}</td>
+                                            {isJobOrder && (
+                                                <td className="tap-prev__td--desc">
+                                                    {rowProc && rowProc !== "—" ? (
+                                                        <span className="tap-prev__proc">{rowProc}</span>
+                                                    ) : (
+                                                        "—"
+                                                    )}
+                                                </td>
+                                            )}
+                                            <td className="tap-prev__td--center">{row.uom}</td>
+                                            <td className="tap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
+                                            {!isJobOrder && (
+                                                <td className="tap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
+                                            )}
+                                            <td className="tap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
+                                            <td className="tap-prev__td--num tap-prev__td--amt">{fmt(row.amount)}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -434,8 +595,9 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         <button
                             type="button"
                             className="tap-prev-btn tap-prev-btn--modify"
-                            disabled={!!actionLoading}
-                            onClick={() => onModify(card)}
+                            disabled={isDcDoc(card) || !!actionLoading}
+                            title={isDcDoc(card) ? "Modify Open is disabled for DC" : ""}
+                            onClick={() => !isDcDoc(card) && onModify(card)}
                         >
                             {actionLoading?.pono === docNo && actionLoading?.type === "modify"
                                 ? <><BtnSpinner /> Modifying…</>
@@ -496,7 +658,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
         <div className="tap-group">
             <div className="tap-group__hd" onClick={onToggle}>
                 <div className="tap-group__hd-left">
-                    <span className="tap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS["Invoice - General"]}</span>
+                    <span className="tap-group__hd-icon">{getTypeIcon(type)}</span>
                     <span className="tap-group__hd-title">{type}</span>
                     
                     <button
@@ -566,8 +728,12 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                     </button>
                                     {status === "Approved" ? (
                                         <button type="button" className="tap-action-btn tap-action-btn--modify"
-                                            disabled={!!actionLoading}
-                                            onClick={e => { e.stopPropagation(); onModify(card); }}>
+                                            disabled={isDcDoc(card) || !!actionLoading}
+                                            title={isDcDoc(card) ? "Modify Open is disabled for DC" : ""}
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                if (!isDcDoc(card)) onModify(card);
+                                            }}>
                                             {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
                                                 ? <><BtnSpinner /> Modifying…</>
                                                 : "Modify Open"}
@@ -722,7 +888,9 @@ export default function TApproval() {
             const qsList = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
             const resList = await fetch(`${API}/tapproval/list/?${qsList}`, { credentials: "include" });
             const dataList = await resList.json();
-            if (resList.ok) setCards(dataList.cards || []);
+            if (resList.ok) {
+                setCards(dataList.cards || []);
+            }
             else { console.error(dataList.error); setCards([]); }
         } catch (e) {
             console.error(e);
@@ -785,8 +953,18 @@ export default function TApproval() {
             setSelected(cached);
             return;
         }
+        if (listCard.items && listCard.items.length > 0) {
+            const cached = { ...listCard };
+            cached.status = approved.includes(listCard.id) ? "Approved" : cached.status;
+            detailCache.current[cacheKey] = cached;
+            setSelected(cached);
+            return;
+        }
         const qs = new URLSearchParams({
             invno,
+            jbno: invno,
+            retissno: invno,
+            dcno: invno,
             doc_kind: docKind,
             from: toYMD(dateRange.from),
             to: toYMD(dateRange.to || dateRange.from),
@@ -817,7 +995,9 @@ export default function TApproval() {
         const invno = card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice";
+        const docLabel = (card?.docKind || "").toLowerCase().includes("job")
+            ? (card?.type || "Job Order Issue")
+            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice");
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "approve" });
         try {
@@ -825,7 +1005,7 @@ export default function TApproval() {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ invno, doc_kind: docKind }),
+                body: JSON.stringify({ invno, jbno: invno, doc_kind: docKind }),
             });
             const data = await res.json();
             if (!res.ok) { addToast(data.error || "Approve failed", "error"); return; }
@@ -846,10 +1026,16 @@ export default function TApproval() {
     }, [actionLoading, addToast]);
 
     const handleModify = useCallback(async (card) => {
+        if (isDcDoc(card)) {
+            addToast("Modify Open is disabled for DC documents.", "error");
+            return;
+        }
         const invno = card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice";
+        const docLabel = (card?.docKind || "").toLowerCase().includes("job")
+            ? (card?.type || "Job Order Issue")
+            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice");
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "modify" });
         try {
@@ -857,7 +1043,7 @@ export default function TApproval() {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ invno, doc_kind: docKind }),
+                body: JSON.stringify({ invno, jbno: invno, doc_kind: docKind }),
             });
             const data = await res.json();
             if (!res.ok) { addToast(data.error || "Modify failed", "error"); return; }
@@ -929,7 +1115,7 @@ export default function TApproval() {
                         disabled={isLoading}
                     >
                         <span className="tap-type-dd__trigger-icon">
-                            {typeFilter ? TYPE_ICONS[typeFilter] : (
+                            {typeFilter ? getTypeIcon(typeFilter) : (
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
                                 </svg>
@@ -981,7 +1167,7 @@ export default function TApproval() {
                                             className={`tap-type-dd__item ${isActive ? "tap-type-dd__item--active" : ""}`}
                                             onClick={() => { setTypeFilter(isActive ? null : t); setTypeDropOpen(false); }}
                                         >
-                                            <span className="tap-type-dd__item-icon">{TYPE_ICONS[t]}</span>
+                                            <span className="tap-type-dd__item-icon">{getTypeIcon(t)}</span>
                                             <span className="tap-type-dd__item-label">{t}</span>
                                             <span className="tap-type-dd__item-badge">{cnt}</span>
                                             {isActive && (

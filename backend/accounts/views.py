@@ -2122,6 +2122,12 @@ def dashboard2_customer_complaints(request):
         mas_where = f"CAST(M.[{date_m}] AS DATE) BETWEEN ? AND ?"; params = [start_date, end_date]
         if del_m: mas_where += f" AND ISNULL(M.[{del_m}], 0) = 0"
         if company_m and company_code: mas_where += f" AND M.[{company_m}] = ?"; params.append(company_code)
+        cust_param = request.GET.get("customer") or request.GET.get("customer_name") or request.GET.get("customers") or ""
+        cust_list = [c.strip() for c in cust_param.split(",") if c.strip() and c.strip().lower() not in ("all", "all customers", "all customer")]
+        if cust_list and tbl_cm and cid_m and cname_cm:
+            placeholders = ",".join(["?"] * len(cust_list))
+            mas_where += f" AND CM.[{cname_cm}] IN ({placeholders})"
+            params.extend(cust_list)
         sql = f"""SELECT TOP 500 M.[{cmpno_m}] AS Complaint_ID, {customer_sql} AS Customer_Name, CAST({product_sql} AS NVARCHAR(800)) AS Product, {rem_sql} AS Complaint_Description, Det.ActionTaken AS Action_Taken, M.[{date_m}] AS Complaint_Date, {cor_sql} AS Corrective_Action, {per_sql} AS Permanent_Action, Det.CompStatus AS Status FROM [{tbl_m}] M {apply_block} {cm_join} WHERE {mas_where} ORDER BY M.[{date_m}], M.[{cmpno_m}]"""
         cursor.execute(sql, params)
         for row in cursor.fetchall() or []:

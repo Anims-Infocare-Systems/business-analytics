@@ -982,212 +982,21 @@ function getTodayMonthRange() {
    Part-wise History & Rate Intelligence Component
    ══════════════════════════════════════════════════════════════ */
 
-const DEFAULT_SAMPLE_PARTS = [
-  {
-    partNo: "PART-1002",
-    description: "Shaft Pin 25mm CNC Machined",
-    uom: "NOS",
-    primaryCustomer: "Brakes India Private Limited",
-    customerList: ["Brakes India Private Limited"],
-    activeRate: 485.50,
-    baseRate: 450.00,
-    avgRealizedRate: 478.20,
-    minRate: 450.00,
-    maxRate: 495.00,
-    totalQty: 2450,
-    totalRevenue: 1171590,
-    rateCount: 3,
-    txCount: 14,
-    lastDate: "2026-02-28",
-    transactions: [
-      { invoice_no: "INV-2026-041", date: "2026-02-28", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 250, uom: "NOS", rate: 485.50, amount: 121375, tax: 21847.50, tamt: 143222.50 },
-      { invoice_no: "INV-2026-036", date: "2026-02-20", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 300, uom: "NOS", rate: 485.50, amount: 145650, tax: 26217.00, tamt: 171867.00 },
-      { invoice_no: "INV-2026-028", date: "2026-02-12", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 400, uom: "NOS", rate: 475.00, amount: 190000, tax: 34200.00, tamt: 224200.00 },
-      { invoice_no: "INV-2026-019", date: "2026-01-28", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 465.00, amount: 232500, tax: 41850.00, tamt: 274350.00 },
-      { invoice_no: "INV-2026-008", date: "2026-01-14", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 450.00, amount: 225000, tax: 40500.00, tamt: 265500.00 },
-      { invoice_no: "INV-2026-002", date: "2026-01-05", customer: "Brakes India Private Limited", part_no: "PART-1002", description: "Shaft Pin 25mm CNC Machined", qty: 500, uom: "NOS", rate: 450.00, amount: 225000, tax: 40500.00, tamt: 265500.00 },
-    ]
-  },
-  {
-    partNo: "FL-8812",
-    description: "Flange Adapter Cast Iron Graded",
-    uom: "NOS",
-    primaryCustomer: "Sundaram Fasteners Ltd",
-    customerList: ["Sundaram Fasteners Ltd"],
-    activeRate: 720.00,
-    baseRate: 680.00,
-    avgRealizedRate: 710.50,
-    minRate: 680.00,
-    maxRate: 720.00,
-    totalQty: 1800,
-    totalRevenue: 1278900,
-    rateCount: 2,
-    txCount: 8,
-    lastDate: "2026-02-26",
-    transactions: [
-      { invoice_no: "INV-2026-039", date: "2026-02-26", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 350, uom: "NOS", rate: 720.00, amount: 252000, tax: 45360.00, tamt: 297360.00 },
-      { invoice_no: "INV-2026-025", date: "2026-02-08", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 450, uom: "NOS", rate: 720.00, amount: 324000, tax: 58320.00, tamt: 382320.00 },
-      { invoice_no: "INV-2026-014", date: "2026-01-20", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 500, uom: "NOS", rate: 680.00, amount: 340000, tax: 61200.00, tamt: 401200.00 },
-      { invoice_no: "INV-2026-004", date: "2026-01-08", customer: "Sundaram Fasteners Ltd", part_no: "FL-8812", description: "Flange Adapter Cast Iron Graded", qty: 500, uom: "NOS", rate: 680.00, amount: 340000, tax: 61200.00, tamt: 401200.00 },
-    ]
-  },
-  {
-    partNo: "GS-2201",
-    description: "High Pressure Gear Sleeve Nitrided",
-    uom: "NOS",
-    primaryCustomer: "Lucas TVS Limited",
-    customerList: ["Lucas TVS Limited"],
-    activeRate: 315.00,
-    baseRate: 330.00,
-    avgRealizedRate: 320.00,
-    minRate: 315.00,
-    maxRate: 330.00,
-    totalQty: 3200,
-    totalRevenue: 1024000,
-    rateCount: 2,
-    txCount: 9,
-    lastDate: "2026-02-24",
-    transactions: [
-      { invoice_no: "INV-2026-038", date: "2026-02-24", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 800, uom: "NOS", rate: 315.00, amount: 252000, tax: 45360.00, tamt: 297360.00 },
-      { invoice_no: "INV-2026-022", date: "2026-02-04", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 1000, uom: "NOS", rate: 315.00, amount: 315000, tax: 56700.00, tamt: 371700.00 },
-      { invoice_no: "INV-2026-011", date: "2026-01-16", customer: "Lucas TVS Limited", part_no: "GS-2201", description: "High Pressure Gear Sleeve Nitrided", qty: 1400, uom: "NOS", rate: 330.00, amount: 462000, tax: 83160.00, tamt: 545160.00 },
-    ]
-  },
-  {
-    partNo: "PN-9940",
-    description: "Pneumatic Cylinder Piston Head",
-    uom: "NOS",
-    primaryCustomer: "Roots Industries India Ltd",
-    customerList: ["Roots Industries India Ltd"],
-    activeRate: 1140.00,
-    baseRate: 1050.00,
-    avgRealizedRate: 1110.00,
-    minRate: 1050.00,
-    maxRate: 1140.00,
-    totalQty: 950,
-    totalRevenue: 1054500,
-    rateCount: 2,
-    txCount: 6,
-    lastDate: "2026-02-27",
-    transactions: [
-      { invoice_no: "INV-2026-040", date: "2026-02-27", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 250, uom: "NOS", rate: 1140.00, amount: 285000, tax: 51300.00, tamt: 336300.00 },
-      { invoice_no: "INV-2026-030", date: "2026-02-14", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 300, uom: "NOS", rate: 1140.00, amount: 342000, tax: 61560.00, tamt: 403560.00 },
-      { invoice_no: "INV-2026-015", date: "2026-01-22", customer: "Roots Industries India Ltd", part_no: "PN-9940", description: "Pneumatic Cylinder Piston Head", qty: 400, uom: "NOS", rate: 1050.00, amount: 420000, tax: 75600.00, tamt: 495600.00 },
-    ]
-  },
-  {
-    partNo: "VN-3305",
-    description: "Venturi Nozzle Brass Finished",
-    uom: "NOS",
-    primaryCustomer: "ELGI Equipments Ltd",
-    customerList: ["ELGI Equipments Ltd"],
-    activeRate: 265.00,
-    baseRate: 250.00,
-    avgRealizedRate: 260.00,
-    minRate: 250.00,
-    maxRate: 265.00,
-    totalQty: 4200,
-    totalRevenue: 1092000,
-    rateCount: 2,
-    txCount: 11,
-    lastDate: "2026-02-25",
-    transactions: [
-      { invoice_no: "INV-2026-037", date: "2026-02-25", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1200, uom: "NOS", rate: 265.00, amount: 318000, tax: 57240.00, tamt: 375240.00 },
-      { invoice_no: "INV-2026-026", date: "2026-02-10", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1500, uom: "NOS", rate: 265.00, amount: 397500, tax: 71550.00, tamt: 469050.00 },
-      { invoice_no: "INV-2026-006", date: "2026-01-10", customer: "ELGI Equipments Ltd", part_no: "VN-3305", description: "Venturi Nozzle Brass Finished", qty: 1500, uom: "NOS", rate: 250.00, amount: 375000, tax: 67500.00, tamt: 442500.00 },
-    ]
-  }
-];
-
 function PartWiseHistorySection({
-  invoices = [],
-  filteredInvoices = [],
-  summary = null,
   dateRange = {},
   selectedCustomers = [],
   loading = false,
 }) {
-  /* ── 1. Part Catalog Discovery from Invoices ─────────────── */
-  const partCatalog = useMemo(() => {
-    const map = new Map();
-    let source = invoices.length > 0 ? invoices : filteredInvoices;
-    if (selectedCustomers.length > 0) {
-      source = source.filter((r) => r.customer && selectedCustomers.includes(r.customer.trim()));
-    }
-
-    source.forEach((r) => {
-      const pno = (r.part_no || "").trim();
-      if (!pno) return;
-
-      if (!map.has(pno)) {
-        map.set(pno, {
-          partNo: pno,
-          description: (r.description || pno).trim(),
-          uom: (r.uom || "NOS").trim(),
-          customers: new Set(),
-          transactions: [],
-          totalQty: 0,
-          totalRevenue: 0,
-          rates: [],
-          lastDate: r.date || "",
-        });
-      }
-
-      const item = map.get(pno);
-      if (r.customer) item.customers.add(r.customer.trim());
-      const rate = Number(r.rate || 0);
-      const qty = Number(r.qty || 0);
-      const amt = Number(r.amount || 0);
-
-      item.totalQty += qty;
-      item.totalRevenue += amt;
-      if (rate > 0) item.rates.push(rate);
-      item.transactions.push(r);
-      if (r.date && (!item.lastDate || new Date(r.date) > new Date(item.lastDate))) {
-        item.lastDate = r.date;
-      }
-    });
-
-    const res = Array.from(map.values());
-    if (res.length === 0) return DEFAULT_SAMPLE_PARTS;
-    return res
-      .map((p) => {
-        const sortedRates = [...p.rates].sort((a, b) => a - b);
-        const distinctRates = Array.from(new Set(p.rates));
-        const activeRate = p.rates.length > 0 ? p.rates[p.rates.length - 1] : 0;
-        const baseRate = p.rates.length > 0 ? p.rates[0] : 0;
-        const avgRealizedRate = p.totalQty > 0 ? p.totalRevenue / p.totalQty : activeRate;
-        const minRate = sortedRates.length > 0 ? sortedRates[0] : activeRate;
-        const maxRate = sortedRates.length > 0 ? sortedRates[sortedRates.length - 1] : activeRate;
-
-        return {
-          ...p,
-          customerList: Array.from(p.customers),
-          primaryCustomer: Array.from(p.customers)[0] || "Standard Customer",
-          activeRate,
-          baseRate,
-          avgRealizedRate,
-          minRate,
-          maxRate,
-          rateCount: distinctRates.length,
-          txCount: p.transactions.length,
-        };
-      })
-      .sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [invoices, filteredInvoices, selectedCustomers]);
-
-  /* ── 2. Component State ───────────────────────────────────── */
+  const [catalog, setCatalog] = useState([]);
   const [selectedPartNo, setSelectedPartNo] = useState("");
+  const [historyRows, setHistoryRows] = useState([]);
+  const [heroData, setHeroData] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const dropdownRef = useRef(null);
 
-  useEffect(() => {
-    if (partCatalog.length > 0 && (!selectedPartNo || !partCatalog.some((p) => p.partNo === selectedPartNo))) {
-      setSelectedPartNo(partCatalog[0].partNo);
-    }
-  }, [partCatalog, selectedPartNo]);
-
+  // Click outside to close dropdown
   useEffect(() => {
     function handleClickOutside(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -1198,121 +1007,127 @@ function PartWiseHistorySection({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* ── 3. Active Part Profile ───────────────────────────────── */
-  const activePart = useMemo(() => {
-    return partCatalog.find((p) => p.partNo === selectedPartNo) || partCatalog[0] || null;
-  }, [partCatalog, selectedPartNo]);
-
-  /* ── 4. Synthesize Rate Revision History & Ledger ─────────── */
-  const rateRevisionData = useMemo(() => {
-    if (!activePart) return { revisions: [], timeline: [] };
-
-    const sortedTxs = [...activePart.transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const revisions = [];
-    let prevRate = activePart.baseRate || 100;
-    let revIdx = 1;
-
-    const firstDate = sortedTxs[0]?.date || dateRange.from || "2026-01-01";
-    revisions.push({
-      revNo: "REV-00",
-      effDate: firstDate,
-      customer: activePart.primaryCustomer,
-      prevRate: prevRate,
-      revisedRate: prevRate,
-      diffVal: 0,
-      diffPct: 0,
-      reason: "Initial Contract Baseline Price",
-      refDoc: "CNTR-2025/BASE",
-      status: "Effective",
-      type: "baseline",
-    });
-
-    const distinctRatePoints = [];
-    let lastRecordedRate = prevRate;
-
-    sortedTxs.forEach((tx) => {
-      const currentTxRate = Number(tx.rate || 0);
-      if (currentTxRate > 0 && Math.abs(currentTxRate - lastRecordedRate) > 0.01) {
-        distinctRatePoints.push({
-          date: tx.date,
-          invoiceNo: tx.invoice_no,
-          customer: tx.customer || activePart.primaryCustomer,
-          newRate: currentTxRate,
-          oldRate: lastRecordedRate,
-        });
-        lastRecordedRate = currentTxRate;
-      }
-    });
-
-    if (distinctRatePoints.length > 0) {
-      distinctRatePoints.forEach((pt, i) => {
-        const diff = pt.newRate - pt.oldRate;
-        const diffPct = pt.oldRate > 0 ? (diff / pt.oldRate) * 100 : 0;
-        const isHike = diff > 0;
-
-        const standardReasons = [
-          "Raw Material Surcharge Indexing (Alloy & Power cost)",
-          "Annual Contract Price Revision as per Master Agreement",
-          "Customer Approved Price Amendment via PO Schedule",
-          "Tooling Surcharge & Precision Tolerancing Adjustment",
-          "Volume Tier Discount Re-negotiation",
-        ];
-
-        revisions.push({
-          revNo: `REV-${String(revIdx).padStart(2, "0")}`,
-          effDate: pt.date,
-          customer: pt.customer,
-          prevRate: pt.oldRate,
-          revisedRate: pt.newRate,
-          diffVal: diff,
-          diffPct: diffPct,
-          reason: standardReasons[i % standardReasons.length],
-          refDoc: `AMND-${pt.invoiceNo || "PO-REV"}`,
-          status: "Approved",
-          type: isHike ? "up" : "down",
-        });
-        revIdx++;
-      });
-    } else {
-      const midDate = sortedTxs[Math.floor(sortedTxs.length / 2)]?.date || dateRange.to || "2026-02-15";
-      const standardPrevRate = Math.round(activePart.activeRate * 0.94 * 100) / 100;
-      const standardDiff = Math.round((activePart.activeRate - standardPrevRate) * 100) / 100;
-      const standardPct = Math.round((standardDiff / standardPrevRate) * 1000) / 10;
-
-      revisions.push({
-        revNo: "REV-01",
-        effDate: midDate,
-        customer: activePart.primaryCustomer,
-        prevRate: standardPrevRate,
-        revisedRate: activePart.activeRate,
-        diffVal: standardDiff,
-        diffPct: standardPct,
-        reason: "Customer Agreed Rate Revision & Raw Material Indexation",
-        refDoc: `PO-AMND-${activePart.partNo.slice(-4) || "882"}`,
-        status: "Approved & Active",
-        type: "up",
-      });
+  // Fetch Part Rate History & Catalog from backend
+  useEffect(() => {
+    let fromDate = dateRange.from;
+    let toDate = dateRange.to;
+    if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      const dflt = getTodayMonthRange();
+      fromDate = dflt.from;
+      toDate = dflt.to;
     }
 
-    return {
-      revisions,
-      timeline: revisions,
-    };
-  }, [activePart, dateRange]);
+    const params = new URLSearchParams({
+      from: toIsoDate(fromDate),
+      to: toIsoDate(toDate),
+    });
+    if (selectedPartNo) {
+      params.set("part_no", selectedPartNo);
+    }
 
+    const ctrl = new AbortController();
+    setDataLoading(true);
+
+    fetch(`${API_BASE}/sales-analysis/part-rate-history/?${params}`, {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok || data?.error) {
+          console.error("Part rate history fetch error:", data?.error || r.statusText);
+          return;
+        }
+
+        const cat = data.catalog || [];
+        setCatalog(cat);
+        setHistoryRows(data.history || []);
+        setHeroData(data.hero || null);
+
+        if (!selectedPartNo && data.part_no) {
+          setSelectedPartNo(data.part_no);
+        } else if (!selectedPartNo && cat.length > 0) {
+          setSelectedPartNo(cat[0].partNo);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Part rate history fetch failed:", err);
+        }
+      })
+      .finally(() => {
+        setDataLoading(false);
+      });
+
+    return () => ctrl.abort();
+  }, [dateRange.from, dateRange.to, selectedPartNo]);
+
+  // Filter catalog based on search input & optional customer filter
   const filteredCatalog = useMemo(() => {
-    if (!searchQuery.trim()) return partCatalog;
+    let list = catalog;
+    if (selectedCustomers && selectedCustomers.length > 0) {
+      list = list.filter((p) => p.customer && selectedCustomers.includes(p.customer.trim()));
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
-    return partCatalog.filter(
+    return list.filter(
       (p) =>
-        p.partNo.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.primaryCustomer.toLowerCase().includes(q)
+        (p.partNo && p.partNo.toLowerCase().includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.customer && p.customer.toLowerCase().includes(q))
     );
-  }, [partCatalog, searchQuery]);
+  }, [catalog, searchQuery, selectedCustomers]);
 
-  if (loading) {
+  // Active Part in catalog
+  const activeCatalogPart = useMemo(() => {
+    return catalog.find((p) => p.partNo === selectedPartNo) || catalog[0] || null;
+  }, [catalog, selectedPartNo]);
+
+  // Active Hero banner info
+  const hero = useMemo(() => {
+    if (heroData) return heroData;
+    if (historyRows.length > 0) {
+      const latest = historyRows[historyRows.length - 1];
+      const earliest = historyRows[0];
+      const baseRate = earliest.previousRate !== null && earliest.previousRate !== undefined ? earliest.previousRate : earliest.revisedRate;
+      const activeRate = latest.revisedRate;
+      const rateVariance = activeRate - (baseRate || activeRate);
+      const changePercent = baseRate > 0 ? (rateVariance / baseRate) * 100 : 0;
+      return {
+        partNo: latest.partNo,
+        description: latest.description,
+        uom: latest.uom,
+        customer: latest.cname,
+        activeRate,
+        baseRate,
+        rateVariance,
+        changePercent,
+        invoicedQty: latest.invoicedQty,
+        totalRevenue: latest.totalRevenue,
+        invoiceCount: latest.invoiceCount,
+        lastDispatchedDate: latest.lastDispatchedDate,
+      };
+    }
+    if (activeCatalogPart) {
+      return {
+        partNo: activeCatalogPart.partNo,
+        description: activeCatalogPart.description,
+        uom: activeCatalogPart.uom,
+        customer: activeCatalogPart.customer,
+        activeRate: activeCatalogPart.latestRate || 0,
+        baseRate: activeCatalogPart.latestRate || 0,
+        rateVariance: 0,
+        changePercent: 0,
+        invoicedQty: 0,
+        totalRevenue: 0,
+        invoiceCount: 0,
+        lastDispatchedDate: "",
+      };
+    }
+    return null;
+  }, [heroData, historyRows, activeCatalogPart]);
+
+  if (loading && catalog.length === 0) {
     return (
       <div className="pwh-root" id="sales-part-wise-history-section">
         <div className="pwh-card" style={{ padding: "1.75rem" }}>
@@ -1324,7 +1139,7 @@ function PartWiseHistorySection({
     );
   }
 
-  if (partCatalog.length === 0) {
+  if (catalog.length === 0 && !dataLoading) {
     return null;
   }
 
@@ -1344,7 +1159,7 @@ function PartWiseHistorySection({
                 <h3>
                   Part-wise History & Rate Intelligence
                   <span className="sa-badge sa-badge--blue" style={{ fontSize: "0.7rem", verticalAlign: "middle" }}>
-                    {partCatalog.length} Active Catalog Parts
+                    {catalog.length} Active Catalog Parts
                   </span>
                 </h3>
                 <p>
@@ -1396,8 +1211,8 @@ function PartWiseHistorySection({
                             <span className="pwh-dropdown-item-desc">{p.description}</span>
                           </div>
                           <div className="pwh-dropdown-item-meta">
-                            <span className="pwh-dropdown-item-rate">₹{formatExactRupees(p.activeRate)}</span>
-                            <div className="pwh-dropdown-item-count">{p.txCount} invoices</div>
+                            <span className="pwh-dropdown-item-rate">₹{formatExactRupees(p.latestRate || 0)}</span>
+                            <div className="pwh-dropdown-item-count">{p.customer || "—"}</div>
                           </div>
                         </div>
                       ))
@@ -1412,23 +1227,22 @@ function PartWiseHistorySection({
         {/* ═══════════════════════════════════════════════════════
             2. SELECTED PART HERO BANNER
         ═══════════════════════════════════════════════════════ */}
-        {activePart && (
+        {hero && (
           <div className="pwh-hero-banner">
             <div className="pwh-hero-left">
               <div className="pwh-hero-tags">
-                <span className="pwh-tag-partno">{activePart.partNo}</span>
+                <span className="pwh-tag-partno">{hero.partNo}</span>
                 <span className="pwh-tag-customer">
                   <Building2 size={12} style={{ display: "inline", marginRight: "4px", verticalAlign: "-1px" }} />
-                  {activePart.primaryCustomer}
-                  {activePart.customerList.length > 1 && ` (+${activePart.customerList.length - 1} more)`}
+                  {hero.customer || "—"}
                 </span>
                 <span className="sa-badge sa-badge--purple" style={{ textTransform: "uppercase" }}>
-                  {activePart.uom}
+                  {hero.uom || "NOS"}
                 </span>
               </div>
-              <h2 className="pwh-hero-title">{activePart.description}</h2>
+              <h2 className="pwh-hero-title">{hero.description || hero.partNo}</h2>
               <p className="pwh-hero-desc">
-                Catalog Code: {activePart.partNo} &nbsp;·&nbsp; Last Dispatched: {formatInvDate(activePart.lastDate)}
+                Catalog Code: {hero.partNo} &nbsp;·&nbsp; Last Dispatched: {formatInvDate(hero.lastDispatchedDate)}
               </p>
             </div>
 
@@ -1436,28 +1250,28 @@ function PartWiseHistorySection({
             <div className="pwh-hero-middle">
               <span className="pwh-hero-rate-label">Active Selling Rate</span>
               <div className="pwh-hero-rate-row">
-                <span className="pwh-hero-current-rate">₹{formatExactRupees(activePart.activeRate)}</span>
-                {activePart.baseRate > 0 && (
+                <span className="pwh-hero-current-rate">₹{formatExactRupees(hero.activeRate)}</span>
+                {hero.baseRate > 0 && (
                   <span
-                    className={`pwh-hero-diff-badge ${activePart.activeRate > activePart.baseRate
+                    className={`pwh-hero-diff-badge ${hero.activeRate > hero.baseRate
                       ? "pwh-hero-diff-badge--up"
-                      : activePart.activeRate < activePart.baseRate
+                      : hero.activeRate < hero.baseRate
                         ? "pwh-hero-diff-badge--down"
                         : "pwh-hero-diff-badge--neutral"
                       }`}
                   >
-                    {activePart.activeRate > activePart.baseRate ? (
+                    {hero.activeRate > hero.baseRate ? (
                       <TrendingUp size={12} />
-                    ) : activePart.activeRate < activePart.baseRate ? (
+                    ) : hero.activeRate < hero.baseRate ? (
                       <TrendingDown size={12} />
                     ) : null}
-                    {activePart.activeRate >= activePart.baseRate ? "+" : ""}
-                    {(((activePart.activeRate - activePart.baseRate) / activePart.baseRate) * 100).toFixed(1)}% vs Base
+                    {hero.activeRate >= hero.baseRate ? "+" : ""}
+                    {(((hero.activeRate - hero.baseRate) / hero.baseRate) * 100).toFixed(1)}% vs Base
                   </span>
                 )}
               </div>
               <span className="pwh-hero-rate-sub">
-                Initial Contract Base Rate: ₹{formatExactRupees(activePart.baseRate)}
+                Initial Contract Base Rate: ₹{formatExactRupees(hero.baseRate)}
               </span>
             </div>
 
@@ -1466,16 +1280,16 @@ function PartWiseHistorySection({
               <div className="pwh-mini-stat">
                 <div className="pwh-mini-stat-label">Invoiced Qty</div>
                 <div className="pwh-mini-stat-val">
-                  {formatQty(activePart.totalQty)} <span style={{ fontSize: "0.7rem", fontWeight: "600" }}>{activePart.uom}</span>
+                  {formatQty(hero.invoicedQty)} <span style={{ fontSize: "0.7rem", fontWeight: "600" }}>{hero.uom || "NOS"}</span>
                 </div>
-                <div className="pwh-mini-stat-sub">{activePart.txCount} Invoices raised</div>
+                <div className="pwh-mini-stat-sub">{hero.invoiceCount || 0} Invoices raised</div>
               </div>
               <div className="pwh-mini-stat">
                 <div className="pwh-mini-stat-label">Total Revenue</div>
                 <div className="pwh-mini-stat-val" style={{ color: "#38bdf8" }}>
-                  {formatLakhs(activePart.totalRevenue)}
+                  {formatLakhs(hero.totalRevenue)}
                 </div>
-                <div className="pwh-mini-stat-sub">₹{formatExactRupees(activePart.totalRevenue)}</div>
+                <div className="pwh-mini-stat-sub">₹{formatExactRupees(hero.totalRevenue)}</div>
               </div>
             </div>
           </div>
@@ -1492,28 +1306,36 @@ function PartWiseHistorySection({
             </div>
 
             <div className="pwh-timeline">
-              {rateRevisionData.timeline.map((step, idx) => {
-                const isLatest = idx === rateRevisionData.timeline.length - 1;
-                return (
-                  <div key={idx} className={`pwh-timeline-step ${isLatest ? "pwh-timeline-step--latest" : ""}`}>
-                    <div className="pwh-timeline-node">
-                      {idx === 0 ? "B" : `#${idx}`}
+              {historyRows.length === 0 ? (
+                <div style={{ padding: "12px 16px", color: "#64748b", fontSize: "0.82rem" }}>
+                  No rate revision progression recorded for this part
+                </div>
+              ) : (
+                historyRows.map((step, idx) => {
+                  const isLatest = idx === historyRows.length - 1;
+                  return (
+                    <div key={idx} className={`pwh-timeline-step ${isLatest ? "pwh-timeline-step--latest" : ""}`}>
+                      <div className="pwh-timeline-node">
+                        {idx === 0 ? "B" : `#${idx}`}
+                      </div>
+                      <div className="pwh-timeline-date">{formatInvDate(step.effectiveDate)}</div>
+                      <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
+                      <div
+                        className={`pwh-timeline-delta ${idx === 0
+                          ? "pwh-pill--neutral"
+                          : step.rateVariance > 0
+                            ? "pwh-pill--green"
+                            : step.rateVariance < 0
+                              ? "pwh-pill--red"
+                              : "pwh-pill--neutral"
+                          }`}
+                      >
+                        {idx === 0 ? "Base" : step.rateVariance > 0 ? `+₹${step.rateVariance.toFixed(2)}` : step.rateVariance < 0 ? `-₹${Math.abs(step.rateVariance).toFixed(2)}` : "₹0.00"}
+                      </div>
                     </div>
-                    <div className="pwh-timeline-date">{formatInvDate(step.effDate)}</div>
-                    <div className="pwh-timeline-rate">₹{formatExactRupees(step.revisedRate)}</div>
-                    <div
-                      className={`pwh-timeline-delta ${step.diffVal > 0
-                        ? "pwh-pill--green"
-                        : step.diffVal < 0
-                          ? "pwh-pill--red"
-                          : "pwh-pill--neutral"
-                        }`}
-                    >
-                      {step.diffVal > 0 ? `+₹${step.diffVal.toFixed(2)}` : step.diffVal < 0 ? `-₹${Math.abs(step.diffVal).toFixed(2)}` : "Base"}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -1522,7 +1344,6 @@ function PartWiseHistorySection({
             <table className="pwh-table">
               <thead>
                 <tr>
-                  {/* <th>Revision No</th> */}
                   <th>Effective Date</th>
                   <th>Customer Scope</th>
                   <th>Previous Rate</th>
@@ -1534,38 +1355,49 @@ function PartWiseHistorySection({
                 </tr>
               </thead>
               <tbody>
-                {rateRevisionData.revisions.map((rev, i) => (
-                  <tr key={i}>
-                    {/* <td style={{ fontWeight: "700", color: "#1e293b" }}>{rev.revNo}</td> */}
-                    <td style={{ color: "#475569", fontWeight: "600" }}>{formatInvDate(rev.effDate)}</td>
-                    <td style={{ fontWeight: "600" }}>{rev.customer}</td>
-                    <td style={{ color: "#64748b" }}>₹{formatExactRupees(rev.prevRate)}</td>
-                    <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(rev.revisedRate)}</td>
-                    <td style={{ fontWeight: "700", color: rev.diffVal > 0 ? "#15803d" : rev.diffVal < 0 ? "#b91c1c" : "#64748b" }}>
-                      {rev.diffVal > 0 ? `+₹${rev.diffVal.toFixed(2)}` : rev.diffVal < 0 ? `-₹${Math.abs(rev.diffVal).toFixed(2)}` : "₹0.00"}
-                    </td>
-                    <td>
-                      <span
-                        className={`pwh-pill ${rev.diffPct > 0
-                          ? "pwh-pill--green"
-                          : rev.diffPct < 0
-                            ? "pwh-pill--red"
-                            : "pwh-pill--neutral"
-                          }`}
-                      >
-                        {rev.diffPct > 0 ? `+${rev.diffPct.toFixed(1)}%` : `${rev.diffPct.toFixed(1)}%`}
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: "monospace", fontSize: "0.76rem", fontWeight: "700", color: "#1e40af" }}>
-                      {activePart?.partNo || rev.refDoc}
-                    </td>
-                    <td>
-                      <span className="pwh-pill pwh-pill--green">
-                        <CheckCircle2 size={11} /> {rev.status}
-                      </span>
+                {historyRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: "center", padding: "1.5rem", color: "#64748b" }}>
+                      No rate history entries found for the selected part.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  historyRows.map((rev, i) => (
+                    <tr key={i}>
+                      <td style={{ color: "#475569", fontWeight: "600" }}>{formatInvDate(rev.effectiveDate)}</td>
+                      <td style={{ fontWeight: "600" }}>{rev.cname || "—"}</td>
+                      <td style={{ color: "#64748b" }}>
+                        {rev.previousRate !== null && rev.previousRate !== undefined
+                          ? `₹${formatExactRupees(rev.previousRate)}`
+                          : `₹${formatExactRupees(rev.revisedRate)}`}
+                      </td>
+                      <td style={{ fontWeight: "800", color: "#2563eb" }}>₹{formatExactRupees(rev.revisedRate)}</td>
+                      <td style={{ fontWeight: "700", color: rev.rateVariance > 0 ? "#15803d" : rev.rateVariance < 0 ? "#b91c1c" : "#64748b" }}>
+                        {rev.rateVariance > 0 ? `+₹${rev.rateVariance.toFixed(2)}` : rev.rateVariance < 0 ? `-₹${Math.abs(rev.rateVariance).toFixed(2)}` : "₹0.00"}
+                      </td>
+                      <td>
+                        <span
+                          className={`pwh-pill ${rev.changePercent > 0
+                            ? "pwh-pill--green"
+                            : rev.changePercent < 0
+                              ? "pwh-pill--red"
+                              : "pwh-pill--neutral"
+                            }`}
+                        >
+                          {rev.changePercent > 0 ? `+${rev.changePercent.toFixed(1)}%` : `${rev.changePercent.toFixed(1)}%`}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.76rem", fontWeight: "700", color: "#1e40af" }}>
+                        {rev.partNo}
+                      </td>
+                      <td>
+                        <span className="pwh-pill pwh-pill--green">
+                          <CheckCircle2 size={11} /> {i === 0 ? "Effective" : "Approved"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -6238,9 +6070,6 @@ export default function SalesAnalysis() {
           PART-WISE HISTORY & RATE INTELLIGENCE SECTION
       ═══════════════════════════════════════════════════════ */}
       <PartWiseHistorySection
-        invoices={invoiceRows}
-        filteredInvoices={filteredInvoices}
-        summary={derivedSummary || summary}
         dateRange={dateRange}
         selectedCustomers={selectedCustomers}
         loading={loading || tableLoading}

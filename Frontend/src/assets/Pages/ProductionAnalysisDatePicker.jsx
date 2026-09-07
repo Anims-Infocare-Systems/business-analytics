@@ -116,7 +116,7 @@ function PopupPortal({ anchorRef, children }) {
     return createPortal(<div className="padp-portal-wrap" style={style}>{children}</div>, document.body);
 }
 
-export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
+export default function ProductionAnalysisDatePicker({ from, to, onChange, disabled = false }) {
     const today = new Date();
     const [open,         setOpen]        = useState(false);
     const [leftMonth,    setLeft]        = useState(from ? new Date(from.getFullYear(),from.getMonth(),1) : addMonths(today,-1));
@@ -131,6 +131,10 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
     const [fromInput, setFromInput] = useState("");
     const [toInput,   setToInput]   = useState("");
     const [inputErr,  setInputErr]  = useState("");
+
+    useEffect(() => {
+        if (disabled) setOpen(false);
+    }, [disabled]);
 
     useEffect(() => {
         setFromInput(toInputFmt(from));
@@ -209,7 +213,13 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
 
     return (
         <div className="padp-wrap" ref={wrapRef}>
-            <button ref={triggerRef} className={`padp-trigger ${open?"padp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
+            <button
+                ref={triggerRef}
+                className={`padp-trigger ${open ? "padp-trigger--open" : ""} ${disabled ? "padp-trigger--disabled" : ""}`}
+                onClick={() => !disabled && setOpen(o => !o)}
+                disabled={disabled}
+                type="button"
+            >
                 <svg className="padp-trigger__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
                     <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
@@ -218,7 +228,7 @@ export default function ProductionAnalysisDatePicker({ from, to, onChange }) {
                 <svg className={`padp-trigger__caret ${open?"padp-trigger__caret--up":""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9"/></svg>
             </button>
 
-            {open && (
+            {open && !disabled && (
                 <PopupPortal anchorRef={triggerRef}>
                     <div className="padp-popup">
                         <div className="padp-presets">

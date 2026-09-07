@@ -65,11 +65,22 @@
     white-space: nowrap;
     overflow: hidden;
 }
-.padp-trigger:hover {
+.padp-trigger:hover:not(:disabled) {
     border-color: var(--padp-accent);
     box-shadow: 0 0 0 3px var(--padp-focus-ring);
     background: var(--padp-surface);
 }
+
+.padp-trigger--disabled,
+.padp-trigger:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    pointer-events: none;
+}
+
 .padp-trigger--open {
     border-color: var(--padp-accent);
     box-shadow: 0 0 0 3px var(--padp-focus-ring);

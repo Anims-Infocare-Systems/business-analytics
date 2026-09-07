@@ -31,6 +31,7 @@ import PurchaseAnalysis from "./PurchaseAnalysis";
 import QualityAnalysis from "./QualityAnalysis";
 import ProductionAnalysis from "./ProductionAnalysis";
 import UserRights from "./UserRights";
+import UsersSetting from "./UsersSetting";
 import Settings from "./Settings";
 import Welcome from "./Welcome";
 import PasswordExpiryModal from "./PasswordExpiryModal";
@@ -93,7 +94,7 @@ const MENU_ITEMS = [
     {
         key: "Utility",
         icon: Icons.Utility,
-        children: ["User Rights"],
+        children: ["User Rights", "Users Setting"],
     },
 ];
 
@@ -113,6 +114,7 @@ const HEADING_MAP = {
     "Efficiency Report": "MIS — Efficiency Report",
     "Charts": "Charts & Visualizations",
     "User Rights": "Utility — User Rights",
+    "Users Setting": "Utility — Users Setting",
     "Settings": "Settings",
     "Welcome": "Workspace Overview",
 };
@@ -131,6 +133,7 @@ const SUB_ITEM_META = {
     "Idle Time Report": { tone: "cyan", desc: "Machine idle time analysis & shift breakdown" },
     "Efficiency Report": { tone: "amber", desc: "Operational efficiency scores & benchmarks" },
     "User Rights": { tone: "indigo", desc: "Team access management & module permissions" },
+    "Users Setting": { tone: "emerald", desc: "User-wise PO amount limits & E-Approval threshold control" },
 };
 
 const CATEGORY_DESC = {
@@ -241,6 +244,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     else if (si === "Efficiency Report") node = <EfficiencyReport />;
     else if (ai === "Charts") node = <Charts />;
     else if (si === "User Rights") node = <UserRights />;
+    else if (si === "Users Setting") node = <UsersSetting />;
     else {
         // Show premium CategoryLanding when a parent menu is active but no sub-item selected
         const parentItem = (allowedMenuItems || MENU_ITEMS).find(m => m.key === ai);
@@ -499,6 +503,9 @@ export default function DashboardLayout() {
             };
         }
         let filteredChildren = item.children.filter(sub => {
+            if (sub === "Users Setting") {
+                return isSuperAdmin;
+            }
             if (sub === "M-Approval") {
                 return !!userRights["M-Approval"];
             }
@@ -509,7 +516,7 @@ export default function DashboardLayout() {
             if (item.key === "Dashboard") {
                 filteredChildren = filteredChildren.filter(sub => sub === "Top Management Dashboard");
             } else if (item.key === "Utility") {
-                filteredChildren = filteredChildren.filter(sub => sub === "User Rights");
+                filteredChildren = filteredChildren.filter(sub => sub === "User Rights" || (sub === "Users Setting" && isSuperAdmin));
             } else if (item.key !== "Approvals") {
                 filteredChildren = [];
             }

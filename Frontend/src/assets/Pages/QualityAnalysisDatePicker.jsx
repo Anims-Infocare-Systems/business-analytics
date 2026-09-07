@@ -116,7 +116,7 @@ function PopupPortal({ anchorRef, children }) {
     return createPortal(<div className="qadp-portal-wrap" style={style}>{children}</div>, document.body);
 }
 
-export default function QualityAnalysisDatePicker({ from, to, onChange }) {
+export default function QualityAnalysisDatePicker({ from, to, onChange, disabled = false }) {
     const today = new Date();
     const [open,         setOpen]        = useState(false);
     const [leftMonth,    setLeft]        = useState(from ? new Date(from.getFullYear(),from.getMonth(),1) : addMonths(today,-1));
@@ -131,6 +131,10 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
     const [fromInput, setFromInput] = useState("");
     const [toInput,   setToInput]   = useState("");
     const [inputErr,  setInputErr]  = useState("");
+
+    useEffect(() => {
+        if (disabled) setOpen(false);
+    }, [disabled]);
 
     useEffect(() => {
         setFromInput(toInputFmt(from));
@@ -209,10 +213,16 @@ export default function QualityAnalysisDatePicker({ from, to, onChange }) {
 
     return (
         <div className="qadp-wrap" ref={wrapRef}>
-            <button ref={triggerRef} className={`qadp-trigger ${open?"qadp-trigger--open":""}`} onClick={()=>setOpen(o=>!o)} type="button">
+            <button
+                ref={triggerRef}
+                className={`qadp-trigger ${open ? "qadp-trigger--open" : ""} ${disabled ? "qadp-trigger--disabled" : ""}`}
+                onClick={() => !disabled && setOpen(o => !o)}
+                disabled={disabled}
+                type="button"
+            >
                 <Calendar className="qadp-trigger__icon" size={15} />
                 <span className="qadp-trigger__label">{label}</span>
-                <ChevronDown className={`qadp-trigger__caret ${open?"qadp-trigger__caret--up":""}`} size={12} strokeWidth={2.5} />
+                <ChevronDown className={`qadp-trigger__caret ${open ? "qadp-trigger__caret--up" : ""}`} size={12} strokeWidth={2.5} />
             </button>
 
             {open && (

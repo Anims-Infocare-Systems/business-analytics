@@ -2628,7 +2628,7 @@
 .pp1-loading-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.55);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     display: flex;
@@ -2638,7 +2638,7 @@
     gap: 16px;
     z-index: 50;
     border-radius: 12px;
-    animation: pp1-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: pp1-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes pp1-fade-in {
@@ -2648,45 +2648,63 @@
 
 .pp1-loading-spinner-wrap {
     position: relative;
-    width: 48px;
-    height: 48px;
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.pp1-loading-spinner {
+.pp1-loading-svg {
     position: absolute;
     inset: 0;
-    border: 3px solid var(--act-border);
-    border-top-color: var(--act-color);
-    border-radius: 50%;
-    animation: pp1-spin 1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
-    box-shadow: 0 0 12px var(--act-border);
+    width: 76px;
+    height: 76px;
 }
 
-.pp1-loading-spinner-inner {
-    position: absolute;
-    inset: 8px;
-    border: 2px solid var(--act-border);
-    border-bottom-color: var(--act-color);
-    border-radius: 50%;
-    opacity: 0.7;
-    animation: pp1-spin-reverse 1.2s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+.pp1-loading-circle-bg {
+    stroke: rgba(37, 99, 235, 0.12);
+}
+
+.pp1-loading-circle-bar {
+    transition: stroke-dashoffset 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pp1-loading-percent-center {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    user-select: none;
+}
+
+.pp1-loading-percent-num {
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', sans-serif !important;
+    font-size: 18px;
+    font-weight: 800;
+    color: #1a54d4;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp1-loading-percent-symbol {
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', sans-serif !important;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2563eb;
+    margin-left: 1px;
+    line-height: 1;
 }
 
 .pp1-loading-text {
     font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', sans-serif !important;
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 700;
     color: #475569;
     letter-spacing: -0.010em;
     animation: pp1-text-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes pp1-spin {
-    to { transform: rotate(360deg); }
-}
-
-@keyframes pp1-spin-reverse {
-    to { transform: rotate(-360deg); }
 }
 
 @keyframes pp1-text-pulse {

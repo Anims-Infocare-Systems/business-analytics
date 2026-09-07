@@ -1,0 +1,1626 @@
+/* ============================================================
+   EApprovalPdfModal.css  —  E-Approval PDF Studio & Print Preview
+   Prefix: eap-pdf-
+   Theme: Modern Indigo / Multi-Theme Document Canvas
+   ============================================================ */
+
+.eap-pdf-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    animation: eapPdfFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: 'DM Sans', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #0f172a;
+    overflow: hidden;
+}
+
+@keyframes eapPdfFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ── Top Floating Studio Toolbar ── */
+.eap-pdf-toolbar {
+    width: 100%;
+    height: 64px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    flex-shrink: 0;
+    z-index: 50;
+    gap: 1rem;
+    box-sizing: border-box;
+}
+
+.eap-pdf-toolbar__left {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.eap-pdf-toolbar__badge-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
+}
+
+.eap-pdf-toolbar__title {
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.eap-pdf-title-full {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.eap-pdf-title-short {
+    display: none;
+    white-space: nowrap;
+}
+
+.eap-btn-label-options-short,
+.eap-btn-label-drag-short {
+    display: none;
+}
+
+.eap-pdf-toolbar__tag {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #eef2ff;
+    color: #4f46e5;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.eap-pdf-toolbar__center {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #f8fafc;
+    padding: 4px 8px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.eap-pdf-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.eap-pdf-tool-btn:hover {
+    background: #ffffff;
+    color: #1e293b;
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.eap-pdf-tool-btn--active {
+    background: #ffffff;
+    color: #4f46e5;
+    border-color: #c7d2fe;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+
+.eap-pdf-tool-btn--primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #ffffff;
+    border-color: transparent;
+    box-shadow: 0 3px 10px rgba(79, 70, 229, 0.3);
+}
+
+.eap-pdf-tool-btn--primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 5px 15px rgba(79, 70, 229, 0.4);
+}
+
+.eap-pdf-tool-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.eap-spin-icon {
+    animation: eapSpin 0.8s linear infinite;
+}
+
+@keyframes eapSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.eap-pdf-tool-btn--ghost {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #e2e8f0;
+}
+
+.eap-pdf-tool-btn--ghost:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.eap-pdf-divider {
+    width: 1px;
+    height: 20px;
+    background: #cbd5e1;
+    margin: 0 2px;
+}
+
+.eap-pdf-zoom-val {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #334155;
+    min-width: 44px;
+    text-align: center;
+}
+
+.eap-pdf-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+/* ── Main Workspace Container ── */
+.eap-pdf-workspace {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+    background: #cbd5e1;
+    background-image: radial-gradient(#94a3b8 1.2px, transparent 1.2px);
+    background-size: 20px 20px;
+}
+
+/* ── Left Sidebar Settings Panel ── */
+.eap-pdf-sidebar {
+    width: 300px;
+    height: 100%;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 20;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.04);
+    overflow-y: auto;
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+}
+
+.eap-pdf-side-sec {
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.eap-pdf-side-sec__title {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #64748b;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.eap-pdf-theme-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.eap-pdf-theme-card {
+    padding: 0.55rem;
+    border-radius: 8px;
+    border: 1.5px solid #e2e8f0;
+    cursor: pointer;
+    background: #f8fafc;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.eap-pdf-theme-card:hover {
+    border-color: #cbd5e1;
+    background: #ffffff;
+}
+
+.eap-pdf-theme-card--active {
+    border-color: #4f46e5;
+    background: #eef2ff;
+    color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.eap-pdf-theme-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.eap-pdf-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+}
+
+.eap-pdf-toggle-switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: #cbd5e1;
+    border-radius: 20px;
+    transition: background 0.2s ease;
+    cursor: pointer;
+}
+
+.eap-pdf-toggle-switch--on {
+    background: #4f46e5;
+}
+
+.eap-pdf-toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.eap-pdf-toggle-switch--on .eap-pdf-toggle-knob {
+    transform: translateX(16px);
+}
+
+/* ── Stamp Selector Badges ── */
+.eap-pdf-stamp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.eap-pdf-stamp-opt {
+    padding: 0.4rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: center;
+    cursor: pointer;
+    border: 1.5px dashed;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+}
+
+.eap-pdf-stamp-opt:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.eap-pdf-stamp-opt--approved {
+    border-color: #10b981;
+    color: #059669;
+    background: #ecfdf5;
+}
+
+.eap-pdf-stamp-opt--pending {
+    border-color: #f59e0b;
+    color: #d97706;
+    background: #fffbeb;
+}
+
+.eap-pdf-stamp-opt--verified {
+    border-color: #6366f1;
+    color: #4f46e5;
+    background: #eef2ff;
+}
+
+.eap-pdf-stamp-opt--confidential {
+    border-color: #ef4444;
+    color: #dc2626;
+    background: #fef2f2;
+}
+
+.eap-pdf-stamp-opt--selected {
+    box-shadow: 0 0 0 2px #1e293b;
+}
+
+/* ── Scrollable Viewport & A4 Sheet Canvas ── */
+.eap-pdf-viewport {
+    flex: 1;
+    height: 100%;
+    overflow: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2.5rem 1.5rem 4rem;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.eap-pdf-canvas-wrapper {
+    position: relative;
+    transition: transform 0.15s ease-out;
+    transform-origin: top center;
+}
+
+/* ── A4 Page Document Sheet ── */
+.eap-pdf-page {
+    width: 820px;
+    min-height: 1160px;
+    background: #ffffff;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18), 0 2px 10px rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    padding: 40px 48px 44px;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+    user-select: text;
+}
+
+/* ── Theme Styling on Page ── */
+.eap-pdf-page--theme-indigo {
+    --doc-primary: #4338ca;
+    --doc-accent: #6366f1;
+    --doc-bg-subtle: #f5f7ff;
+    --doc-border: #e0e7ff;
+    --doc-text: #1e1b4b;
+    --doc-highlight: #4f46e5;
+}
+
+.eap-pdf-page--theme-executive {
+    --doc-primary: #0f172a;
+    --doc-accent: #334155;
+    --doc-bg-subtle: #f8fafc;
+    --doc-border: #e2e8f0;
+    --doc-text: #0f172a;
+    --doc-highlight: #2563eb;
+}
+
+.eap-pdf-page--theme-slate {
+    --doc-primary: #1e293b;
+    --doc-accent: #0f766e;
+    --doc-bg-subtle: #f0fdfa;
+    --doc-border: #ccfbf1;
+    --doc-text: #134e4a;
+    --doc-highlight: #0d9488;
+}
+
+.eap-pdf-page--theme-minimal {
+    --doc-primary: #18181b;
+    --doc-accent: #52525b;
+    --doc-bg-subtle: #fafafa;
+    --doc-border: #e4e4e7;
+    --doc-text: #18181b;
+    --doc-highlight: #18181b;
+}
+
+/* ── Background Watermark ── */
+.eap-pdf-watermark-overlay {
+    position: absolute;
+    pointer-events: none;
+    font-size: 5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.04);
+    transform: rotate(-30deg);
+    white-space: nowrap;
+    letter-spacing: 12px;
+    z-index: 1;
+    user-select: none;
+    left: 10%;
+    top: 35%;
+}
+
+/* ── Document Header ── */
+.eap-doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 12px;
+    border-bottom: 2.5px solid var(--doc-primary);
+    position: relative;
+    z-index: 2;
+}
+
+.eap-doc-company {
+    flex: 1;
+}
+
+.eap-doc-company__logo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.22rem;
+    font-weight: 900;
+    color: var(--doc-primary);
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.eap-doc-company__logo-badge svg {
+    color: var(--doc-accent);
+}
+
+.eap-doc-company__sub {
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.45;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.eap-doc-company__line {
+    word-break: break-word;
+}
+
+.eap-doc-po-meta-block {
+    text-align: right;
+    min-width: 220px;
+}
+
+.eap-doc-po-title {
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: var(--doc-primary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.eap-doc-po-pill-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.eap-doc-meta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.eap-doc-meta-badge--approved {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+
+.eap-doc-meta-badge--pending {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1px solid #fde68a;
+}
+
+.eap-doc-po-info-list {
+    font-size: 0.78rem;
+    color: #334155;
+    line-height: 1.55;
+}
+
+.eap-doc-po-info-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.eap-doc-po-info-row strong {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+/* ── Vendor & Delivery Cards ── */
+.eap-doc-parties-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 12px 0 16px;
+    position: relative;
+    z-index: 2;
+}
+
+.eap-doc-party-card {
+    background: var(--doc-bg-subtle);
+    border: 1px solid var(--doc-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.eap-doc-party-card__label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.eap-doc-party-card__label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--doc-accent);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 6px;
+}
+
+.eap-doc-party-card__label-row .eap-doc-party-card__label {
+    margin-bottom: 0;
+}
+
+.eap-doc-party-card__name {
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: var(--doc-text);
+    margin-bottom: 4px;
+}
+
+.eap-doc-party-card__detail {
+    font-size: 0.76rem;
+    color: #475569;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.eap-doc-party-card__line {
+    word-break: break-word;
+}
+
+/* ── Line Items Table ── */
+.eap-doc-items-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin: 14px 0 16px;
+    position: relative;
+    z-index: 2;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1.5px solid var(--doc-border);
+    min-height: 280px;
+    background: #ffffff;
+}
+
+.eap-doc-table {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.78rem;
+    margin: 0;
+}
+
+.eap-doc-table thead {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    background: var(--doc-primary);
+    color: #ffffff;
+}
+
+.eap-doc-table thead tr {
+    display: table-row;
+    height: 36px;
+}
+
+.eap-doc-table th {
+    display: table-cell;
+    padding: 9px 12px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 0.74rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    box-sizing: border-box;
+}
+
+.eap-doc-table th:last-child {
+    border-right: none;
+}
+
+.eap-doc-table th.text-right,
+.eap-doc-table td.text-right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.eap-doc-table th.text-center,
+.eap-doc-table td.text-center {
+    text-align: center;
+}
+
+.eap-doc-table tbody {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+}
+
+.eap-doc-table tbody tr.eap-doc-row {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    border-bottom: 1px solid var(--doc-border);
+    background: #ffffff;
+    transition: background 0.15s ease;
+}
+
+.eap-doc-table tbody tr.eap-doc-row:nth-child(even) {
+    background: var(--doc-bg-subtle);
+}
+
+.eap-doc-table tbody tr.eap-doc-filler-row {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    flex: 1;
+    background: #ffffff;
+    border-bottom: none;
+}
+
+.eap-doc-table td {
+    display: table-cell;
+    padding: 9px 12px;
+    color: #1e293b;
+    vertical-align: middle;
+    line-height: 1.4;
+    border-right: 1px solid var(--doc-border);
+    box-sizing: border-box;
+}
+
+.eap-doc-table td:last-child {
+    border-right: none;
+}
+
+.eap-doc-filler-row td {
+    border-right: 1px solid var(--doc-border);
+    height: 100%;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.eap-doc-filler-row td:last-child {
+    border-right: none;
+}
+
+.eap-doc-item-code {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 600;
+    font-size: 0.74rem;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.eap-doc-item-desc {
+    font-weight: 500;
+    color: #1e293b;
+    word-break: break-word;
+    font-family: inherit;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.eap-doc-item-combo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.eap-doc-item-combined-cell {
+    padding: 8px 12px;
+}
+
+.eap-doc-item-amt {
+    font-weight: 800;
+    color: #0f172a;
+}
+
+/* ── Financial & Summary Bottom Layout ── */
+.eap-doc-bottom-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 16px;
+    margin-top: 0;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 2;
+}
+
+.eap-doc-notes-block {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: 20px;
+    box-sizing: border-box;
+}
+
+.eap-doc-words-box {
+    background: var(--doc-bg-subtle);
+    border: 1.5px solid var(--doc-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    flex: 1;
+    gap: 14px;
+    box-sizing: border-box;
+}
+
+.eap-doc-words-section {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.eap-doc-words-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+}
+
+.eap-doc-words-val {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--doc-accent);
+    font-style: italic;
+    line-height: 1.45;
+}
+
+.eap-doc-remarks-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: 1px dashed var(--doc-border);
+    padding-top: 10px;
+    margin-top: auto;
+}
+
+.eap-doc-remarks-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+}
+
+.eap-doc-remarks-val {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.5;
+    word-break: break-word;
+    min-height: 24px;
+}
+
+.eap-doc-editable-text {
+    outline: none;
+    border-radius: 4px;
+    padding: 2px 4px;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.eap-doc-editable-text:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.eap-doc-editable-text:focus {
+    background: #ffffff;
+    box-shadow: 0 0 0 2px var(--doc-highlight);
+}
+
+/* ── Financial Summary Card ── */
+.eap-doc-fin-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.eap-doc-fin-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--doc-accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.eap-doc-fin-card {
+    background: var(--doc-bg-subtle);
+    border: 1.5px solid var(--doc-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.eap-doc-fin-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5.5px 12px;
+    font-size: 0.75rem;
+    color: #475569;
+    border-bottom: 1px solid var(--doc-border);
+}
+
+.eap-doc-fin-row:last-child {
+    border-bottom: none;
+}
+
+.eap-doc-fin-label {
+    font-size: 0.75rem;
+    color: #475569;
+    font-weight: 600;
+}
+
+.eap-doc-fin-val {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #1e293b;
+    font-variant-numeric: tabular-nums;
+}
+
+.eap-doc-fin-row--sub .eap-doc-fin-label {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.eap-doc-fin-row--sub .eap-doc-fin-val {
+    font-size: 0.74rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.eap-doc-fin-row--tax {
+    background: var(--doc-bg-subtle);
+}
+
+.eap-doc-fin-row--grand {
+    background: var(--doc-primary);
+    color: #ffffff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: 900;
+    border-bottom: none;
+}
+
+.eap-doc-fin-row--grand .eap-doc-fin-label {
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 800;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+.eap-doc-fin-row--grand .eap-doc-fin-val {
+    color: #ffffff;
+    font-size: 0.98rem;
+    font-weight: 900;
+}
+
+/* ── Document Footer & Standalone Signatures (Prepared By, Checked By, Authorized Signatory) ── */
+.eap-doc-footer-sec {
+    margin-top: 24px;
+    padding-top: 14px;
+    border-top: 1px solid var(--doc-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    gap: 1.25rem;
+}
+
+.eap-doc-sign-box {
+    background: #ffffff;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 14px 10px;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.eap-doc-sign-box--auth {
+    flex: 1.35;
+}
+
+.eap-doc-sign-box .eap-pdf-sign-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    line-height: 1.3;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: normal;
+    word-break: normal;
+}
+
+.eap-doc-sign-box .eap-pdf-sign-line {
+    width: 100%;
+    height: 1.5px;
+    background: #0f172a;
+    margin: 24px 0 6px;
+}
+
+.eap-doc-sign-box .eap-pdf-sign-user {
+    font-size: 0.68rem;
+    color: #64748b;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.eap-doc-sign-box .eap-pdf-sign-user strong {
+    color: #0f172a;
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: normal;
+    line-height: 1.25;
+}
+
+/* ── DRAGGABLE ELEMENTS LAYER ── */
+.eap-pdf-drag-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 20;
+}
+
+.eap-pdf-draggable {
+    position: absolute;
+    cursor: grab;
+    pointer-events: auto;
+    user-select: none;
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
+    touch-action: none;
+}
+
+.eap-pdf-draggable:active {
+    cursor: grabbing;
+}
+
+.eap-pdf-draggable--active {
+    box-shadow: 0 0 0 2px #6366f1, 0 8px 24px rgba(99, 102, 241, 0.25);
+    border-radius: 6px;
+}
+
+/* Drag Handle Badge */
+.eap-pdf-drag-handle {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 22px;
+    height: 22px;
+    background: #4f46e5;
+    color: #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    cursor: move;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Drag Remove Close Button */
+.eap-pdf-drag-remove-btn {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 22px;
+    height: 22px;
+    background: #ef4444;
+    color: #ffffff;
+    border: 1.5px solid #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.15s ease, background 0.15s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.eap-pdf-draggable:hover .eap-pdf-drag-handle,
+.eap-pdf-draggable--active .eap-pdf-drag-handle,
+.eap-pdf-draggable:hover .eap-pdf-drag-remove-btn,
+.eap-pdf-draggable--active .eap-pdf-drag-remove-btn {
+    opacity: 1;
+}
+
+.eap-pdf-drag-remove-btn:hover {
+    background: #dc2626;
+    transform: scale(1.15);
+}
+
+/* ── Draggable Rubber Ink Stamps ── */
+.eap-pdf-rubber-stamp {
+    display: inline-block;
+    padding: 8px 16px;
+    font-weight: 900;
+    font-size: 1.15rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: 3.5px dashed;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(4px);
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.eap-pdf-rubber-stamp__sub {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    margin-top: 2px;
+    text-transform: none;
+}
+
+.eap-pdf-rubber-stamp--approved {
+    border-color: #059669;
+    color: #059669;
+    transform: rotate(-12deg);
+}
+
+.eap-pdf-rubber-stamp--pending {
+    border-color: #d97706;
+    color: #d97706;
+    transform: rotate(8deg);
+}
+
+.eap-pdf-rubber-stamp--verified {
+    border-color: #4f46e5;
+    color: #4f46e5;
+    transform: rotate(-6deg);
+}
+
+.eap-pdf-rubber-stamp--confidential {
+    border-color: #dc2626;
+    color: #dc2626;
+    transform: rotate(15deg);
+}
+
+/* ── Draggable Signature Card ── */
+.eap-pdf-draggable-sign {
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px dashed #94a3b8;
+    border-radius: 8px;
+    padding: 10px 16px;
+    min-width: 190px;
+    text-align: center;
+}
+
+.eap-pdf-sign-line {
+    width: 100%;
+    height: 1.5px;
+    background: #0f172a;
+    margin: 28px 0 6px;
+}
+
+.eap-pdf-sign-label {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.eap-pdf-sign-user {
+    font-size: 0.68rem;
+    color: #64748b;
+}
+
+/* ── Draggable Sticky Annotation Memo ── */
+.eap-pdf-draggable-memo {
+    background: #fef08a;
+    color: #854d0e;
+    border: 1px solid #fde047;
+    border-radius: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    font-size: 0.76rem;
+    font-weight: 600;
+    max-width: 220px;
+    transform: rotate(2deg);
+}
+
+.eap-pdf-draggable-memo__pin {
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Floating Helper Toast on Drag Mode ── */
+.eap-pdf-drag-tip {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #ffffff;
+    padding: 8px 18px;
+    border-radius: 24px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    z-index: 60;
+    pointer-events: none;
+    animation: eapPdfFadeIn 0.3s ease;
+}
+
+.eap-pdf-drag-tip svg {
+    color: #818cf8;
+}
+
+/* ── Sidebar Mobile Backdrop ── */
+.eap-pdf-sidebar-backdrop {
+    display: none;
+}
+
+/* ── Sidebar Mobile Drawer Header ── */
+.eap-pdf-sidebar-mobile-hdr {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.eap-pdf-sidebar-mobile-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: #1e293b;
+}
+
+.eap-pdf-sidebar-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.eap-pdf-sidebar-close-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fca5a5;
+}
+
+/* ============================================================
+   RESPONSIVE MEDIA QUERIES FOR ALL RESOLUTIONS
+   ============================================================ */
+
+/* ── 1. Wide Desktop / Laptop (max-width: 1280px) ── */
+@media screen and (max-width: 1280px) {
+    .eap-pdf-toolbar {
+        padding: 0 1rem;
+        gap: 0.75rem;
+    }
+    .eap-pdf-sidebar {
+        width: 270px;
+    }
+    .eap-pdf-side-sec {
+        padding: 0.9rem 1rem;
+    }
+    .eap-pdf-viewport {
+        padding: 1.5rem 1rem 3rem;
+    }
+}
+
+/* ── 2. Tablets & Small Laptops (max-width: 1024px) ── */
+@media screen and (max-width: 1024px) {
+    .eap-pdf-toolbar {
+        height: 58px;
+        padding: 0 0.85rem;
+        gap: 0.65rem;
+    }
+    .eap-pdf-toolbar__tag {
+        display: none;
+    }
+    .eap-btn-label-options {
+        display: none;
+    }
+    .eap-btn-label-options-short {
+        display: inline;
+    }
+    
+    /* Sidebar as Floating Slide-over Drawer */
+    .eap-pdf-sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(320px, 85vw);
+        z-index: 100;
+        box-shadow: 8px 0 30px rgba(0, 0, 0, 0.25);
+        animation: eapSidebarSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .eap-pdf-sidebar-mobile-hdr {
+        display: flex;
+    }
+    
+    .eap-pdf-sidebar-backdrop {
+        display: block;
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 90;
+        animation: eapPdfFadeIn 0.2s ease;
+    }
+    
+    .eap-pdf-viewport {
+        padding: 1.25rem 0.5rem 2.5rem;
+    }
+}
+
+@keyframes eapSidebarSlideIn {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+/* ── 3. Phablets & Mobile Landscape (max-width: 768px) ── */
+@media screen and (max-width: 768px) {
+    .eap-pdf-toolbar {
+        height: 54px;
+        padding: 0 0.5rem;
+        gap: 0.4rem;
+        overflow-x: visible;
+        position: relative;
+    }
+    
+    .eap-pdf-toolbar__left {
+        flex-shrink: 0;
+        gap: 0.4rem;
+    }
+    .eap-pdf-toolbar__badge-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+    }
+    .eap-pdf-title-full {
+        display: none;
+    }
+    .eap-pdf-title-short {
+        display: inline;
+        font-size: 0.86rem;
+        font-weight: 800;
+    }
+    
+    .eap-pdf-toolbar__center {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: #6366f1 rgba(0, 0, 0, 0.05);
+        padding: 3px 5px;
+        gap: 0.25rem;
+    }
+    .eap-pdf-toolbar__center::-webkit-scrollbar {
+        height: 3px;
+        display: block;
+    }
+    .eap-pdf-toolbar__center::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+    }
+    .eap-pdf-toolbar__center::-webkit-scrollbar-thumb {
+        background: linear-gradient(90deg, #6366f1, #a855f7);
+        border-radius: 4px;
+    }
+
+    .eap-pdf-tool-btn {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.76rem;
+    }
+    .eap-btn-label-drag {
+        display: none;
+    }
+    .eap-btn-label-drag-short {
+        display: inline;
+    }
+    .eap-pdf-zoom-val {
+        min-width: 34px;
+        font-size: 0.74rem;
+    }
+    
+    .eap-pdf-toolbar__right {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-left: auto;
+    }
+    .eap-btn-label {
+        display: none;
+    }
+    .eap-pdf-tool-btn--close {
+        background: #fee2e2 !important;
+        color: #ef4444 !important;
+        border: 1.5px solid #fecaca !important;
+        padding: 0.4rem 0.5rem !important;
+        border-radius: 8px !important;
+        flex-shrink: 0 !important;
+    }
+    
+    .eap-pdf-viewport {
+        padding: 0.75rem 0.25rem 2rem;
+    }
+    
+    .eap-pdf-drag-tip {
+        bottom: 12px;
+        padding: 6px 14px;
+        font-size: 0.74rem;
+        max-width: 90vw;
+    }
+}
+
+/* ── 4. Compact Mobile Phones (max-width: 520px) ── */
+@media screen and (max-width: 520px) {
+    .eap-pdf-toolbar {
+        height: 50px;
+        padding: 0 0.35rem;
+        gap: 0.3rem;
+    }
+    .eap-pdf-toolbar__badge-icon {
+        display: none;
+    }
+    .eap-pdf-toolbar__title {
+        font-size: 0.8rem;
+    }
+    .eap-btn-label-options-short,
+    .eap-btn-label-drag-short,
+    .eap-btn-label-reset {
+        display: none;
+    }
+    .eap-pdf-divider {
+        display: none;
+    }
+    .eap-pdf-tool-btn {
+        padding: 0.32rem 0.42rem;
+    }
+    .eap-pdf-zoom-val {
+        min-width: 28px;
+        font-size: 0.68rem;
+    }
+    .eap-pdf-tool-btn--close {
+        padding: 0.35rem 0.45rem !important;
+    }
+}
+
+/* ── 5. Ultra Small Mobile Screens (max-width: 360px) ── */
+@media screen and (max-width: 360px) {
+    .eap-pdf-toolbar {
+        padding: 0 0.25rem;
+        gap: 0.2rem;
+    }
+    .eap-pdf-title-short {
+        font-size: 0.75rem;
+    }
+    .eap-pdf-tool-btn--reset {
+        display: none;
+    }
+    .eap-pdf-tool-btn {
+        padding: 0.28rem 0.35rem;
+    }
+}
+
+/* ── 6. Short Landscape Viewports (max-height: 700px) ── */
+@media screen and (max-height: 700px) {
+    .eap-pdf-toolbar {
+        height: 48px;
+    }
+    .eap-pdf-viewport {
+        padding: 0.5rem 0.5rem 1.5rem;
+    }
+    .eap-pdf-side-sec {
+        padding: 0.65rem 0.9rem;
+    }
+    .eap-pdf-drag-tip {
+        bottom: 8px;
+    }
+}
+
+/* ============================================================
+   PRINT MEDIA RULES — Vector Crisp Print without UI Chrome
+   ============================================================ */
+@media print {
+    html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Hide background app, modals, sidebar, toolbar, controls */
+    #root,
+    .eap-pdf-toolbar,
+    .eap-pdf-sidebar,
+    .eap-pdf-sidebar-backdrop,
+    .eap-pdf-drag-handle,
+    .eap-pdf-drag-remove-btn,
+    .eap-pdf-drag-tip,
+    .eap-pdf-zoom-val,
+    .eap-prev-btn {
+        display: none !important;
+    }
+
+    .eap-pdf-overlay {
+        position: static !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    .eap-pdf-workspace,
+    .eap-pdf-viewport,
+    .eap-pdf-canvas-wrapper {
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: transparent !important;
+        overflow: visible !important;
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
+    }
+
+    .eap-pdf-page {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: 210mm !important;
+        min-height: 297mm !important;
+        margin: 0 auto !important;
+        padding: 12mm 15mm !important;
+        page-break-inside: avoid !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    @page {
+        size: A4 portrait;
+        margin: 0;
+    }
+}

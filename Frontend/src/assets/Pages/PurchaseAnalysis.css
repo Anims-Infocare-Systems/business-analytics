@@ -1731,10 +1731,20 @@
     text-align: left;
 }
 
-.pa2-custom-select-trigger:hover {
+.pa2-custom-select-trigger:hover:not(:disabled) {
     border-color: rgba(45, 109, 232, 0.35);
     background: #fff;
     box-shadow: 0 4px 12px rgba(45, 109, 232, 0.06);
+}
+
+.pa2-custom-select-trigger:disabled,
+.pa2-custom-select.pa2-disabled .pa2-custom-select-trigger {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    pointer-events: none;
 }
 
 .pa2-custom-select.pa2-active .pa2-custom-select-trigger {
@@ -1903,10 +1913,20 @@
     color: #94a3b8;
 }
 
-.pa2-search-input:hover {
+.pa2-search-input:hover:not(:disabled) {
     border-color: rgba(45, 109, 232, 0.35);
     background: #fff;
     box-shadow: 0 4px 12px rgba(45, 109, 232, 0.06);
+}
+
+.pa2-search-input:disabled,
+.pa2-search-input[disabled] {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    pointer-events: none;
 }
 
 .pa2-search-input:focus {
@@ -1957,7 +1977,7 @@
     height: 38px;
 }
 
-.pa2-btn-reset:hover {
+.pa2-btn-reset:hover:not(:disabled) {
     background: #dc2626;
     color: #fff;
     border-color: #dc2626;
@@ -1965,19 +1985,31 @@
     transform: translateY(-1px);
 }
 
-.pa2-btn-reset:active {
+.pa2-btn-reset:active:not(:disabled) {
     transform: translateY(1px);
+}
+
+.pa2-btn-reset:disabled,
+.pa2-btn-reset[disabled] {
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    background: rgba(220, 38, 38, 0.03) !important;
+    border-color: rgba(220, 38, 38, 0.1) !important;
+    color: #f87171 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    pointer-events: none !important;
 }
 
 .pa2-btn-reset-icon {
     transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.pa2-btn-reset:hover .pa2-btn-reset-icon {
+.pa2-btn-reset:hover:not(:disabled) .pa2-btn-reset-icon {
     transform: rotate(-180deg);
 }
 
-.pa2-btn-reset:active .pa2-btn-reset-icon {
+.pa2-btn-reset:active:not(:disabled) .pa2-btn-reset-icon {
     transform: rotate(-360deg) scale(0.95);
 }
 
@@ -3240,6 +3272,17 @@
 /* Fulfillment Table Styles */
 .pa2-fs-tbl {
     width: 100%;
+}
+
+.pa2-fs-tbl .pa2-po-vendor,
+.pa2-fs-vendor {
+    min-width: 160px;
+    max-width: 260px;
+    white-space: normal !important;
+    word-break: break-word;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    line-height: 1.35;
 }
 
 .pa2-fs-part-badge {

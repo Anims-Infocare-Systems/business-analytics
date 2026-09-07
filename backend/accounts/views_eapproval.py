@@ -113,6 +113,11 @@ _CUST_JOIN_SQL = """
     LEFT JOIN CustMast C ON
         LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(C.Id, N''))))
         = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(P.cid, N''))))
+        AND ISNULL(C.Deleted, 0) = 0
+    LEFT JOIN CustAliasMast CA ON
+        LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CA.Id, N''))))
+        = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(P.cid, N''))))
+        AND ISNULL(CA.Deleted, 0) = 0
 """
 
 _IS_APPROVED_SQL = """
@@ -128,8 +133,180 @@ def _check_table_exists(cursor, table_name: str) -> bool:
         return False
 
 
-def _po_cte_sql(include_amnd: bool = False, is_approve_vend_po: bool = False) -> str:
-    job_filter = "" if is_approve_vend_po else "AND LOWER(LTRIM(RTRIM(ISNULL(P.dtype, N'')))) NOT LIKE '%job%'"
+def _ensure_bapodetails_table(cursor):
+    cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'BAPoDetails')
+        BEGIN
+            CREATE TABLE BAPoDetails (
+                Id INT IDENTITY(1,1) PRIMARY KEY,
+                Pono NVARCHAR(100) NOT NULL,
+                Podate DATE NULL,
+                Potype NVARCHAR(100) NULL,
+                Custname NVARCHAR(250) NULL,
+                Pocomment NVARCHAR(MAX) NULL,
+                [User] NVARCHAR(100) NULL,
+                [datetime] DATETIME DEFAULT GETDATE(),
+                deleted BIT DEFAULT 0
+            );
+            CREATE NONCLUSTERED INDEX IX_BAPoDetails_Pono ON BAPoDetails (Pono);
+        END
+    """)
+
+
+def _ensure_bauserlimits_table(cursor):
+    cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'BAUserLimits')
+        BEGIN
+            CREATE TABLE BAUserLimits (
+                Id INT IDENTITY(1,1) PRIMARY KEY,
+                Username NVARCHAR(100) NOT NULL,
+                LimitAmt DECIMAL(18,2) DEFAULT 0,
+                IsUnlimited BIT DEFAULT 0,
+                HideUnder1000 BIT DEFAULT 0,
+                UpdatedBy NVARCHAR(100) NULL,
+                UpdatedAt DATETIME DEFAULT GETDATE()
+            );
+            CREATE NONCLUSTERED INDEX IX_BAUserLimits_Username ON BAUserLimits (Username);
+        END
+    """)
+
+
+def _get_user_po_limit_rule(cursor, tenant) -> dict:
+    """
+    Returns {'is_superadmin': bool, 'is_unlimited': bool, 'limit': float, 'hide_under_1000': bool}
+    for the current user based on Superadmin status and BAUserLimits table.
+    """
+    username = str(tenant.get("username") or "").strip()
+    company_code = str(tenant.get("company_code") or "").strip()
+
+    is_super = False
+    try:
+        from django.db import connection as django_conn
+        with django_conn.cursor() as dj_cursor:
+            dj_cursor.execute(
+                "SELECT designation, issuperadmin FROM tenants_users WHERE company_code = %s AND UPPER(username) = UPPER(%s) AND deleted = 0",
+                [company_code, username]
+            )
+            urow = dj_cursor.fetchone()
+            if urow:
+                desg = (urow[0] or "").strip().lower()
+                is_super = desg == "admin" or bool(urow[1])
+            elif username.lower() == "admin":
+                is_super = True
+    except Exception:
+        if username.lower() == "admin":
+            is_super = True
+
+    _ensure_bauserlimits_table(cursor)
+
+    # Check global/policy hide_under_1000 from BAUserLimits
+    hide_under_1000 = False
+    try:
+        cursor.execute("SELECT TOP 1 ISNULL(HideUnder1000, 0) FROM BAUserLimits WHERE HideUnder1000 = 1")
+        hrow = cursor.fetchone()
+        if hrow and hrow[0]:
+            hide_under_1000 = True
+    except Exception:
+        pass
+
+    # 1. Query user-specific limit configured in BAUserLimits (takes precedence)
+    try:
+        cursor.execute("""
+            SELECT TOP 1 ISNULL(LimitAmt, 0), ISNULL(IsUnlimited, 0), ISNULL(HideUnder1000, 0)
+            FROM BAUserLimits
+            WHERE UPPER(LTRIM(RTRIM(Username))) = UPPER(LTRIM(RTRIM(?)))
+            ORDER BY Id DESC
+        """, [username])
+        lrow = cursor.fetchone()
+        if lrow:
+            limit_amt = float(lrow[0] or 0)
+            is_unlimited = bool(lrow[1])
+            if lrow[2]:
+                hide_under_1000 = True
+            return {
+                "is_superadmin": is_super,
+                "is_unlimited": is_unlimited,
+                "limit": limit_amt if not is_unlimited else 0.0,
+                "hide_under_1000": hide_under_1000,
+            }
+    except Exception as ex:
+        print("Error reading BAUserLimits:", ex)
+
+    # 2. Fallback if no specific row exists in BAUserLimits:
+    # Superadmin default is Unlimited; standard user default is ₹15,000
+    if is_super:
+        return {
+            "is_superadmin": True,
+            "is_unlimited": True,
+            "limit": 0.0,
+            "hide_under_1000": hide_under_1000,
+        }
+
+    return {
+        "is_superadmin": False,
+        "is_unlimited": False,
+        "limit": 15000.0,
+        "hide_under_1000": hide_under_1000,
+    }
+
+
+def _get_eapproval_company_settings(cursor) -> tuple[bool, bool]:
+    """
+    Returns (is_approve_supp_po, is_approve_vend_po) from CompanySetting.
+    - is_approve_supp_po: controls supplier PO types (Raw Material, Store Material, Service Po, PO Amendment, General).
+    - is_approve_vend_po: controls job order PO types (Job Order).
+    """
+    is_approve_supp_po = True
+    is_approve_vend_po = False
+
+    # 1. Try querying both columns from CompanySetting
+    try:
+        cursor.execute("SELECT TOP 1 ISNULL(IsApproveSuppPo, 0), ISNULL(IsApproveVendPo, 0) FROM CompanySetting")
+        row = cursor.fetchone()
+        if row is not None:
+            return bool(row[0]), bool(row[1])
+    except Exception:
+        pass
+
+    # Try individual columns on CompanySetting in case of schema variations
+    try:
+        cursor.execute("SELECT TOP 1 ISNULL(IsApproveSuppPo, 0) FROM CompanySetting")
+        row = cursor.fetchone()
+        if row is not None:
+            is_approve_supp_po = bool(row[0])
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("SELECT TOP 1 ISNULL(IsApproveVendPo, 0) FROM CompanySetting")
+        row = cursor.fetchone()
+        if row is not None:
+            is_approve_vend_po = bool(row[0])
+    except Exception:
+        pass
+
+    # 2. Fallback to CompanySettingFeatures if present
+    try:
+        cursor.execute("SELECT TOP 1 ISNULL(IsApproveSuppPo, 0), ISNULL(IsApproveVendPo, 0) FROM CompanySettingFeatures")
+        row = cursor.fetchone()
+        if row is not None:
+            return bool(row[0]), bool(row[1])
+    except Exception:
+        pass
+
+    return is_approve_supp_po, is_approve_vend_po
+
+
+def _po_cte_sql(include_amnd: bool = False, is_approve_supp_po: bool = True, is_approve_vend_po: bool = False) -> str:
+    if is_approve_supp_po and is_approve_vend_po:
+        type_filter = ""
+    elif is_approve_supp_po and not is_approve_vend_po:
+        type_filter = "AND LOWER(LTRIM(RTRIM(ISNULL(P.dtype, N'')))) NOT LIKE '%job%'"
+    elif not is_approve_supp_po and is_approve_vend_po:
+        type_filter = "AND LOWER(LTRIM(RTRIM(ISNULL(P.dtype, N'')))) LIKE '%job%'"
+    else:
+        type_filter = "AND 1=0"
+
     base_sql = f"""
         WITH po AS (
             SELECT
@@ -138,14 +315,14 @@ def _po_cte_sql(include_amnd: bool = False, is_approve_vend_po: bool = False) ->
                 LTRIM(RTRIM(ISNULL(P.dtype, N'')))                  AS dtype_raw,
                 ISNULL(P.totamt, 0)                                 AS totamt,
                 {_IS_APPROVED_SQL.strip()}                         AS is_approved,
-                LTRIM(RTRIM(ISNULL(C.CName, N'')))                  AS vendor_name,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS vendor_name,
                 {_CANON_TYPE_SQL.strip()}                          AS canon_type,
                 N'po'                                               AS doc_kind,
                 N''                                                 AS amd_no
             FROM POMas P
             {_CUST_JOIN_SQL.strip()}
             WHERE ISNULL(P.deleted, 0) = 0
-              {job_filter}
+              {type_filter}
               AND CAST(P.podate AS DATE) BETWEEN ? AND ?
     """
     if include_amnd:
@@ -158,21 +335,21 @@ def _po_cte_sql(include_amnd: bool = False, is_approve_vend_po: bool = False) ->
                 LTRIM(RTRIM(ISNULL(P.dtype, N'')))                  AS dtype_raw,
                 ISNULL(P.totamt, 0)                                 AS totamt,
                 {_IS_APPROVED_SQL.strip()}                         AS is_approved,
-                LTRIM(RTRIM(ISNULL(C.CName, N'')))                  AS vendor_name,
+                LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))      AS vendor_name,
                 N'PO Amendment'                                     AS canon_type,
                 N'po_amnd'                                          AS doc_kind,
                 LTRIM(RTRIM(ISNULL(P.amdno, N'')))                  AS amd_no
             FROM POAmndMas P
             {_CUST_JOIN_SQL.strip()}
             WHERE ISNULL(P.deleted, 0) = 0
-              {job_filter}
+              {type_filter}
               AND CAST(P.amddate AS DATE) BETWEEN ? AND ?
         """
     base_sql += "\n        )\n"
     return base_sql
 
 
-def _list_filter_sql(type_filter: str, status_filter: str, search_q: str, params: list) -> str:
+def _list_filter_sql(type_filter: str, status_filter: str, search_q: str, params: list, user_rule: dict | None = None) -> str:
     """Extra WHERE on CTE `po` (unqualified column names)."""
     filt = " WHERE 1=1 "
     if search_q:
@@ -191,6 +368,15 @@ def _list_filter_sql(type_filter: str, status_filter: str, search_q: str, params
         filt += " AND is_approved = 1 "
     elif status_filter == "pending":
         filt += " AND is_approved = 0 "
+
+    # Enforce user PO amount threshold limit
+    if user_rule:
+        if not user_rule.get("is_unlimited") and user_rule.get("limit", 0) > 0:
+            filt += " AND ISNULL(totamt, 0) <= ? "
+            params.append(float(user_rule["limit"]))
+        if user_rule.get("hide_under_1000"):
+            filt += " AND ISNULL(totamt, 0) > 1000 "
+
     return filt
 
 
@@ -223,21 +409,14 @@ def eapproval_list(request):
     try:
         cursor = conn.cursor()
         has_amnd = _check_table_exists(cursor, "POAmndMas")
-
-        is_approve_vend_po = False
-        try:
-            cursor.execute("SELECT TOP 1 ISNULL(IsApproveVendPo, 0) FROM CompanySetting")
-            cs_row = cursor.fetchone()
-            if cs_row and cs_row[0]:
-                is_approve_vend_po = True
-        except Exception:
-            pass
+        is_approve_supp_po, is_approve_vend_po = _get_eapproval_company_settings(cursor)
+        user_rule = _get_user_po_limit_rule(cursor, tenant)
 
         params: list = [start_date, end_date, start_date, end_date] if has_amnd else [start_date, end_date]
-        filt = _list_filter_sql(type_filter, status_filter, search_q, params)
+        filt = _list_filter_sql(type_filter, status_filter, search_q, params, user_rule)
 
         sql_combined = f"""
-            {_po_cte_sql(has_amnd, is_approve_vend_po).strip()}
+            {_po_cte_sql(has_amnd, is_approve_supp_po, is_approve_vend_po).strip()}
             , numbered AS (
                 SELECT po.*,
                        ROW_NUMBER()  OVER (ORDER BY po.po_date DESC, po.po_no DESC) AS _rn,
@@ -258,9 +437,9 @@ def eapproval_list(request):
         except Exception:
             # Safe fallback to main POMas table if POAmndMas UNION fails
             params = [start_date, end_date]
-            filt = _list_filter_sql(type_filter, status_filter, search_q, params)
+            filt = _list_filter_sql(type_filter, status_filter, search_q, params, user_rule)
             sql_fallback = f"""
-                {_po_cte_sql(False, is_approve_vend_po).strip()}
+                {_po_cte_sql(False, is_approve_supp_po, is_approve_vend_po).strip()}
                 , numbered AS (
                     SELECT po.*,
                            ROW_NUMBER()  OVER (ORDER BY po.po_date DESC, po.po_no DESC) AS _rn,
@@ -275,6 +454,24 @@ def eapproval_list(request):
             cursor.execute(sql_fallback, params + [offset + 1, offset + page_size])
             rows = cursor.fetchall()
             cols = [d[0] for d in cursor.description]
+
+        comments_map = {}
+        try:
+            if _check_table_exists(cursor, "BAPoDetails") and rows:
+                po_list = list({str(r[0]).strip() for r in rows if r[0]})
+                if po_list:
+                    placeholders = ",".join(["?"] * len(po_list))
+                    cursor.execute(f"""
+                        SELECT Pono, Pocomment
+                        FROM BAPoDetails
+                        WHERE ISNULL(deleted, 0) = 0
+                          AND LTRIM(RTRIM(Pono)) IN ({placeholders})
+                        ORDER BY [datetime] ASC, Id ASC
+                    """, po_list)
+                    for crow in cursor.fetchall():
+                        comments_map[str(crow[0]).strip()] = crow[1] or ""
+        except Exception as ex:
+            print("Error batch fetching BAPoDetails in eapproval_list:", ex)
 
         cursor.close()
         conn.close()
@@ -323,6 +520,7 @@ def eapproval_list(request):
             "dtypeRaw":   rec.get("dtype_raw") or "",
             "approvedBy": approved_by,
             "approvedDateTime": approved_dt,
+            "pocomment":  comments_map.get(str(rec["po_no"]).strip(), ""),
         })
 
     return Response({
@@ -333,6 +531,8 @@ def eapproval_list(request):
         "page_size": page_size,
         "total":     total_count,
         "cards":     cards,
+        "is_approve_supp_po": is_approve_supp_po,
+        "is_approve_vend_po": is_approve_vend_po,
     })
 
 
@@ -351,43 +551,46 @@ def eapproval_stats(request):
     try:
         cursor = conn.cursor()
         has_amnd = _check_table_exists(cursor, "POAmndMas")
+        is_approve_supp_po, is_approve_vend_po = _get_eapproval_company_settings(cursor)
+        user_rule = _get_user_po_limit_rule(cursor, tenant)
 
-        is_approve_vend_po = False
-        try:
-            cursor.execute("SELECT TOP 1 ISNULL(IsApproveVendPo, 0) FROM CompanySetting")
-            cs_row = cursor.fetchone()
-            if cs_row and cs_row[0]:
-                is_approve_vend_po = True
-        except Exception:
-            pass
+        limit_where = ""
+        extra_params = []
+        if not user_rule.get("is_unlimited") and user_rule.get("limit", 0) > 0:
+            limit_where += " AND ISNULL(po.totamt, 0) <= ? "
+            extra_params.append(float(user_rule["limit"]))
+        if user_rule.get("hide_under_1000"):
+            limit_where += " AND ISNULL(po.totamt, 0) > 1000 "
 
         sql = f"""
-            {_po_cte_sql(has_amnd, is_approve_vend_po).strip()}
+            {_po_cte_sql(has_amnd, is_approve_supp_po, is_approve_vend_po).strip()}
             SELECT
                 po.canon_type,
                 po.is_approved,
                 COUNT(*)              AS cnt,
                 SUM(ISNULL(po.totamt, 0)) AS total_amt
             FROM po
+            WHERE 1=1 {limit_where}
             GROUP BY po.canon_type, po.is_approved
         """
-        stat_params = [start_date, end_date, start_date, end_date] if has_amnd else [start_date, end_date]
+        stat_params = ([start_date, end_date, start_date, end_date] if has_amnd else [start_date, end_date]) + extra_params
 
         try:
             cursor.execute(sql, stat_params)
             rows = cursor.fetchall()
         except Exception:
             sql_fallback = f"""
-                {_po_cte_sql(False, is_approve_vend_po).strip()}
+                {_po_cte_sql(False, is_approve_supp_po, is_approve_vend_po).strip()}
                 SELECT
                     po.canon_type,
                     po.is_approved,
                     COUNT(*)              AS cnt,
                     SUM(ISNULL(po.totamt, 0)) AS total_amt
                 FROM po
+                WHERE 1=1 {limit_where}
                 GROUP BY po.canon_type, po.is_approved
             """
-            cursor.execute(sql_fallback, [start_date, end_date])
+            cursor.execute(sql_fallback, [start_date, end_date] + extra_params)
             rows = cursor.fetchall()
 
         cursor.close()
@@ -395,13 +598,15 @@ def eapproval_stats(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
-    type_buckets = {
-        "Raw Material": {"total": 0, "approved": 0, "pending": 0, "amount": 0.0},
-        "Store Material": {"total": 0, "approved": 0, "pending": 0, "amount": 0.0},
-        "PO Amendment": {"total": 0, "approved": 0, "pending": 0, "amount": 0.0},
-        "Service Po": {"total": 0, "approved": 0, "pending": 0, "amount": 0.0},
-        "General": {"total": 0, "approved": 0, "pending": 0, "amount": 0.0},
-    }
+    type_buckets = {}
+    if is_approve_supp_po:
+        type_buckets["Raw Material"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
+        type_buckets["Store Material"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
+        type_buckets["PO Amendment"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
+        type_buckets["Service Po"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
+        type_buckets["General"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
+    if is_approve_vend_po:
+        type_buckets["Job Order"] = {"total": 0, "approved": 0, "pending": 0, "amount": 0.0}
 
     overall_total = overall_approved = overall_pending = 0
     overall_amount = 0.0
@@ -456,6 +661,8 @@ def eapproval_stats(request):
         "by_type": type_buckets,
         "overall_total": overall_total,
         "overall_amount": round(overall_amount, 2),
+        "is_approve_supp_po": is_approve_supp_po,
+        "is_approve_vend_po": is_approve_vend_po,
     })
 
 
@@ -507,7 +714,17 @@ def eapproval_detail(request):
                     0                                    AS pacamtbf,
                     ISNULL(P.pacamt, 0)                  AS pacamt,
                     P.IsApprovePo                        AS is_approve_raw,
-                    LTRIM(RTRIM(ISNULL(C.CName, N'')))   AS vendor_name
+                    LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))       AS vendor_name,
+                    LTRIM(RTRIM(COALESCE(C.Address, CA.Address, N'')))   AS vendor_address,
+                    LTRIM(RTRIM(COALESCE(C.Address1, CA.Address1, N''))) AS vendor_address1,
+                    LTRIM(RTRIM(COALESCE(C.Address2, CA.Address2, N''))) AS vendor_address2,
+                    LTRIM(RTRIM(COALESCE(C.City, CA.City, N'')))        AS vendor_city,
+                    LTRIM(RTRIM(COALESCE(C.State, CA.State, N'')))      AS vendor_state,
+                    LTRIM(RTRIM(COALESCE(C.PinCode, CA.PinCode, N'')))  AS vendor_pincode,
+                    LTRIM(RTRIM(COALESCE(C.gstino, CA.gstino, N'')))    AS vendor_gstino,
+                    LTRIM(RTRIM(COALESCE(C.Contact, CA.Contact, N'')))  AS vendor_contact,
+                    LTRIM(RTRIM(COALESCE(C.Phone, CA.Phone, N'')))      AS vendor_phone,
+                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email
                 FROM POAmndMas P
                 {_CUST_JOIN_SQL.strip()}
                 WHERE ISNULL(P.deleted, 0) = 0
@@ -530,6 +747,7 @@ def eapproval_detail(request):
                         ) AS sno,
                         ISNULL(D.rmname, N'')    AS code_no,
                         ISNULL(D.mattype, N'')   AS description,
+                        ISNULL(CM.hsncode, N'')  AS hsn_code,
                         ISNULL(D.dia, N'')       AS dia,
                         ISNULL(D.uom, N'')       AS uom,
                         ISNULL(D.qty, 0)         AS qty,
@@ -537,16 +755,24 @@ def eapproval_detail(request):
                         ISNULL(D.rate, 0)        AS rate,
                         ISNULL(D.amount, 0)      AS amount
                     FROM POAmndDet D
+                    LEFT JOIN (
+                        SELECT 
+                            LTRIM(RTRIM(PartNo)) AS PartNo,
+                            MAX(LTRIM(RTRIM(ISNULL(hsncode, N'')))) AS hsncode
+                        FROM Commer_Mas
+                        WHERE ISNULL(deleted, 0) = 0
+                        GROUP BY LTRIM(RTRIM(PartNo))
+                    ) CM ON CM.PartNo = LTRIM(RTRIM(D.rmname))
                     WHERE ISNULL(D.deleted, 0) = 0
                       AND LTRIM(RTRIM(D.pono)) = LTRIM(RTRIM(?))
                       AND (? = '' OR LTRIM(RTRIM(ISNULL(D.amdno, N''))) = LTRIM(RTRIM(?)))
                     ORDER BY ISNULL(D.seq, 2147483647)
                 """
-                cursor.execute(items_sql, [pono, found_amdno, found_amdno])
-                icols = [d[0] for d in cursor.description]
-                raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
-
-                if not raw_items:
+                try:
+                    cursor.execute(items_sql, [pono, found_amdno, found_amdno])
+                    icols = [d[0] for d in cursor.description]
+                    raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
+                except Exception:
                     items_sql_fb = """
                         SELECT
                             ROW_NUMBER() OVER (
@@ -554,6 +780,7 @@ def eapproval_detail(request):
                             ) AS sno,
                             ISNULL(D.rmname, N'')    AS code_no,
                             ISNULL(D.mattype, N'')   AS description,
+                            N''                      AS hsn_code,
                             ISNULL(D.dia, N'')       AS dia,
                             ISNULL(D.uom, N'')       AS uom,
                             ISNULL(D.qty, 0)         AS qty,
@@ -563,9 +790,11 @@ def eapproval_detail(request):
                         FROM POAmndDet D
                         WHERE ISNULL(D.deleted, 0) = 0
                           AND LTRIM(RTRIM(D.pono)) = LTRIM(RTRIM(?))
+                          AND (? = '' OR LTRIM(RTRIM(ISNULL(D.amdno, N''))) = LTRIM(RTRIM(?)))
                         ORDER BY ISNULL(D.seq, 2147483647)
                     """
-                    cursor.execute(items_sql_fb, [pono])
+                    cursor.execute(items_sql_fb, [pono, found_amdno, found_amdno])
+                    icols = [d[0] for d in cursor.description]
                     raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
 
                 tax_sql = """
@@ -610,7 +839,17 @@ def eapproval_detail(request):
                     ISNULL(P.pacamtbf, 0)                AS pacamtbf,
                     ISNULL(P.pacamt, 0)                  AS pacamt,
                     P.IsApprovePo                        AS is_approve_raw,
-                    LTRIM(RTRIM(ISNULL(C.CName, N'')))   AS vendor_name
+                    LTRIM(RTRIM(COALESCE(C.CName, CA.CName, N'')))       AS vendor_name,
+                    LTRIM(RTRIM(COALESCE(C.Address, CA.Address, N'')))   AS vendor_address,
+                    LTRIM(RTRIM(COALESCE(C.Address1, CA.Address1, N''))) AS vendor_address1,
+                    LTRIM(RTRIM(COALESCE(C.Address2, CA.Address2, N''))) AS vendor_address2,
+                    LTRIM(RTRIM(COALESCE(C.City, CA.City, N'')))        AS vendor_city,
+                    LTRIM(RTRIM(COALESCE(C.State, CA.State, N'')))      AS vendor_state,
+                    LTRIM(RTRIM(COALESCE(C.PinCode, CA.PinCode, N'')))  AS vendor_pincode,
+                    LTRIM(RTRIM(COALESCE(C.gstino, CA.gstino, N'')))    AS vendor_gstino,
+                    LTRIM(RTRIM(COALESCE(C.Contact, CA.Contact, N'')))  AS vendor_contact,
+                    LTRIM(RTRIM(COALESCE(C.Phone, CA.Phone, N'')))      AS vendor_phone,
+                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email
                 FROM POMas P
                 {_CUST_JOIN_SQL.strip()}
                 WHERE ISNULL(P.deleted, 0) = 0
@@ -632,6 +871,7 @@ def eapproval_detail(request):
                     ) AS sno,
                     ISNULL(D.rmname, N'')    AS code_no,
                     ISNULL(D.mattype, N'')   AS description,
+                    ISNULL(CM.hsncode, N'')  AS hsn_code,
                     ISNULL(D.dia, N'')       AS dia,
                     ISNULL(D.uom, N'')       AS uom,
                     ISNULL(D.qty, 0)         AS qty,
@@ -639,13 +879,45 @@ def eapproval_detail(request):
                     ISNULL(D.rate, 0)        AS rate,
                     ISNULL(D.amount, 0)      AS amount
                 FROM PODet D
+                LEFT JOIN (
+                    SELECT 
+                        LTRIM(RTRIM(PartNo)) AS PartNo,
+                        MAX(LTRIM(RTRIM(ISNULL(hsncode, N'')))) AS hsncode
+                    FROM Commer_Mas
+                    WHERE ISNULL(deleted, 0) = 0
+                    GROUP BY LTRIM(RTRIM(PartNo))
+                ) CM ON CM.PartNo = LTRIM(RTRIM(D.rmname))
                 WHERE ISNULL(D.deleted, 0) = 0
                   AND LTRIM(RTRIM(D.pono)) = LTRIM(RTRIM(?))
                 ORDER BY ISNULL(D.seq, 2147483647)
             """
-            cursor.execute(items_sql, [pono])
-            icols = [d[0] for d in cursor.description]
-            raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
+            try:
+                cursor.execute(items_sql, [pono])
+                icols = [d[0] for d in cursor.description]
+                raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
+            except Exception:
+                items_sql_fb = """
+                    SELECT
+                        ROW_NUMBER() OVER (
+                            ORDER BY ISNULL(D.seq, 2147483647)
+                        ) AS sno,
+                        ISNULL(D.rmname, N'')    AS code_no,
+                        ISNULL(D.mattype, N'')   AS description,
+                        N''                      AS hsn_code,
+                        ISNULL(D.dia, N'')       AS dia,
+                        ISNULL(D.uom, N'')       AS uom,
+                        ISNULL(D.qty, 0)         AS qty,
+                        ISNULL(D.QtyKgs, 0)      AS qty_kgs,
+                        ISNULL(D.rate, 0)        AS rate,
+                        ISNULL(D.amount, 0)      AS amount
+                    FROM PODet D
+                    WHERE ISNULL(D.deleted, 0) = 0
+                      AND LTRIM(RTRIM(D.pono)) = LTRIM(RTRIM(?))
+                    ORDER BY ISNULL(D.seq, 2147483647)
+                """
+                cursor.execute(items_sql_fb, [pono])
+                icols = [d[0] for d in cursor.description]
+                raw_items = [dict(zip(icols, r)) for r in cursor.fetchall()]
 
             tax_sql = """
                 SELECT
@@ -664,6 +936,28 @@ def eapproval_detail(request):
             except Exception:
                 raw_taxes = []
 
+        pocomment = ""
+        comment_user = None
+        comment_dt = None
+        try:
+            if _check_table_exists(cursor, "BAPoDetails"):
+                cursor.execute("""
+                    SELECT TOP 1 Pocomment, [User], [datetime]
+                    FROM BAPoDetails
+                    WHERE ISNULL(deleted, 0) = 0
+                      AND LTRIM(RTRIM(Pono)) = LTRIM(RTRIM(?))
+                    ORDER BY [datetime] DESC, Id DESC
+                """, [header["pono"]])
+                crow = cursor.fetchone()
+                if crow:
+                    pocomment = crow[0] or ""
+                    comment_user = crow[1]
+                    if crow[2]:
+                        from django.utils import timezone
+                        comment_dt = crow[2].strftime("%d/%m/%Y %I:%M %p") if isinstance(crow[2], (datetime, date)) else str(crow[2])
+        except Exception as ex:
+            print("Error fetching BAPoDetails comment in detail:", ex)
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -678,6 +972,7 @@ def eapproval_detail(request):
             "sNo": int(item.get("sno", 0)) or len(line_items) + 1,
             "codeNo": str(item.get("code_no", "")).strip(),
             "description": str(item.get("description", "")).strip(),
+            "hsnCode": str(item.get("hsn_code", "")).strip(),
             "dia": item.get("dia"),
             "uom": str(item.get("uom", "")).strip(),
             "qty": _safe_float(item.get("qty", 0)),
@@ -726,6 +1021,7 @@ def eapproval_detail(request):
 
     # Fetch approval info from tenants_approvals
     from .models import TenantApproval
+    from django.db import connection as django_conn
     approved_by = None
     approved_dt = None
     try:
@@ -743,6 +1039,33 @@ def eapproval_detail(request):
     except Exception:
         pass
 
+    # Fetch logged-in company details from tenants_signup matching company_code
+    company_info = {}
+    try:
+        company_code = tenant.get("company_code")
+        if company_code:
+            with django_conn.cursor() as dj_cursor:
+                dj_cursor.execute("""
+                    SELECT TOP 1 company_name, address1, address2, city, state, pincode, gst_number, phone_number, email_id
+                    FROM tenants_signup
+                    WHERE UPPER(company_code) = UPPER(%s)
+                """, [company_code])
+                srow = dj_cursor.fetchone()
+                if srow:
+                    company_info = {
+                        "companyName": (srow[0] or "").strip(),
+                        "address1": (srow[1] or "").strip(),
+                        "address2": (srow[2] or "").strip(),
+                        "city": (srow[3] or "").strip(),
+                        "state": (srow[4] or "").strip(),
+                        "pincode": (srow[5] or "").strip(),
+                        "gstNumber": (srow[6] or "").strip(),
+                        "phone": (srow[7] or "").strip(),
+                        "email": (srow[8] or "").strip(),
+                    }
+    except Exception as ex:
+        print("Error fetching company details from tenants_signup:", ex)
+
     card_id = f"po_amnd:{header['pono']}:{header.get('amdno', '')}" if (doc_kind == "po_amnd" or header.get("amdno")) else str(header["pono"])
     card = {
         "id": card_id,
@@ -752,7 +1075,27 @@ def eapproval_detail(request):
         "poDate": _fmt_date(header["podate"]),
         "type": canon,
         "status": status,
-        "vendor": header["vendor_name"] or "Unknown Vendor",
+        "companyInfo": company_info,
+        "companyName": company_info.get("companyName") or tenant.get("company_name") or "BICELLI GECO HYDRAULICS INDIA PVT LTD",
+        "companyAddress1": company_info.get("address1") or "",
+        "companyAddress2": company_info.get("address2") or "",
+        "companyCity": company_info.get("city") or "",
+        "companyState": company_info.get("state") or "",
+        "companyPinCode": company_info.get("pincode") or "",
+        "companyGst": company_info.get("gstNumber") or "",
+        "companyPhone": company_info.get("phone") or "",
+        "companyEmail": company_info.get("email") or "",
+        "vendor": header.get("vendor_name") or "Unknown Vendor",
+        "vendorAddress": header.get("vendor_address") or "",
+        "vendorAddress1": header.get("vendor_address1") or "",
+        "vendorAddress2": header.get("vendor_address2") or "",
+        "vendorCity": header.get("vendor_city") or "",
+        "vendorState": header.get("vendor_state") or "",
+        "vendorPinCode": header.get("vendor_pincode") or "",
+        "vendorGst": header.get("vendor_gstino") or "",
+        "vendorContact": header.get("vendor_contact") or "",
+        "vendorPhone": header.get("vendor_phone") or "",
+        "vendorEmail": header.get("vendor_email") or "",
         "countLabel": "Amount",
         "countVal": round(grand_total, 2),
         "items": line_items,
@@ -765,6 +1108,9 @@ def eapproval_detail(request):
         "sgstPct": 0,
         "approvedBy": approved_by,
         "approvedDateTime": approved_dt,
+        "pocomment": pocomment,
+        "commentUser": comment_user,
+        "commentDateTime": comment_dt,
     }
 
     return Response({"success": True, "card": card})
@@ -997,3 +1343,218 @@ def eapproval_modify(request):
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
     return Response({"success": True, "pono": pono, "modified_in_erp": modified_in_erp, "message": message})
+
+
+# ═══════════════════════════════════════════════════════════════
+#  POST  eapproval/comment/
+#  Saves remark/comment to BAPoDetails table in tenant database.
+# ═══════════════════════════════════════════════════════════════
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def eapproval_save_comment(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    pono = (request.data.get("pono") or "").strip()
+    if not pono:
+        return Response({"error": "Field 'pono' is required."}, status=400)
+
+    pocomment = (request.data.get("pocomment") or "").strip()
+    if not pocomment:
+        return Response({"error": "Field 'pocomment' cannot be empty."}, status=400)
+
+    podate_raw = request.data.get("podate")
+    potype = (request.data.get("potype") or "General").strip()
+    custname = (request.data.get("custname") or "").strip()
+    username = (request.data.get("user") or tenant.get("username") or "Admin").strip()
+
+    # Parse date if provided
+    podate = None
+    if podate_raw:
+        try:
+            if isinstance(podate_raw, str):
+                parts = podate_raw.split("/")
+                if len(parts) == 3:
+                    podate = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                else:
+                    podate = podate_raw.split("T")[0]
+        except Exception:
+            podate = None
+
+    try:
+        cursor = conn.cursor()
+        _ensure_bapodetails_table(cursor)
+
+        cursor.execute("SELECT TOP 1 Id FROM BAPoDetails WHERE ISNULL(deleted, 0) = 0 AND LTRIM(RTRIM(Pono)) = LTRIM(RTRIM(?)) ORDER BY [datetime] DESC, Id DESC", [pono])
+        existing_row = cursor.fetchone()
+
+        if existing_row:
+            update_sql = """
+                UPDATE BAPoDetails
+                SET Pocomment = ?,
+                    Podate = COALESCE(?, Podate),
+                    Potype = COALESCE(?, Potype),
+                    Custname = COALESCE(?, Custname),
+                    [User] = ?,
+                    [datetime] = GETDATE()
+                WHERE Id = ?
+            """
+            cursor.execute(update_sql, [pocomment, podate, potype, custname, username, existing_row[0]])
+            # Clean up any other duplicate rows for this Pono if they existed before
+            cursor.execute("DELETE FROM BAPoDetails WHERE LTRIM(RTRIM(Pono)) = LTRIM(RTRIM(?)) AND Id <> ?", [pono, existing_row[0]])
+        else:
+            insert_sql = """
+                INSERT INTO BAPoDetails (Pono, Podate, Potype, Custname, Pocomment, [User], [datetime], deleted)
+                VALUES (?, ?, ?, ?, ?, ?, GETDATE(), 0)
+            """
+            cursor.execute(insert_sql, [pono, podate, potype, custname, pocomment, username])
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    from django.utils import timezone
+    now_str = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %I:%M %p")
+
+    return Response({
+        "success": True,
+        "message": f"Remark for PO {pono} saved successfully in BAPoDetails.",
+        "pono": pono,
+        "pocomment": pocomment,
+        "user": username,
+        "datetime": now_str,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+#  POST  eapproval/comment/delete/
+#  Soft-deletes remark (deleted = 1) from BAPoDetails for given Pono.
+# ═══════════════════════════════════════════════════════════════
+@api_view(["POST", "DELETE"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def eapproval_delete_comment(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    pono = (request.data.get("pono") or "").strip()
+    if not pono:
+        return Response({"error": "Field 'pono' is required."}, status=400)
+
+    try:
+        cursor = conn.cursor()
+        if _check_table_exists(cursor, "BAPoDetails"):
+            cursor.execute("UPDATE BAPoDetails SET deleted = 1 WHERE LTRIM(RTRIM(Pono)) = LTRIM(RTRIM(?))", [pono])
+            conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    return Response({
+        "success": True,
+        "message": f"Remark for PO {pono} deleted successfully.",
+        "pono": pono
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GET/POST  eapproval/user-limits/
+#  Manages user PO approval limit rules and low-value PO filter
+# ═══════════════════════════════════════════════════════════════
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def eapproval_user_limits(request):
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    try:
+        cursor = conn.cursor()
+        _ensure_bauserlimits_table(cursor)
+
+        if request.method == "POST":
+            data = request.data or {}
+            limits = data.get("limits", {})
+            hide_under_1000 = bool(data.get("hideUnder1000", False))
+            current_user = str(tenant.get("username") or "").strip()
+
+            for uid_or_uname, lim_info in limits.items():
+                if not isinstance(lim_info, dict):
+                    continue
+                uname = str(lim_info.get("userName") or uid_or_uname).strip()
+                if not uname:
+                    continue
+                limit_amt = float(lim_info.get("limit") or 0)
+                is_unlimited = 1 if lim_info.get("isUnlimited") else 0
+                hide_flag = 1 if hide_under_1000 else 0
+
+                cursor.execute(
+                    "DELETE FROM BAUserLimits WHERE UPPER(LTRIM(RTRIM(Username))) = UPPER(LTRIM(RTRIM(?)))",
+                    [uname]
+                )
+                cursor.execute("""
+                    INSERT INTO BAUserLimits (Username, LimitAmt, IsUnlimited, HideUnder1000, UpdatedBy, UpdatedAt)
+                    VALUES (?, ?, ?, ?, ?, GETDATE())
+                """, [uname, limit_amt, is_unlimited, hide_flag, current_user])
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return Response({
+                "success": True,
+                "message": "User PO approval limits and policy saved successfully."
+            })
+
+        # GET request: fetch current saved limits
+        cursor.execute("""
+            SELECT Username, ISNULL(LimitAmt, 0), ISNULL(IsUnlimited, 0), ISNULL(HideUnder1000, 0)
+            FROM BAUserLimits
+        """)
+        rows = cursor.fetchall()
+        limits_dict = {}
+        hide_under_1000 = False
+
+        for uname, limit_amt, is_unlimited, hide_flag in rows:
+            u_clean = str(uname or "").strip()
+            if u_clean:
+                limits_dict[u_clean] = {
+                    "userName": u_clean,
+                    "limit": float(limit_amt or 0),
+                    "isUnlimited": bool(is_unlimited),
+                    "eapproval": True,
+                }
+            if hide_flag:
+                hide_under_1000 = True
+
+        cursor.close()
+        conn.close()
+        return Response({
+            "success": True,
+            "limits": limits_dict,
+            "hideUnder1000": hide_under_1000,
+        })
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+

@@ -21545,18 +21545,82 @@ function CustomerComplaintReportBottomTable({ data, filters }) {
 
 
 /* ── Center panel animated wrapper (zero-latency) ──────────── */
-function CenterTransitionWrapper({ uid, loading, children }) {
+function CenterTransitionWrapper({ uid, loading, loadingProgress = 0, children }) {
   const [localLoading, setLocalLoading] = React.useState(false);
+  const [displayProgress, setDisplayProgress] = React.useState(0);
+  const [showOverlay, setShowOverlay] = React.useState(false);
 
   React.useEffect(() => {
     setLocalLoading(true);
     const timer = setTimeout(() => {
       setLocalLoading(false);
-    }, 380);
+    }, 320);
     return () => clearTimeout(timer);
   }, [uid]);
 
   const activeLoading = loading || localLoading;
+
+  React.useEffect(() => {
+    let finishTimer = null;
+    let crawlInterval = null;
+
+    if (activeLoading) {
+      setShowOverlay(true);
+
+      if (loading) {
+        // Driven by actual backend chunk progress
+        const target = Math.max(loadingProgress || 12, 12);
+
+        setDisplayProgress((prev) => {
+          if (prev === 0) return 12;
+          return prev < target ? prev + Math.ceil((target - prev) * 0.45) : prev;
+        });
+
+        crawlInterval = setInterval(() => {
+          setDisplayProgress((prev) => {
+            const curTarget = Math.max(loadingProgress || 12, 12);
+            if (prev < curTarget) {
+              return prev + Math.max(1, Math.floor((curTarget - prev) * 0.35));
+            }
+            if (prev < 98 && prev < curTarget + 6) {
+              return prev + 1;
+            }
+            return prev;
+          });
+        }, 90);
+      } else {
+        // Quick local card-switch transition (~320ms)
+        setDisplayProgress(20);
+        let step = 0;
+        crawlInterval = setInterval(() => {
+          step++;
+          setDisplayProgress((prev) => {
+            if (step === 1) return 48;
+            if (step === 2) return 76;
+            if (step === 3) return 92;
+            if (step >= 4) return 100;
+            return prev;
+          });
+        }, 60);
+      }
+    } else {
+      // When loading finishes, smoothly snap to 100% and fade out after 200ms
+      setDisplayProgress(100);
+      finishTimer = setTimeout(() => {
+        setShowOverlay(false);
+        setDisplayProgress(0);
+      }, 200);
+    }
+
+    return () => {
+      if (crawlInterval) clearInterval(crawlInterval);
+      if (finishTimer) clearTimeout(finishTimer);
+    };
+  }, [activeLoading, loading, loadingProgress]);
+
+  const clampedPercent = Math.min(Math.max(displayProgress, 0), 100);
+  const strokeCircumference = 201.06;
+  const strokeOffset = strokeCircumference - (clampedPercent / 100) * strokeCircumference;
 
   return (
     <div className="pp1-ct-wrapper" style={{ position: "relative", width: "100%", minHeight: "380px" }}>
@@ -21565,21 +21629,59 @@ function CenterTransitionWrapper({ uid, loading, children }) {
         className="pp1-ct-reveal"
         style={{
           transition: "filter 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
-          filter: activeLoading ? "blur(8px)" : "none",
-          opacity: activeLoading ? 0.35 : 1,
-          transform: activeLoading ? "scale(0.99) translateY(4px)" : "scale(1) translateY(0)",
-          pointerEvents: activeLoading ? "none" : "auto"
+          filter: showOverlay ? "blur(8px)" : "none",
+          opacity: showOverlay ? 0.35 : 1,
+          transform: showOverlay ? "scale(0.99) translateY(4px)" : "scale(1) translateY(0)",
+          pointerEvents: showOverlay ? "none" : "auto"
         }}
       >
         {children}
       </div>
 
-      {/* Frosted Glass Premium Loader Overlay */}
-      {activeLoading && (
+      {/* Frosted Glass Premium Loader Overlay with Circular Progress */}
+      {showOverlay && (
         <div className="pp1-loading-overlay">
           <div className="pp1-loading-spinner-wrap">
-            <div className="pp1-loading-spinner" />
-            <div className="pp1-loading-spinner-inner" />
+            <svg className="pp1-loading-svg" width="76" height="76" viewBox="0 0 76 76">
+              <defs>
+                <linearGradient id="pp1LoadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#1d4ed8" />
+                  <stop offset="50%" stopColor="#2563eb" />
+                  <stop offset="100%" stopColor="#60a5fa" />
+                </linearGradient>
+                <filter id="pp1RingGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#2563eb" floodOpacity="0.4" />
+                </filter>
+              </defs>
+              {/* Background Track Circle */}
+              <circle
+                className="pp1-loading-circle-bg"
+                cx="38"
+                cy="38"
+                r="32"
+                fill="none"
+                strokeWidth="5"
+              />
+              {/* Animated Progress Meter Ring */}
+              <circle
+                className="pp1-loading-circle-bar"
+                cx="38"
+                cy="38"
+                r="32"
+                fill="none"
+                stroke="url(#pp1LoadGrad)"
+                strokeWidth="5"
+                strokeDasharray={strokeCircumference}
+                strokeDashoffset={strokeOffset}
+                strokeLinecap="round"
+                transform="rotate(-90 38 38)"
+                filter="url(#pp1RingGlow)"
+              />
+            </svg>
+            <div className="pp1-loading-percent-center">
+              <span className="pp1-loading-percent-num">{clampedPercent}</span>
+              <span className="pp1-loading-percent-symbol">%</span>
+            </div>
           </div>
           <div className="pp1-loading-text">Analyzing performance metrics...</div>
         </div>
@@ -21717,6 +21819,7 @@ export default function PlantPerformance1() {
   const [dateRange, setDateRange] = useState(_saved.dateRange || { from: monthStart, to: today });
   const [data, setData] = useState(_cachedData || {});
   const [loading, setLoading] = useState(!_cachedData || Object.keys(_cachedData).length === 0);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [fetchError, setFetchError] = useState(null);
   const [mobileActiveTab, setMobileActiveTab] = useState("center");
 
@@ -22242,18 +22345,54 @@ export default function PlantPerformance1() {
 
   const fetchAll = useCallback(async (from, to, signal) => {
     setFetchError(null);
-    const bundleUrl = buildUrl("/api/plant-performance/bundle/", from, to);
+    setLoadingProgress(12);
+
+    const BUNDLE_CHUNKS = [
+      ["fi", "prod", "idle", "injob", "inter", "finalOrg", "shifts", "downtime", "complaints", "po", "grn", "iqc", "topDefects", "otd"],
+      ["customerPoCompare", "grnValueCompare", "fgValueCompare", "salesAnalysisCompare", "purchaseValueCompare"],
+      ["efficiencyCompare", "oeeCompare", "rejectionCompare", "reworkCompare", "complaintCompare"],
+      ["capaCompare", "operatorEfficiencyCompare", "dailyProductionCompare", "productionValueCompare", "machineEfficiencyCompare"],
+      ["supplierRating", "supplierRatingCompare", "vendorRating", "targetVsActualCompare", "storeStockValue"]
+    ];
+
+    const combinedData = {};
+    const allErrors = {};
+    let completedChunks = 0;
+
     try {
-      const res = await fetch(bundleUrl, { credentials: "include", signal });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.data) {
-        setFetchError(json?.error || json?.detail || `Load failed (${res.status})`);
-        return;
+      const fetchChunk = async (keys) => {
+        const url = `${buildUrl("/api/plant-performance/bundle/", from, to)}&keys=${keys.join(",")}`;
+        const res = await fetch(url, { credentials: "include", signal });
+        const json = await res.json().catch(() => null);
+        if (json?.data) {
+          Object.assign(combinedData, json.data);
+        }
+        if (json?.errors) {
+          Object.assign(allErrors, json.errors);
+        }
+        completedChunks += 1;
+        const targetPercent = Math.min(12 + Math.round((completedChunks / BUNDLE_CHUNKS.length) * 88), 100);
+        setLoadingProgress(targetPercent);
+        return json;
+      };
+
+      await Promise.allSettled(BUNDLE_CHUNKS.map(keys => fetchChunk(keys)));
+
+      const hasAnyData = Object.keys(combinedData).length > 0 && Object.values(combinedData).some(v => v != null);
+      if (!hasAnyData) {
+        const fallbackUrl = buildUrl("/api/plant-performance/bundle/", from, to);
+        const fbRes = await fetch(fallbackUrl, { credentials: "include", signal });
+        const fbJson = await fbRes.json().catch(() => null);
+        if (fbJson?.data) {
+          Object.assign(combinedData, fbJson.data);
+        }
       }
-      setData(json.data);
+
+      setData(combinedData);
       try {
-        sessionStorage.setItem("ba_cache_plantperformance", JSON.stringify(json.data));
+        sessionStorage.setItem("ba_cache_plantperformance", JSON.stringify(combinedData));
       } catch { }
+
       setRejPanelData(null);
       setRewPanelData(null);
       setCompPanelData(null);
@@ -22263,18 +22402,19 @@ export default function PlantPerformance1() {
       setProdValuePanelData(null);
       setFgValuePanelData(null);
       setTargetVsActualPanelData(null);
-      const errs = json.errors ? Object.entries(json.errors) : [];
-      const hasAny = Object.values(json.data).some((v) => v != null);
-      if (!hasAny && errs.some(([, msg]) => String(msg).includes("Session expired"))) {
+
+      const errEntries = Object.entries(allErrors);
+      if (!hasAnyData && errEntries.some(([, msg]) => String(msg).includes("Session expired"))) {
         setFetchError("Session expired — please log in again.");
-      } else if (errs.length) {
-        setFetchError(`Some panels failed: ${errs.slice(0, 2).map(([k, m]) => `${k}: ${m}`).join("; ")}`);
+      } else if (errEntries.length) {
+        setFetchError(`Some panels failed: ${errEntries.slice(0, 2).map(([k, m]) => `${k}: ${m}`).join("; ")}`);
       }
     } catch (e) {
       if (e.name === "AbortError") return;
       setFetchError(e.message || "Failed to load data");
       setData({});
     } finally {
+      setLoadingProgress(100);
       setLoading(false);
     }
   }, []);
@@ -24238,7 +24378,7 @@ export default function PlantPerformance1() {
             <section className="pp1-center" ref={centerRef}>
               <div className="pp1-center__glow" />
               <div className="pp1-center__scroll">
-                <CenterTransitionWrapper uid={centerKey} loading={loading}>
+                <CenterTransitionWrapper uid={centerKey} loading={loading} loadingProgress={loadingProgress}>
                   <DashboardErrorBoundary>
                     {selectionId === "customer_po_vs_sales_analysis" ? (
                       <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />

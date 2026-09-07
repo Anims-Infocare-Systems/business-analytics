@@ -193,16 +193,16 @@ const getTraceColStyle = (h) => {
 
 const getSuppColStyle = (h) => {
     switch (h) {
-        case "#": return { width: "50px", textAlign: "center" };
-        case "Supplier Name": return { width: "160px" };
-        case "Grn no": return { width: "100px" };
-        case "Grn Date": return { width: "100px" };
-        case "Item Details": return { minWidth: "180px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word" };
+        case "#": return { width: "45px", textAlign: "center", whiteSpace: "nowrap" };
+        case "Supplier Name": return { minWidth: "180px", maxWidth: "280px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" };
+        case "Grn no": return { width: "100px", whiteSpace: "nowrap" };
+        case "Grn Date": return { width: "100px", whiteSpace: "nowrap" };
+        case "Item Details": return { minWidth: "260px", maxWidth: "450px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" };
         case "GRN Qty":
         case "Ok Qty":
         case "Mat Rej":
-        case "Mac Rej": return { width: "85px", textAlign: "right" };
-        case "UOM": return { width: "60px", textAlign: "center" };
+        case "Mac Rej": return { width: "85px", textAlign: "right", whiteSpace: "nowrap" };
+        case "UOM": return { width: "60px", textAlign: "center", whiteSpace: "nowrap" };
         default: return {};
     }
 };
@@ -407,7 +407,9 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
                         top: "calc(100% + 4px)",
                         right: 0,
                         zIndex: 300,
-                        width: "240px",
+                        minWidth: "300px",
+                        maxWidth: "420px",
+                        width: "max-content",
                         background: "#ffffff",
                         border: "1px solid #e2e8f0",
                         borderRadius: "10px",
@@ -482,7 +484,7 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
 
                     <div style={{ height: "1px", background: "#f1f5f9", margin: "2px 0" }} />
 
-                    <div style={{ maxHeight: "170px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px" }}>
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map((opt) => {
                                 const checked = currentSelected.includes(opt);
@@ -491,16 +493,19 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
                                         key={opt}
                                         style={{
                                             display: "flex",
-                                            alignItems: "center",
+                                            alignItems: "flex-start",
                                             gap: "8px",
-                                            padding: "4px 6px",
+                                            padding: "5px 6px",
                                             borderRadius: "4px",
                                             cursor: "pointer",
                                             fontSize: "0.72rem",
                                             color: "#334155",
                                             userSelect: "none",
                                             transition: "background 0.1s ease",
-                                            background: checked ? checkedItemBg : "transparent"
+                                            background: checked ? checkedItemBg : "transparent",
+                                            lineHeight: "1.35",
+                                            wordBreak: "break-word",
+                                            whiteSpace: "normal"
                                         }}
                                     >
                                         <input
@@ -511,15 +516,17 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
                                                 accentColor: accentColor,
                                                 cursor: "pointer",
                                                 width: "13px",
-                                                height: "13px"
+                                                height: "13px",
+                                                marginTop: "2px",
+                                                flexShrink: 0
                                             }}
                                         />
                                         <span style={{
-                                            overflow: "hidden",
-                                            textOverflow: "ellipsis",
-                                            whiteSpace: "nowrap",
+                                            wordBreak: "break-word",
+                                            whiteSpace: "normal",
                                             fontWeight: checked ? 600 : 400,
-                                            color: "#0f172a"
+                                            color: "#0f172a",
+                                            flex: 1
                                         }} title={opt}>
                                             {opt}
                                         </span>
@@ -768,10 +775,20 @@ export default function QualityAnalysis() {
     }, [rawCustomerComplaints]);
 
     const allComplaintCustomerOptions = useMemo(() => {
+        if (selectedCustomers.length > 0) {
+            const set = new Set();
+            rawCustomerComplaints.forEach(c => {
+                if (c && c.customer_name && selectedCustomers.some(sc => sc.toLowerCase() === c.customer_name.toLowerCase())) {
+                    set.add(c.customer_name);
+                }
+            });
+            if (set.size > 0) return Array.from(set).sort();
+            return [...selectedCustomers].sort();
+        }
         const set = new Set();
         rawCustomerComplaints.forEach(c => { if (c && c.customer_name) set.add(c.customer_name); });
         return Array.from(set).sort();
-    }, [rawCustomerComplaints]);
+    }, [rawCustomerComplaints, selectedCustomers]);
 
     const allComplaintProductOptions = useMemo(() => {
         const set = new Set();
@@ -779,8 +796,18 @@ export default function QualityAnalysis() {
         return Array.from(set).sort();
     }, [rawCustomerComplaints]);
 
+    const [allMasterCustomerNames, setAllMasterCustomerNames] = useState([]);
+    useEffect(() => {
+        if (recordsData?.all_customers && Array.isArray(recordsData.all_customers) && recordsData.all_customers.length > 0) {
+            setAllMasterCustomerNames(prev => {
+                const set = new Set([...prev, ...recordsData.all_customers]);
+                return Array.from(set).sort();
+            });
+        }
+    }, [recordsData?.all_customers]);
+
     const uniqueCustomerNames = useMemo(() => {
-        const set = new Set();
+        const set = new Set(allMasterCustomerNames);
         // Extract from inspection records
         const records = recordsData?.inspection_records || [];
         records.forEach(r => {
@@ -792,13 +819,8 @@ export default function QualityAnalysis() {
             const name = (c.customer_name || "").trim();
             if (name && name !== "—" && name !== "-") set.add(name);
         });
-        // Extract from supplier rejections
-        rawSupplierRejections.forEach(s => {
-            const name = (s.supplier || "").trim();
-            if (name && name !== "—" && name !== "-") set.add(name);
-        });
         return Array.from(set).sort();
-    }, [recordsData, rawCustomerComplaints, rawSupplierRejections]);
+    }, [allMasterCustomerNames, recordsData, rawCustomerComplaints]);
 
     const filteredDropdownCustomers = useMemo(() => {
         if (!customerSearch.trim()) return uniqueCustomerNames;
@@ -817,13 +839,24 @@ export default function QualityAnalysis() {
     };
 
     const uniqueTableCustomerNames = useMemo(() => {
+        if (selectedCustomers.length > 0) {
+            const set = new Set();
+            (recordsData?.inspection_records || []).forEach(r => {
+                const name = (r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")).trim();
+                if (name && name !== "—" && name !== "-" && selectedCustomers.some(sc => sc.toLowerCase() === name.toLowerCase())) {
+                    set.add(name);
+                }
+            });
+            if (set.size > 0) return Array.from(set).sort();
+            return [...selectedCustomers].sort();
+        }
         const set = new Set();
         (recordsData?.inspection_records || []).forEach(r => {
             const name = (r.partyName || r.cname || r.vendor || (r.typeLabel?.includes("Job") ? getPartyName(r.id, r.product || r.partNoDesc) : "")).trim();
             if (name && name !== "—" && name !== "-") set.add(name);
         });
         return Array.from(set).sort();
-    }, [recordsData]);
+    }, [recordsData, selectedCustomers]);
 
     const filteredTableDropdownCustomers = useMemo(() => {
         if (!tableCustomerSearch.trim()) return uniqueTableCustomerNames;
@@ -867,10 +900,11 @@ export default function QualityAnalysis() {
 
     // Rejection Trend Filter Memos
     const filteredRejDropdownCustomers = useMemo(() => {
-        if (!trendRejCustSearch.trim()) return uniqueCustomerNames;
+        const base = selectedCustomers.length > 0 ? selectedCustomers : uniqueCustomerNames;
+        if (!trendRejCustSearch.trim()) return base;
         const q = trendRejCustSearch.toLowerCase().trim();
-        return uniqueCustomerNames.filter(c => c.toLowerCase().includes(q));
-    }, [uniqueCustomerNames, trendRejCustSearch]);
+        return base.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueCustomerNames, trendRejCustSearch, selectedCustomers]);
 
     const filteredRejDropdownParts = useMemo(() => {
         if (!trendRejPartSearch.trim()) return uniquePartOptions;
@@ -888,10 +922,11 @@ export default function QualityAnalysis() {
 
     // Rework Trend Filter Memos
     const filteredRwkDropdownCustomers = useMemo(() => {
-        if (!trendRwkCustSearch.trim()) return uniqueCustomerNames;
+        const base = selectedCustomers.length > 0 ? selectedCustomers : uniqueCustomerNames;
+        if (!trendRwkCustSearch.trim()) return base;
         const q = trendRwkCustSearch.toLowerCase().trim();
-        return uniqueCustomerNames.filter(c => c.toLowerCase().includes(q));
-    }, [uniqueCustomerNames, trendRwkCustSearch]);
+        return base.filter(c => c.toLowerCase().includes(q));
+    }, [uniqueCustomerNames, trendRwkCustSearch, selectedCustomers]);
 
     const filteredRwkDropdownParts = useMemo(() => {
         if (!trendRwkPartSearch.trim()) return uniquePartOptions;
@@ -906,6 +941,16 @@ export default function QualityAnalysis() {
     const handleTrendRwkPartToggle = (part) => {
         setTrendRwkPartFilter(prev => prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part]);
     };
+
+    // Auto-prune card-level sub-filters if main customer selection changes
+    useEffect(() => {
+        if (selectedCustomers.length > 0) {
+            setTrendRejCustFilter(prev => prev.filter(c => selectedCustomers.some(sc => sc.toLowerCase() === c.toLowerCase())));
+            setTrendRwkCustFilter(prev => prev.filter(c => selectedCustomers.some(sc => sc.toLowerCase() === c.toLowerCase())));
+            setTableSelectedCustomers(prev => prev.filter(c => selectedCustomers.some(sc => sc.toLowerCase() === c.toLowerCase())));
+            setSelectedComplaintCustomers(prev => prev ? prev.filter(c => selectedCustomers.some(sc => sc.toLowerCase() === c.toLowerCase())) : null);
+        }
+    }, [selectedCustomers]);
 
     // hasNoData = true only when there's genuinely no data AND no search query is active.
     // When a search query is active, even total_inspected=0 is a valid "no results" state
@@ -1233,11 +1278,13 @@ export default function QualityAnalysis() {
 
     const debounceRef = useRef(null);
 
-    const fetchQualityData = useCallback((from, to, q = "") => {
+    const fetchQualityData = useCallback((from, to, q = "", customers = []) => {
         const fromStr = formatYmd(from);
         const toStr = formatYmd(to);
         const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
-        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}${qParam}`;
+        const custParam = customers && customers.length > 0 ? `&customer=${encodeURIComponent(customers.join(","))}` : "";
+        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}${qParam}${custParam}`;
+        const buildDateOnlyUrl = (base) => `${base}?from=${fromStr}&to=${toStr}`;
 
         const fetchPanel = async (url, setData, setLoadingState) => {
             setLoadingState(true);
@@ -1264,7 +1311,8 @@ export default function QualityAnalysis() {
             await fetchPanel(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading);
             await fetchPanel(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading);
             await fetchPanel(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading);
+            // Supplier Wise Rejection card is for suppliers only; not affected by global customer/part filters
+            await fetchPanel(buildDateOnlyUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading);
         };
 
         loadAllSequentially();
@@ -1274,6 +1322,20 @@ export default function QualityAnalysis() {
         const t = setTimeout(() => setAnimated(true), 60);
         return () => clearTimeout(t);
     }, []);
+
+    // Close dropdowns when data is loading
+    useEffect(() => {
+        if (isGlobalLoading) {
+            setCustomerDropdownOpen(false);
+            setTrendRejCustDropdownOpen(false);
+            setTrendRejPartDropdownOpen(false);
+            setTrendRwkCustDropdownOpen(false);
+            setTrendRwkPartDropdownOpen(false);
+            setTableCustomerDropdownOpen(false);
+            setInspTypeDropdownOpen(false);
+            setTraceTypeDropdownOpen(false);
+        }
+    }, [isGlobalLoading]);
 
     // Close dropdown on click outside
     useEffect(() => {
@@ -1307,20 +1369,34 @@ export default function QualityAnalysis() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    // Close any open filter dropdowns when loading starts
+    useEffect(() => {
+        if (isGlobalLoading) {
+            setCustomerDropdownOpen(false);
+            setInspTypeDropdownOpen(false);
+            setTraceTypeDropdownOpen(false);
+            setTrendRejCustDropdownOpen(false);
+            setTrendRejPartDropdownOpen(false);
+            setTrendRwkCustDropdownOpen(false);
+            setTrendRwkPartDropdownOpen(false);
+            setTableCustomerDropdownOpen(false);
+        }
+    }, [isGlobalLoading]);
+
     // ✅ Persist date range to sessionStorage on every change
     useEffect(() => {
         writeFilterSession("ba_filter_quality", { from: dateRange.from, to: dateRange.to });
     }, [dateRange.from, dateRange.to]);
 
-    // Debounced re-fetch on dateRange change (150 ms)
+    // Debounced re-fetch on dateRange or customer change (150 ms)
     useEffect(() => {
         if (!dateRange.from || !dateRange.to) return;
         clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-            fetchQualityData(dateRange.from, dateRange.to, searchQuery);
+            fetchQualityData(dateRange.from, dateRange.to, searchQuery, selectedCustomers);
         }, 150);
         return () => clearTimeout(debounceRef.current);
-    }, [dateRange, fetchQualityData, searchQuery]);
+    }, [dateRange, fetchQualityData, searchQuery, selectedCustomers]);
 
     // Debounced re-fetch on searchQuery change (400 ms — slightly longer to avoid rapid keystroke spam)
     const searchDebounceRef = useRef(null);
@@ -1328,10 +1404,10 @@ export default function QualityAnalysis() {
         if (!dateRange.from || !dateRange.to) return;
         clearTimeout(searchDebounceRef.current);
         searchDebounceRef.current = setTimeout(() => {
-            fetchQualityData(dateRange.from, dateRange.to, searchQuery);
+            fetchQualityData(dateRange.from, dateRange.to, searchQuery, selectedCustomers);
         }, 400);
         return () => clearTimeout(searchDebounceRef.current);
-    }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [searchQuery, selectedCustomers]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const fontBase = useMemo(() => ({ family: "Poppins" }), []);
 
@@ -2123,7 +2199,7 @@ export default function QualityAnalysis() {
             const mat = (parseFloat(r.matRej) || 0);
             const mac = (parseFloat(r.macRej) || 0);
             if (mat > 0 || mac > 0) {
-                const sName = r.supplier ? (r.supplier.length > 20 ? r.supplier.substring(0, 18) + "..." : r.supplier) : "Unknown";
+                const sName = r.supplier || "Unknown";
                 if (!suppMap[sName]) {
                     suppMap[sName] = { matRej: 0, macRej: 0, total: 0 };
                 }
@@ -2782,16 +2858,25 @@ export default function QualityAnalysis() {
 
             {/* ── Filters ── */}
             <div className="qa2-card qa2-filter-card qa2-animate qa2-d1">
-                <div className="qa2-filter-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <SlidersHorizontal size={18} style={{ color: '#2d6de8', strokeWidth: 2.25 }} /> Report Filters
+                <div className="qa2-filter-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <SlidersHorizontal size={18} style={{ color: '#2d6de8', strokeWidth: 2.25 }} /> Report Filters
+                    </div>
+                    {isGlobalLoading && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#6366f1', fontWeight: 600 }}>
+                            <span className="qa2-pulse-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />
+                            Updating data...
+                        </div>
+                    )}
                 </div>
-                <div className="qa2-filter-grid" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'end', padding: '1rem 1.25rem' }}>
+                <div className="qa2-filter-grid" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'end', padding: '1rem 1.25rem', opacity: isGlobalLoading ? 0.7 : 1, transition: 'opacity 0.2s ease', pointerEvents: isGlobalLoading ? 'none' : 'auto' }}>
                     <div className="qa2-fg" style={{ width: '320px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Date Range</label>
                         <QualityAnalysisDatePicker
                             from={dateRange.from}
                             to={dateRange.to}
-                            onChange={({ from, to }) => setDateRange({ from, to })}
+                            onChange={({ from, to }) => !isGlobalLoading && setDateRange({ from, to })}
+                            disabled={isGlobalLoading}
                         />
                     </div>
 
@@ -2801,9 +2886,11 @@ export default function QualityAnalysis() {
                         <div style={{ position: "relative", width: "100%" }}>
                             <button
                                 type="button"
-                                className={`qa2-cust-select-trigger${customerDropdownOpen ? " active" : ""}${selectedCustomers.length > 0 ? " has-filter" : ""}`}
-                                onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
-                                title="Filter by Customer Name"
+                                disabled={isGlobalLoading}
+                                className={`qa2-cust-select-trigger${customerDropdownOpen ? " active" : ""}${selectedCustomers.length > 0 ? " has-filter" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setCustomerDropdownOpen(!customerDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Customer Name"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
                             >
                                 <Users size={14} className="qa2-cust-trigger-icon" />
                                 <span className="qa2-cust-trigger-label">
@@ -2819,7 +2906,7 @@ export default function QualityAnalysis() {
                                 <ChevronDown size={13} className={`qa2-cust-arrow-icon${customerDropdownOpen ? " open" : ""}`} />
                             </button>
 
-                            {customerDropdownOpen && (
+                            {customerDropdownOpen && !isGlobalLoading && (
                                 <div className="qa2-cust-dropdown-panel">
                                     <div className="qa2-cust-search-row">
                                         <Search size={13} className="qa2-cust-search-icon" />
@@ -2912,8 +2999,9 @@ export default function QualityAnalysis() {
                             <input
                                 type="text"
                                 className="qa2-fi"
-                                style={{ width: '100%', padding: '0.65rem 2.25rem 0.65rem 2.25rem', background: '#ffffff', cursor: 'text' }}
-                                placeholder="Search by description, ID, etc..."
+                                disabled={isGlobalLoading}
+                                style={{ width: '100%', padding: '0.65rem 2.25rem 0.65rem 2.25rem', background: isGlobalLoading ? '#f8fafc' : '#ffffff', cursor: isGlobalLoading ? 'not-allowed' : 'text', opacity: isGlobalLoading ? 0.65 : 1 }}
+                                placeholder={isGlobalLoading ? "Loading data..." : "Search by description, ID, etc..."}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -2921,7 +3009,8 @@ export default function QualityAnalysis() {
                             {searchQuery && (
                                 <button
                                     type="button"
-                                    onClick={() => setSearchQuery("")}
+                                    disabled={isGlobalLoading}
+                                    onClick={() => !isGlobalLoading && setSearchQuery("")}
                                     style={{
                                         position: 'absolute',
                                         right: '0.8rem',
@@ -2930,7 +3019,7 @@ export default function QualityAnalysis() {
                                         background: 'none',
                                         border: 'none',
                                         color: '#94a3b8',
-                                        cursor: 'pointer',
+                                        cursor: isGlobalLoading ? 'not-allowed' : 'pointer',
                                         padding: 0,
                                         display: 'flex',
                                         alignItems: 'center',
@@ -2949,9 +3038,11 @@ export default function QualityAnalysis() {
                         <div className="qa2-fg" style={{ flex: '0 0 auto' }}>
                             <button
                                 type="button"
+                                disabled={isGlobalLoading}
                                 className="qa2-reset-btn"
-                                onClick={resetFilters}
+                                onClick={() => !isGlobalLoading && resetFilters()}
                                 title="Reset all filters"
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
                             >
                                 <RotateCcw size={13} /> Reset Filters
                             </button>
