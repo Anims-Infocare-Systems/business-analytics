@@ -2612,6 +2612,10 @@ def sales_analysis_traceability(request):
     btype_sql = " AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?" if btype_p else ""
 
     search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+    cust_q = (request.GET.get("customer") or "").strip()
+    inv_q = (request.GET.get("inv_no") or request.GET.get("inv") or "").strip()
+    rc_q = (request.GET.get("rc_no") or request.GET.get("rc") or "").strip()
+    po_q = (request.GET.get("grn_po") or request.GET.get("po") or "").strip()
 
     rows = []
     cursor = None
@@ -2619,9 +2623,19 @@ def sales_analysis_traceability(request):
         cursor = conn.cursor()
         search_sql, search_params = _get_invoice_subquery_filter(cursor, search_q, "BM")
 
+        extra_filter_sql = ""
+        extra_params = []
+        if cust_q:
+            extra_filter_sql += " AND LOWER(COALESCE(CA.CName, CM.CName, N'')) LIKE LOWER(?)"
+            extra_params.append(f"%{cust_q}%")
+        if inv_q:
+            extra_filter_sql += " AND LOWER(BM.invno) LIKE LOWER(?)"
+            extra_params.append(f"%{inv_q}%")
+
         sql = f"""
     SELECT
         COALESCE(CA.CName, CM.CName) AS [Customer Name],
+        COALESCE(DCD.PartNoDesc, BD_AGG.PartNoDesc, N'—') AS [PartNo - Description],
         BM.invno AS [Invoice No],
         BM.invdt AS [Invoice Date],
         BDO.dcno AS [DC No],
@@ -2644,6 +2658,36 @@ def sales_analysis_traceability(request):
         ON BM.invno = BDO.invno
        AND BDO.deleted = 0
     LEFT JOIN (
+        SELECT dcno, 
+               STRING_AGG(
+                   NULLIF(
+                       LTRIM(RTRIM(partno)) + 
+                       CASE WHEN NULLIF(LTRIM(RTRIM(description)), '') IS NOT NULL 
+                            THEN ' - ' + LTRIM(RTRIM(description)) 
+                            ELSE '' 
+                       END, 
+                   ''), 
+               ', ') AS PartNoDesc
+        FROM DC_Det 
+        WHERE deleted = 0 
+        GROUP BY dcno
+    ) DCD ON BDO.dcno = DCD.dcno
+    LEFT JOIN (
+        SELECT invno,
+               STRING_AGG(
+                   NULLIF(
+                       LTRIM(RTRIM(itcode)) + 
+                       CASE WHEN NULLIF(LTRIM(RTRIM(itdesc)), '') IS NOT NULL 
+                            THEN ' - ' + LTRIM(RTRIM(itdesc)) 
+                            ELSE '' 
+                       END, 
+                   ''), 
+               ', ') AS PartNoDesc
+        FROM Bill_Det
+        WHERE deleted = 0
+        GROUP BY invno
+    ) BD_AGG ON BM.invno = BD_AGG.invno
+    LEFT JOIN (
         SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(Apono)), ''), ', ') AS APONos
         FROM DcInSubDet WHERE deleted = 0 GROUP BY dcno
     ) DIS ON BDO.dcno = DIS.dcno
@@ -2659,21 +2703,30 @@ def sales_analysis_traceability(request):
       AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
       {btype_sql}
       {search_sql}
+      {extra_filter_sql}
     ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno;
     """
 
-        cursor.execute(sql, [start_date, end_date] + list(btype_p) + search_params)
+        all_params = [start_date, end_date] + list(btype_p) + search_params + extra_params
+        cursor.execute(sql, all_params)
         for row in cursor.fetchall() or []:
             customer = str(row[0]) if row[0] else "—"
-            inv_no = str(row[1]) if row[1] else ""
-            inv_date = str(row[2])[:10] if row[2] else ""
-            dc_no = str(row[3]) if row[3] else ""
-            dc_date = str(row[4])[:10] if row[4] else ""
-            grn_po = str(row[5]) if row[5] else "—"
-            rc_no = str(row[6]) if row[6] else "—"
+            part_no_desc = str(row[1]) if row[1] else "—"
+            inv_no = str(row[2]) if row[2] else ""
+            inv_date = str(row[3])[:10] if row[3] else ""
+            dc_no = str(row[4]) if row[4] else ""
+            dc_date = str(row[5])[:10] if row[5] else ""
+            grn_po = str(row[6]) if row[6] else "—"
+            rc_no = str(row[7]) if row[7] else "—"
+
+            if rc_q and rc_q.lower() not in rc_no.lower():
+                continue
+            if po_q and po_q.lower() not in grn_po.lower():
+                continue
 
             rows.append({
                 "customer": customer,
+                "partNoDesc": part_no_desc,
                 "invNo": inv_no,
                 "invDate": inv_date,
                 "dcNo": dc_no,

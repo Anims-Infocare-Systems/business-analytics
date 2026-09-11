@@ -206,6 +206,7 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
 
         raw_rows = []
         columns = []
+        tenant_fetched = False
 
         if request:
             try:
@@ -217,10 +218,11 @@ def fetch_product_route_cards(request=None, from_date="2026-08-01", to_date="202
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as ex:
                 print("[M-APPROVAL] Tenant DB fetch warning:", ex)
 
-        if not raw_rows:
+        if not tenant_fetched:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(query)
@@ -361,7 +363,7 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
     is_approve_needed = False
     try:
         setting_query = "SELECT TOP 1 IsVendRateMast FROM CompanySettingFeatures"
-        setting_rows = []
+        setting_rows = None
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -372,10 +374,13 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 conn.close()
             except Exception:
                 pass
-        if not setting_rows:
-            with connection.cursor() as cursor:
-                cursor.execute(setting_query)
-                setting_rows = cursor.fetchall()
+        if setting_rows is None:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(setting_query)
+                    setting_rows = cursor.fetchall()
+            except Exception:
+                pass
         
         if setting_rows and setting_rows[0][0]:
             is_approve_needed = True
@@ -435,6 +440,7 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
 
         raw_rows = []
         columns = []
+        tenant_fetched = False
 
         if request:
             try:
@@ -446,10 +452,11 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as ex:
                 print("[M-APPROVAL] Tenant DB fetch warning (Vendor Rate Master):", ex)
 
-        if not raw_rows:
+        if not tenant_fetched:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(query)
@@ -691,6 +698,7 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
 
         raw_rows = []
         columns = []
+        tenant_fetched = False
 
         if request:
             try:
@@ -702,10 +710,11 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as ex:
                 print("[M-APPROVAL] Tenant DB fetch warning (Commercial Master):", ex)
 
-        if not raw_rows:
+        if not tenant_fetched:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(query)
@@ -729,6 +738,7 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                     WHERE cmno IN ({placeholders}) AND ISNULL(deleted, 0) = 0
                 """
                 batch_rows = []
+                batch_fetched = False
                 if request:
                     try:
                         conn, _ = get_tenant_connection(request)
@@ -737,12 +747,17 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                         batch_rows = cursor.fetchall()
                         cursor.close()
                         conn.close()
+                        batch_fetched = True
                     except Exception:
                         pass
-                if not batch_rows:
-                    with connection.cursor() as cursor:
-                        cursor.execute(batch_query, cmnos)
-                        batch_rows = cursor.fetchall()
+                if not batch_fetched:
+                    try:
+                        with connection.cursor() as cursor:
+                            local_batch_query = batch_query.replace('?', '%s')
+                            cursor.execute(local_batch_query, cmnos)
+                            batch_rows = cursor.fetchall()
+                    except Exception:
+                        pass
                 
                 # Populating the first NetRate for each cmno
                 for b_row in batch_rows:
@@ -1033,7 +1048,7 @@ def fetch_vendor_masters(request=None, from_date="2026-08-01", to_date="2026-08-
     is_approve_needed = False
     try:
         setting_query = "SELECT TOP 1 IsApproveVendMast FROM CompanySetting"
-        setting_rows = []
+        setting_rows = None
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -1044,10 +1059,13 @@ def fetch_vendor_masters(request=None, from_date="2026-08-01", to_date="2026-08-
                 conn.close()
             except Exception:
                 pass
-        if not setting_rows:
-            with connection.cursor() as cursor:
-                cursor.execute(setting_query)
-                setting_rows = cursor.fetchall()
+        if setting_rows is None:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(setting_query)
+                    setting_rows = cursor.fetchall()
+            except Exception:
+                pass
         
         if setting_rows and setting_rows[0][0]:
             is_approve_needed = True
@@ -1084,6 +1102,7 @@ def fetch_vendor_masters(request=None, from_date="2026-08-01", to_date="2026-08-
             params.extend([from_date, to_date])
             
         rows = []
+        tenant_fetched = False
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -1093,19 +1112,20 @@ def fetch_vendor_masters(request=None, from_date="2026-08-01", to_date="2026-08-
                 rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as e:
                 print("Error executing tenant query for vendor masters:", e)
                 pass
         
-        if not rows:
-            with connection.cursor() as cursor:
-                db_vendor = connection.vendor
-                local_query = query
-                if db_vendor != 'microsoft':
+        if not tenant_fetched:
+            try:
+                with connection.cursor() as cursor:
                     local_query = query.replace('?', '%s')
-                cursor.execute(local_query, params)
-                columns = [col[0] for col in cursor.description]
-                rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                    cursor.execute(local_query, params)
+                    columns = [col[0] for col in cursor.description]
+                    rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            except Exception as e:
+                print("Error executing fallback query for vendor masters:", e)
         
         # Batch fetch approvals to prevent N+1 queries
         approvals_map = {}
@@ -1226,7 +1246,7 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
     is_supp_po_ind_approve = False
     try:
         setting_query = "SELECT TOP 1 IsApproveSuppPoInd FROM CompanySetting"
-        setting_rows = []
+        setting_rows = None
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -1237,14 +1257,17 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
                 conn.close()
             except Exception:
                 pass
-        if not setting_rows:
-            with connection.cursor() as cursor:
-                db_vendor = connection.vendor
-                local_setting_query = setting_query
-                if db_vendor != 'microsoft':
-                    local_setting_query = setting_query.replace('TOP 1', '').replace('TOP 1 ', '') + ' LIMIT 1'
-                cursor.execute(local_setting_query)
-                setting_rows = cursor.fetchall()
+        if setting_rows is None:
+            try:
+                with connection.cursor() as cursor:
+                    db_vendor = connection.vendor
+                    local_setting_query = setting_query
+                    if db_vendor != 'microsoft':
+                        local_setting_query = setting_query.replace('TOP 1', '').replace('TOP 1 ', '') + ' LIMIT 1'
+                    cursor.execute(local_setting_query)
+                    setting_rows = cursor.fetchall()
+            except Exception:
+                pass
 
         if setting_rows and setting_rows[0][0]:
             is_supp_po_ind_approve = True
@@ -1285,6 +1308,7 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
             
         raw_rows = []
         columns = []
+        tenant_fetched = False
         
         if request:
             try:
@@ -1296,19 +1320,20 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception:
                 pass
                 
-        if not raw_rows:
-            with connection.cursor() as cursor:
-                db_vendor = connection.vendor
-                local_query = query
-                if db_vendor != 'microsoft':
+        if not tenant_fetched:
+            try:
+                with connection.cursor() as cursor:
                     local_query = query.replace('?', '%s')
-                cursor.execute(local_query, params)
-                desc = cursor.description or []
-                columns = [col[0] for col in desc]
-                raw_rows = cursor.fetchall()
+                    cursor.execute(local_query, params)
+                    desc = cursor.description or []
+                    columns = [col[0] for col in desc]
+                    raw_rows = cursor.fetchall()
+            except Exception:
+                pass
 
         cards = []
         for row in raw_rows:
@@ -1330,6 +1355,7 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
             count_val = 0
             count_query = "SELECT COUNT(*) FROM POInd_Det WHERE pino = ? AND ISNULL(deleted, 0) = 0"
             count_rows = []
+            count_fetched = False
             if request:
                 try:
                     conn, _ = get_tenant_connection(request)
@@ -1338,15 +1364,13 @@ def fetch_purchase_indents(request=None, from_date="2026-08-01", to_date="2026-0
                     count_rows = cursor.fetchone()
                     cursor.close()
                     conn.close()
+                    count_fetched = True
                 except Exception:
                     pass
-            if not count_rows:
+            if not count_fetched:
                 try:
                     with connection.cursor() as cursor:
-                        db_vendor = connection.vendor
-                        local_count_query = count_query
-                        if db_vendor != 'microsoft':
-                            local_count_query = count_query.replace('?', '%s')
+                        local_count_query = count_query.replace('?', '%s')
                         cursor.execute(local_count_query, [pino])
                         count_rows = cursor.fetchone()
                 except Exception:
@@ -1399,7 +1423,7 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
     is_cust_po_approve = False
     try:
         setting_query = "SELECT TOP 1 IsApproveCustPo FROM CompanySetting"
-        setting_rows = []
+        setting_rows = None
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -1410,10 +1434,13 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
                 conn.close()
             except Exception:
                 pass
-        if not setting_rows:
-            with connection.cursor() as cursor:
-                cursor.execute(setting_query)
-                setting_rows = cursor.fetchall()
+        if setting_rows is None:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(setting_query)
+                    setting_rows = cursor.fetchall()
+            except Exception:
+                pass
 
         if setting_rows and setting_rows[0][0]:
             is_cust_po_approve = True
@@ -1448,6 +1475,7 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
             
         raw_rows = []
         columns = []
+        tenant_fetched = False
         
         if request:
             try:
@@ -1459,16 +1487,14 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as ex:
                 print("[M-APPROVAL] Tenant DB fetch customer pos warning:", ex)
                 
-        if not raw_rows:
+        if not tenant_fetched:
             try:
                 with connection.cursor() as cursor:
-                    db_vendor = connection.vendor
-                    local_query = query
-                    if db_vendor != 'microsoft':
-                        local_query = query.replace('?', '%s')
+                    local_query = query.replace('?', '%s')
                     cursor.execute(local_query, params)
                     description = cursor.description or []
                     columns = [col[0] for col in description]
@@ -1505,6 +1531,7 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
                 det_params.append(single_apono)
             
             det_rows = []
+            det_fetched = False
             if request:
                 try:
                     conn, _ = get_tenant_connection(request)
@@ -1515,15 +1542,13 @@ def fetch_customer_pos(request=None, from_date="2026-08-01", to_date="2026-08-31
                     det_rows = [dict(zip(det_cols, row)) for row in cursor.fetchall()]
                     cursor.close()
                     conn.close()
+                    det_fetched = True
                 except Exception:
                     pass
-            if not det_rows:
+            if not det_fetched:
                 try:
                     with connection.cursor() as cursor:
-                        db_vendor = connection.vendor
-                        local_det_query = det_query
-                        if db_vendor != 'microsoft':
-                            local_det_query = det_query.replace('?', '%s')
+                        local_det_query = det_query.replace('?', '%s')
                         cursor.execute(local_det_query, det_params)
                         det_desc = cursor.description or []
                         det_cols = [col[0] for col in det_desc]
@@ -1624,7 +1649,7 @@ def fetch_alternate_raw_materials(request=None, single_key=None):
     is_alt_rm_approve = False
     try:
         setting_query = "SELECT TOP 1 IsApproveAltRawMat FROM CompanySetting"
-        setting_rows = []
+        setting_rows = None
         if request:
             try:
                 conn, _ = get_tenant_connection(request)
@@ -1635,7 +1660,7 @@ def fetch_alternate_raw_materials(request=None, single_key=None):
                 conn.close()
             except Exception:
                 pass
-        if not setting_rows:
+        if setting_rows is None:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(setting_query)
@@ -1645,23 +1670,26 @@ def fetch_alternate_raw_materials(request=None, single_key=None):
 
         if not setting_rows:
             feat_query = "SELECT TOP 1 IsApproveAltRawMat FROM CompanySettingFeatures"
+            feat_rows = None
             if request:
                 try:
                     conn, _ = get_tenant_connection(request)
                     cursor = conn.cursor()
                     cursor.execute(feat_query)
-                    setting_rows = cursor.fetchall()
+                    feat_rows = cursor.fetchall()
                     cursor.close()
                     conn.close()
                 except Exception:
                     pass
-            if not setting_rows:
+            if feat_rows is None:
                 try:
                     with connection.cursor() as cursor:
                         cursor.execute(feat_query)
-                        setting_rows = cursor.fetchall()
+                        feat_rows = cursor.fetchall()
                 except Exception:
                     pass
+            if feat_rows:
+                setting_rows = feat_rows
 
         if setting_rows and setting_rows[0][0]:
             val = setting_rows[0][0]
@@ -1761,6 +1789,7 @@ def fetch_alternate_raw_materials(request=None, single_key=None):
 
         raw_rows = []
         columns = []
+        tenant_fetched = False
 
         if request:
             try:
@@ -1772,16 +1801,14 @@ def fetch_alternate_raw_materials(request=None, single_key=None):
                 raw_rows = cursor.fetchall()
                 cursor.close()
                 conn.close()
+                tenant_fetched = True
             except Exception as ex:
                 print("[M-APPROVAL] Tenant DB fetch warning (Alternate Raw Material):", ex)
 
-        if not raw_rows:
+        if not tenant_fetched:
             try:
                 with connection.cursor() as cursor:
-                    db_vendor = connection.vendor
-                    local_query = query
-                    if db_vendor != 'microsoft':
-                        local_query = query.replace('?', '%s')
+                    local_query = query.replace('?', '%s')
                     cursor.execute(local_query, params)
                     description = cursor.description or []
                     columns = [col[0] for col in description]
@@ -2061,6 +2088,7 @@ def mapproval_detail(request):
             items_query += " ORDER BY RowNo"
 
             item_rows = []
+            item_fetched = False
             if request:
                 try:
                     conn, _ = get_tenant_connection(request)
@@ -2071,15 +2099,13 @@ def mapproval_detail(request):
                     item_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
                     cursor.close()
                     conn.close()
+                    item_fetched = True
                 except Exception:
                     pass
-            if not item_rows:
+            if not item_fetched:
                 try:
                     with connection.cursor() as cursor:
-                        db_vendor = connection.vendor
-                        local_query = items_query
-                        if db_vendor != 'microsoft':
-                            local_query = items_query.replace('?', '%s')
+                        local_query = items_query.replace('?', '%s')
                         cursor.execute(local_query, [clean_apono])
                         desc = cursor.description or []
                         cols = [col[0] for col in desc]
@@ -2115,6 +2141,7 @@ def mapproval_detail(request):
                 """
                 shd_params = [clean_apono] + displayed_itcodes + displayed_itcodes
 
+                shd_fetched = False
                 if request:
                     try:
                         conn, _ = get_tenant_connection(request)
@@ -2125,15 +2152,13 @@ def mapproval_detail(request):
                         shd_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
                         cursor.close()
                         conn.close()
+                        shd_fetched = True
                     except Exception:
                         pass
-                if not shd_rows:
+                if not shd_fetched:
                     try:
                         with connection.cursor() as cursor:
-                            db_vendor = connection.vendor
-                            local_query = shd_query
-                            if db_vendor != 'microsoft':
-                                local_query = shd_query.replace('?', '%s')
+                            local_query = shd_query.replace('?', '%s')
                             cursor.execute(local_query, shd_params)
                             desc = cursor.description or []
                             cols = [col[0] for col in desc]
@@ -2202,6 +2227,7 @@ def mapproval_detail(request):
                 WHERE pino = ? AND ISNULL(deleted, 0) = 0
             """
             item_rows = []
+            item_fetched = False
             if request:
                 try:
                     conn, _ = get_tenant_connection(request)
@@ -2212,15 +2238,13 @@ def mapproval_detail(request):
                     item_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
                     cursor.close()
                     conn.close()
+                    item_fetched = True
                 except Exception:
                     pass
-            if not item_rows:
+            if not item_fetched:
                 try:
                     with connection.cursor() as cursor:
-                        db_vendor = connection.vendor
-                        local_query = items_query
-                        if db_vendor != 'microsoft':
-                            local_query = items_query.replace('?', '%s')
+                        local_query = items_query.replace('?', '%s')
                         cursor.execute(local_query, [clean_pino])
                         desc = cursor.description or []
                         cols = [col[0] for col in desc]
@@ -2634,10 +2658,7 @@ def mapproval_approve(request):
                 except Exception:
                     try:
                         with connection.cursor() as cursor:
-                            db_vendor = connection.vendor
-                            local_q = "SELECT RowNo FROM In_PoDet WHERE Apono = ? AND ISNULL(IsApprovePo, 0) = 1 AND ISNULL(deleted, 0) = 0"
-                            if db_vendor != 'microsoft':
-                                local_q = local_q.replace('?', '%s')
+                            local_q = "SELECT RowNo FROM In_PoDet WHERE Apono = %s AND ISNULL(IsApprovePo, 0) = 1 AND ISNULL(deleted, 0) = 0"
                             cursor.execute(local_q, [clean_rc])
                             approved_rows = [r[0] for r in cursor.fetchall()]
                     except Exception:
@@ -2658,10 +2679,7 @@ def mapproval_approve(request):
                 except Exception:
                     try:
                         with connection.cursor() as cursor:
-                            db_vendor = connection.vendor
-                            local_q = "SELECT RowNo FROM In_PoDet WHERE Apono = ? AND ISNULL(IsApprovePo, 0) = 0 AND ISNULL(deleted, 0) = 0"
-                            if db_vendor != 'microsoft':
-                                local_q = local_q.replace('?', '%s')
+                            local_q = "SELECT RowNo FROM In_PoDet WHERE Apono = %s AND ISNULL(IsApprovePo, 0) = 0 AND ISNULL(deleted, 0) = 0"
                             cursor.execute(local_q, [clean_rc])
                             pending_rows = [r[0] for r in cursor.fetchall()]
                     except Exception:

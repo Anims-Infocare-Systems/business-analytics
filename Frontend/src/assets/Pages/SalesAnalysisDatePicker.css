@@ -607,3 +607,12 @@
     min-width: 0 !important;
     width: 680px !important;
 }
+
+@media (max-width: 600px) {
+    .sadp-portal-wrap--small .sadp-popup {
+        width: 100% !important;
+        transform: none !important;
+        transform-origin: center bottom !important;
+    }
+}
+

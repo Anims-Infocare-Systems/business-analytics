@@ -273,7 +273,7 @@ export default function Welcome({
                         <span>Contact your administrator to request access.</span>
                     </div>
                 ) : (
-                    <div className="wh-bento">
+                    <div className="wh-bento" data-tour="quick-access">
                         {shortcuts.map((item, idx) => {
                             const Icon = item.icon;
                             return (

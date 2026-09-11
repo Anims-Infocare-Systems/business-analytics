@@ -35,16 +35,9 @@ FORM_RIGHTS_KEYS = (
 
 
 def get_session_tenant(request, allow_expired=False):
-    """Validate that a valid tenant session exists and return the tenant dictionary."""
-    tenant = request.session.get("tenant")
-    if not tenant:
-        raise ValueError("Session expired. Please login again.")
-    if not allow_expired:
-        from .views import is_plan_expired
-        company_code = tenant.get("company_code")
-        if company_code and is_plan_expired(company_code):
-            raise ValueError("Subscription expired. Please renew or upgrade your plan.")
-    return tenant
+    """Validate that a valid tenant session exists and return the tenant dictionary, auto-restoring if needed."""
+    from .session_utils import get_or_restore_session_tenant
+    return get_or_restore_session_tenant(request, allow_expired=allow_expired)
 
 
 def _rights_schema():

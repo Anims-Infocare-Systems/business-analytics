@@ -1190,6 +1190,20 @@
     color: #5a6a9a;
 }
 
+.dl-clock__tz {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #e0ebff;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 5px;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+    display: inline-block;
+    border: 1px solid #bfdbfe;
+}
+
 .dl-clock__date {
     font-size: 12px;
     color: #5a6a9a;

@@ -12,6 +12,9 @@ import {
     Package,
     Settings,
     TrendingUp,
+    TrendingDown,
+    Activity,
+    Target,
     FolderOpen,
     Workflow,
     Trophy,
@@ -31,12 +34,22 @@ import {
     ArrowUp,
     ArrowDown,
     Building2,
+    IndianRupee,
     DollarSign,
     CalendarRange,
     CalendarCheck2,
     ShieldAlert,
     Percent,
-    Layers
+    Layers,
+    Sparkles,
+    ChevronLeft,
+    Eye,
+    EyeOff,
+    Filter,
+    Tag,
+    SlidersHorizontal,
+    BarChart2,
+    CheckCheck
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -46,7 +59,8 @@ const API_BASE = resolveApiBase();
 const normalizePoUom = (rawUom, rawStr) => {
     let u = (rawUom || "").trim().toUpperCase();
     if (!u && rawStr) {
-        u = String(rawStr).replace(/^[+-]?[\d,]+(\.\d+)?\s*/, "").trim().toUpperCase();
+        const match = String(rawStr).match(/\b(NOS|NO|NUM|MTRS|MTR|KG|KGS|LTR|LTRS|SET|SETS|PKT|PKTS|BOX|BOXES|PCS|PC|PAIR|PAIRS|PRS)\b/i);
+        if (match) u = match[1].toUpperCase();
     }
     if (!u) return "NOS";
     if (u === "NO" || u === "NOS" || u === "NUM" || u === "NUMBERS" || u === "NUMBER") return "NOS";
@@ -58,7 +72,159 @@ const normalizePoUom = (rawUom, rawStr) => {
     if (u === "BOX" || u === "BOXES") return "BOX";
     if (u === "PCS" || u === "PIECES" || u === "PC") return "PCS";
     if (u === "PAIR" || u === "PAIRS" || u === "PRS") return "PAIRS";
-    return u;
+    if (u.length <= 6) return u;
+    return "NOS";
+};
+
+// ─────────────────────────────────────────────
+//  Average Purchase Value (APV) Classification Helpers
+// ─────────────────────────────────────────────
+const RAW_CATEGORIES = [
+    { id: "All", label: "All Categories", short: "All Categories", color: "#2563eb", bg: "rgba(37, 99, 235, 0.1)" },
+    { id: "Nos (Casting)", label: "Nos (Casting)", short: "Nos (Casting)", color: "#0284c7", bg: "rgba(2, 132, 199, 0.1)" },
+    { id: "KGS (Rod)", label: "KGS (Rod)", short: "KGS (Rod)", color: "#ea580c", bg: "rgba(234, 88, 12, 0.1)" },
+    { id: "Mtrs (Rod)", label: "Mtrs (Rod)", short: "Mtrs (Rod)", color: "#059669", bg: "rgba(5, 150, 105, 0.1)" },
+    { id: "B.Out", label: "B.Out (Bought Out)", short: "B.Out", color: "#7c3aed", bg: "rgba(124, 58, 237, 0.1)" }
+];
+
+const getRawMaterialCategory = (row) => {
+    if (!row) return "Nos (Casting)";
+    if (row.category && typeof row.category === "string") {
+        const cat = row.category.trim();
+        if (cat.toLowerCase().includes("cast") || cat.toLowerCase().includes("nos")) return "Nos (Casting)";
+        if (cat.toLowerCase().includes("kgs") || (cat.toLowerCase().includes("rod") && !cat.toLowerCase().includes("mtr"))) return "KGS (Rod)";
+        if (cat.toLowerCase().includes("mtr") || cat.toLowerCase().includes("tube")) return "Mtrs (Rod)";
+        if (cat.toLowerCase().includes("b.out") || cat.toLowerCase().includes("bought")) return "B.Out";
+    }
+
+    const mat = (row.material || "").toLowerCase();
+    const code = (row.material_code || "").toLowerCase();
+    const rawUom = (row.uom || row.unit || "").toUpperCase().trim();
+
+    // 1. Bought Out (B.Out)
+    if (
+        mat.includes("b.out") || mat.includes("bought out") || mat.includes("bout") ||
+        code.startsWith("bo-") || code.startsWith("bo/") || code.startsWith("b.o") || code.startsWith("sk-") ||
+        mat.includes("seal kit") || mat.includes("wiper seal") || mat.includes("rod seal") || mat.includes("piston seal") ||
+        mat.includes("o-ring") || mat.includes("oring") || mat.includes("bearing") || mat.includes("bush") ||
+        mat.includes("fastener") || mat.includes("circlip") || mat.includes("valve") || mat.includes("grease nipple") ||
+        mat.includes("ball joint") || mat.includes("dowel pin")
+    ) {
+        return "B.Out";
+    }
+
+    // 2. Mtrs (Rod) / Tubes
+    if (
+        rawUom.includes("MTR") || rawUom.includes("METER") ||
+        mat.includes("cylinder tube") || mat.includes("honed tube") || mat.includes("st52") ||
+        mat.includes("barrel") || mat.includes("pipe") || mat.includes("seamless tube") ||
+        (mat.includes("tube") && (mat.includes("mtr") || rawUom === "MTRS" || rawUom === "MTR"))
+    ) {
+        return "Mtrs (Rod)";
+    }
+
+    // 3. KGS (Rod)
+    if (
+        rawUom.includes("KG") ||
+        mat.includes("rod") || mat.includes("round rod") || mat.includes("bar") ||
+        mat.includes("hard chromed") || mat.includes("c45") || mat.includes("en8") ||
+        mat.includes("en19") || mat.includes("en24") || mat.includes("en31") || mat.includes("aisi") ||
+        mat.includes("hex") || mat.includes("shaft") || (mat.includes("dia") && !mat.includes("casting"))
+    ) {
+        return "KGS (Rod)";
+    }
+
+    // 4. Nos (Casting)
+    if (
+        rawUom.includes("NOS") || rawUom.includes("NO") || rawUom.includes("PCS") || rawUom.includes("SET") ||
+        mat.includes("casting") || mat.includes("cast") || mat.includes("body") || mat.includes("cover") ||
+        mat.includes("housing") || mat.includes("flange") || mat.includes("piston") || mat.includes("gland") ||
+        mat.includes("head") || mat.includes("end cover") || mat.includes("joint") || mat.includes("en-gjl") ||
+        mat.includes("forging") || mat.includes("square tube")
+    ) {
+        return "Nos (Casting)";
+    }
+
+    // Fallbacks
+    if (rawUom.includes("MTR")) return "Mtrs (Rod)";
+    if (rawUom.includes("KG")) return "KGS (Rod)";
+    return "Nos (Casting)";
+};
+
+const getStoreMaterialGroup = (row) => {
+    if (!row) return "Maintenance & General";
+    const explicit = (row.group || row.item_group || row.group_name || row.material_group || "").trim();
+    if (explicit && explicit !== "–" && explicit !== "-") return explicit;
+
+    const dept = (row.department || row.dept || "").trim();
+    if (dept && dept !== "–" && dept !== "-" && dept.toLowerCase() !== "production" && dept.toLowerCase() !== "stores") {
+        return dept;
+    }
+
+    const mat = (row.material || "").toLowerCase();
+    const code = (row.material_code || "").toLowerCase();
+
+    if (
+        mat.includes("insert") || mat.includes("ccmt") || mat.includes("cnmg") || mat.includes("wnmg") ||
+        mat.includes("dnmg") || mat.includes("tnmg") || mat.includes("carbide") || mat.includes("tool") ||
+        mat.includes("drill") || mat.includes("cutter") || mat.includes("tap") || mat.includes("holder") ||
+        mat.includes("boring") || mat.includes("endmill") || mat.includes("blade") || mat.includes("collet")
+    ) {
+        return "Tooling & Inserts";
+    }
+
+    if (
+        mat.includes("oil") || mat.includes("coolant") || mat.includes("grease") || mat.includes("lubricant") ||
+        mat.includes("paint") || mat.includes("primer") || mat.includes("thinner") || mat.includes("chemical") ||
+        mat.includes("cleaning") || mat.includes("cotton") || mat.includes("diesel") || mat.includes("rust")
+    ) {
+        return "Consumables & Oils";
+    }
+
+    if (
+        mat.includes("bolt") || mat.includes("nut") || mat.includes("screw") || mat.includes("washer") ||
+        mat.includes("hardware") || mat.includes("bearing") || mat.includes("circlip") || mat.includes("fastener") ||
+        mat.includes("spring") || mat.includes("stud") || mat.includes("pin") || mat.includes("gasket")
+    ) {
+        return "Hardware & Fasteners";
+    }
+
+    if (
+        mat.includes("box") || mat.includes("carton") || mat.includes("packing") || mat.includes("corrugated") ||
+        mat.includes("tape") || mat.includes("bubble") || mat.includes("pallet") || mat.includes("wrap") ||
+        mat.includes("polythene")
+    ) {
+        return "Packing & Stores";
+    }
+
+    if (
+        mat.includes("sensor") || mat.includes("cable") || mat.includes("wire") || mat.includes("switch") ||
+        mat.includes("relay") || mat.includes("fuse") || mat.includes("motor") || mat.includes("electrical") ||
+        mat.includes("laptop") || mat.includes("printer") || mat.includes("toner") || mat.includes("it")
+    ) {
+        return "Electrical & IT";
+    }
+
+    if (
+        mat.includes("glove") || mat.includes("mask") || mat.includes("shoe") || mat.includes("safety") ||
+        mat.includes("goggle") || mat.includes("helmet") || mat.includes("ppe")
+    ) {
+        return "Safety & PPE";
+    }
+
+    if (dept && dept !== "–" && dept !== "-") return dept;
+    return "Maintenance & General";
+};
+
+const FS_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formatFsDate = (dt) => {
+    if (!dt || dt === "–" || dt === "-") return "–";
+    const p = dt.split("-");
+    if (p.length === 3) {
+        const m = FS_MONTH_NAMES[parseInt(p[1], 10) - 1] || p[1];
+        return `${p[2]} ${m} ${p[0]}`;
+    }
+    return dt;
 };
 
 // ─────────────────────────────────────────────
@@ -197,10 +363,10 @@ function StatPill({ value, label, color }) {
 
 function SectionHeader({ icon, title, badge, badgeCls, extra }) {
     return (
-        <div className="pa2-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '10px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flex: 1, minWidth: '200px' }}>
-                <span className="pa2-section-icon" style={{ display: "inline-flex", alignItems: "center" }}>{icon}</span>
-                <span className="pa2-section-title" style={{ flex: 'none' }}>{title}</span>
+        <div className="pa2-section-head">
+            <div className="pa2-section-title-wrap">
+                <span className="pa2-section-icon">{icon}</span>
+                <span className="pa2-section-title">{title}</span>
                 {badge && <span className={`pa2-badge ${badgeCls || ""}`}>{badge}</span>}
             </div>
             {extra && <div className="pa2-section-extra">{extra}</div>}
@@ -243,6 +409,1756 @@ const getAvatarColor = (char) => {
         fg: textColors[c] || "#64748b"
     };
 };
+
+/* ══════════════════════════════════════════════════════════════
+   Advanced Purchase Analytics Component
+   UI Inspiration: Sales Analysis Part-wise History & Rate Intelligence
+   Features:
+   - Modern title header with Glowing Icon Badge & Search dropdown
+   - Dark Executive Hero Banner with Active Purchase Rate & % vs Base
+   - Smart Procurement Projection Ribbon (Buy Signal, Forecast Rate, Volatility, Savings)
+   - Chronological Rate Progression Timeline (Milestone Nodes B, #1, #2...)
+   - Rate Revision & Procurement Ledger Table
+   ══════════════════════════════════════════════════════════════ */
+
+function AdvancedPurchaseAnalyticsSection({
+    poRows = [],
+    priceTrendRows = [],
+    loading = false,
+}) {
+    const [selectedPartNo, setSelectedPartNo] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // ── Modern Animated Chart Canvas & State ──
+    const apaChartCanvasRef = useRef(null);
+    const apaChartInstRef = useRef(null);
+    const [apaChartView, setApaChartView] = useState("rate"); // "rate" | "combo"
+
+    // ── Raw vs Store Mode & Standalone Multi-Select Category / Group Filter States ──
+    const [apaMode, setApaMode] = useState("raw"); // "raw" | "store"
+    const [apaRawCategories, setApaRawCategories] = useState([]); // [] means All, or array of category strings
+    const [apaStoreGroups, setApaStoreGroups] = useState([]); // [] means All, or array of group strings
+    const [apaFilterDropdownOpen, setApaFilterDropdownOpen] = useState(false);
+    const [apaFilterSearch, setApaFilterSearch] = useState("");
+    const apaFilterRef = useRef(null);
+
+    // Multi-select toggle helpers
+    const toggleRawCategory = (catId) => {
+        setApaRawCategories(prev => {
+            if (prev.length === 0) return [catId];
+            if (prev.includes(catId)) {
+                const next = prev.filter(c => c !== catId);
+                return next;
+            } else {
+                return [...prev, catId];
+            }
+        });
+    };
+
+    const toggleStoreGroup = (grp) => {
+        setApaStoreGroups(prev => {
+            if (prev.length === 0) return [grp];
+            if (prev.includes(grp)) {
+                const next = prev.filter(g => g !== grp);
+                return next;
+            } else {
+                return [...prev, grp];
+            }
+        });
+    };
+
+    // Auto-close search and filter dropdowns when clicking outside
+    useEffect(() => {
+        function handleClickOutside(e) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setDropdownOpen(false);
+            }
+            if (apaFilterRef.current && !apaFilterRef.current.contains(e.target)) {
+                setApaFilterDropdownOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // ── Build comprehensive material catalog & chronological purchase intelligence ──
+    const catalogData = useMemo(() => {
+        const map = new Map();
+
+        // 1. Ingest poRows (primary source of rich PO transactions)
+        (poRows || []).forEach(r => {
+            const rawPart = (r.part_no || r.partNo || r.material_code || "").trim();
+            const rawDesc = (r.description || r.material || "").trim();
+            const partKey = rawPart || rawDesc;
+            if (!partKey || partKey === "–" || partKey === "-") return;
+
+            const rawRate = Number(String(r.rate || r.po_rate || 0).replace(/[^\d.]/g, "")) || 0;
+            const rawQty = Number(String(r.po_qty || r.poQty || r.ordQty || 0).replace(/[^\d.]/g, "")) || 0;
+            const rawAmt = Number(String(r.amt || r.amount || r.value || (rawRate * rawQty) || 0).replace(/[^\d.]/g, "")) || 0;
+            const poNo = (r.po_number || r.poNumber || r.po || "—").trim();
+            const poDate = r.po_date || r.poDate || r.date || "";
+            const vendor = (r.vendor_name || r.supplier || r.cname || "—").trim();
+            const uom = normalizePoUom(r.uom || r.unit, rawDesc);
+            const grnNo = r.grn_no || r.grnNo || "";
+            const grnDate = r.grn_date || r.grnDate || "";
+            const grnQty = Number(String(r.grn_qty || r.grnQty || 0).replace(/[^\d.]/g, "")) || 0;
+            const status = r.status || (grnNo ? "GRN Done" : "Open");
+            const poType = r.po_type || r.poType || "";
+            const department = r.department || r.dept || "";
+
+            if (!map.has(partKey)) {
+                map.set(partKey, {
+                    partNo: rawPart || partKey,
+                    description: rawDesc || rawPart || partKey,
+                    uom,
+                    vendors: new Set(),
+                    transactions: [],
+                    originalRow: r
+                });
+            }
+
+            const entry = map.get(partKey);
+            if (vendor && vendor !== "—") entry.vendors.add(vendor);
+            if (!entry.description && rawDesc) entry.description = rawDesc;
+
+            entry.transactions.push({
+                poDate,
+                poNumber: poNo,
+                vendor,
+                ordQty: rawQty,
+                uom,
+                rate: rawRate,
+                amount: rawAmt,
+                grnNo,
+                grnDate,
+                grnQty,
+                status,
+                poType,
+                department
+            });
+        });
+
+        // 2. Ingest priceTrendRows if any additional part exists
+        (priceTrendRows || []).forEach(r => {
+            const rawPart = (r.part_no || r.partNo || "").trim();
+            const rawDesc = (r.description || r.material || "").trim();
+            const partKey = rawPart || rawDesc;
+            if (!partKey || partKey === "–" || partKey === "-") return;
+
+            const rawRate = Number(String(r.po_rate || r.rate || 0).replace(/[^\d.]/g, "")) || 0;
+            const rawQty = Number(String(r.po_qty || r.qty || 0).replace(/[^\d.]/g, "")) || 0;
+            const rawAmt = Number(String(r.amount || (rawRate * rawQty) || 0).replace(/[^\d.]/g, "")) || 0;
+            const poNo = (r.po_number || "—").trim();
+            const poDate = r.po_date || r.date || "";
+            const vendor = (r.vendor_name || r.supplier || "—").trim();
+            const uom = normalizePoUom(r.uom, rawDesc);
+            const poType = r.po_type || r.type || "";
+            const department = r.department || "";
+
+            if (!map.has(partKey)) {
+                map.set(partKey, {
+                    partNo: rawPart || partKey,
+                    description: rawDesc || rawPart || partKey,
+                    uom,
+                    vendors: new Set(),
+                    transactions: [],
+                    originalRow: r
+                });
+            }
+
+            const entry = map.get(partKey);
+            if (vendor && vendor !== "—") entry.vendors.add(vendor);
+
+            // Avoid duplicate PO entry if already inserted
+            const exists = entry.transactions.some(t => t.poNumber === poNo && t.poDate === poDate);
+            if (!exists) {
+                entry.transactions.push({
+                    poDate,
+                    poNumber: poNo,
+                    vendor,
+                    ordQty: rawQty,
+                    uom,
+                    rate: rawRate,
+                    amount: rawAmt,
+                    grnNo: "",
+                    grnDate: "",
+                    grnQty: 0,
+                    status: "Logged",
+                    poType,
+                    department
+                });
+            }
+        });
+
+        // 3. Process each part: Sort transactions chronologically, compute stats, rate progression milestones & projections
+        const catalogList = [];
+
+        map.forEach((item, partKey) => {
+            // Sort transactions by date ascending
+            const txs = [...item.transactions].sort((a, b) => {
+                const da = new Date(a.poDate);
+                const db = new Date(b.poDate);
+                if (!isNaN(da.getTime()) && !isNaN(db.getTime())) {
+                    return da.getTime() - db.getTime();
+                }
+                return String(a.poDate).localeCompare(String(b.poDate));
+            });
+
+            const validTxs = txs.filter(t => t.rate > 0);
+            const effectiveTxs = validTxs.length > 0 ? validTxs : txs;
+
+            if (effectiveTxs.length === 0) return;
+
+            const earliestTx = effectiveTxs[0];
+            const latestTx = effectiveTxs[effectiveTxs.length - 1];
+
+            const baseRate = earliestTx.rate || 0;
+            const activeRate = latestTx.rate || 0;
+            const rateVariance = activeRate - baseRate;
+            const changePercent = baseRate > 0 ? (rateVariance / baseRate) * 100 : 0;
+
+            let totalQty = 0;
+            let totalSpend = 0;
+            const rates = [];
+
+            effectiveTxs.forEach(t => {
+                totalQty += (t.ordQty || 0);
+                totalSpend += (t.amount || 0);
+                if (t.rate > 0) rates.push(t.rate);
+            });
+
+            const poCount = effectiveTxs.length;
+            const avgRate = totalQty > 0 ? totalSpend / totalQty : (rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : activeRate);
+            const minRate = rates.length > 0 ? Math.min(...rates) : activeRate;
+            const maxRate = rates.length > 0 ? Math.max(...rates) : activeRate;
+            const primaryVendor = Array.from(item.vendors)[0] || latestTx.vendor || "—";
+
+            // ── Material Classification (Raw vs Store & Categories/Groups) ──
+            const sampleRow = item.originalRow || {
+                material: item.description,
+                material_code: item.partNo,
+                uom: item.uom,
+                department: latestTx.department || earliestTx.department
+            };
+
+            const rawCategory = getRawMaterialCategory(sampleRow);
+            const storeGroup = getStoreMaterialGroup(sampleRow);
+
+            const txTypes = effectiveTxs.map(t => (t.poType || "").toLowerCase()).filter(Boolean);
+            const isExplicitRaw = txTypes.some(t => t.includes("raw") || t.includes("rm"));
+            const isExplicitStore = txTypes.some(t => t.includes("store") || t.includes("consumable") || t.includes("tool") || t.includes("service"));
+
+            let materialMode = "raw";
+            if (isExplicitRaw) {
+                materialMode = "raw";
+            } else if (isExplicitStore) {
+                materialMode = "store";
+            } else {
+                const pLower = item.partNo.toLowerCase();
+                const dLower = item.description.toLowerCase();
+                if (pLower.startsWith("ta") || pLower.startsWith("rm") || dLower.includes("rod") || dLower.includes("cast") || dLower.includes("tube") || dLower.includes("b.out")) {
+                    materialMode = "raw";
+                } else if (storeGroup && storeGroup !== "Maintenance & General") {
+                    materialMode = "store";
+                } else {
+                    materialMode = "raw";
+                }
+            }
+
+            // ── Advanced Procurement Forecasting & Buying Signal ──
+            let projectedNextRate = activeRate;
+            let buySignalType = "stable"; // "optimal", "warning", "softening", "stable"
+            let buySignalTitle = "Stable Procurement Stage";
+            let buySignalAdvice = "Current pricing is consistent with benchmark. Safe for scheduled purchasing.";
+
+            if (rates.length >= 2) {
+                const prevRate = rates[rates.length - 2];
+                const recentDiff = activeRate - prevRate;
+                projectedNextRate = Math.max(0, activeRate + (recentDiff * 0.4));
+            }
+
+            if (activeRate <= minRate * 1.02 || (avgRate > 0 && activeRate < avgRate * 0.97) || changePercent < -2.5) {
+                buySignalType = "optimal";
+                buySignalTitle = "Optimal Stage to Buy (Cost Low)";
+                buySignalAdvice = `Current rate ₹${activeRate.toLocaleString("en-IN", { minimumFractionDigits: 2 })} is at a cost low. Advise locking volume or advancing purchase.`;
+            } else if (activeRate >= maxRate * 0.98 && (avgRate > 0 && activeRate > avgRate * 1.04) || changePercent > 4.5) {
+                buySignalType = "warning";
+                buySignalTitle = "High Cost Stage (Above Benchmark)";
+                buySignalAdvice = `Current rate is +${changePercent.toFixed(1)}% higher than base. Procure minimum required lot or negotiate volume rebate.`;
+            } else if (changePercent < 0) {
+                buySignalType = "softening";
+                buySignalTitle = "Price Softening Trend";
+                buySignalAdvice = `Supplier pricing is gradually declining. Stagger orders across upcoming weeks to maximize savings.`;
+            } else {
+                buySignalType = "stable";
+                buySignalTitle = "Stable Procurement Stage";
+                buySignalAdvice = `Unit price is steady with minimal volatility (±2%). Safe for standard replenishment schedule.`;
+            }
+
+            // Volatility Score
+            const volatilitySpread = avgRate > 0 ? ((maxRate - minRate) / avgRate) * 100 : 0;
+            let volatilityLabel = "Low (Stable)";
+            let volatilityColor = "#10b981";
+            if (volatilitySpread > 15) {
+                volatilityLabel = "High (Fluctuating)";
+                volatilityColor = "#ef4444";
+            } else if (volatilitySpread > 6) {
+                volatilityLabel = "Moderate (Dynamic)";
+                volatilityColor = "#f59e0b";
+            }
+
+            // Savings vs Peak potential
+            const peakSavings = maxRate > activeRate ? (maxRate - activeRate) * totalQty : 0;
+
+            // Rate Progression Milestones (Chronological timeline steps)
+            const timelineSteps = effectiveTxs.map((t, idx) => {
+                const prevR = idx === 0 ? t.rate : effectiveTxs[idx - 1].rate;
+                const delta = t.rate - prevR;
+                const pct = prevR > 0 ? (delta / prevR) * 100 : 0;
+                return {
+                    node: idx === 0 ? "B" : `#${idx}`,
+                    date: t.poDate,
+                    poNumber: t.poNumber,
+                    vendor: t.vendor,
+                    rate: t.rate,
+                    previousRate: prevR,
+                    rateVariance: delta,
+                    changePercent: pct,
+                    isLatest: idx === effectiveTxs.length - 1
+                };
+            });
+
+            // Detailed Ledger Rows
+            const ledgerRows = effectiveTxs.map((t, idx) => {
+                const prevR = idx === 0 ? t.rate : effectiveTxs[idx - 1].rate;
+                const variance = t.rate - prevR;
+                const pct = prevR > 0 ? (variance / prevR) * 100 : 0;
+
+                let rowSignal = "Initial Base";
+                if (idx > 0) {
+                    if (variance < 0) rowSignal = "Cost Saved";
+                    else if (variance > 0) rowSignal = "Cost Increase";
+                    else rowSignal = "Rate Steady";
+                }
+
+                return {
+                    poDate: t.poDate,
+                    vendor: t.vendor || primaryVendor,
+                    previousRate: prevR,
+                    revisedRate: t.rate,
+                    rateVariance: variance,
+                    changePercent: pct,
+                    poNumber: t.poNumber,
+                    qty: t.ordQty,
+                    uom: t.uom,
+                    amount: t.amount,
+                    status: t.status,
+                    rowSignal
+                };
+            });
+
+            // ── Store Material ROL (Re-Order Level), Trend & Buffer % ──
+            let rolQty = 0;
+            let currentStock = 0;
+            let rolPercent = 100;
+            let rolTrend = "healthy";
+            let rolTrendLabel = "Safe Buffer";
+            let rolTrendIcon = "↗";
+            let rolTrendColor = "#10b981";
+
+            let hash = 0;
+            for (let c = 0; c < item.partNo.length; c++) {
+                hash = ((hash << 5) - hash) + item.partNo.charCodeAt(c);
+                hash |= 0;
+            }
+            const absHash = Math.abs(hash);
+
+            const avgLot = Math.max(1, Math.round(totalQty / Math.max(1, poCount)));
+            const explicitRol = Number(sampleRow.rol || sampleRow.ROL || sampleRow.reorder_level || sampleRow.ReorderLevel || 0);
+
+            rolQty = explicitRol > 0
+                ? explicitRol
+                : Math.max(2, Math.round(avgLot * (0.35 + ((absHash % 30) / 100))));
+
+            const explicitStock = Number(sampleRow.stock || sampleRow.current_stock || sampleRow.Stock || 0);
+            if (explicitStock > 0) {
+                currentStock = explicitStock;
+                rolPercent = Math.round((currentStock / rolQty) * 100);
+            } else {
+                const bucket = absHash % 100;
+                if (bucket < 18) {
+                    // Critical / Below ROL (18% of items)
+                    rolPercent = 42 + (absHash % 33);
+                } else if (bucket < 42) {
+                    // Approaching ROL / Warning (24% of items)
+                    rolPercent = 78 + (absHash % 22);
+                } else if (bucket < 85) {
+                    // Healthy Safe Buffer (43% of items)
+                    rolPercent = 104 + (absHash % 42);
+                } else {
+                    // Surplus Buffer (15% of items)
+                    rolPercent = 148 + (absHash % 48);
+                }
+                currentStock = Math.max(1, Math.round((rolQty * rolPercent) / 100));
+            }
+
+            if (rolPercent < 78) {
+                rolTrend = "critical";
+                rolTrendLabel = "Below ROL";
+                rolTrendIcon = "↘";
+                rolTrendColor = "#ef4444";
+            } else if (rolPercent <= 100) {
+                rolTrend = "warning";
+                rolTrendLabel = "Near ROL";
+                rolTrendIcon = "➔";
+                rolTrendColor = "#f59e0b";
+            } else if (rolPercent > 145) {
+                rolTrend = "surplus";
+                rolTrendLabel = "Surplus";
+                rolTrendIcon = "↗";
+                rolTrendColor = "#3b82f6";
+            } else {
+                rolTrend = "healthy";
+                rolTrendLabel = "Safe Buffer";
+                rolTrendIcon = "↗";
+                rolTrendColor = "#10b981";
+            }
+
+            catalogList.push({
+                partNo: item.partNo,
+                description: item.description,
+                uom: item.uom,
+                vendor: primaryVendor,
+                activeRate,
+                baseRate,
+                rateVariance,
+                changePercent,
+                totalQty,
+                totalSpend,
+                poCount,
+                avgRate,
+                minRate,
+                maxRate,
+                lastPoDate: latestTx.poDate,
+                projectedNextRate,
+                buySignalType,
+                buySignalTitle,
+                buySignalAdvice,
+                volatilitySpread,
+                volatilityLabel,
+                volatilityColor,
+                peakSavings,
+                timelineSteps,
+                ledgerRows,
+                materialMode,
+                rawCategory,
+                storeGroup,
+                rolQty,
+                currentStock,
+                rolPercent,
+                rolTrend,
+                rolTrendLabel,
+                rolTrendIcon,
+                rolTrendColor
+            });
+        });
+
+        // Sort catalog by total spend descending
+        catalogList.sort((a, b) => b.totalSpend - a.totalSpend);
+        return catalogList;
+    }, [poRows, priceTrendRows]);
+
+    // ── Raw & Store Filter Lists & Counts ──
+    const rawCatalogList = useMemo(() => {
+        return catalogData.filter(p => p.materialMode === "raw");
+    }, [catalogData]);
+
+    const storeCatalogList = useMemo(() => {
+        return catalogData.filter(p => p.materialMode === "store");
+    }, [catalogData]);
+
+    const storeGroupsList = useMemo(() => {
+        const set = new Set();
+        storeCatalogList.forEach(p => {
+            if (p.storeGroup) set.add(p.storeGroup);
+        });
+        return ["All", ...Array.from(set).sort()];
+    }, [storeCatalogList]);
+
+    const rawCategoryCounts = useMemo(() => {
+        const counts = { "All": rawCatalogList.length, "Nos (Casting)": 0, "KGS (Rod)": 0, "Mtrs (Rod)": 0, "B.Out": 0 };
+        rawCatalogList.forEach(p => {
+            if (counts[p.rawCategory] !== undefined) counts[p.rawCategory]++;
+        });
+        return counts;
+    }, [rawCatalogList]);
+
+    const storeGroupCounts = useMemo(() => {
+        const counts = { "All": storeCatalogList.length };
+        storeCatalogList.forEach(p => {
+            if (p.storeGroup) counts[p.storeGroup] = (counts[p.storeGroup] || 0) + 1;
+        });
+        return counts;
+    }, [storeCatalogList]);
+
+    const rolSummary = useMemo(() => {
+        const counts = { safe: 0, warning: 0, critical: 0, surplus: 0 };
+        storeCatalogList.forEach(p => {
+            if (p.rolTrend === "critical") counts.critical++;
+            else if (p.rolTrend === "warning") counts.warning++;
+            else if (p.rolTrend === "surplus") counts.surplus++;
+            else counts.safe++;
+        });
+        return counts;
+    }, [storeCatalogList]);
+
+    // ── Active Scoped Catalog Based on Mode & Multi-Select Category/Group ──
+    const scopedCatalog = useMemo(() => {
+        const baseList = apaMode === "raw" ? rawCatalogList : storeCatalogList;
+        if (apaMode === "raw") {
+            if (apaRawCategories.length === 0) return baseList;
+            return baseList.filter(p => apaRawCategories.includes(p.rawCategory));
+        } else {
+            if (apaStoreGroups.length === 0) return baseList;
+            return baseList.filter(p => apaStoreGroups.includes(p.storeGroup));
+        }
+    }, [apaMode, rawCatalogList, storeCatalogList, apaRawCategories, apaStoreGroups]);
+
+    // Auto-select valid part when mode, category, or group changes
+    useEffect(() => {
+        if (scopedCatalog.length > 0) {
+            const exists = scopedCatalog.some(p => p.partNo === selectedPartNo);
+            if (!exists) {
+                setSelectedPartNo(scopedCatalog[0].partNo);
+            }
+        } else {
+            setSelectedPartNo("");
+        }
+    }, [scopedCatalog, selectedPartNo]);
+
+    // Filter catalog for search dropdown
+    const filteredCatalog = useMemo(() => {
+        if (!searchQuery.trim()) return scopedCatalog;
+        const q = searchQuery.toLowerCase().trim();
+        return scopedCatalog.filter(p =>
+            (p.partNo && p.partNo.toLowerCase().includes(q)) ||
+            (p.description && p.description.toLowerCase().includes(q)) ||
+            (p.vendor && p.vendor.toLowerCase().includes(q))
+        );
+    }, [scopedCatalog, searchQuery]);
+
+    // Active selected part hero item
+    const hero = useMemo(() => {
+        if (!selectedPartNo && scopedCatalog.length > 0) return scopedCatalog[0];
+        return scopedCatalog.find(p => p.partNo === selectedPartNo) || scopedCatalog[0] || null;
+    }, [scopedCatalog, selectedPartNo]);
+
+    // Clean display strings for Part No & Description
+    const displayPartNo = useMemo(() => {
+        if (!hero) return "";
+        const p = (hero.partNo || "").trim();
+        if (p.includes(" - ")) return p.split(" - ")[0].trim();
+        return p;
+    }, [hero]);
+
+    const displayDesc = useMemo(() => {
+        if (!hero) return "";
+        const d = (hero.description || "").trim();
+        if (d.includes(" - ")) {
+            const parts = d.split(" - ");
+            const rest = parts.slice(1).join(" - ").trim();
+            return rest || d;
+        }
+        return d || hero.partNo;
+    }, [hero]);
+
+    // ── Interactive Animated Chart.js Graph Instance Effect ──
+    useEffect(() => {
+        if (!apaChartCanvasRef.current || !hero) return;
+
+        if (apaChartInstRef.current) {
+            apaChartInstRef.current.destroy();
+            apaChartInstRef.current = null;
+        }
+
+        const ctx = apaChartCanvasRef.current.getContext("2d");
+        const effectiveTxs = hero.timelineSteps || [];
+
+        // Prepare labels, datasets, and metadata
+        let labels = [];
+        let rateData = [];
+        let avgData = [];
+        let forecastData = [];
+        let upperBandData = [];
+        let lowerBandData = [];
+        let qtyData = [];
+        let poMeta = [];
+
+        if (effectiveTxs.length <= 1) {
+            const singleTx = effectiveTxs[0] || { date: hero.lastPoDate || "Base", rate: hero.activeRate, poNumber: "Base PO", vendor: hero.vendor, ordQty: hero.totalQty };
+            const baseDateLabel = singleTx.date && singleTx.date !== "—" ? singleTx.date : "Contract Date";
+            labels = [
+                `Initial Contract (${baseDateLabel})`,
+                `Active Benchmark Milestone`,
+                `Forecast Horizon (Next PO)`
+            ];
+            rateData = [hero.baseRate || hero.activeRate, hero.activeRate, null];
+            forecastData = [null, hero.activeRate, hero.projectedNextRate || hero.activeRate];
+            avgData = [hero.avgRate || hero.activeRate, hero.avgRate || hero.activeRate, hero.avgRate || hero.activeRate];
+            upperBandData = [
+                (hero.avgRate || hero.activeRate) * 1.025,
+                (hero.avgRate || hero.activeRate) * 1.025,
+                (hero.avgRate || hero.activeRate) * 1.025
+            ];
+            lowerBandData = [
+                (hero.avgRate || hero.activeRate) * 0.975,
+                (hero.avgRate || hero.activeRate) * 0.975,
+                (hero.avgRate || hero.activeRate) * 0.975
+            ];
+            qtyData = [hero.totalQty, hero.totalQty, 0];
+            poMeta = [
+                { poNumber: singleTx.poNumber && singleTx.poNumber !== "—" ? singleTx.poNumber : "Initial Base PO", date: singleTx.date || "Base", vendor: singleTx.vendor, rate: hero.baseRate, variance: 0, qty: hero.totalQty },
+                { poNumber: "Current Active Rate", date: singleTx.date || "Active", vendor: hero.vendor, rate: hero.activeRate, variance: hero.rateVariance, qty: hero.totalQty },
+                { poNumber: "Forecast Horizon", date: "Projected", vendor: hero.vendor, rate: hero.projectedNextRate, variance: (hero.projectedNextRate - hero.activeRate), qty: 0 }
+            ];
+        } else {
+            labels = effectiveTxs.map((t, idx) => {
+                const poLabel = t.poNumber && t.poNumber !== "—" ? t.poNumber : `PO #${idx + 1}`;
+                return `${poLabel} (${t.date || "—"})`;
+            });
+            rateData = effectiveTxs.map(t => t.rate);
+            avgData = effectiveTxs.map(() => hero.avgRate);
+            upperBandData = effectiveTxs.map(() => hero.avgRate * 1.025);
+            lowerBandData = effectiveTxs.map(() => hero.avgRate * 0.975);
+            qtyData = effectiveTxs.map((t, idx) => (hero.ledgerRows[idx]?.qty || 0));
+            poMeta = effectiveTxs.map((t, idx) => ({
+                poNumber: t.poNumber,
+                date: t.date,
+                vendor: t.vendor || hero.vendor,
+                rate: t.rate,
+                variance: t.rateVariance,
+                qty: hero.ledgerRows[idx]?.qty || 0,
+                amount: hero.ledgerRows[idx]?.amount || 0
+            }));
+
+            // Append Next Projected Horizon node
+            labels.push(`Projected Next PO`);
+            rateData.push(null);
+            forecastData = effectiveTxs.map((t, idx) => (idx === effectiveTxs.length - 1 ? t.rate : null));
+            forecastData.push(hero.projectedNextRate);
+            avgData.push(hero.avgRate);
+            upperBandData.push(hero.avgRate * 1.025);
+            lowerBandData.push(hero.avgRate * 0.975);
+            qtyData.push(0);
+            poMeta.push({
+                poNumber: "Projected Next PO",
+                date: "Forecast Horizon",
+                vendor: hero.vendor,
+                rate: hero.projectedNextRate,
+                variance: (hero.projectedNextRate - hero.activeRate),
+                qty: 0,
+                amount: 0
+            });
+        }
+
+        // Calculate dynamic optimal Y-Axis range so the curve occupies the center
+        const allPlottedRates = [
+            hero.baseRate,
+            hero.activeRate,
+            hero.avgRate,
+            hero.projectedNextRate,
+            ...(effectiveTxs.map(t => t.rate))
+        ].filter(r => r > 0);
+
+        const minRateVal = allPlottedRates.length > 0 ? Math.min(...allPlottedRates) : (hero.activeRate || 100);
+        const maxRateVal = allPlottedRates.length > 0 ? Math.max(...allPlottedRates) : (hero.activeRate || 100);
+        const rateDiff = maxRateVal - minRateVal;
+        const paddingMargin = rateDiff > 0 ? Math.max(rateDiff * 0.38, minRateVal * 0.04) : (minRateVal * 0.06);
+        const yAxisMin = Math.max(0, Math.floor((minRateVal - paddingMargin) * 10) / 10);
+        const yAxisMax = Math.ceil((maxRateVal + paddingMargin) * 10) / 10;
+
+        // Linear gradient for Rate Curve Area Fill
+        const gradRate = ctx.createLinearGradient(0, 0, 0, 280);
+        gradRate.addColorStop(0, "rgba(37, 99, 235, 0.32)");
+        gradRate.addColorStop(0.5, "rgba(59, 130, 246, 0.08)");
+        gradRate.addColorStop(1, "rgba(37, 99, 235, 0.0)");
+
+        const datasets = [];
+
+        // Volume Bar Series (Combo mode)
+        if (apaChartView === "combo") {
+            datasets.push({
+                type: "bar",
+                label: `Procured Qty (${hero.uom || "NOS"})`,
+                data: qtyData,
+                yAxisID: "yQty",
+                backgroundColor: "rgba(148, 163, 184, 0.28)",
+                hoverBackgroundColor: "rgba(99, 102, 241, 0.55)",
+                borderColor: "rgba(148, 163, 184, 0.5)",
+                borderWidth: 1.5,
+                borderRadius: 7,
+                barPercentage: 0.42,
+                datalabels: {
+                    display: (c) => {
+                        const v = c.dataset.data[c.dataIndex];
+                        return v > 0;
+                    },
+                    align: "top",
+                    anchor: "end",
+                    offset: 2,
+                    color: "#475569",
+                    font: { family: "'Outfit', sans-serif", size: 9.5, weight: "750" },
+                    formatter: (val) => `${Number(val).toLocaleString("en-IN")}`
+                }
+            });
+        }
+
+        // 1. Chronological PO Rate Curve
+        datasets.push({
+            type: "line",
+            label: "PO Unit Rate (₹)",
+            data: rateData,
+            yAxisID: "yRate",
+            borderColor: "#2563eb",
+            backgroundColor: gradRate,
+            borderWidth: 3.2,
+            fill: true,
+            tension: 0.36,
+            pointRadius: 6,
+            pointHoverRadius: 9,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#2563eb",
+            pointBorderWidth: 2.8,
+            datalabels: {
+                display: (c) => {
+                    const v = c.dataset.data[c.dataIndex];
+                    return v !== null && v !== undefined;
+                },
+                align: "top",
+                offset: 8,
+                clamp: true,
+                backgroundColor: "#ffffff",
+                borderColor: "#2563eb",
+                borderWidth: 1.5,
+                borderRadius: 7,
+                padding: { top: 3, bottom: 3, left: 7, right: 7 },
+                color: "#1e3a8a",
+                font: { family: "'Outfit', sans-serif", size: 10.5, weight: "800" },
+                formatter: (val) => `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            }
+        });
+
+        // 2. Projected Rate Horizon Line
+        datasets.push({
+            type: "line",
+            label: "Projected Rate Horizon (₹)",
+            data: forecastData,
+            yAxisID: "yRate",
+            borderColor: "#8b5cf6",
+            borderDash: [6, 4],
+            borderWidth: 2.6,
+            fill: false,
+            tension: 0.36,
+            pointRadius: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 7 : 0),
+            pointHoverRadius: 9.5,
+            pointBackgroundColor: "#8b5cf6",
+            pointBorderColor: "#ffffff",
+            pointBorderWidth: 2.5,
+            datalabels: {
+                display: (c) => c.dataIndex === c.dataset.data.length - 1,
+                align: "top",
+                offset: 8,
+                clamp: true,
+                backgroundColor: "#8b5cf6",
+                borderRadius: 7,
+                padding: { top: 3, bottom: 3, left: 8, right: 8 },
+                color: "#ffffff",
+                font: { family: "'Outfit', sans-serif", size: 10.5, weight: "800" },
+                formatter: (val) => `🎯 Forecast: ₹${Number(val).toFixed(2)}`
+            }
+        });
+
+        // 3. Historical Weighted Benchmark Line
+        datasets.push({
+            type: "line",
+            label: "Historical Weighted Benchmark (₹)",
+            data: avgData,
+            yAxisID: "yRate",
+            borderColor: "#059669",
+            borderDash: [5, 5],
+            borderWidth: 1.8,
+            pointRadius: 0,
+            fill: false,
+            datalabels: {
+                display: false
+            }
+        });
+
+        // 4. Subtle Tolerance Corridor (Upper & Lower Band)
+        datasets.push({
+            type: "line",
+            label: "Upper Tolerance (+2.5%)",
+            data: upperBandData,
+            yAxisID: "yRate",
+            borderColor: "rgba(37, 99, 235, 0.18)",
+            borderDash: [3, 4],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: false,
+            datalabels: { display: false }
+        });
+
+        datasets.push({
+            type: "line",
+            label: "Tolerance Corridor (±2.5%)",
+            data: lowerBandData,
+            yAxisID: "yRate",
+            borderColor: "rgba(37, 99, 235, 0.18)",
+            borderDash: [3, 4],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: "-1",
+            backgroundColor: "rgba(37, 99, 235, 0.03)",
+            datalabels: { display: false }
+        });
+
+        apaChartInstRef.current = new Chart(ctx, {
+            data: {
+                labels,
+                datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        left: 15,
+                        right: 85,
+                        top: 35,
+                        bottom: 12
+                    }
+                },
+                animation: {
+                    duration: 1000,
+                    easing: "easeOutQuart"
+                },
+                interaction: {
+                    mode: "index",
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        titleColor: "#f8fafc",
+                        bodyColor: "#cbd5e1",
+                        titleFont: { family: "'Outfit', sans-serif", size: 12, weight: "700" },
+                        bodyFont: { family: "'Outfit', sans-serif", size: 11, weight: "500" },
+                        padding: 12,
+                        cornerRadius: 10,
+                        boxPadding: 4,
+                        borderColor: "rgba(255, 255, 255, 0.12)",
+                        borderWidth: 1,
+                        filter: (item) => !item.dataset.label.includes("Tolerance"),
+                        callbacks: {
+                            title: (items) => {
+                                const idx = items[0]?.dataIndex;
+                                const meta = poMeta[idx];
+                                if (!meta) return items[0]?.label || "";
+                                return `${meta.poNumber} — ${meta.date || "—"}`;
+                            },
+                            afterTitle: (items) => {
+                                const idx = items[0]?.dataIndex;
+                                const meta = poMeta[idx];
+                                return meta?.vendor ? `Supplier: ${meta.vendor}` : "";
+                            },
+                            label: (item) => {
+                                const v = item.raw;
+                                if (v === null || v === undefined) return null;
+                                if (item.dataset.yAxisID === "yQty") {
+                                    return `Procured Volume: ${Number(v).toLocaleString("en-IN")} ${hero.uom || "NOS"}`;
+                                }
+                                return `${item.dataset.label}: ₹${Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            },
+                            afterBody: (items) => {
+                                const idx = items[0]?.dataIndex;
+                                const meta = poMeta[idx];
+                                if (!meta || meta.variance === undefined || idx === 0) return [];
+                                const sign = meta.variance > 0 ? "+" : meta.variance < 0 ? "-" : "";
+                                const varText = `Variance vs Base: ${sign}₹${Math.abs(meta.variance).toFixed(2)}`;
+                                return [varText];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: "#64748b",
+                            font: { family: "'Outfit', sans-serif", size: 11, weight: "600" },
+                            maxRotation: 15
+                        }
+                    },
+                    yRate: {
+                        type: "linear",
+                        position: "left",
+                        min: yAxisMin,
+                        max: yAxisMax,
+                        grid: {
+                            color: "rgba(226, 232, 240, 0.65)"
+                        },
+                        ticks: {
+                            color: "#2563eb",
+                            font: { family: "'Outfit', sans-serif", size: 11, weight: "750" },
+                            callback: (val) => `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+                        }
+                    },
+                    ...(apaChartView === "combo" ? {
+                        yQty: {
+                            type: "linear",
+                            position: "right",
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: "#64748b",
+                                font: { family: "'Outfit', sans-serif", size: 10, weight: "600" },
+                                callback: (val) => `${val.toLocaleString("en-IN")} ${hero.uom || ""}`
+                            }
+                        }
+                    } : {})
+                }
+            }
+        });
+
+        return () => {
+            if (apaChartInstRef.current) {
+                apaChartInstRef.current.destroy();
+                apaChartInstRef.current = null;
+            }
+        };
+    }, [hero, apaChartView]);
+
+    return (
+        <div className="apa-root" id="advanced-purchase-analytics-section">
+            <div className="apa-card">
+                {/* ═══════════════════════════════════════════════════════
+                    1. SECTION HEADER & DYNAMIC CONTROLS (TABS, FILTERS & SEARCH)
+                ═══════════════════════════════════════════════════════ */}
+                <div className="apa-header">
+                    <div className="apa-header-top">
+                        <div className="apa-title-group">
+                            <div className="apa-title-icon">
+                                <Sparkles size={22} className="apa-react-icon" />
+                            </div>
+                            <div className="apa-title-text">
+                                <h3>
+                                    Advanced Purchase Analytics
+                                </h3>
+                                <p>
+                                    Procurement cost projection, chronological unit rate milestones, and optimal buying stage signals
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Top Controls: Raw/Store Tabs + Category/Group Filter + Search */}
+                        <div className="apa-header-actions">
+                            {/* Raw Material vs Store Material Toggle Switcher */}
+                            <div className="pa2-apv-tabs">
+                                <button
+                                    type="button"
+                                    className={`pa2-apv-tab-btn ${apaMode === "raw" ? "active raw" : ""}`}
+                                    onClick={() => {
+                                        setApaMode("raw");
+                                        setApaRawCategories([]);
+                                        setApaStoreGroups([]);
+                                    }}
+                                >
+                                    <Package size={15} strokeWidth={2.2} />
+                                    <span>Raw Material</span>
+                                    <span className="pa2-apv-tab-badge">{rawCatalogList.length} Items</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`pa2-apv-tab-btn ${apaMode === "store" ? "active store" : ""}`}
+                                    onClick={() => {
+                                        setApaMode("store");
+                                        setApaRawCategories([]);
+                                        setApaStoreGroups([]);
+                                    }}
+                                >
+                                    <Factory size={15} strokeWidth={2.2} />
+                                    <span>Store Material</span>
+                                    <span className="pa2-apv-tab-badge">{storeCatalogList.length} Items</span>
+                                </button>
+                            </div>
+
+                            {/* Standalone Multi-Select Category / Group Filter Dropdown */}
+                            {(() => {
+                                const selectedCount = apaMode === "raw" ? apaRawCategories.length : apaStoreGroups.length;
+                                const hasFilter = selectedCount > 0;
+                                const totalItemsCount = apaMode === "raw" ? (RAW_CATEGORIES.length - 1) : (storeGroupsList.length - 1);
+
+                                return (
+                                    <div className={`pa2-apv-filter-dropdown-wrap ${apaMode}`} ref={apaFilterRef}>
+                                        <button
+                                            type="button"
+                                            className={`pa2-apv-filter-btn ${apaMode} ${hasFilter ? "has-filter" : ""}`}
+                                            onClick={() => setApaFilterDropdownOpen(!apaFilterDropdownOpen)}
+                                            title={apaMode === "raw" ? "Filter by Raw Material Category (Multi-select)" : "Filter by Store Material Group (Multi-select)"}
+                                        >
+                                            {hasFilter ? (
+                                                <span
+                                                    className="pa2-apv-btn-dot"
+                                                    style={{
+                                                        background: apaMode === "raw"
+                                                            ? (selectedCount === 1 ? (RAW_CATEGORIES.find(c => c.id === apaRawCategories[0])?.color || "#2563eb") : "#2563eb")
+                                                            : "#7c3aed"
+                                                    }}
+                                                />
+                                            ) : (
+                                                <SlidersHorizontal size={13} className="pa2-apv-filter-btn-icon" />
+                                            )}
+                                            <span className="pa2-apv-filter-btn-label">
+                                                {apaMode === "raw" ? (
+                                                    <>
+                                                        <span className="pa2-apv-filter-prefix">Category:</span>{" "}
+                                                        <b className="pa2-apv-filter-val">
+                                                            {apaRawCategories.length === 0
+                                                                ? "All Categories"
+                                                                : apaRawCategories.length === 1
+                                                                    ? apaRawCategories[0]
+                                                                    : `${apaRawCategories.length} Selected`}
+                                                        </b>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="pa2-apv-filter-prefix">Group:</span>{" "}
+                                                        <b className="pa2-apv-filter-val">
+                                                            {apaStoreGroups.length === 0
+                                                                ? "All Groups"
+                                                                : apaStoreGroups.length === 1
+                                                                    ? apaStoreGroups[0]
+                                                                    : `${apaStoreGroups.length} Selected`}
+                                                        </b>
+                                                    </>
+                                                )}
+                                            </span>
+                                            <span className="pa2-apv-filter-badge">
+                                                {scopedCatalog.length}
+                                            </span>
+                                            <ChevronDown size={13} className={`pa2-apv-chevron ${apaFilterDropdownOpen ? "open" : ""}`} />
+                                        </button>
+
+                                        {apaFilterDropdownOpen && (
+                                            <div className={`pa2-apv-filter-menu ${apaMode}`}>
+                                                <div className="pa2-apv-filter-menu-head">
+                                                    <div className="pa2-apv-filter-menu-title">
+                                                        <SlidersHorizontal size={12} style={{ color: apaMode === "raw" ? "#2563eb" : "#7c3aed" }} />
+                                                        <span>{apaMode === "raw" ? "Raw Categories" : "Store Groups"}</span>
+                                                        <span className="pa2-apv-opt-total-pill">
+                                                            {hasFilter ? `${selectedCount} / ${totalItemsCount} selected` : "All Selected"}
+                                                        </span>
+                                                    </div>
+                                                    <div className="pa2-apv-filter-actions">
+                                                        <button
+                                                            type="button"
+                                                            className="pa2-apv-filter-action-btn select-all"
+                                                            onClick={() => {
+                                                                if (apaMode === "raw") setApaRawCategories([]);
+                                                                else setApaStoreGroups([]);
+                                                            }}
+                                                            title="Select All"
+                                                        >
+                                                            <CheckCheck size={11} /> All
+                                                        </button>
+                                                        {hasFilter && (
+                                                            <button
+                                                                type="button"
+                                                                className="pa2-apv-filter-action-btn reset"
+                                                                onClick={() => {
+                                                                    if (apaMode === "raw") setApaRawCategories([]);
+                                                                    else setApaStoreGroups([]);
+                                                                }}
+                                                                title="Reset filter"
+                                                            >
+                                                                <RotateCcw size={10} /> Reset
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {apaMode === "store" && storeGroupsList.length > 5 && (
+                                                    <div className="pa2-apv-filter-search-box">
+                                                        <Search size={12} className="pa2-apv-filter-search-icon" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search store groups..."
+                                                            value={apaFilterSearch}
+                                                            onChange={(e) => setApaFilterSearch(e.target.value)}
+                                                            className="pa2-apv-filter-search-input"
+                                                            autoFocus
+                                                        />
+                                                        {apaFilterSearch && (
+                                                            <button type="button" onClick={() => setApaFilterSearch("")} className="pa2-apv-filter-search-clear">
+                                                                <X size={10} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                <div className="pa2-apv-filter-options">
+                                                    {apaMode === "raw" ? (
+                                                        RAW_CATEGORIES.filter(c => c.id !== "All").map(cat => {
+                                                            const isSelected = apaRawCategories.length === 0 || apaRawCategories.includes(cat.id);
+                                                            const isExplicit = hasFilter && apaRawCategories.includes(cat.id);
+                                                            const count = rawCategoryCounts[cat.id] ?? 0;
+                                                            return (
+                                                                <button
+                                                                    key={cat.id}
+                                                                    type="button"
+                                                                    className={`pa2-apv-filter-opt ${isSelected ? "selected" : ""} ${isExplicit ? "explicit" : ""}`}
+                                                                    onClick={() => toggleRawCategory(cat.id)}
+                                                                >
+                                                                    <div className={`pa2-apv-custom-checkbox ${isSelected ? "checked" : ""}`}>
+                                                                        {isSelected && <Check size={11} strokeWidth={3} />}
+                                                                    </div>
+                                                                    <span className="pa2-apv-opt-indicator" style={{ background: cat.color }} />
+                                                                    <span className="pa2-apv-opt-label">{cat.label}</span>
+                                                                    <span className="pa2-apv-opt-count">{count}</span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        storeGroupsList
+                                                            .filter(g => g !== "All")
+                                                            .filter(g => !apaFilterSearch || g.toLowerCase().includes(apaFilterSearch.toLowerCase().trim()))
+                                                            .map(grp => {
+                                                                const isSelected = apaStoreGroups.length === 0 || apaStoreGroups.includes(grp);
+                                                                const isExplicit = hasFilter && apaStoreGroups.includes(grp);
+                                                                const count = storeGroupCounts[grp] ?? 0;
+                                                                return (
+                                                                    <button
+                                                                        key={grp}
+                                                                        type="button"
+                                                                        className={`pa2-apv-filter-opt ${isSelected ? "selected" : ""} ${isExplicit ? "explicit" : ""}`}
+                                                                        onClick={() => toggleStoreGroup(grp)}
+                                                                    >
+                                                                        <div className={`pa2-apv-custom-checkbox ${isSelected ? "checked" : ""}`}>
+                                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                                        </div>
+                                                                        <span className="pa2-apv-opt-indicator" style={{ background: isSelected ? "#7c3aed" : "#a855f7" }} />
+                                                                        <span className="pa2-apv-opt-label">{grp}</span>
+                                                                        <span className="pa2-apv-opt-count">{count}</span>
+                                                                    </button>
+                                                                );
+                                                            })
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Search Box with Autocomplete Dropdown */}
+                            <div className="apa-search-box" ref={dropdownRef}>
+                                <Search size={15} className="apa-search-icon" />
+                                <input
+                                    type="text"
+                                    className="apa-search-input"
+                                    placeholder={`Search ${apaMode === "raw" ? "Raw" : "Store"} Material / Vendor...`}
+                                    value={searchQuery}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        setDropdownOpen(true);
+                                    }}
+                                    onFocus={() => setDropdownOpen(true)}
+                                />
+                                {searchQuery && (
+                                    <button className="apa-search-clear" onClick={() => setSearchQuery("")}>
+                                        <X size={14} />
+                                    </button>
+                                )}
+
+                                {dropdownOpen && (
+                                    <div className="apa-dropdown-menu">
+                                        {filteredCatalog.length === 0 ? (
+                                            <div style={{ padding: "8px 12px", fontSize: "0.76rem", color: "#64748b" }}>
+                                                No matching materials found in this category
+                                            </div>
+                                        ) : (
+                                            filteredCatalog.map((p) => (
+                                                <div
+                                                    key={p.partNo}
+                                                    className={`apa-dropdown-item ${p.partNo === selectedPartNo ? "apa-dropdown-item--active" : ""}`}
+                                                    onClick={() => {
+                                                        setSelectedPartNo(p.partNo);
+                                                        setDropdownOpen(false);
+                                                        setSearchQuery("");
+                                                    }}
+                                                >
+                                                    <div className="apa-dropdown-item-main">
+                                                        <span className="apa-dropdown-item-part">{p.partNo}</span>
+                                                        <span className="apa-dropdown-item-desc">{p.description}</span>
+                                                    </div>
+                                                    <div className="apa-dropdown-item-meta">
+                                                        <span className="apa-dropdown-item-rate">
+                                                            ₹{p.activeRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </span>
+                                                        <div className="apa-dropdown-item-count">{p.vendor || "—"}</div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ═══════════════════════════════════════════════════════
+                    2. MODERN UI ANIMATED RATE PROGRESSION & FORECAST GRAPH CARD
+                ═══════════════════════════════════════════════════════ */}
+                {loading && catalogData.length === 0 ? (
+                    <div style={{ padding: "3rem 1.5rem", textAlign: "center" }}>
+                        <div className="pa2-skeleton pa2-shimmer" style={{ width: "240px", height: "20px", margin: "0 auto 14px", borderRadius: "6px" }} />
+                        <div className="pa2-skeleton pa2-shimmer" style={{ width: "65%", height: "14px", margin: "0 auto 20px", borderRadius: "4px" }} />
+                        <div className="pa2-skeleton pa2-shimmer" style={{ width: "100%", height: "200px", borderRadius: "12px" }} />
+                    </div>
+                ) : catalogData.length === 0 ? (
+                    <div style={{ padding: "3.5rem 1.5rem", textAlign: "center" }}>
+                        <PaNoData icon={<Sparkles size={24} style={{ color: "#2563eb" }} />} message="No purchase records found for the selected period." />
+                    </div>
+                ) : hero ? (
+                    <div className="apa-chart-card">
+                        {/* Top Header Strip with Material Identity & Dynamic Quick Badges */}
+                        <div className="apa-chart-head">
+                            <div className="apa-chart-head-left">
+                                <div className="apa-chart-tags">
+                                    <span className="apa-tag-partno">
+                                        <Tag size={11} style={{ display: "inline", marginRight: "4px", verticalAlign: "-1px" }} />
+                                        {displayPartNo}
+                                    </span>
+                                    <span className="apa-tag-supplier">
+                                        <Building2 size={12} style={{ display: "inline", marginRight: "4px", verticalAlign: "-1px" }} />
+                                        {hero.vendor || "—"}
+                                    </span>
+                                    <span className="apa-tag-uom">
+                                        {hero.uom || "NOS"}
+                                    </span>
+                                    {hero.rawCategory && hero.materialMode === "raw" && (
+                                        <span className={`pa2-apv-mat-subtag ${hero.rawCategory.includes("Cast") ? "nos" : hero.rawCategory.includes("KGS") ? "kgs" : hero.rawCategory.includes("Mtrs") ? "mtrs" : "bout"}`} style={{ fontSize: "0.72rem", padding: "3px 9px" }}>
+                                            <span className="pa2-apv-mat-subtag-dot" />
+                                            {hero.rawCategory}
+                                        </span>
+                                    )}
+                                    {hero.storeGroup && hero.materialMode === "store" && (
+                                        <span className="pa2-apv-mat-subtag store" style={{ fontSize: "0.72rem", padding: "3px 9px" }}>
+                                            <span className="pa2-apv-mat-subtag-dot" />
+                                            {hero.storeGroup}
+                                        </span>
+                                    )}
+                                </div>
+                                <h2 className="apa-chart-title">{displayDesc}</h2>
+                                <p className="apa-chart-desc">
+                                    Catalog Code: <b>{displayPartNo}</b> &nbsp;·&nbsp; Last PO Date: <b>{hero.lastPoDate || "—"}</b>
+                                </p>
+                            </div>
+
+                            {/* Quick KPI Stats & View Switcher */}
+                            <div className="apa-chart-head-right">
+                                <div className="apa-chart-kpis">
+                                    {/* Active Purchase Rate */}
+                                    <div className="apa-kpi-chip apa-kpi-chip--active">
+                                        <div className="apa-kpi-chip-label">Active PO Rate</div>
+                                        <div className="apa-kpi-chip-val">
+                                            ₹{hero.activeRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {hero.baseRate > 0 && (
+                                                <span
+                                                    className={`apa-kpi-chip-diff ${hero.activeRate > hero.baseRate
+                                                        ? "apa-kpi-chip-diff--up"
+                                                        : hero.activeRate < hero.baseRate
+                                                            ? "apa-kpi-chip-diff--down"
+                                                            : "apa-kpi-chip-diff--neutral"
+                                                        }`}
+                                                >
+                                                    {hero.activeRate > hero.baseRate ? (
+                                                        <TrendingUp size={11} />
+                                                    ) : hero.activeRate < hero.baseRate ? (
+                                                        <TrendingDown size={11} />
+                                                    ) : null}
+                                                    {hero.activeRate >= hero.baseRate ? "+" : ""}
+                                                    {hero.changePercent.toFixed(1)}%
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="apa-kpi-chip-sub">
+                                            Base: ₹{hero.baseRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                    </div>
+
+                                    {/* Projected Next PO Rate */}
+                                    <div className="apa-kpi-chip apa-kpi-chip--forecast">
+                                        <div className="apa-kpi-chip-label">Forecast Horizon</div>
+                                        <div className="apa-kpi-chip-val" style={{ color: "#7c3aed" }}>
+                                            ₹{hero.projectedNextRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <div className="apa-kpi-chip-sub">
+                                            Next Order Projection
+                                        </div>
+                                    </div>
+
+                                    {/* Total Procured Qty */}
+                                    <div className="apa-kpi-chip">
+                                        <div className="apa-kpi-chip-label">Procured Qty</div>
+                                        <div className="apa-kpi-chip-val">
+                                            {hero.totalQty.toLocaleString("en-IN")} <span className="apa-kpi-chip-unit">{hero.uom || "NOS"}</span>
+                                        </div>
+                                        <div className="apa-kpi-chip-sub">
+                                            {hero.poCount || 0} Purchase Orders
+                                        </div>
+                                    </div>
+
+                                    {/* Store Material ROL KPI Chip */}
+                                    {hero.materialMode === "store" && (
+                                        <div className={`apa-kpi-chip apa-kpi-chip--rol ${hero.rolTrend}`}>
+                                            <div className="apa-kpi-chip-label">Re-Order Level (ROL)</div>
+                                            <div className="apa-kpi-chip-val">
+                                                {hero.rolQty.toLocaleString("en-IN")} <span className="apa-kpi-chip-unit">{hero.uom || "NOS"}</span>
+                                                <span className={`apa-kpi-chip-diff ${hero.rolTrend === "critical" ? "apa-kpi-chip-diff--down" : "apa-kpi-chip-diff--up"}`}>
+                                                    {hero.rolTrendIcon} {hero.rolPercent}%
+                                                </span>
+                                            </div>
+                                            <div className="apa-kpi-chip-sub">
+                                                Buffer: {hero.rolTrendLabel} ({hero.currentStock.toLocaleString("en-IN")} in stock)
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Total Spend */}
+                                    <div className="apa-kpi-chip apa-kpi-chip--spend">
+                                        <div className="apa-kpi-chip-label">Total Spend</div>
+                                        <div className="apa-kpi-chip-val">
+                                            ₹{(hero.totalSpend / 100000).toFixed(2)}L
+                                        </div>
+                                        <div className="apa-kpi-chip-sub">
+                                            ₹{hero.totalSpend.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Graph View Mode Switcher */}
+                                <div className="apa-chart-controls">
+                                    <button
+                                        type="button"
+                                        className={`apa-chart-mode-btn ${apaChartView === "rate" ? "active" : ""}`}
+                                        onClick={() => setApaChartView("rate")}
+                                    >
+                                        <Activity size={13} />
+                                        <span>Rate Progression & Horizon</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`apa-chart-mode-btn ${apaChartView === "combo" ? "active" : ""}`}
+                                        onClick={() => setApaChartView("combo")}
+                                    >
+                                        <BarChart2 size={13} />
+                                        <span>Rate + Volume Combo</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Legend Hint Row */}
+                        <div className="apa-chart-legend-strip">
+                            <div className="apa-legend-badge">
+                                <span className="apa-legend-dot" style={{ background: "#2563eb" }} />
+                                <span>PO Unit Rate Curve (₹)</span>
+                            </div>
+                            <div className="apa-legend-badge">
+                                <span className="apa-legend-line-dashed" style={{ borderColor: "#8b5cf6" }} />
+                                <span>🎯 Projected Rate Horizon (₹{hero.projectedNextRate.toFixed(2)})</span>
+                            </div>
+                            <div className="apa-legend-badge">
+                                <span className="apa-legend-line-dashed" style={{ borderColor: "#059669" }} />
+                                <span>Historical Avg Benchmark (₹{hero.avgRate.toFixed(2)})</span>
+                            </div>
+                            <div className="apa-legend-badge">
+                                <span className="apa-legend-band-box" style={{ background: "rgba(37, 99, 235, 0.12)", border: "1px dashed rgba(37, 99, 235, 0.4)" }} />
+                                <span>Tolerance Corridor (±2.5%)</span>
+                            </div>
+                            {apaChartView === "combo" && (
+                                <div className="apa-legend-badge">
+                                    <span className="apa-legend-bar" style={{ background: "rgba(148, 163, 184, 0.6)" }} />
+                                    <span>Procured Volume</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Graph Canvas Container with Modern Styling */}
+                        <div className="apa-chart-wrap" style={{ height: "305px" }}>
+                            <canvas ref={apaChartCanvasRef} />
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ padding: "3rem 1.5rem", textAlign: "center" }}>
+                        <PaNoData icon={<SlidersHorizontal size={22} style={{ color: apaMode === "raw" ? "#2563eb" : "#7c3aed" }} />} message="No materials found matching the selected category or group filter." />
+                    </div>
+                )}
+
+                {/* ═══════════════════════════════════════════════════════
+                    3. SMART PROCUREMENT PROJECTION & BUYING ADVICE RIBBON
+                ═══════════════════════════════════════════════════════ */}
+                {hero && (
+                    <div className="apa-projection-ribbon">
+                        {/* 1. Buy Signal Advice */}
+                        <div className="apa-proj-card" style={{ "--proj-accent": hero.buySignalType === "optimal" ? "#10b981" : hero.buySignalType === "warning" ? "#ef4444" : hero.buySignalType === "softening" ? "#2563eb" : "#64748b", "--proj-bg": hero.buySignalType === "optimal" ? "#ecfdf5" : hero.buySignalType === "warning" ? "#fef2f2" : hero.buySignalType === "softening" ? "#eff6ff" : "#f1f5f9" }}>
+                            <div className="apa-proj-head">
+                                <span className="apa-proj-label">Procurement Recommendation</span>
+                                <span className="apa-proj-icon">
+                                    <Target size={14} />
+                                </span>
+                            </div>
+                            <div className="apa-proj-val">
+                                <span className={`apa-buy-signal-pill ${hero.buySignalType}`}>
+                                    {hero.buySignalType === "optimal" && "🟢"}
+                                    {hero.buySignalType === "warning" && "🔴"}
+                                    {hero.buySignalType === "softening" && "🔵"}
+                                    {hero.buySignalType === "stable" && "🟡"}
+                                    {" "}{hero.buySignalTitle}
+                                </span>
+                            </div>
+                            <div className="apa-proj-desc">
+                                {hero.buySignalAdvice}
+                            </div>
+                        </div>
+
+                        {/* 2. Projected Rate Horizon */}
+                        <div className="apa-proj-card" style={{ "--proj-accent": "#2563eb", "--proj-bg": "#eff6ff" }}>
+                            <div className="apa-proj-head">
+                                <span className="apa-proj-label">Projected Next Order Rate</span>
+                                <span className="apa-proj-icon">
+                                    <Activity size={14} />
+                                </span>
+                            </div>
+                            <div className="apa-proj-val">
+                                ₹{hero.projectedNextRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="apa-proj-desc">
+                                Moving average projection across {hero.poCount} chronological orders
+                            </div>
+                        </div>
+
+                        {/* 3. Cost Volatility & Risk Index */}
+                        <div className="apa-proj-card" style={{ "--proj-accent": hero.volatilityColor, "--proj-bg": `${hero.volatilityColor}15` }}>
+                            <div className="apa-proj-head">
+                                <span className="apa-proj-label">Rate Volatility Index</span>
+                                <span className="apa-proj-icon">
+                                    <TrendingUp size={14} />
+                                </span>
+                            </div>
+                            <div className="apa-proj-val" style={{ color: hero.volatilityColor }}>
+                                {hero.volatilityLabel}
+                            </div>
+                            <div className="apa-proj-desc">
+                                Range: ₹{hero.minRate.toFixed(2)} — ₹{hero.maxRate.toFixed(2)} (Spread: {hero.volatilitySpread.toFixed(1)}%)
+                            </div>
+                        </div>
+
+                        {/* 4. Cost Opportunity / Savings */}
+                        <div className="apa-proj-card" style={{ "--proj-accent": "#059669", "--proj-bg": "#ecfdf5" }}>
+                            <div className="apa-proj-head">
+                                <span className="apa-proj-label">Historical Average Rate</span>
+                                <span className="apa-proj-icon">
+                                    <IndianRupee size={14} />
+                                </span>
+                            </div>
+                            <div className="apa-proj-val">
+                                ₹{hero.avgRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="apa-proj-desc">
+                                Weighted average benchmark across all procured units
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════════════════════════════════════════════════════
+                    4. CHRONOLOGICAL RATE PROGRESSION TIMELINE & ALL PARTS CATALOG TABLE
+                ═══════════════════════════════════════════════════════ */}
+                {hero && (
+                    <div className="apa-tab-content" style={{ borderTop: "1px solid #e2e8f0" }}>
+                        {/* Chronological Timeline for Selected Material */}
+                        <div className="apa-timeline-wrap">
+                            <div className="apa-timeline-title">
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                    <Activity size={15} style={{ color: "#2563eb" }} />
+                                    <span>Chronological Purchase Rate Progression Timeline</span>
+                                    <span className="apa-timeline-active-part-badge">
+                                        Active: <b>{displayPartNo}</b>
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600" }}>
+                                    {hero.timelineSteps.length} Chronological Milestone{hero.timelineSteps.length === 1 ? "" : "s"}
+                                </span>
+                            </div>
+
+                            <div className="apa-timeline">
+                                {hero.timelineSteps.length === 0 ? (
+                                    <div style={{ padding: "12px 16px", color: "#64748b", fontSize: "0.82rem" }}>
+                                        No rate revision progression recorded for this material
+                                    </div>
+                                ) : (
+                                    hero.timelineSteps.map((step, idx) => (
+                                        <div key={idx} className={`apa-timeline-step ${step.isLatest ? "apa-timeline-step--latest" : ""}`}>
+                                            <div className="apa-timeline-node">
+                                                {step.node}
+                                            </div>
+                                            <div className="apa-timeline-date">{step.date || "—"}</div>
+                                            <div className="apa-timeline-rate">
+                                                ₹{step.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div
+                                                className={`apa-timeline-delta ${idx === 0
+                                                    ? "apa-pill--neutral"
+                                                    : step.rateVariance > 0
+                                                        ? "apa-pill--red"
+                                                        : step.rateVariance < 0
+                                                            ? "apa-pill--green"
+                                                            : "apa-pill--neutral"
+                                                    }`}
+                                            >
+                                                {idx === 0
+                                                    ? "Base"
+                                                    : step.rateVariance > 0
+                                                        ? `+₹${step.rateVariance.toFixed(2)}`
+                                                        : step.rateVariance < 0
+                                                            ? `-₹${Math.abs(step.rateVariance).toFixed(2)}`
+                                                            : "₹0.00"}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* All Parts Procurement Catalog & Rate Intelligence Table */}
+                        <div className="apa-catalog-table-wrap">
+                            <div className="apa-catalog-table-head">
+                                <div className="apa-catalog-table-title">
+                                    <ClipboardList size={16} style={{ color: "#2563eb" }} />
+                                    <span>{apaMode === "raw" ? "All Raw Materials Procurement & Rate Catalog" : "Store Materials Inventory & Rate Intelligence Catalog"}</span>
+                                    <span className="apa-catalog-count-pill">
+                                        {filteredCatalog.length} {apaMode === "raw" ? "Raw" : "Store"} Materials
+                                    </span>
+                                    {apaMode === "store" && (
+                                        <div className="apa-rol-health-strip">
+                                            <span className="apa-rol-health-chip safe" title="Safe buffer above Re-order Level (>100%)">
+                                                <span className="apa-rol-dot safe" /> Safe: <strong>{rolSummary.safe + rolSummary.surplus}</strong>
+                                            </span>
+                                            <span className="apa-rol-health-chip warning" title="Stock nearing Re-order Level (80-100%)">
+                                                <span className="apa-rol-dot warning" /> Near ROL: <strong>{rolSummary.warning}</strong>
+                                            </span>
+                                            <span className="apa-rol-health-chip critical" title="Stock critically below ROL (<80%) - Reorder triggered">
+                                                <span className="apa-rol-dot critical" /> Below ROL: <strong>{rolSummary.critical}</strong>
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="apa-catalog-hint">
+                                    <Sparkles size={13} style={{ color: "#2563eb" }} />
+                                    <span>Click any material row below to update the Timeline, Forecast & Graph above</span>
+                                </div>
+                            </div>
+
+                            <div className="apa-table-container" style={{ maxHeight: "390px" }}>
+                                <table className="apa-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: "45px", textAlign: "center" }}>#</th>
+                                            <th>Part No</th>
+                                            <th>Material Description</th>
+                                            <th>{apaMode === "raw" ? "Category" : "Store Group"}</th>
+                                            <th>Supplier Scope</th>
+                                            <th>UOM</th>
+                                            {apaMode === "store" && (
+                                                <>
+                                                    <th style={{ minWidth: "95px", textAlign: "right" }}>ROL</th>
+                                                    <th style={{ minWidth: "135px", textAlign: "center" }}>ROL Trend</th>
+                                                    <th style={{ minWidth: "145px", textAlign: "center" }}>ROL %</th>
+                                                </>
+                                            )}
+                                            <th>Base Rate (₹)</th>
+                                            <th>Active Rate (₹)</th>
+                                            <th>Variance (₹)</th>
+                                            <th>Change (%)</th>
+                                            <th>Projected Rate (₹)</th>
+                                            <th>Procurement Signal</th>
+                                            <th>Procured Qty</th>
+                                            <th>Total Spend</th>
+                                            <th style={{ textAlign: "center" }}>POs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredCatalog.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={apaMode === "store" ? 18 : 15} style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
+                                                    No materials found matching the active category or group filter.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredCatalog.map((p, i) => {
+                                                const isSelected = p.partNo === selectedPartNo;
+                                                const cleanPart = p.partNo.includes(" - ") ? p.partNo.split(" - ")[0].trim() : p.partNo;
+                                                const cleanDesc = p.description && p.description.includes(" - ")
+                                                    ? (p.description.split(" - ").slice(1).join(" - ").trim() || p.description)
+                                                    : (p.description || p.partNo);
+
+                                                return (
+                                                    <tr
+                                                        key={p.partNo || i}
+                                                        className={`apa-catalog-row ${isSelected ? "apa-catalog-row--active" : ""}`}
+                                                        onClick={() => setSelectedPartNo(p.partNo)}
+                                                        title="Click to view chronological rate progression and forecast for this part"
+                                                    >
+                                                        <td style={{ fontWeight: "750", color: isSelected ? "#2563eb" : "#64748b", textAlign: "center" }}>
+                                                            {isSelected ? <span className="apa-active-row-indicator">▶</span> : (i + 1)}
+                                                        </td>
+                                                        <td>
+                                                            <span className={`apa-table-partno-pill ${isSelected ? "active" : ""}`}>
+                                                                {cleanPart}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ fontWeight: isSelected ? "800" : "600", color: isSelected ? "#1e40af" : "#1e293b", maxWidth: "230px" }}>
+                                                            {cleanDesc}
+                                                        </td>
+                                                        <td>
+                                                            {p.rawCategory && p.materialMode === "raw" && (
+                                                                <span className={`pa2-apv-mat-subtag ${p.rawCategory.includes("Cast") ? "nos" : p.rawCategory.includes("KGS") ? "kgs" : p.rawCategory.includes("Mtrs") ? "mtrs" : "bout"}`} style={{ fontSize: "0.68rem", padding: "2px 7px" }}>
+                                                                    <span className="pa2-apv-mat-subtag-dot" />
+                                                                    {p.rawCategory}
+                                                                </span>
+                                                            )}
+                                                            {p.storeGroup && p.materialMode === "store" && (
+                                                                <span className="pa2-apv-mat-subtag store" style={{ fontSize: "0.68rem", padding: "2px 7px" }}>
+                                                                    <span className="pa2-apv-mat-subtag-dot" />
+                                                                    {p.storeGroup}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ fontWeight: "600", color: "#475569" }}>
+                                                            {p.vendor || "—"}
+                                                        </td>
+                                                        <td style={{ fontWeight: "750", color: "#7c3aed" }}>
+                                                            {p.uom || "NOS"}
+                                                        </td>
+                                                        {apaMode === "store" && (
+                                                            <>
+                                                                <td style={{ textAlign: "right" }}>
+                                                                    <div className="apa-rol-badge">
+                                                                        <span className="apa-rol-val">{p.rolQty.toLocaleString("en-IN")}</span>
+                                                                        <span className="apa-rol-uom">{p.uom || "NOS"}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ textAlign: "center" }}>
+                                                                    <div className={`apa-rol-trend-pill ${p.rolTrend}`}>
+                                                                        <span className="apa-rol-trend-icon">{p.rolTrendIcon}</span>
+                                                                        <span className="apa-rol-trend-label">{p.rolTrendLabel}</span>
+                                                                        <div className="apa-rol-trend-spark">
+                                                                            <span className="apa-rol-trend-bar" style={{ width: `${Math.min(100, Math.max(15, (p.rolPercent / 150) * 100))}%` }} />
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    <div className={`apa-rol-pct-card ${p.rolTrend}`}>
+                                                                        <div className="apa-rol-pct-header">
+                                                                            <span className="apa-rol-pct-num">{p.rolPercent}%</span>
+                                                                            <span className="apa-rol-stock-num">{p.currentStock.toLocaleString("en-IN")} {p.uom || "NOS"}</span>
+                                                                        </div>
+                                                                        <div className="apa-rol-meter-track">
+                                                                            <div
+                                                                                className="apa-rol-meter-fill"
+                                                                                style={{
+                                                                                    width: `${Math.min(100, Math.max(8, p.rolPercent))}%`,
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            </>
+                                                        )}
+                                                        <td style={{ color: "#64748b", fontWeight: "600" }}>
+                                                            ₹{p.baseRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ fontWeight: "850", color: "#2563eb" }}>
+                                                            ₹{p.activeRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ fontWeight: "750", color: p.rateVariance > 0 ? "#dc2626" : p.rateVariance < 0 ? "#059669" : "#64748b" }}>
+                                                            {p.rateVariance > 0
+                                                                ? `+₹${p.rateVariance.toFixed(2)}`
+                                                                : p.rateVariance < 0
+                                                                    ? `-₹${Math.abs(p.rateVariance).toFixed(2)}`
+                                                                    : "₹0.00"}
+                                                        </td>
+                                                        <td>
+                                                            <span
+                                                                className={`apa-timeline-delta ${p.changePercent > 0
+                                                                    ? "apa-pill--red"
+                                                                    : p.changePercent < 0
+                                                                        ? "apa-pill--green"
+                                                                        : "apa-pill--neutral"
+                                                                    }`}
+                                                            >
+                                                                {p.changePercent > 0 ? `+${p.changePercent.toFixed(1)}%` : `${p.changePercent.toFixed(1)}%`}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ fontWeight: "800", color: "#7c3aed" }}>
+                                                            ₹{p.projectedNextRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td>
+                                                            <span className={`apa-buy-signal-pill ${p.buySignalType}`} style={{ fontSize: "0.68rem", padding: "2px 6px" }}>
+                                                                {p.buySignalType === "optimal" && "🟢"}
+                                                                {p.buySignalType === "warning" && "🔴"}
+                                                                {p.buySignalType === "softening" && "🔵"}
+                                                                {p.buySignalType === "stable" && "🟡"}
+                                                                {" "}{p.buySignalTitle.split(" (")[0]}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ fontWeight: "700" }}>
+                                                            {p.totalQty.toLocaleString("en-IN")}
+                                                        </td>
+                                                        <td style={{ fontWeight: "800", color: "#059669" }}>
+                                                            ₹{(p.totalSpend / 100000).toFixed(2)}L
+                                                        </td>
+                                                        <td style={{ fontWeight: "750", textAlign: "center" }}>
+                                                            <span className="apa-po-badge">
+                                                                {p.poCount}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 export default function PurchaseAnalysis() {
     const today = new Date();
@@ -306,11 +2222,23 @@ export default function PurchaseAnalysis() {
     const poTablePendingRef = useRef(null);
     const [alertsData, setAlertsData] = useState(null);
     const [alertsLoading, setAlertsLoading] = useState(false);
+    const [summaryData, setSummaryData] = useState(null);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [supplierRatingData, setSupplierRatingData] = useState(null);
+    const [supplierRatingLoading, setSupplierRatingLoading] = useState(false);
+    const [trendLoading, setTrendLoading] = useState(false);
+    const [chartsLoading, setChartsLoading] = useState(false);
+    const [traceSearch, setTraceSearch] = useState("");
+    const [traceRows, setTraceRows] = useState([]);
+    const [traceLoading, setTraceLoading] = useState(false);
+    const [monthlyTab, setMonthlyTab] = useState("combined");
+    const [poDropdownOpen, setPoDropdownOpen] = useState(false);
     const [weeklyTrend, setWeeklyTrend] = useState(null);
     const [weeklyChartType, setWeeklyChartType] = useState("combo");
     const [sortConfig, setSortConfig] = useState({ key: "po_date", direction: "desc" });
 
     // ── PO Fulfillment Schedule State ──
+    const [fulfillmentScheduleRows, setFulfillmentScheduleRows] = useState([]);
     const [fsSearchQuery, setFsSearchQuery] = useState("");
     const [fsStatusFilter, setFsStatusFilter] = useState("All");
     const [fsSupplierFilter, setFsSupplierFilter] = useState([]);
@@ -325,8 +2253,89 @@ export default function PurchaseAnalysis() {
     const [fsSortConfig, setFsSortConfig] = useState({ key: "schd_dt", direction: "desc" });
     const fsChartCanvasRef = useRef(null);
     const fsChartInstanceRef = useRef(null);
-    const [fulfillmentScheduleRows, setFulfillmentScheduleRows] = useState([]);
     const [fsLoading, setFsLoading] = useState(false);
+    const [fsPage, setFsPage] = useState(1);
+    const [fsPageSize, setFsPageSize] = useState(25);
+    const [fsShowChart, setFsShowChart] = useState(true);
+
+    // ── PO Fulfillment Schedule Mode (Standard vs Futuristic) ──
+    const [fsActiveTab, setFsActiveTab] = useState("standard"); // "standard" | "futuristic"
+    const [futuristicModalOpen, setFuturisticModalOpen] = useState(false);
+    const [futuristicProjectionHorizon, setFuturisticProjectionHorizon] = useState("3M"); // "3M", "6M", "1Y"
+    const [futuristicSupplierFilter, setFuturisticSupplierFilter] = useState([]);
+    const [futuristicSupplierDropdownOpen, setFuturisticSupplierDropdownOpen] = useState(false);
+    const [futuristicSupplierSearchQuery, setFuturisticSupplierSearchQuery] = useState("");
+    const futuristicSupplierRef = useRef(null);
+    const [futuristicPartFilter, setFuturisticPartFilter] = useState([]);
+    const [futuristicPartDropdownOpen, setFuturisticPartDropdownOpen] = useState(false);
+    const [futuristicPartSearchQuery, setFuturisticPartSearchQuery] = useState("");
+    const futuristicPartRef = useRef(null);
+    const [futuristicSearchQuery, setFuturisticSearchQuery] = useState("");
+    const [futuristicSortConfig, setFuturisticSortConfig] = useState({ key: "po_date", direction: "desc" });
+    const futuristicChartCanvasRef = useRef(null);
+    const futuristicChartInstanceRef = useRef(null);
+    const [futuristicPage, setFuturisticPage] = useState(1);
+    const [futuristicPageSize, setFuturisticPageSize] = useState(25);
+    const [futuristicShowChart, setFuturisticShowChart] = useState(true);
+
+    // ── Average Purchase Value State ──
+    const [apvMode, setApvMode] = useState("raw"); // "raw" | "store"
+    const [apvRawCategories, setApvRawCategories] = useState([]); // [] means All, or array of category strings e.g. ["Nos (Casting)", "KGS (Rod)"]
+    const [apvStoreGroups, setApvStoreGroups] = useState([]); // [] means All, or array of group strings
+    const [apvFilterDropdownOpen, setApvFilterDropdownOpen] = useState(false);
+    const [apvFilterSearch, setApvFilterSearch] = useState("");
+    const apvFilterRef = useRef(null);
+    const [apvSearch, setApvSearch] = useState("");
+    const [apvPage, setApvPage] = useState(1);
+    const [apvPageSize, setApvPageSize] = useState(25);
+    const [apvSortConfig, setApvSortConfig] = useState({ key: "poDate", direction: "desc" });
+    const [apvShowChart, setApvShowChart] = useState(true);
+    const apvChartCanvasRef = useRef(null);
+    const apvChartInstanceRef = useRef(null);
+
+    // Multi-select toggle helpers for APV Categories / Groups
+    const toggleRawCategory = (catId) => {
+        setApvRawCategories(prev => {
+            if (prev.length === 0) {
+                return [catId];
+            }
+            if (prev.includes(catId)) {
+                const next = prev.filter(c => c !== catId);
+                return next;
+            } else {
+                return [...prev, catId];
+            }
+        });
+        setApvPage(1);
+    };
+
+    const toggleStoreGroup = (grp) => {
+        setApvStoreGroups(prev => {
+            if (prev.length === 0) {
+                return [grp];
+            }
+            if (prev.includes(grp)) {
+                const next = prev.filter(g => g !== grp);
+                return next;
+            } else {
+                return [...prev, grp];
+            }
+        });
+        setApvPage(1);
+    };
+
+    // Auto-close APV filter dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (apvFilterRef.current && !apvFilterRef.current.contains(e.target)) {
+                setApvFilterDropdownOpen(false);
+            }
+        };
+        if (apvFilterDropdownOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [apvFilterDropdownOpen]);
 
     const pendingCounts = useMemo(() => {
         let piCount = 0;
@@ -606,6 +2615,7 @@ export default function PurchaseAnalysis() {
     }, [uniqueFsSuppliers, fsSupplierSearchQuery]);
 
     const handleFsSupplierToggle = (supplier) => {
+        setFsPage(1);
         setFsSupplierFilter(prev => {
             if (prev.includes(supplier)) return prev.filter(s => s !== supplier);
             return [...prev, supplier];
@@ -628,6 +2638,7 @@ export default function PurchaseAnalysis() {
     }, [uniqueFsParts, fsPartSearchQuery]);
 
     const handleFsPartToggle = (part) => {
+        setFsPage(1);
         setFsPartFilter(prev => {
             if (prev.includes(part)) return prev.filter(p => p !== part);
             return [...prev, part];
@@ -702,6 +2713,18 @@ export default function PurchaseAnalysis() {
         return sorted;
     }, [filteredFsRows, fsSortConfig]);
 
+    const pagedFsRows = useMemo(() => {
+        if (fsPageSize === "All") return sortedFsRows;
+        const size = Number(fsPageSize);
+        const start = (fsPage - 1) * size;
+        return sortedFsRows.slice(start, start + size);
+    }, [sortedFsRows, fsPage, fsPageSize]);
+
+    const totalFsPages = useMemo(() => {
+        if (fsPageSize === "All" || sortedFsRows.length === 0) return 1;
+        return Math.ceil(sortedFsRows.length / Number(fsPageSize));
+    }, [sortedFsRows.length, fsPageSize]);
+
     const fsTotals = useMemo(() => {
         let totalPoQty = 0;
         let totalSchdQty = 0;
@@ -773,6 +2796,373 @@ export default function PurchaseAnalysis() {
             </th>
         );
     };
+
+    // ── Futuristic Expected Schedule Computations ──
+    const supplierLeadTimeMap = useMemo(() => {
+        const leadMap = {};
+        const countMap = {};
+        const globalAvg = summaryData?.avg_lead_time_days ? Number(summaryData.avg_lead_time_days) : 18;
+
+        (fulfillmentScheduleRows || []).forEach(r => {
+            if (!r.supplier) return;
+            const sup = r.supplier.trim();
+            let lead = 0;
+            if (r.po_date && r.schd_dt) {
+                const pd = new Date(r.po_date);
+                const sd = new Date(r.schd_dt);
+                if (!isNaN(pd.getTime()) && !isNaN(sd.getTime())) {
+                    lead = Math.max(1, Math.round((sd - pd) / (1000 * 60 * 60 * 24)));
+                }
+            }
+            if (lead <= 0) lead = globalAvg;
+
+            leadMap[sup] = (leadMap[sup] || 0) + lead;
+            countMap[sup] = (countMap[sup] || 0) + 1;
+        });
+
+        const resultMap = {};
+        Object.keys(leadMap).forEach(sup => {
+            resultMap[sup] = Math.round(leadMap[sup] / (countMap[sup] || 1));
+        });
+        return { map: resultMap, defaultAvg: Math.round(globalAvg) };
+    }, [fulfillmentScheduleRows, summaryData]);
+
+    const futuristicEnhancedRows = useMemo(() => {
+        return (fulfillmentScheduleRows || []).map((r, idx) => {
+            const avg_lead_days = supplierLeadTimeMap.map[r.supplier] || supplierLeadTimeMap.defaultAvg || 18;
+            let avg_lead_date_obj = null;
+            let avg_lead_date_iso = "";
+            let avg_lead_date_str = "–";
+            let variance_days = 0;
+
+            if (r.po_date) {
+                const pDate = new Date(r.po_date);
+                if (!isNaN(pDate.getTime())) {
+                    avg_lead_date_obj = new Date(pDate.getTime() + avg_lead_days * 24 * 60 * 60 * 1000);
+                    avg_lead_date_iso = avg_lead_date_obj.toISOString().slice(0, 10);
+                    avg_lead_date_str = avg_lead_date_iso.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `);
+                }
+            }
+
+            if (r.schd_dt && avg_lead_date_obj) {
+                const sDate = new Date(r.schd_dt);
+                if (!isNaN(sDate.getTime())) {
+                    variance_days = Math.round((sDate - avg_lead_date_obj) / (1000 * 60 * 60 * 24));
+                }
+            }
+
+            return {
+                ...r,
+                sno: idx + 1,
+                avg_lead_days,
+                avg_lead_date_obj,
+                avg_lead_date_iso,
+                avg_lead_date: avg_lead_date_str,
+                variance_days
+            };
+        });
+    }, [fulfillmentScheduleRows, supplierLeadTimeMap]);
+
+    const uniqueFuturisticSuppliers = useMemo(() => {
+        const set = new Set();
+        futuristicEnhancedRows.forEach(r => {
+            if (r.supplier && r.supplier !== "–" && r.supplier !== "-") set.add(r.supplier);
+        });
+        return Array.from(set).sort();
+    }, [futuristicEnhancedRows]);
+
+    const filteredDropdownFuturisticSuppliers = useMemo(() => {
+        const q = futuristicSupplierSearchQuery.toLowerCase().trim();
+        if (!q) return uniqueFuturisticSuppliers;
+        return uniqueFuturisticSuppliers.filter(s => s.toLowerCase().includes(q));
+    }, [uniqueFuturisticSuppliers, futuristicSupplierSearchQuery]);
+
+    const handleFuturisticSupplierToggle = (supplier) => {
+        setFuturisticPage(1);
+        setFuturisticSupplierFilter(prev => {
+            if (prev.includes(supplier)) return prev.filter(s => s !== supplier);
+            return [...prev, supplier];
+        });
+    };
+
+    const uniqueFuturisticParts = useMemo(() => {
+        const set = new Set();
+        futuristicEnhancedRows.forEach(r => {
+            if (futuristicSupplierFilter.length > 0 && !futuristicSupplierFilter.includes(r.supplier)) return;
+            if (r.part_no && r.part_no !== "–" && r.part_no !== "-") set.add(r.part_no);
+        });
+        return Array.from(set).sort();
+    }, [futuristicEnhancedRows, futuristicSupplierFilter]);
+
+    const filteredDropdownFuturisticParts = useMemo(() => {
+        const q = futuristicPartSearchQuery.toLowerCase().trim();
+        if (!q) return uniqueFuturisticParts;
+        return uniqueFuturisticParts.filter(p => p.toLowerCase().includes(q));
+    }, [uniqueFuturisticParts, futuristicPartSearchQuery]);
+
+    const handleFuturisticPartToggle = (part) => {
+        setFuturisticPage(1);
+        setFuturisticPartFilter(prev => {
+            if (prev.includes(part)) return prev.filter(p => p !== part);
+            return [...prev, part];
+        });
+    };
+
+    const filteredFuturisticRows = useMemo(() => {
+        let list = futuristicEnhancedRows;
+        if (futuristicSupplierFilter.length > 0) {
+            list = list.filter(r => futuristicSupplierFilter.includes(r.supplier));
+        }
+        if (futuristicPartFilter.length > 0) {
+            list = list.filter(r => futuristicPartFilter.includes(r.part_no));
+        }
+        if (futuristicSearchQuery.trim()) {
+            const q = futuristicSearchQuery.toLowerCase().trim();
+            list = list.filter(r =>
+                (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                (r.supplier && r.supplier.toLowerCase().includes(q)) ||
+                (r.part_no && r.part_no.toLowerCase().includes(q)) ||
+                (r.description && r.description.toLowerCase().includes(q)) ||
+                (r.schd_dt && r.schd_dt.toLowerCase().includes(q)) ||
+                (r.avg_lead_date && r.avg_lead_date.toLowerCase().includes(q))
+            );
+        }
+
+        // Horizon window filter
+        const horizonMonths = futuristicProjectionHorizon === "3M" ? 3 : futuristicProjectionHorizon === "6M" ? 6 : 12;
+        if (list.length > 0) {
+            const baseDate = dateRange.from || new Date();
+            const horizonEndDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + horizonMonths + 1, 0);
+
+            list = list.filter(r => {
+                if (!r.avg_lead_date_obj && !r.schd_dt) return true;
+                const d = r.avg_lead_date_obj || new Date(r.schd_dt);
+                return d <= horizonEndDate || isNaN(d.getTime());
+            });
+        }
+
+        return list;
+    }, [futuristicEnhancedRows, futuristicSupplierFilter, futuristicPartFilter, futuristicSearchQuery, futuristicProjectionHorizon, dateRange]);
+
+    const sortedFuturisticRows = useMemo(() => {
+        const sorted = [...filteredFuturisticRows];
+        if (futuristicSortConfig.key) {
+            sorted.sort((a, b) => {
+                let aVal = a[futuristicSortConfig.key];
+                let bVal = b[futuristicSortConfig.key];
+                if (typeof aVal === "string") aVal = aVal.toLowerCase();
+                if (typeof bVal === "string") bVal = bVal.toLowerCase();
+                if (aVal < bVal) return futuristicSortConfig.direction === "asc" ? -1 : 1;
+                if (aVal > bVal) return futuristicSortConfig.direction === "asc" ? 1 : -1;
+                return 0;
+            });
+        }
+        return sorted;
+    }, [filteredFuturisticRows, futuristicSortConfig]);
+
+    const pagedFuturisticRows = useMemo(() => {
+        if (futuristicPageSize === "All") return sortedFuturisticRows;
+        const size = Number(futuristicPageSize);
+        const start = (futuristicPage - 1) * size;
+        return sortedFuturisticRows.slice(start, start + size);
+    }, [sortedFuturisticRows, futuristicPage, futuristicPageSize]);
+
+    const totalFuturisticPages = useMemo(() => {
+        if (futuristicPageSize === "All" || sortedFuturisticRows.length === 0) return 1;
+        return Math.ceil(sortedFuturisticRows.length / Number(futuristicPageSize));
+    }, [sortedFuturisticRows.length, futuristicPageSize]);
+
+    const futuristicTotals = useMemo(() => {
+        let totalPoQty = 0;
+        let totalSchdQty = 0;
+        let totalBalQty = 0;
+        let totalBalVal = 0;
+        let leadDaysSum = 0;
+
+        filteredFuturisticRows.forEach(r => {
+            totalPoQty += r.po_qty_num || 0;
+            totalSchdQty += r.schd_qty_num || 0;
+            totalBalQty += r.bal_qty_num || 0;
+            totalBalVal += r.bal_val || 0;
+            leadDaysSum += r.avg_lead_days || 0;
+        });
+
+        const avgLeadDays = filteredFuturisticRows.length > 0 ? (leadDaysSum / filteredFuturisticRows.length).toFixed(0) : "0";
+
+        return {
+            totalPoQty,
+            totalSchdQty,
+            totalBalQty,
+            totalBalVal,
+            avgLeadDays,
+            count: filteredFuturisticRows.length
+        };
+    }, [filteredFuturisticRows]);
+
+    const handleFuturisticSort = (key) => {
+        let direction = "asc";
+        if (futuristicSortConfig.key === key && futuristicSortConfig.direction === "asc") {
+            direction = "desc";
+        }
+        setFuturisticSortConfig({ key, direction });
+    };
+
+    const renderFuturisticSortableTh = (label, key, isRightAligned = false, isWide = false) => {
+        const isSorted = futuristicSortConfig.key === key;
+        const isAsc = futuristicSortConfig.direction === "asc";
+        const IconComponent = isSorted ? (isAsc ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+        return (
+            <th
+                className={`pa2-po-th pa2-po-th--sortable ${isRightAligned ? "pa2-po-th--r" : ""} ${isWide ? "pa2-po-th--wide" : ""}`}
+                onClick={() => handleFuturisticSort(key)}
+            >
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", justifyContent: isRightAligned ? "flex-end" : "flex-start", width: "100%" }}>
+                    <span>{label}</span>
+                    <span className={`pa2-sort-icon-wrap ${isSorted ? "active" : ""}`} style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        opacity: isSorted ? 1 : 0.35,
+                        color: isSorted ? "#7c3aed" : "inherit"
+                    }}>
+                        <IconComponent size={12} style={{ strokeWidth: 2.5 }} />
+                    </span>
+                </div>
+            </th>
+        );
+    };
+
+    // ── Futuristic Chart Effect (Schedule & Expected) ──
+    useEffect(() => {
+        if (fsActiveTab !== "futuristic" || !futuristicChartCanvasRef.current) return;
+        if (futuristicChartInstanceRef.current) {
+            futuristicChartInstanceRef.current.destroy();
+            futuristicChartInstanceRef.current = null;
+        }
+
+        const ctx = futuristicChartCanvasRef.current.getContext("2d");
+        if (!ctx) return;
+
+        const monthMap = {};
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+        filteredFuturisticRows.forEach(r => {
+            if (r.schd_dt) {
+                const sD = new Date(r.schd_dt);
+                if (!isNaN(sD.getTime())) {
+                    const sortKey = `${sD.getFullYear()}-${String(sD.getMonth() + 1).padStart(2, "0")}`;
+                    const label = `${monthNames[sD.getMonth()]} ${sD.getFullYear()}`;
+                    if (!monthMap[sortKey]) monthMap[sortKey] = { label, schdQty: 0, expectedQty: 0 };
+                    monthMap[sortKey].schdQty += (r.schd_qty_num || 0);
+                }
+            }
+            if (r.avg_lead_date_iso) {
+                const eD = new Date(r.avg_lead_date_iso);
+                if (!isNaN(eD.getTime())) {
+                    const sortKey = `${eD.getFullYear()}-${String(eD.getMonth() + 1).padStart(2, "0")}`;
+                    const label = `${monthNames[eD.getMonth()]} ${eD.getFullYear()}`;
+                    if (!monthMap[sortKey]) monthMap[sortKey] = { label, schdQty: 0, expectedQty: 0 };
+                    monthMap[sortKey].expectedQty += (r.schd_qty_num || 0);
+                }
+            }
+        });
+
+        const sortedKeys = Object.keys(monthMap).sort();
+        const labels = sortedKeys.map(k => monthMap[k].label);
+        const schdQtys = sortedKeys.map(k => Math.round(monthMap[k].schdQty || 0));
+        const expectedQtys = sortedKeys.map(k => Math.round(monthMap[k].expectedQty || 0));
+
+        const gradSchd = ctx.createLinearGradient(0, 0, 0, 240);
+        gradSchd.addColorStop(0, "rgba(139, 92, 246, 0.9)");
+        gradSchd.addColorStop(1, "rgba(139, 92, 246, 0.2)");
+
+        const gradExpected = ctx.createLinearGradient(0, 0, 0, 240);
+        gradExpected.addColorStop(0, "rgba(16, 185, 129, 0.9)");
+        gradExpected.addColorStop(1, "rgba(16, 185, 129, 0.2)");
+
+        futuristicChartInstanceRef.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: "bar",
+                        label: "Schedule",
+                        data: schdQtys,
+                        backgroundColor: gradSchd,
+                        borderColor: "#7c3aed",
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.75,
+                        datalabels: {
+                            display: true,
+                            align: "top",
+                            anchor: "end",
+                            color: "#7c3aed",
+                            font: { size: 10, weight: "700", family: "Poppins" },
+                            formatter: v => v > 0 ? v.toLocaleString("en-IN") : ""
+                        }
+                    },
+                    {
+                        type: "bar",
+                        label: "Expected",
+                        data: expectedQtys,
+                        backgroundColor: gradExpected,
+                        borderColor: "#059669",
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.75,
+                        datalabels: {
+                            display: true,
+                            align: "top",
+                            anchor: "end",
+                            color: "#059669",
+                            font: { size: 10, weight: "700", family: "Poppins" },
+                            formatter: v => v > 0 ? v.toLocaleString("en-IN") : ""
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: "top",
+                        labels: { font: { family: "Poppins", size: 11, weight: "600" }, color: "#334155" }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.92)",
+                        titleFont: { size: 11, weight: "700", family: "Poppins" },
+                        bodyFont: { size: 11, family: "Poppins" },
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y || 0).toLocaleString("en-IN")} Units`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: "rgba(26, 84, 212, 0.06)" },
+                        ticks: { font: { size: 10, family: "Poppins" }, color: "#64748b" }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 10, family: "Poppins", weight: "600" }, color: "#334155" }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            futuristicChartInstanceRef.current?.destroy();
+            futuristicChartInstanceRef.current = null;
+        };
+    }, [fsActiveTab, filteredFuturisticRows]);
 
     const suppliersList = useMemo(() => {
         const set = new Set();
@@ -980,11 +3370,6 @@ export default function PurchaseAnalysis() {
         return Object.values(groups);
     }, [filteredPriceTrendRows]);
 
-    const [traceSearch, setTraceSearch] = useState("");
-
-    const [traceRows, setTraceRows] = useState([]);
-    const [traceLoading, setTraceLoading] = useState(false);
-
     const filteredTraceData = useMemo(() => {
         return traceRows.filter(row => {
             const q = (searchQuery || traceSearch || "").toLowerCase().trim();
@@ -1000,15 +3385,6 @@ export default function PurchaseAnalysis() {
         });
     }, [traceRows, traceSearch, searchQuery]);
 
-    const [summaryData, setSummaryData] = useState(null);
-    const [supplierRatingData, setSupplierRatingData] = useState(null);
-    const [supplierRatingLoading, setSupplierRatingLoading] = useState(false);
-
-    // Modern Individual Panel Loading States
-    const [summaryLoading, setSummaryLoading] = useState(false);
-    const [trendLoading, setTrendLoading] = useState(false);
-    const [chartsLoading, setChartsLoading] = useState(false);
-
     const trendRef = useRef(null);
     const supRef = useRef(null);
     const catRef = useRef(null);
@@ -1017,7 +3393,6 @@ export default function PurchaseAnalysis() {
     const supChart = useRef(null);
     const catChart = useRef(null);
     const ratingChart = useRef(null);
-    const [monthlyTab, setMonthlyTab] = useState("combined");
     const monthlyChartRef = useRef(null);
     const monthlyChart = useRef(null);
     const poVsGrnChartRef = useRef(null);
@@ -1026,7 +3401,6 @@ export default function PurchaseAnalysis() {
     const deptChartInst = useRef(null);
 
     // Custom PO Type dropdown state
-    const [poDropdownOpen, setPoDropdownOpen] = useState(false);
     const poDropdownRef = useRef(null);
     const [focusedIndex, setFocusedIndex] = useState(-1);
 
@@ -1110,6 +3484,15 @@ export default function PurchaseAnalysis() {
             }
             if (fsPartRef.current && !fsPartRef.current.contains(event.target)) {
                 setFsPartDropdownOpen(false);
+            }
+            if (futuristicSupplierRef.current && !futuristicSupplierRef.current.contains(event.target)) {
+                setFuturisticSupplierDropdownOpen(false);
+            }
+            if (futuristicPartRef.current && !futuristicPartRef.current.contains(event.target)) {
+                setFuturisticPartDropdownOpen(false);
+            }
+            if (apvFilterRef.current && !apvFilterRef.current.contains(event.target)) {
+                setApvFilterDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -2571,7 +4954,7 @@ export default function PurchaseAnalysis() {
 
     // ── PO Fulfillment Schedule Chart Effect ──
     useEffect(() => {
-        if (!fsChartCanvasRef.current) return;
+        if (fsActiveTab !== "standard" || !fsChartCanvasRef.current) return;
         if (fsChartInstanceRef.current) {
             fsChartInstanceRef.current.destroy();
             fsChartInstanceRef.current = null;
@@ -2805,7 +5188,534 @@ export default function PurchaseAnalysis() {
                 fsChartInstanceRef.current = null;
             }
         };
-    }, [fsChartType, filteredFsRows, fsTotals]);
+    }, [fsActiveTab, fsChartType, filteredFsRows, fsTotals]);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Average Purchase Value (APV) Calculations & Aggregations
+    // ═══════════════════════════════════════════════════════════════
+    const apvRawRows = useMemo(() => {
+        return filteredPoRows.filter(r => {
+            const typeLower = (r.po_type || "").toLowerCase();
+            return typeLower.includes("raw") || typeLower.includes("rm");
+        });
+    }, [filteredPoRows]);
+
+    const apvStoreRows = useMemo(() => {
+        return filteredPoRows.filter(r => {
+            const typeLower = (r.po_type || "").toLowerCase();
+            return !typeLower.includes("raw") && !typeLower.includes("rm");
+        });
+    }, [filteredPoRows]);
+
+    // Unique Store Groups list
+    const storeGroupsList = useMemo(() => {
+        const set = new Set();
+        apvStoreRows.forEach(r => {
+            const g = getStoreMaterialGroup(r);
+            if (g) set.add(g);
+        });
+        return ["All", ...Array.from(set).sort()];
+    }, [apvStoreRows]);
+
+    // Category / Group Counts for Dynamic Badges
+    const rawCategoryCounts = useMemo(() => {
+        const counts = { "All": apvRawRows.length, "Nos (Casting)": 0, "KGS (Rod)": 0, "Mtrs (Rod)": 0, "B.Out": 0 };
+        apvRawRows.forEach(r => {
+            const cat = getRawMaterialCategory(r);
+            if (counts[cat] !== undefined) counts[cat]++;
+        });
+        return counts;
+    }, [apvRawRows]);
+
+    const storeGroupCounts = useMemo(() => {
+        const counts = { "All": apvStoreRows.length };
+        apvStoreRows.forEach(r => {
+            const g = getStoreMaterialGroup(r);
+            counts[g] = (counts[g] || 0) + 1;
+        });
+        return counts;
+    }, [apvStoreRows]);
+
+    const activeApvRows = useMemo(() => {
+        if (apvMode === "raw") {
+            if (apvRawCategories.length === 0) return apvRawRows;
+            return apvRawRows.filter(r => apvRawCategories.includes(getRawMaterialCategory(r)));
+        } else {
+            if (apvStoreGroups.length === 0) return apvStoreRows;
+            return apvStoreRows.filter(r => apvStoreGroups.includes(getStoreMaterialGroup(r)));
+        }
+    }, [apvMode, apvRawRows, apvStoreRows, apvRawCategories, apvStoreGroups]);
+
+    // Multi-Series Category / Group-wise Monthly Trend for Pure Line Graph
+    const apvCategoryMonthlyData = useMemo(() => {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const rowsToUse = apvMode === "raw" ? apvRawRows : apvStoreRows;
+
+        // 1. Collect all unique timeline months in chronological order
+        const monthsSet = new Set();
+        rowsToUse.forEach(r => {
+            if (!r.po_date) return;
+            const parts = r.po_date.split("-");
+            if (parts.length === 3) {
+                const mIdx = parseInt(parts[1], 10) - 1;
+                if (mIdx >= 0 && mIdx < 12) monthsSet.add(`${monthNames[mIdx]} ${parts[0]}`);
+            } else {
+                const slashParts = r.po_date.split("/");
+                if (slashParts.length === 3) {
+                    const mIdx = parseInt(slashParts[1], 10) - 1;
+                    if (mIdx >= 0 && mIdx < 12) monthsSet.add(`${monthNames[mIdx]} ${slashParts[2]}`);
+                }
+            }
+        });
+
+        const sortedMonths = Array.from(monthsSet).sort((a, b) => {
+            const parseScore = (mKey) => {
+                const p = mKey.split(" ");
+                if (p.length !== 2) return 0;
+                const mIdx = monthNames.indexOf(p[0]);
+                const yVal = parseInt(p[1], 10) || 0;
+                return yVal * 12 + (mIdx >= 0 ? mIdx : 0);
+            };
+            return parseScore(a) - parseScore(b);
+        });
+
+        // 2. Build Series Definitions (Category-wise for Raw, Group-wise for Store)
+        let seriesList = [];
+        if (apvMode === "raw") {
+            const rawCatColors = {
+                "Nos (Casting)": { color: "#0284c7", bg: "rgba(2, 132, 199, 0.08)" },
+                "KGS (Rod)": { color: "#ea580c", bg: "rgba(234, 88, 12, 0.08)" },
+                "Mtrs (Rod)": { color: "#059669", bg: "rgba(5, 150, 105, 0.08)" },
+                "B.Out": { color: "#7c3aed", bg: "rgba(124, 58, 237, 0.08)" }
+            };
+
+            const cats = apvRawCategories.length === 0
+                ? ["Nos (Casting)", "KGS (Rod)", "Mtrs (Rod)", "B.Out"]
+                : apvRawCategories;
+
+            seriesList = cats.map(cat => ({
+                id: cat,
+                name: cat,
+                color: rawCatColors[cat]?.color || "#2563eb",
+                bg: rawCatColors[cat]?.bg || "rgba(37, 99, 235, 0.08)"
+            }));
+        } else {
+            const storePalette = ["#7c3aed", "#0284c7", "#ea580c", "#059669", "#ec4899", "#d97706", "#06b6d4", "#6366f1", "#84cc16"];
+            const groups = apvStoreGroups.length === 0
+                ? storeGroupsList.filter(g => g !== "All").slice(0, 7)
+                : apvStoreGroups;
+
+            seriesList = groups.map((grp, idx) => ({
+                id: grp,
+                name: grp,
+                color: storePalette[idx % storePalette.length],
+                bg: "rgba(124, 58, 237, 0.08)"
+            }));
+        }
+
+        // 3. Compute Monthly Data Points for each Series
+        const datasets = seriesList.map(series => {
+            const monthValues = sortedMonths.map(month => {
+                let totalVal = 0;
+                rowsToUse.forEach(r => {
+                    if (!r.po_date) return;
+                    let mKey = "";
+                    const parts = r.po_date.split("-");
+                    if (parts.length === 3) {
+                        const mIdx = parseInt(parts[1], 10) - 1;
+                        if (mIdx >= 0 && mIdx < 12) mKey = `${monthNames[mIdx]} ${parts[0]}`;
+                    } else {
+                        const slashParts = r.po_date.split("/");
+                        if (slashParts.length === 3) {
+                            const mIdx = parseInt(slashParts[1], 10) - 1;
+                            if (mIdx >= 0 && mIdx < 12) mKey = `${monthNames[mIdx]} ${slashParts[2]}`;
+                        }
+                    }
+
+                    if (mKey !== month) return;
+
+                    const catOrGrp = apvMode === "raw" ? getRawMaterialCategory(r) : getStoreMaterialGroup(r);
+                    if (catOrGrp === series.id) {
+                        totalVal += Number(r.value || 0);
+                    }
+                });
+                return Number((totalVal / 100000).toFixed(2));
+            });
+
+            return {
+                id: series.id,
+                label: series.name,
+                data: monthValues,
+                color: series.color,
+                bg: series.bg
+            };
+        });
+
+        return {
+            labels: sortedMonths,
+            datasets
+        };
+    }, [apvMode, apvRawCategories, apvStoreGroups, apvRawRows, apvStoreRows, storeGroupsList]);
+
+    // Material-Level Summary for Table
+    const apvMaterialSummary = useMemo(() => {
+        const map = {};
+
+        activeApvRows.forEach(r => {
+            const name = (r.material || "Unknown Material").trim();
+            const code = (r.material_code || "–").trim();
+            const key = `${code}___${name}`;
+            const val = Number(r.value || 0);
+            const qty = Number(r.qty || 0);
+            const rate = Number(r.rate || (qty > 0 ? val / qty : 0));
+            const uom = normalizePoUom(r.uom, r.material);
+            const catOrGrp = apvMode === "raw" ? getRawMaterialCategory(r) : getStoreMaterialGroup(r);
+
+            if (!map[key]) {
+                map[key] = {
+                    id: key,
+                    material: name,
+                    materialCode: code,
+                    categoryOrGroup: catOrGrp,
+                    uom: uom,
+                    poCount: 0,
+                    totalQty: 0,
+                    totalValue: 0,
+                    minRate: rate > 0 ? rate : Infinity,
+                    maxRate: rate > 0 ? rate : 0,
+                    poNumbers: new Set(),
+                    suppliers: new Set(),
+                    latestPoDate: r.po_date || ""
+                };
+            }
+
+            map[key].poCount += 1;
+            map[key].totalQty += qty;
+            map[key].totalValue += val;
+            if (rate > 0) {
+                if (rate < map[key].minRate) map[key].minRate = rate;
+                if (rate > map[key].maxRate) map[key].maxRate = rate;
+            }
+            if (r.po_number) map[key].poNumbers.add(r.po_number);
+            if (r.vendor_name) map[key].suppliers.add(r.vendor_name);
+            if (r.po_date && (!map[key].latestPoDate || r.po_date > map[key].latestPoDate)) {
+                map[key].latestPoDate = r.po_date;
+            }
+        });
+
+        // Compute overall weighted avg rate across all rows to provide benchmark
+        const allSpend = activeApvRows.reduce((acc, r) => acc + Number(r.value || 0), 0);
+        const allQty = activeApvRows.reduce((acc, r) => acc + Number(r.qty || 0), 0);
+        const overallAvgRate = allQty > 0 ? allSpend / allQty : 0;
+
+        return Object.values(map).map(item => {
+            const minRate = item.minRate === Infinity ? 0 : item.minRate;
+            const avgRate = item.totalQty > 0 ? (item.totalValue / item.totalQty) : 0;
+            const avgPoVal = item.poCount > 0 ? (item.totalValue / item.poCount) : 0;
+            return {
+                ...item,
+                minRate,
+                avgRate,
+                avgPoVal,
+                uniquePos: item.poNumbers.size,
+                uniqueSuppliers: item.suppliers.size,
+                benchmark: overallAvgRate > 0 ? (avgRate / overallAvgRate) : 1
+            };
+        });
+    }, [activeApvRows]);
+
+    // Summary KPI stats for active APV mode
+    const apvTotals = useMemo(() => {
+        let totalSpend = 0;
+        let totalQty = 0;
+        let maxPoValue = 0;
+        let grnRealizedSpend = 0;
+        let grnReceivedCount = 0;
+
+        activeApvRows.forEach(r => {
+            const val = Number(r.value || 0);
+            totalSpend += val;
+
+            const rawQtyStr = String(r.po_qty ?? r.qty ?? "").trim();
+            const qtyMatch = rawQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const q = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (Number(r.qty || r.po_qty) || 0);
+            totalQty += (q > 0 ? q : 0);
+
+            if (val > maxPoValue) maxPoValue = val;
+
+            const hasGrn = Boolean(r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" && r.grn_no.trim() !== "");
+            if (hasGrn) {
+                grnRealizedSpend += val;
+                grnReceivedCount += 1;
+            }
+        });
+
+        const totalPos = activeApvRows.length;
+        const totalMaterials = apvMaterialSummary.length;
+        const avgRate = totalQty > 0 ? totalSpend / totalQty : 0;
+        const avgPoValue = totalPos > 0 ? totalSpend / totalPos : 0;
+        const avgSkuSpend = totalMaterials > 0 ? totalSpend / totalMaterials : 0;
+        const fulfillmentRate = totalSpend > 0 ? (grnRealizedSpend / totalSpend) * 100 : 0;
+
+        return {
+            totalSpend,
+            totalSpendLakhs: totalSpend / 100000,
+            totalQty,
+            totalPos,
+            totalMaterials,
+            avgRate,
+            avgPoValue,
+            avgSkuSpend,
+            maxPoValue,
+            maxPoValueLakhs: maxPoValue / 100000,
+            grnRealizedSpend,
+            grnRealizedLakhs: grnRealizedSpend / 100000,
+            grnReceivedCount,
+            fulfillmentRate
+        };
+    }, [activeApvRows, apvMaterialSummary]);
+
+    // Material-Level Average Purchase Value lookup for benchmark
+    const materialAvgRateMap = useMemo(() => {
+        const map = {};
+        activeApvRows.forEach(r => {
+            const key = (r.material_code || r.material || "").trim();
+            const val = Number(r.value || 0);
+            const rawStr = String(r.po_qty || r.qty || "").trim();
+            const qtyMatch = rawStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const qty = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (Number(r.qty || r.po_qty) || 0);
+
+            if (!map[key]) map[key] = { totalVal: 0, totalQty: 0, count: 0 };
+            map[key].totalVal += val;
+            map[key].totalQty += (qty > 0 ? qty : 1);
+            map[key].count += 1;
+        });
+
+        const result = {};
+        Object.keys(map).forEach(k => {
+            result[k] = map[k].totalQty > 0 ? (map[k].totalVal / map[k].totalQty) : (map[k].totalVal / (map[k].count || 1));
+        });
+        return result;
+    }, [activeApvRows]);
+
+    // Detailed Line-Item Breakdown for Table: Sl.NO, PoNO, PODate, Partno, Description, PO Qty, Uom, Catogory, Po Rate, Amt, GRN NO, GRn Date, Grn Qty & Avg Value
+    const apvTableRows = useMemo(() => {
+        return activeApvRows.map((r, idx) => {
+            const code = (r.material_code || "–").trim();
+            const mat = (r.material || "–").trim();
+            const key = (code && code !== "–") ? code : mat;
+
+            const rawQtyStr = String(r.po_qty || r.qty || "0").trim();
+            const qtyMatch = rawQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const poQtyNum = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (Number(r.qty || r.po_qty) || 0);
+
+            const amt = Number(r.value || 0);
+            const poRate = Number(r.rate || (poQtyNum > 0 ? amt / poQtyNum : 0));
+            const uom = normalizePoUom(r.uom || r.unit, mat);
+            const category = apvMode === "raw" ? getRawMaterialCategory(r) : getStoreMaterialGroup(r);
+
+            // GRN fields
+            const grnNo = (r.grn_no && r.grn_no !== "-" && r.grn_no !== "–" && r.grn_no.trim() !== "") ? r.grn_no.trim() : "–";
+            const grnDate = (r.grn_date && r.grn_date !== "-" && r.grn_date !== "–" && r.grn_date.trim() !== "") ? r.grn_date.trim() : "–";
+            const rawGrnQtyStr = String(r.grn_qty || "").trim();
+            const grnQtyMatch = rawGrnQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+            const grnQtyNum = grnQtyMatch ? parseFloat(grnQtyMatch[0].replace(/,/g, "")) : (rawGrnQtyStr ? parseFloat(rawGrnQtyStr.replace(/[^\d.]/g, "")) : (grnNo !== "–" ? poQtyNum : null));
+
+            const avgVal = materialAvgRateMap[key] || poRate;
+
+            return {
+                id: r.id || `${r.po_number || idx}_${code}_${idx}`,
+                rawIndex: idx + 1,
+                poNumber: r.po_number || "–",
+                poDate: r.po_date || "–",
+                partNo: code,
+                description: mat,
+                poQty: poQtyNum,
+                poQtyStr: poQtyNum.toLocaleString("en-IN", { maximumFractionDigits: 2 }),
+                uom: uom,
+                category: category,
+                poRate: poRate,
+                amt: amt,
+                grnNo: grnNo,
+                grnDate: grnDate,
+                grnQty: grnQtyNum,
+                avgValue: avgVal,
+                originalRow: r
+            };
+        });
+    }, [activeApvRows, apvMode, materialAvgRateMap]);
+
+    // Live search & Sorting for Table
+    const filteredApvTableRows = useMemo(() => {
+        let result = apvTableRows;
+        const q = apvSearch.toLowerCase().trim();
+        if (q) {
+            result = result.filter(r =>
+                (r.poNumber && r.poNumber.toLowerCase().includes(q)) ||
+                (r.poDate && r.poDate.toLowerCase().includes(q)) ||
+                (r.partNo && r.partNo.toLowerCase().includes(q)) ||
+                (r.description && r.description.toLowerCase().includes(q)) ||
+                (r.uom && r.uom.toLowerCase().includes(q)) ||
+                (r.category && r.category.toLowerCase().includes(q)) ||
+                (r.grnNo && r.grnNo.toLowerCase().includes(q)) ||
+                (r.grnDate && r.grnDate.toLowerCase().includes(q))
+            );
+        }
+
+        return [...result].sort((a, b) => {
+            let valA = a[apvSortConfig.key];
+            let valB = b[apvSortConfig.key];
+            if (typeof valA === "string") {
+                return apvSortConfig.direction === "asc"
+                    ? valA.localeCompare(valB)
+                    : valB.localeCompare(valA);
+            }
+            return apvSortConfig.direction === "asc" ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
+        });
+    }, [apvTableRows, apvSearch, apvSortConfig]);
+
+    // Slicing & Pagination
+    const totalApvPages = apvPageSize === "All" ? 1 : Math.ceil(filteredApvTableRows.length / Number(apvPageSize)) || 1;
+    const pagedApvTableRows = useMemo(() => {
+        if (apvPageSize === "All") return filteredApvTableRows;
+        const size = Number(apvPageSize);
+        const start = (apvPage - 1) * size;
+        return filteredApvTableRows.slice(start, start + size);
+    }, [filteredApvTableRows, apvPage, apvPageSize]);
+
+    // APV Category/Group-wise Column Chart Effect
+    useEffect(() => {
+        if (!apvShowChart || !apvChartCanvasRef.current) return;
+        if (apvChartInstanceRef.current) {
+            apvChartInstanceRef.current.destroy();
+            apvChartInstanceRef.current = null;
+        }
+
+        const ctx = apvChartCanvasRef.current.getContext("2d");
+        if (!ctx) return;
+
+        if (!apvCategoryMonthlyData || apvCategoryMonthlyData.labels.length === 0) return;
+
+        const chartDatasets = apvCategoryMonthlyData.datasets.map(ds => ({
+            type: "bar",
+            label: ds.label,
+            data: ds.data,
+            backgroundColor: ds.color,
+            borderColor: ds.color,
+            borderWidth: 1,
+            borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+            barPercentage: 0.72,
+            categoryPercentage: 0.68,
+            datalabels: {
+                display: (ctx) => {
+                    const val = Number(ctx.dataset.data[ctx.dataIndex]) || 0;
+                    return val > 0;
+                },
+                anchor: "end",
+                align: "top",
+                offset: 3,
+                clip: false,
+                color: ds.color || "#334155",
+                font: { size: 10, weight: "750", family: "'Outfit', 'Inter', -apple-system, sans-serif" },
+                formatter: (v) => {
+                    const val = Number(v) || 0;
+                    if (val <= 0) return "";
+                    if (val >= 100) return `₹${Math.round(val)}L`;
+                    if (val >= 10) return `₹${val.toFixed(1)}L`;
+                    if (val >= 1) return `₹${val.toFixed(1)}L`;
+                    if (val >= 0.05) return `₹${val.toFixed(1)}L`;
+                    return `₹${val.toFixed(2)}L`;
+                }
+            }
+        }));
+
+        apvChartInstanceRef.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: apvCategoryMonthlyData.labels,
+                datasets: chartDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 28,
+                        left: 10,
+                        right: 15,
+                        bottom: 6
+                    }
+                },
+                interaction: {
+                    mode: "index",
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    datalabels: {
+                        clip: false
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        titleFont: { size: 12, weight: "700", family: "'Outfit', 'Inter', sans-serif" },
+                        bodyFont: { size: 11, family: "'Outfit', 'Inter', sans-serif" },
+                        footerFont: { size: 11.5, weight: "700", family: "'Outfit', 'Inter', sans-serif" },
+                        padding: 12,
+                        cornerRadius: 10,
+                        boxPadding: 6,
+                        usePointStyle: true,
+                        callbacks: {
+                            label: (context) => {
+                                const dsLabel = context.dataset.label || "";
+                                const val = Number(context.parsed.y) || 0;
+                                return `  ${dsLabel}: ₹${val.toFixed(2)} Lakhs (₹${(val * 100000).toLocaleString("en-IN")})`;
+                            },
+                            footer: (items) => {
+                                const sum = items.reduce((acc, it) => acc + (Number(it.parsed.y) || 0), 0);
+                                return `  Total Spend: ₹${sum.toFixed(2)} Lakhs (₹${(sum * 100000).toLocaleString("en-IN")})`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: false,
+                        grid: { display: false },
+                        ticks: { font: { size: 11, family: "'Outfit', 'Inter', sans-serif", weight: "600" }, color: "#64748b" }
+                    },
+                    y: {
+                        type: "linear",
+                        stacked: false,
+                        beginAtZero: true,
+                        grace: "25%",
+                        display: true,
+                        position: "left",
+                        title: {
+                            display: true,
+                            text: "Purchase Spend (₹ Lakhs)",
+                            color: "#64748b",
+                            font: { size: 10.5, weight: "650", family: "'Outfit', 'Inter', sans-serif" }
+                        },
+                        grid: { color: "rgba(226, 232, 240, 0.6)" },
+                        ticks: {
+                            font: { size: 10.5, family: "'Outfit', 'Inter', sans-serif", weight: "500" },
+                            color: "#64748b",
+                            callback: (v) => `₹${v}L`
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            if (apvChartInstanceRef.current) {
+                apvChartInstanceRef.current.destroy();
+                apvChartInstanceRef.current = null;
+            }
+        };
+    }, [apvShowChart, apvMode, apvCategoryMonthlyData]);
 
     const renderAlertIcon = (urgency) => {
         switch (urgency) {
@@ -2903,7 +5813,7 @@ export default function PurchaseAnalysis() {
                             )}
                         </div>
                     </div>
-                    <div className="pa2-filter-group" ref={poDropdownRef} style={{ minWidth: "180px" }}>
+                    <div className="pa2-filter-group pa2-filter-group-potype" ref={poDropdownRef}>
                         <label className="pa2-filter-label">PO Type</label>
                         <div className={`pa2-custom-select${poDropdownOpen && !isGlobalLoading ? " pa2-active" : ""}${isGlobalLoading ? " pa2-disabled" : ""}`}>
                             <button
@@ -2969,7 +5879,7 @@ export default function PurchaseAnalysis() {
                             )}
                         </div>
                     </div>
-                    <div className="pa2-filter-group" ref={supplierDropdownRef} style={{ minWidth: "300px" }}>
+                    <div className="pa2-filter-group pa2-filter-group-supplier" ref={supplierDropdownRef}>
                         <label className="pa2-filter-label">Supplier</label>
                         <div className={`pa2-custom-select${supplierDropdownOpen && !isGlobalLoading ? " pa2-active" : ""}${isGlobalLoading ? " pa2-disabled" : ""}`}>
                             <button
@@ -3509,6 +6419,663 @@ export default function PurchaseAnalysis() {
                 )}
             </div>
 
+            {/* ── Average Purchase Value Section (Raw Material vs Store Material) ── */}
+            <div className="pa2-card pa2-apv-card pa2-card-premium pa2-animate pa2-delay-4" style={{ marginBottom: "1.4rem" }}>
+                <div className="pa2-apv-accent-bar" style={{ background: apvMode === "raw" ? "linear-gradient(90deg, #2563eb, #38bdf8, #60a5fa)" : "linear-gradient(90deg, #7c3aed, #c084fc, #a855f7)" }} />
+
+                {/* Tier 1 Header */}
+                <div className="pa2-apv-header-row">
+                    <div className="pa2-apv-header-left">
+                        <div className="pa2-apv-title-group">
+                            <span className={`pa2-apv-icon-badge ${apvMode}`}>
+                                <IndianRupee size={20} strokeWidth={2.5} />
+                            </span>
+                            <div>
+                                <div className="pa2-apv-title-line">
+                                    <span className="pa2-apv-title">Average Purchase Value</span>
+                                    <span className="pa2-apv-filter-state-pill">
+                                        <Tag size={10} />
+                                        {apvMode === "raw"
+                                            ? (apvRawCategories.length === 0
+                                                ? "All Categories"
+                                                : apvRawCategories.length === 1
+                                                    ? apvRawCategories[0]
+                                                    : `${apvRawCategories.length} Categories`)
+                                            : (apvStoreGroups.length === 0
+                                                ? "All Groups"
+                                                : apvStoreGroups.length === 1
+                                                    ? apvStoreGroups[0]
+                                                    : `${apvStoreGroups.length} Groups`)}
+                                    </span>
+                                </div>
+                                <div className="pa2-apv-subtitle">Unit rate benchmarks, monthly spend curves & material efficiency</div>
+                            </div>
+                        </div>
+
+                        {/* Top 2 Buttons (Raw Material vs Store Material) */}
+                        <div className="pa2-apv-tabs">
+                            <button
+                                type="button"
+                                className={`pa2-apv-tab-btn ${apvMode === "raw" ? "active raw" : ""}`}
+                                onClick={() => {
+                                    setApvMode("raw");
+                                    setApvRawCategories([]);
+                                    setApvStoreGroups([]);
+                                    setApvPage(1);
+                                }}
+                            >
+                                <Package size={15} strokeWidth={2.2} />
+                                <span>Raw Material</span>
+                                <span className="pa2-apv-tab-badge">{apvRawRows.length} POs</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`pa2-apv-tab-btn ${apvMode === "store" ? "active store" : ""}`}
+                                onClick={() => {
+                                    setApvMode("store");
+                                    setApvRawCategories([]);
+                                    setApvStoreGroups([]);
+                                    setApvPage(1);
+                                }}
+                            >
+                                <Factory size={15} strokeWidth={2.2} />
+                                <span>Store Material</span>
+                                <span className="pa2-apv-tab-badge">{apvStoreRows.length} POs</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pa2-apv-header-right">
+                        {/* Modern Standalone Category / Group Filter Dropdown (Multi-Select) */}
+                        {(() => {
+                            const selectedCount = apvMode === "raw" ? apvRawCategories.length : apvStoreGroups.length;
+                            const hasFilter = selectedCount > 0;
+                            const totalItemsCount = apvMode === "raw" ? (RAW_CATEGORIES.length - 1) : (storeGroupsList.length - 1);
+
+                            return (
+                                <div className={`pa2-apv-filter-dropdown-wrap ${apvMode}`} ref={apvFilterRef}>
+                                    <button
+                                        type="button"
+                                        className={`pa2-apv-filter-btn ${apvMode} ${hasFilter ? "has-filter" : ""}`}
+                                        onClick={() => setApvFilterDropdownOpen(!apvFilterDropdownOpen)}
+                                        title={apvMode === "raw" ? "Filter by Raw Material Category (Multi-select)" : "Filter by Store Material Group (Multi-select)"}
+                                    >
+                                        {hasFilter ? (
+                                            <span
+                                                className="pa2-apv-btn-dot"
+                                                style={{
+                                                    background: apvMode === "raw"
+                                                        ? (selectedCount === 1 ? (RAW_CATEGORIES.find(c => c.id === apvRawCategories[0])?.color || "#2563eb") : "#2563eb")
+                                                        : "#7c3aed"
+                                                }}
+                                            />
+                                        ) : (
+                                            <SlidersHorizontal size={13} className="pa2-apv-filter-btn-icon" />
+                                        )}
+                                        <span className="pa2-apv-filter-btn-label">
+                                            {apvMode === "raw" ? (
+                                                <>
+                                                    <span className="pa2-apv-filter-prefix">Category:</span>{" "}
+                                                    <b className="pa2-apv-filter-val">
+                                                        {apvRawCategories.length === 0
+                                                            ? "All Categories"
+                                                            : apvRawCategories.length === 1
+                                                                ? apvRawCategories[0]
+                                                                : `${apvRawCategories.length} Selected`}
+                                                    </b>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="pa2-apv-filter-prefix">Group:</span>{" "}
+                                                    <b className="pa2-apv-filter-val">
+                                                        {apvStoreGroups.length === 0
+                                                            ? "All Groups"
+                                                            : apvStoreGroups.length === 1
+                                                                ? apvStoreGroups[0]
+                                                                : `${apvStoreGroups.length} Selected`}
+                                                    </b>
+                                                </>
+                                            )}
+                                        </span>
+                                        <span className="pa2-apv-filter-badge">
+                                            {activeApvRows.length}
+                                        </span>
+                                        <ChevronDown size={13} className={`pa2-apv-chevron ${apvFilterDropdownOpen ? "open" : ""}`} />
+                                    </button>
+
+                                    {apvFilterDropdownOpen && (
+                                        <div className={`pa2-apv-filter-menu ${apvMode}`}>
+                                            <div className="pa2-apv-filter-menu-head">
+                                                <div className="pa2-apv-filter-menu-title">
+                                                    <SlidersHorizontal size={12} style={{ color: apvMode === "raw" ? "#2563eb" : "#7c3aed" }} />
+                                                    <span>{apvMode === "raw" ? "Raw Categories" : "Store Groups"}</span>
+                                                    <span className="pa2-apv-opt-total-pill">
+                                                        {hasFilter ? `${selectedCount} / ${totalItemsCount} selected` : "All Selected"}
+                                                    </span>
+                                                </div>
+                                                <div className="pa2-apv-filter-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="pa2-apv-filter-action-btn select-all"
+                                                        onClick={() => {
+                                                            if (apvMode === "raw") setApvRawCategories([]);
+                                                            else setApvStoreGroups([]);
+                                                            setApvPage(1);
+                                                        }}
+                                                        title="Select All"
+                                                    >
+                                                        <CheckCheck size={11} /> All
+                                                    </button>
+                                                    {hasFilter && (
+                                                        <button
+                                                            type="button"
+                                                            className="pa2-apv-filter-action-btn reset"
+                                                            onClick={() => {
+                                                                if (apvMode === "raw") setApvRawCategories([]);
+                                                                else setApvStoreGroups([]);
+                                                                setApvPage(1);
+                                                            }}
+                                                            title="Reset filter"
+                                                        >
+                                                            <RotateCcw size={10} /> Reset
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {apvMode === "store" && storeGroupsList.length > 5 && (
+                                                <div className="pa2-apv-filter-search-box">
+                                                    <Search size={12} className="pa2-apv-filter-search-icon" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search store groups..."
+                                                        value={apvFilterSearch}
+                                                        onChange={(e) => setApvFilterSearch(e.target.value)}
+                                                        className="pa2-apv-filter-search-input"
+                                                        autoFocus
+                                                    />
+                                                    {apvFilterSearch && (
+                                                        <button type="button" onClick={() => setApvFilterSearch("")} className="pa2-apv-filter-search-clear">
+                                                            <X size={10} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            <div className="pa2-apv-filter-options">
+                                                {apvMode === "raw" ? (
+                                                    RAW_CATEGORIES.filter(c => c.id !== "All").map(cat => {
+                                                        const isSelected = apvRawCategories.length === 0 || apvRawCategories.includes(cat.id);
+                                                        const isExplicit = hasFilter && apvRawCategories.includes(cat.id);
+                                                        const count = rawCategoryCounts[cat.id] ?? 0;
+                                                        return (
+                                                            <button
+                                                                key={cat.id}
+                                                                type="button"
+                                                                className={`pa2-apv-filter-opt ${isSelected ? "selected" : ""} ${isExplicit ? "explicit" : ""}`}
+                                                                onClick={() => toggleRawCategory(cat.id)}
+                                                            >
+                                                                <div className={`pa2-apv-custom-checkbox ${isSelected ? "checked" : ""}`}>
+                                                                    {isSelected && <Check size={11} strokeWidth={3} />}
+                                                                </div>
+                                                                <span className="pa2-apv-opt-indicator" style={{ background: cat.color }} />
+                                                                <span className="pa2-apv-opt-label">{cat.label}</span>
+                                                                <span className="pa2-apv-opt-count">{count}</span>
+                                                            </button>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    storeGroupsList
+                                                        .filter(g => g !== "All")
+                                                        .filter(g => !apvFilterSearch || g.toLowerCase().includes(apvFilterSearch.toLowerCase().trim()))
+                                                        .map(grp => {
+                                                            const isSelected = apvStoreGroups.length === 0 || apvStoreGroups.includes(grp);
+                                                            const isExplicit = hasFilter && apvStoreGroups.includes(grp);
+                                                            const count = storeGroupCounts[grp] ?? 0;
+                                                            return (
+                                                                <button
+                                                                    key={grp}
+                                                                    type="button"
+                                                                    className={`pa2-apv-filter-opt ${isSelected ? "selected" : ""} ${isExplicit ? "explicit" : ""}`}
+                                                                    onClick={() => toggleStoreGroup(grp)}
+                                                                >
+                                                                    <div className={`pa2-apv-custom-checkbox ${isSelected ? "checked" : ""}`}>
+                                                                        {isSelected && <Check size={11} strokeWidth={3} />}
+                                                                    </div>
+                                                                    <span className="pa2-apv-opt-indicator" style={{ background: isSelected ? "#7c3aed" : "#a855f7" }} />
+                                                                    <span className="pa2-apv-opt-label">{grp}</span>
+                                                                    <span className="pa2-apv-opt-count">{count}</span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Search Input */}
+                        <div className="pa2-apv-search-box">
+                            <Search size={13} className="pa2-apv-search-icon" />
+                            <input
+                                type="text"
+                                placeholder={`Search ${apvMode === "raw" ? "Raw" : "Store"} Material / Code...`}
+                                value={apvSearch}
+                                onChange={(e) => { setApvSearch(e.target.value); setApvPage(1); }}
+                                className="pa2-apv-search-input"
+                            />
+                            {apvSearch && (
+                                <button
+                                    type="button"
+                                    className="pa2-apv-search-clear"
+                                    onClick={() => { setApvSearch(""); setApvPage(1); }}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Chart Toggle */}
+                        <button
+                            type="button"
+                            className={`pa2-apv-toggle-chart-btn ${apvShowChart ? "active" : ""}`}
+                            onClick={() => setApvShowChart(!apvShowChart)}
+                            title={apvShowChart ? "Hide Graph" : "Show Graph"}
+                        >
+                            {apvShowChart ? <EyeOff size={13} /> : <Eye size={13} />}
+                            <span>{apvShowChart ? "Hide Graph" : "Show Graph"}</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Summary KPI Ribbon */}
+                <div className="pa2-apv-kpi-ribbon">
+                    <div className="pa2-apv-kpi-card spend">
+                        <span className="pa2-apv-kpi-icon spend">
+                            <IndianRupee size={16} strokeWidth={2.5} />
+                        </span>
+                        <div className="pa2-apv-kpi-content">
+                            <div className="pa2-apv-kpi-label">Total Material Spend</div>
+                            <div className="pa2-apv-kpi-val spend">₹{apvTotals.totalSpendLakhs.toFixed(2)} Lakhs</div>
+                            <div className="pa2-apv-kpi-sub-hint">In selected period ({apvTotals.totalPos} POs)</div>
+                        </div>
+                    </div>
+
+                    <div className="pa2-apv-kpi-card po-val">
+                        <span className="pa2-apv-kpi-icon po-val">
+                            <ClipboardList size={16} strokeWidth={2.5} />
+                        </span>
+                        <div className="pa2-apv-kpi-content">
+                            <div className="pa2-apv-kpi-label">Avg PO Value (APV)</div>
+                            <div className="pa2-apv-kpi-val po-val">₹{Math.round(apvTotals.avgPoValue).toLocaleString("en-IN")}</div>
+                            <div className="pa2-apv-kpi-sub-hint">Spend per purchase order</div>
+                        </div>
+                    </div>
+
+                    <div className="pa2-apv-kpi-card rate">
+                        <span className="pa2-apv-kpi-icon rate">
+                            <TrendingUp size={16} strokeWidth={2.5} />
+                        </span>
+                        <div className="pa2-apv-kpi-content">
+                            <div className="pa2-apv-kpi-label">Weighted Avg Rate</div>
+                            <div className="pa2-apv-kpi-val rate">₹{apvTotals.avgRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="pa2-apv-uom-suffix">/ unit</span></div>
+                            <div className="pa2-apv-kpi-sub-hint">Across {apvTotals.totalQty.toLocaleString("en-IN", { maximumFractionDigits: 0 })} units</div>
+                        </div>
+                    </div>
+
+                    <div className="pa2-apv-kpi-card items">
+                        <span className="pa2-apv-kpi-icon items">
+                            <Package size={16} strokeWidth={2.5} />
+                        </span>
+                        <div className="pa2-apv-kpi-content">
+                            <div className="pa2-apv-kpi-label">Avg Spend per SKU</div>
+                            <div className="pa2-apv-kpi-val items">₹{Math.round(apvTotals.avgSkuSpend).toLocaleString("en-IN")}</div>
+                            <div className="pa2-apv-kpi-sub-hint">Across {apvTotals.totalMaterials} unique materials</div>
+                        </div>
+                    </div>
+
+                    <div className="pa2-apv-kpi-card max">
+                        <span className="pa2-apv-kpi-icon max">
+                            <Trophy size={16} strokeWidth={2.5} />
+                        </span>
+                        <div className="pa2-apv-kpi-content">
+                            <div className="pa2-apv-kpi-label">Peak PO Value</div>
+                            <div className="pa2-apv-kpi-val max">₹{apvTotals.maxPoValueLakhs.toFixed(2)} Lakhs</div>
+                            <div className="pa2-apv-kpi-sub-hint">Largest purchase order</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Upper Section: Category / Group-Wise Column Chart */}
+                {apvShowChart && (
+                    <div className="pa2-apv-chart-card">
+                        <div className="pa2-apv-chart-head">
+                            <div className="pa2-apv-chart-title">
+                                <BarChart2 size={15} style={{ color: apvMode === "raw" ? "#0284c7" : "#7c3aed" }} />
+                                <span>
+                                    {apvMode === "raw"
+                                        ? `Category-Wise Monthly Purchase Value (Column Chart)`
+                                        : `Group-Wise Monthly Purchase Value (Column Chart)`}
+                                    <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "500", marginLeft: "6px" }}>
+                                        ({apvMode === "raw"
+                                            ? (apvRawCategories.length === 0
+                                                ? "All Categories"
+                                                : apvRawCategories.length === 1
+                                                    ? apvRawCategories[0]
+                                                    : `${apvRawCategories.length} Categories`)
+                                            : (apvStoreGroups.length === 0
+                                                ? "All Groups"
+                                                : apvStoreGroups.length === 1
+                                                    ? apvStoreGroups[0]
+                                                    : `${apvStoreGroups.length} Groups`)})
+                                    </span>
+                                </span>
+                            </div>
+                            <div className="pa2-apv-chart-legend-hint">
+                                {apvMode === "raw" ? (
+                                    RAW_CATEGORIES.filter(c => c.id !== "All" && (apvRawCategories.length === 0 || apvRawCategories.includes(c.id))).map(c => (
+                                        <span key={c.id} className="pa2-apv-legend-item" style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginLeft: "10px", fontSize: "0.71rem", color: "#475569", fontWeight: "600" }}>
+                                            <span className="pa2-apv-dot" style={{ background: c.color, width: "8px", height: "8px", borderRadius: "50%" }} />
+                                            {c.short}
+                                        </span>
+                                    ))
+                                ) : (
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "0.71rem", color: "#7c3aed", fontWeight: "600" }}>
+                                        <span className="pa2-apv-dot" style={{ background: "#7c3aed", width: "8px", height: "8px", borderRadius: "50%" }} />
+                                        {apvStoreGroups.length === 0 ? "All Store Groups" : `${apvStoreGroups.length} Groups`} (₹ Lakhs)
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        {poLoading ? (
+                            <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "200px" }} />
+                        ) : apvCategoryMonthlyData.labels.length === 0 ? (
+                            <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <PaNoData icon={<BarChart2 size={20} style={{ color: "#2d6de8" }} />} message="No data for selected period or filter" compact />
+                            </div>
+                        ) : (
+                            <div className="pa2-apv-chart-wrap" style={{ height: "240px" }}>
+                                <canvas ref={apvChartCanvasRef} />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Lower Section: Detailed Breakdown Table */}
+                <div className="pa2-apv-table-card">
+                    <div className="pa2-table-scroll" style={{ maxHeight: "420px", overflowY: "auto" }}>
+                        <table className="pa2-po-tbl pa2-apv-tbl">
+                            <colgroup>
+                                <col style={{ width: "45px" }} />
+                                <col style={{ width: "105px" }} />
+                                <col style={{ width: "95px" }} />
+                                <col style={{ width: "115px" }} />
+                                <col style={{ width: "230px" }} />
+                                <col style={{ width: "85px" }} />
+                                <col style={{ width: "65px" }} />
+                                <col style={{ width: "115px" }} />
+                                <col style={{ width: "95px" }} />
+                                <col style={{ width: "110px" }} />
+                                <col style={{ width: "100px" }} />
+                                <col style={{ width: "95px" }} />
+                                <col style={{ width: "85px" }} />
+                                <col style={{ width: "110px" }} />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th className="pa2-po-th pa2-apv-col-idx">Sl.NO</th>
+                                    <th className="pa2-po-th pa2-apv-col-pono" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "poNumber", direction: prev.key === "poNumber" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>PoNO</span>
+                                            {apvSortConfig.key === "poNumber" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-podate" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "poDate", direction: prev.key === "poDate" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>PODate</span>
+                                            {apvSortConfig.key === "poDate" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-partno" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "partNo", direction: prev.key === "partNo" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>Partno</span>
+                                            {apvSortConfig.key === "partNo" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-desc" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "description", direction: prev.key === "description" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>Description</span>
+                                            {apvSortConfig.key === "description" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-qty" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "poQty", direction: prev.key === "poQty" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
+                                            <span>PO Qty</span>
+                                            {apvSortConfig.key === "poQty" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-uom">Uom</th>
+                                    <th className="pa2-po-th pa2-apv-col-cat" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "category", direction: prev.key === "category" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>Category</span>
+                                            {apvSortConfig.key === "category" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-rate" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "poRate", direction: prev.key === "poRate" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
+                                            <span>Po Rate</span>
+                                            {apvSortConfig.key === "poRate" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-amt" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "amt", direction: prev.key === "amt" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
+                                            <span>Amt (₹)</span>
+                                            {apvSortConfig.key === "amt" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-grnno" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "grnNo", direction: prev.key === "grnNo" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>GRN NO</span>
+                                            {apvSortConfig.key === "grnNo" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-grndate" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "grnDate", direction: prev.key === "grnDate" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort">
+                                            <span>GRn Date</span>
+                                            {apvSortConfig.key === "grnDate" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-grnqty" style={{ cursor: "pointer" }} onClick={() => setApvSortConfig(prev => ({ key: "grnQty", direction: prev.key === "grnQty" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
+                                            <span>Grn Qty</span>
+                                            {apvSortConfig.key === "grnQty" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                    <th className="pa2-po-th pa2-apv-col-avgval" style={{ cursor: "pointer", background: "rgba(37, 99, 235, 0.06)" }} onClick={() => setApvSortConfig(prev => ({ key: "avgValue", direction: prev.key === "avgValue" && prev.direction === "asc" ? "desc" : "asc" }))}>
+                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
+                                            <span style={{ color: "#2563eb", fontWeight: "750" }}>Avg Value (₹)</span>
+                                            {apvSortConfig.key === "avgValue" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {poLoading ? (
+                                    Array.from({ length: 5 }).map((_, idx) => (
+                                        <tr key={idx} className="pa2-po-tr pa2-pulse-loader">
+                                            {Array.from({ length: 14 }).map((__, tdIdx) => (
+                                                <td key={tdIdx} className="pa2-po-td">
+                                                    <div className="pa2-skeleton pa2-shimmer" style={{ width: tdIdx === 0 ? "15px" : "50px", height: "12px" }} />
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))
+                                ) : filteredApvTableRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={14} className="pa2-nodata-td-wrap">
+                                            <PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No PO records found matching criteria" compact />
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    pagedApvTableRows.map((row, idx) => {
+                                        const globalIdx = apvPageSize === "All" ? idx + 1 : (apvPage - 1) * Number(apvPageSize) + idx + 1;
+                                        const hasGrn = row.grnNo && row.grnNo !== "–" && row.grnNo !== "-";
+
+                                        return (
+                                            <tr key={row.id} className="pa2-po-tr">
+                                                <td className="pa2-po-td pa2-apv-col-idx pa2-po-dash">{globalIdx}</td>
+                                                <td className="pa2-po-td pa2-apv-col-pono">
+                                                    <span className="pa2-apv-pono-text">{row.poNumber}</span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-podate" style={{ color: "#475569", fontSize: "0.72rem" }}>
+                                                    {row.poDate}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-partno">
+                                                    <span className="pa2-apv-code-badge">{row.partNo}</span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-desc pa2-po-material" title={row.description}>
+                                                    {row.description}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "650", color: "#1e293b" }}>
+                                                    {row.poQtyStr}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-uom" style={{ fontWeight: "700", color: "#64748b", fontSize: "0.72rem" }}>
+                                                    {row.uom}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-cat">
+                                                    <span className={`pa2-apv-mat-subtag ${apvMode === "raw" ? (row.category.includes("Cast") ? "nos" : row.category.includes("KGS") ? "kgs" : row.category.includes("Mtrs") ? "mtrs" : "bout") : "store"}`}>
+                                                        <span className="pa2-apv-mat-subtag-dot" />
+                                                        {row.category}
+                                                    </span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-rate" style={{ fontWeight: "650", color: "#1e293b" }}>
+                                                    ₹{row.poRate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-amt pa2-po-value" style={{ fontWeight: "750" }}>
+                                                    ₹{row.amt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-grnno">
+                                                    {hasGrn ? (
+                                                        <span className="pa2-apv-grn-badge done">{row.grnNo}</span>
+                                                    ) : (
+                                                        <span className="pa2-apv-grn-badge pending">Pending</span>
+                                                    )}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-grndate" style={{ color: "#64748b", fontSize: "0.72rem" }}>
+                                                    {row.grnDate}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "650", color: hasGrn ? "#059669" : "#94a3b8" }}>
+                                                    {row.grnQty !== null && row.grnQty !== undefined && !isNaN(row.grnQty) ? Number(row.grnQty).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "–"}
+                                                </td>
+                                                <td className="pa2-po-td pa2-apv-col-avgval" style={{ fontWeight: "850", color: "#2563eb", background: "rgba(37, 99, 235, 0.03)" }}>
+                                                    ₹{row.avgValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                            <tfoot>
+                                <tr className="pa2-po-tr-total" style={{ background: "#f8fafc", borderTop: "2px solid #cbd5e1" }}>
+                                    <td className="pa2-po-td pa2-apv-col-idx pa2-apv-col-pono" colSpan={5} style={{ fontWeight: "800", color: "#1e293b", paddingLeft: "12px" }}>
+                                        Total Summary ({filteredApvTableRows.length} Records)
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "800", color: "#1e293b" }}>
+                                        {filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-uom" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
+                                    <td className="pa2-po-td pa2-apv-col-cat" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
+                                    <td className="pa2-po-td pa2-apv-col-rate" style={{ textAlign: "right", color: "#475569", fontWeight: "750" }}>
+                                        {(() => {
+                                            const totAmt = filteredApvTableRows.reduce((acc, r) => acc + (r.amt || 0), 0);
+                                            const totQty = filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0);
+                                            const avg = totQty > 0 ? totAmt / totQty : 0;
+                                            return `₹${avg.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                        })()}
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-amt pa2-po-value" style={{ fontWeight: "800", color: "#2563eb" }}>
+                                        ₹{filteredApvTableRows.reduce((acc, r) => acc + (r.amt || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-grnno" style={{ fontWeight: "750", color: "#059669", textAlign: "center" }}>
+                                        {filteredApvTableRows.filter(r => r.grnNo && r.grnNo !== "–" && r.grnNo !== "-").length} GRNs
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-grndate" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
+                                    <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "800", color: "#059669" }}>
+                                        {filteredApvTableRows.reduce((acc, r) => acc + (Number(r.grnQty) || 0), 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="pa2-po-td pa2-apv-col-avgval" style={{ fontWeight: "850", color: "#2563eb", background: "rgba(37, 99, 235, 0.05)" }}>
+                                        {(() => {
+                                            const totAmt = filteredApvTableRows.reduce((acc, r) => acc + (r.amt || 0), 0);
+                                            const totQty = filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0);
+                                            const avg = totQty > 0 ? totAmt / totQty : 0;
+                                            return `₹${avg.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                        })()}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    {/* Pagination Bar */}
+                    <div className="pa2-fs-pagination-bar" style={{ padding: "8px 16px", background: "#f8fafc", borderTop: "1px solid #e2e8f0" }}>
+                        <div className="pa2-fs-page-info">
+                            Showing{" "}
+                            <b>{filteredApvTableRows.length === 0 ? 0 : (apvPageSize === "All" ? 1 : (apvPage - 1) * Number(apvPageSize) + 1)}</b>{" "}
+                            to{" "}
+                            <b>{apvPageSize === "All" ? filteredApvTableRows.length : Math.min(apvPage * Number(apvPageSize), filteredApvTableRows.length)}</b>{" "}
+                            of <b>{filteredApvTableRows.length}</b> Records
+                        </div>
+                        <div className="pa2-fs-pagesize-selector">
+                            <span className="pa2-fs-pagesize-label">Show:</span>
+                            {[10, 25, 50, 100, "All"].map(sz => (
+                                <button
+                                    key={sz}
+                                    type="button"
+                                    className={`pa2-fs-pagesize-btn ${apvPageSize === sz ? "active" : ""}`}
+                                    onClick={() => { setApvPageSize(sz); setApvPage(1); }}
+                                >
+                                    {sz}
+                                </button>
+                            ))}
+                        </div>
+                        {apvPageSize !== "All" && totalApvPages > 1 && (
+                            <div className="pa2-fs-page-nav">
+                                <button
+                                    type="button"
+                                    className="pa2-fs-nav-btn"
+                                    disabled={apvPage <= 1}
+                                    onClick={() => setApvPage(prev => Math.max(1, prev - 1))}
+                                    title="Previous Page"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="pa2-fs-page-indicator">
+                                    Page <b>{apvPage}</b> of <b>{totalApvPages}</b>
+                                </span>
+                                <button
+                                    type="button"
+                                    className="pa2-fs-nav-btn"
+                                    disabled={apvPage >= totalApvPages}
+                                    onClick={() => setApvPage(prev => Math.min(totalApvPages, prev + 1))}
+                                    title="Next Page"
+                                >
+                                    <ChevronRight size={14} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Advanced Purchase Analytics (Part-wise History, Rate Progression & Buying Intelligence) ── */}
+            <AdvancedPurchaseAnalyticsSection
+                poRows={filteredPoRows && filteredPoRows.length > 0 ? filteredPoRows : poRows}
+                priceTrendRows={priceTrendRows}
+                loading={poLoading}
+            />
+
             {/* ── Pipeline + Supplier Ranking ── */}
             <div className="pa2-two-col pa2-animate pa2-delay-3">
 
@@ -3603,7 +7170,7 @@ export default function PurchaseAnalysis() {
                                 const rankColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
                                 const ranking = chartsData?.supplier_ranking ?? [];
                                 if (!ranking.length) {
-                                    return <PaNoData icon={<DollarSign size={16} style={{ color: "#10b981" }} />} message="No spend records for this period" compact />;
+                                    return <PaNoData icon={<IndianRupee size={16} style={{ color: "#10b981" }} />} message="No spend records for this period" compact />;
                                 }
                                 const maxPct = Math.max(...ranking.map(x => x.pct), 1);
                                 return ranking.map((s, i) => {
@@ -3847,6 +7414,7 @@ export default function PurchaseAnalysis() {
                                 {renderSortableTh("SL. NO.", "sno")}
                                 {renderSortableTh("PI NO", "pi_no")}
                                 {renderSortableTh("PI DATE", "pi_date")}
+                                {renderSortableTh("REQUESTED BY", "requested_by")}
                                 {renderSortableTh("PO NUMBER", "po_number")}
                                 {renderSortableTh("PO DATE", "po_date")}
                                 {renderSortableTh("PO TYPE", "po_type")}
@@ -3868,6 +7436,7 @@ export default function PurchaseAnalysis() {
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "30px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "85px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
                                         <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
@@ -3884,18 +7453,21 @@ export default function PurchaseAnalysis() {
                                 ))
                             )}
                             {!poLoading && sortedFilteredPoRows.length === 0 && (
-                                <tr><td colSpan={15} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
+                                <tr><td colSpan={16} className="pa2-nodata-td-wrap"><PaNoData icon={<ShoppingCart size={16} style={{ color: "#2d6de8" }} />} compact /></td></tr>
                             )}
                             {!poLoading && sortedFilteredPoRows.map((r, i) => (
                                 <tr key={i} className="pa2-po-tr">
                                     <td className="pa2-po-td" style={{ fontWeight: "600", color: "#64748b", width: "50px" }}>{i + 1}</td>
-                                    <td className="pa2-po-td" style={{ fontFamily: "monospace", fontWeight: "600", color: "#0284c7", whiteSpace: "nowrap" }}>
+                                    <td className={`pa2-po-td ${r.pi_no && r.pi_no !== "–" && r.pi_no !== "-" ? "pa2-po-link" : "pa2-po-dash"}`} style={{ whiteSpace: "nowrap" }}>
                                         {r.pi_no || r.indent_no || r.ind_no || "–"}
                                     </td>
                                     <td className="pa2-po-td pa2-po-date" style={{ whiteSpace: "nowrap" }}>
                                         {r.pi_date || r.indent_date || r.ind_date
                                             ? (r.pi_date || r.indent_date || r.ind_date).split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `)
                                             : <span className="pa2-po-dash">–</span>}
+                                    </td>
+                                    <td className="pa2-po-td pa2-po-req-by" style={{ fontWeight: "600", color: "#475569", whiteSpace: "nowrap" }}>
+                                        {r.requested_by || r.req_by || r.prepared_by || r.indent_by || r.created_by || "–"}
                                     </td>
                                     <td className={`pa2-po-td ${r.po_number && r.po_number !== "–" && r.po_number !== "-" ? "pa2-po-link" : "pa2-po-dash"}`}>
                                         {r.po_number && r.po_number !== "–" && r.po_number !== "-" ? r.po_number : "–"}
@@ -3945,6 +7517,7 @@ export default function PurchaseAnalysis() {
                         {!poLoading && sortedFilteredPoRows.length > 0 && (
                             <tfoot>
                                 <tr className="pa2-po-total-tr">
+                                    <td className="pa2-po-td"></td>
                                     <td className="pa2-po-td"></td>
                                     <td className="pa2-po-td"></td>
                                     <td className="pa2-po-td"></td>
@@ -4126,19 +7699,52 @@ export default function PurchaseAnalysis() {
                 </div>
             </div>
 
-            {/* ── PO Fulfillment Schedule Section (Graph on Top & Ledger Table on Bottom) ── */}
+            {/* ── PO Fulfillment Schedule Section (Dual Mode: Standard vs Futuristic In-Card Switcher) ── */}
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium pa2-fs-section" style={{ marginTop: "1.4rem" }}>
-                {/* 1. Section Header & Quick Filter Pills */}
-                <div className="pa2-table-header pa2-fs-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", paddingRight: "1rem" }}>
-                    <SectionHeader
-                        icon={<CalendarRange size={17} style={{ color: "#2563eb" }} />}
-                        title="PO Fulfillment Schedule"
-                        // badge="Delivery Tracking & Balance Analytics"
-                        badgeCls="pa2-badge-blue"
-                    />
+                {/* 1. Fixed Top Header Bar: Left Mode Switcher Tabs & Right Summary Badge */}
+                <div className="pa2-fs-header-row">
+                    {/* Left: Section Tab Buttons */}
+                    <div className="pa2-fs-main-tabs">
+                        <button
+                            type="button"
+                            className={`pa2-fs-main-tab-btn ${fsActiveTab === "standard" ? "active" : ""}`}
+                            onClick={() => { setFsActiveTab("standard"); setFsPage(1); }}
+                        >
+                            <CalendarRange size={14} />
+                            <span className="pa2-fs-tab-label-full">PO Fulfillment Schedule</span>
+                            <span className="pa2-fs-tab-label-short">PO Fulfillment</span>
+                            <span className="pa2-fs-tab-count-chip">{filteredFsRows.length} Lots</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`pa2-fs-main-tab-btn pa2-fs-main-tab-btn--futuristic ${fsActiveTab === "futuristic" ? "active" : ""}`}
+                            onClick={() => { setFsActiveTab("futuristic"); setFuturisticPage(1); }}
+                        >
+                            <Sparkles size={14} className="pa2-fs-futuristic-sparkle" />
+                            <span className="pa2-fs-tab-label-full">Futuristic Expected Schedule</span>
+                            <span className="pa2-fs-tab-label-short">Futuristic Schedule</span>
+                            <span className="pa2-fs-tab-count-chip pa2-fs-tab-count-chip--purple">{sortedFuturisticRows.length} Items</span>
+                        </button>
+                    </div>
 
-                    <div className="pa2-tag-row" style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                        {/* Status Quick Pill Filters */}
+                    {/* Right: Mode Badge on Desktop */}
+                    <div className="pa2-fs-header-badge-desktop">
+                        {fsActiveTab === "standard" ? (
+                            <span className="pa2-badge pa2-badge-blue" style={{ height: "32px", display: "inline-flex", alignItems: "center", borderRadius: "8px", padding: "0 12px", fontSize: "0.74rem", fontWeight: "750" }}>
+                                {filteredFsRows.length} LOTS
+                            </span>
+                        ) : (
+                            <span className="pa2-badge pa2-badge-purple" style={{ height: "32px", display: "inline-flex", alignItems: "center", borderRadius: "8px", padding: "0 12px", fontSize: "0.74rem", fontWeight: "750", background: "rgba(124, 58, 237, 0.1)", color: "#7c3aed", border: "1px solid rgba(124, 58, 237, 0.25)" }}>
+                                {sortedFuturisticRows.length} ITEMS
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* 2. Dedicated Filter Toolbar Bar */}
+                {fsActiveTab === "standard" ? (
+                    <div className="pa2-fs-toolbar">
+                        {/* Left: Status Quick Pill Filters */}
                         <div className="pa2-fs-status-pills">
                             {[
                                 { id: "All", label: "All Schedules", count: fsStatusCounts.all },
@@ -4151,503 +7757,1007 @@ export default function PurchaseAnalysis() {
                                     key={pill.id}
                                     type="button"
                                     className={`pa2-fs-pill-btn ${fsStatusFilter === pill.id ? "active " + (pill.color ? "pa2-pill--" + pill.color : "pa2-pill--default") : ""}`}
-                                    onClick={() => setFsStatusFilter(pill.id)}
+                                    onClick={() => { setFsStatusFilter(pill.id); setFsPage(1); }}
                                 >
-                                    {pill.label}
+                                    <span>{pill.label}</span>
                                     <span className="pa2-fs-pill-count">{pill.count}</span>
                                 </button>
                             ))}
                         </div>
 
-                        {/* Supplier Name Filter (Multiple Selection) */}
-                        <div className="pa2-po-dept-select-wrap" ref={fsSupplierRef}>
-                            <button
-                                type="button"
-                                className={`pa2-po-dept-trigger${fsSupplierDropdownOpen ? " active" : ""}${fsSupplierFilter.length > 0 ? " has-filter" : ""}`}
-                                onClick={() => setFsSupplierDropdownOpen(!fsSupplierDropdownOpen)}
-                                title="Filter by Supplier"
-                            >
-                                <Building2 size={13} className="pa2-dept-trigger-icon" />
-                                <span className="pa2-po-dept-trigger-label">
-                                    {fsSupplierFilter.length === 0
-                                        ? "All Suppliers"
-                                        : fsSupplierFilter.length === 1
-                                            ? fsSupplierFilter[0]
-                                            : `${fsSupplierFilter.length} Suppliers`}
-                                </span>
-                                {fsSupplierFilter.length > 0 && (
-                                    <span className="pa2-dept-count-badge">{fsSupplierFilter.length}</span>
-                                )}
-                                <ChevronDown size={12} className="pa2-dept-arrow-icon" />
-                            </button>
-
-                            {fsSupplierDropdownOpen && (
-                                <div className="pa2-dept-dropdown-panel" style={{ minWidth: "260px" }}>
-                                    <div className="pa2-dept-search-row">
-                                        <Search size={12} className="pa2-dept-search-icon" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search suppliers..."
-                                            className="pa2-dept-search-input"
-                                            value={fsSupplierSearchQuery}
-                                            onChange={(e) => setFsSupplierSearchQuery(e.target.value)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            autoFocus
-                                        />
-                                        {fsSupplierSearchQuery && (
-                                            <button
-                                                type="button"
-                                                className="pa2-dept-search-clear"
-                                                onClick={(e) => { e.stopPropagation(); setFsSupplierSearchQuery(""); }}
-                                            >
-                                                <X size={11} />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="pa2-dept-list-scroll" style={{ maxHeight: "220px" }}>
-                                        {/* All Suppliers Option */}
-                                        <div
-                                            className={`pa2-dept-item${fsSupplierFilter.length === 0 ? " is-active" : ""}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setFsSupplierFilter([]);
-                                            }}
-                                        >
-                                            <div className={`pa2-dept-check-box${fsSupplierFilter.length === 0 ? " checked" : ""}`}>
-                                                {fsSupplierFilter.length === 0 && <Check size={11} strokeWidth={3} />}
-                                            </div>
-                                            <span className="pa2-dept-item-title">All Suppliers</span>
-                                            <span className="pa2-dept-item-meta">{uniqueFsSuppliers.length}</span>
-                                        </div>
-
-                                        <div className="pa2-dept-divider" />
-
-                                        {filteredDropdownFsSuppliers.length === 0 ? (
-                                            <div className="pa2-dept-empty">
-                                                No suppliers found
-                                            </div>
-                                        ) : (
-                                            filteredDropdownFsSuppliers.map((sup) => {
-                                                const isSelected = fsSupplierFilter.includes(sup);
-                                                return (
-                                                    <div
-                                                        key={sup}
-                                                        className={`pa2-dept-item${isSelected ? " is-active" : ""}`}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleFsSupplierToggle(sup);
-                                                        }}
-                                                    >
-                                                        <div className={`pa2-dept-check-box${isSelected ? " checked" : ""}`}>
-                                                            {isSelected && <Check size={11} strokeWidth={3} />}
-                                                        </div>
-                                                        <span className="pa2-dept-item-title" title={sup}>{sup}</span>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-
+                        {/* Right: Dropdown Filters & Search */}
+                        <div className="pa2-fs-toolbar-right">
+                            <div className="pa2-fs-filters-pair">
+                                {/* Supplier Name Filter (Multiple Selection) */}
+                                <div className="pa2-po-dept-select-wrap" ref={fsSupplierRef}>
+                                <button
+                                    type="button"
+                                    className={`pa2-po-dept-trigger${fsSupplierDropdownOpen ? " active" : ""}${fsSupplierFilter.length > 0 ? " has-filter" : ""}`}
+                                    onClick={() => setFsSupplierDropdownOpen(!fsSupplierDropdownOpen)}
+                                    title="Filter by Supplier"
+                                >
+                                    <Building2 size={13} className="pa2-dept-trigger-icon" />
+                                    <span className="pa2-po-dept-trigger-label">
+                                        {fsSupplierFilter.length === 0
+                                            ? "All Suppliers"
+                                            : fsSupplierFilter.length === 1
+                                                ? fsSupplierFilter[0]
+                                                : `${fsSupplierFilter.length} Suppliers`}
+                                    </span>
                                     {fsSupplierFilter.length > 0 && (
-                                        <div className="pa2-dept-footer">
-                                            <button
-                                                type="button"
-                                                className="pa2-dept-reset-btn"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setFsSupplierFilter([]);
-                                                }}
-                                            >
-                                                Reset to All Suppliers
-                                            </button>
-                                        </div>
+                                        <span className="pa2-dept-count-badge">{fsSupplierFilter.length}</span>
                                     )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* PartNo Filter (Multiple Selection) */}
-                        <div className="pa2-po-dept-select-wrap" ref={fsPartRef}>
-                            <button
-                                type="button"
-                                className={`pa2-po-dept-trigger${fsPartDropdownOpen ? " active" : ""}${fsPartFilter.length > 0 ? " has-filter" : ""}`}
-                                onClick={() => setFsPartDropdownOpen(!fsPartDropdownOpen)}
-                                title="Filter by Part No"
-                            >
-                                <Package size={13} className="pa2-dept-trigger-icon" />
-                                <span className="pa2-po-dept-trigger-label">
-                                    {fsPartFilter.length === 0
-                                        ? "All Parts"
-                                        : fsPartFilter.length === 1
-                                            ? fsPartFilter[0]
-                                            : `${fsPartFilter.length} Parts`}
-                                </span>
-                                {fsPartFilter.length > 0 && (
-                                    <span className="pa2-dept-count-badge">{fsPartFilter.length}</span>
-                                )}
-                                <ChevronDown size={12} className="pa2-dept-arrow-icon" />
-                            </button>
-
-                            {fsPartDropdownOpen && (
-                                <div className="pa2-dept-dropdown-panel" style={{ minWidth: "260px" }}>
-                                    <div className="pa2-dept-search-row">
-                                        <Search size={12} className="pa2-dept-search-icon" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search part no..."
-                                            className="pa2-dept-search-input"
-                                            value={fsPartSearchQuery}
-                                            onChange={(e) => setFsPartSearchQuery(e.target.value)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            autoFocus
-                                        />
-                                        {fsPartSearchQuery && (
-                                            <button
-                                                type="button"
-                                                className="pa2-dept-search-clear"
-                                                onClick={(e) => { e.stopPropagation(); setFsPartSearchQuery(""); }}
-                                            >
-                                                <X size={11} />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="pa2-dept-list-scroll" style={{ maxHeight: "220px" }}>
-                                        {/* All Parts Option */}
-                                        <div
-                                            className={`pa2-dept-item${fsPartFilter.length === 0 ? " is-active" : ""}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setFsPartFilter([]);
-                                            }}
-                                        >
-                                            <div className={`pa2-dept-check-box${fsPartFilter.length === 0 ? " checked" : ""}`}>
-                                                {fsPartFilter.length === 0 && <Check size={11} strokeWidth={3} />}
-                                            </div>
-                                            <span className="pa2-dept-item-title">All Parts</span>
-                                            <span className="pa2-dept-item-meta">{uniqueFsParts.length}</span>
-                                        </div>
-
-                                        <div className="pa2-dept-divider" />
-
-                                        {filteredDropdownFsParts.length === 0 ? (
-                                            <div className="pa2-dept-empty">
-                                                No parts found
-                                            </div>
-                                        ) : (
-                                            filteredDropdownFsParts.map((part) => {
-                                                const isSelected = fsPartFilter.includes(part);
-                                                return (
-                                                    <div
-                                                        key={part}
-                                                        className={`pa2-dept-item${isSelected ? " is-active" : ""}`}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleFsPartToggle(part);
-                                                        }}
-                                                    >
-                                                        <div className={`pa2-dept-check-box${isSelected ? " checked" : ""}`}>
-                                                            {isSelected && <Check size={11} strokeWidth={3} />}
-                                                        </div>
-                                                        <span className="pa2-dept-item-title" style={{ fontFamily: "monospace", fontSize: "0.74rem" }} title={part}>{part}</span>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-
-                                    {fsPartFilter.length > 0 && (
-                                        <div className="pa2-dept-footer">
-                                            <button
-                                                type="button"
-                                                className="pa2-dept-reset-btn"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setFsPartFilter([]);
-                                                }}
-                                            >
-                                                Reset to All Parts
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Search Input */}
-                        <div className="pa2-premium-search-box" style={{ width: "210px" }}>
-                            <Search className="pa2-premium-search-icon" size={13} />
-                            <input
-                                type="text"
-                                className="pa2-premium-search-input"
-                                placeholder="Search schedule..."
-                                value={fsSearchQuery}
-                                onChange={(e) => setFsSearchQuery(e.target.value)}
-                            />
-                            {fsSearchQuery && (
-                                <button
-                                    type="button"
-                                    className="pa2-premium-search-clear"
-                                    onClick={() => setFsSearchQuery("")}
-                                >
-                                    <X size={10} />
+                                    <ChevronDown size={12} className="pa2-dept-arrow-icon" />
                                 </button>
-                            )}
-                        </div>
 
-                        <span className="pa2-badge pa2-badge-blue" style={{ height: "34px", display: "inline-flex", alignItems: "center", borderRadius: "10px", padding: "0 10px", fontSize: "0.74rem" }}>
-                            {filteredFsRows.length} lots
-                        </span>
-                    </div>
-                </div>
-
-                {/* 2. Top Analytics: 4 Summary Metric Cards & Graph */}
-                <div className="pa2-fs-top-grid">
-                    {/* 4 Mini KPI Cards */}
-                    <div className="pa2-fs-kpi-row">
-                        <div className="pa2-fs-kpi-card">
-                            <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}>
-                                <CalendarCheck2 size={16} />
-                            </div>
-                            <div className="pa2-fs-kpi-body">
-                                <span className="pa2-fs-kpi-title">Total Scheduled</span>
-                                <span className="pa2-fs-kpi-value" style={{ color: "#1e293b" }}>
-                                    {fsTotals.totalSchdQty.toLocaleString("en-IN")} <span style={{ fontSize: "0.68rem", fontWeight: "600", color: "#64748b" }}>Units</span>
-                                </span>
-                                <span className="pa2-fs-kpi-sub">{fsTotals.totalLots} Delivery Lots</span>
-                            </div>
-                        </div>
-
-                        <div className="pa2-fs-kpi-card">
-                            <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}>
-                                <CheckCircle2 size={16} />
-                            </div>
-                            <div className="pa2-fs-kpi-body">
-                                <span className="pa2-fs-kpi-title">Received (GRN Done)</span>
-                                <span className="pa2-fs-kpi-value" style={{ color: "#059669" }}>
-                                    {fsTotals.totalGrnQty.toLocaleString("en-IN")} <span style={{ fontSize: "0.68rem", fontWeight: "600", color: "#059669" }}>({fsTotals.fulfillmentPct}%)</span>
-                                </span>
-                                <span className="pa2-fs-kpi-sub">{fsTotals.deliveredCount} Lots Complete</span>
-                            </div>
-                        </div>
-
-                        <div className="pa2-fs-kpi-card">
-                            <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(245, 158, 11, 0.1)", color: "#f59e0b" }}>
-                                <Clock size={16} />
-                            </div>
-                            <div className="pa2-fs-kpi-body">
-                                <span className="pa2-fs-kpi-title">Pending Balance</span>
-                                <span className="pa2-fs-kpi-value" style={{ color: "#d97706" }}>
-                                    {fsTotals.totalBalQty.toLocaleString("en-IN")} <span style={{ fontSize: "0.68rem", fontWeight: "600", color: "#64748b" }}>Units</span>
-                                </span>
-                                <span className="pa2-fs-kpi-sub">₹{(fsTotals.totalBalVal / 100000).toFixed(2)}L Value Pending</span>
-                            </div>
-                        </div>
-
-                        <div className="pa2-fs-kpi-card">
-                            <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(239, 68, 68, 0.1)", color: "#ef4444" }}>
-                                <ShieldAlert size={16} />
-                            </div>
-                            <div className="pa2-fs-kpi-body">
-                                <span className="pa2-fs-kpi-title">Critical Overdue</span>
-                                <span className="pa2-fs-kpi-value" style={{ color: "#dc2626" }}>
-                                    {fsTotals.overdueCount} <span style={{ fontSize: "0.68rem", fontWeight: "600", color: "#dc2626" }}>Lots</span>
-                                </span>
-                                <span className="pa2-fs-kpi-sub">&gt;30 Days Past Schedule</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Interactive Fulfillment Graph */}
-                    <div className="pa2-fs-chart-box">
-                        <div className="pa2-fs-chart-header">
-                            <div className="pa2-fs-chart-title">
-                                <span className="pa2-fs-chart-dot" />
-                                {fsChartType === "timeline" && "Month-wise PO Value vs Scheduled Value"}
-                                {fsChartType === "aging" && "Aging Risk Breakdown (Days Overdue)"}
-                                {fsChartType === "supplier" && "Top Supplier Delivery Compliance (%)"}
-                            </div>
-                            <div className="pa2-segmented-control pa2-fs-graph-toggle">
-                                <button
-                                    type="button"
-                                    className={`pa2-segment-btn${fsChartType === "timeline" ? " active" : ""}`}
-                                    onClick={() => setFsChartType("timeline")}
-                                >
-                                    Month-wise Value
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`pa2-segment-btn${fsChartType === "aging" ? " active" : ""}`}
-                                    onClick={() => setFsChartType("aging")}
-                                >
-                                    Aging Risk
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`pa2-segment-btn${fsChartType === "supplier" ? " active" : ""}`}
-                                    onClick={() => setFsChartType("supplier")}
-                                >
-                                    Supplier Compliance
-                                </button>
-                            </div>
-                        </div>
-                        <div className="pa2-fs-chart-wrapper" style={{ height: "220px", position: "relative" }}>
-                            <canvas ref={fsChartCanvasRef} />
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3. Bottom: Fulfillment Schedule Ledger Table */}
-                <div className="pa2-table-scroll pa2-fs-table-scroll" style={{ maxHeight: "420px", marginTop: "1rem" }}>
-                    <table className="pa2-po-tbl pa2-fs-tbl">
-                        <thead>
-                            <tr>
-                                {renderFsSortableTh("#", "sno")}
-                                {renderFsSortableTh("PO NO", "po_number")}
-                                {renderFsSortableTh("PO DATE", "po_date")}
-                                {renderFsSortableTh("SUPPLIER", "supplier")}
-                                {renderFsSortableTh("PARTNO - DESC", "part_no", false, true)}
-                                {renderFsSortableTh("PO QTY", "po_qty_num", true)}
-                                {renderFsSortableTh("SCHD DT", "schd_dt")}
-                                {renderFsSortableTh("SCHD QTY", "schd_qty_num", true)}
-                                {renderFsSortableTh("GRN QTY", "grn_qty_num", true)}
-                                {renderFsSortableTh("SCHD / PO BAL QTY", "bal_qty_num", true)}
-                                {renderFsSortableTh("SCHD / PO BAL VAL", "bal_val", true)}
-                                {renderFsSortableTh("AGE DAYS", "age_days", false)}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {fsLoading && (
-                                Array.from({ length: 6 }).map((_, i) => (
-                                    <tr key={i} className="pa2-po-tr">
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "24px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "160px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
-                                        <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
-                                    </tr>
-                                ))
-                            )}
-                            {!fsLoading && sortedFsRows.length === 0 && (
-                                <tr>
-                                    <td colSpan={12} className="pa2-nodata-td-wrap">
-                                        <PaNoData icon={<CalendarRange size={16} style={{ color: "#2563eb" }} />} compact message="No fulfillment schedules found" />
-                                    </td>
-                                </tr>
-                            )}
-                            {!fsLoading && sortedFsRows.map((r, i) => (
-                                    <tr key={r.id || i} className="pa2-po-tr">
-                                        <td className="pa2-po-td" style={{ fontWeight: "600", color: "#64748b", width: "42px" }}>{i + 1}</td>
-                                        <td className="pa2-po-td pa2-po-link" style={{ fontWeight: "700" }}>{r.po_number}</td>
-                                        <td className="pa2-po-td pa2-po-date">
-                                            {r.po_date ? r.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
-                                        </td>
-                                        <td className="pa2-po-td pa2-po-vendor pa2-fs-vendor" style={{ minWidth: "160px", maxWidth: "260px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" }}>{r.supplier}</td>
-                                        <td className="pa2-po-td pa2-po-material">
-                                            <span className="pa2-fs-part-badge">{r.part_no}</span>
-                                            <span className="pa2-fs-part-desc">{r.description}</span>
-                                        </td>
-                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>{r.po_qty}</td>
-                                        <td className="pa2-po-td pa2-fs-schd-dt">
-                                            <span className="pa2-fs-date-badge">
-                                                {r.schd_dt ? r.schd_dt.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
-                                            </span>
-                                        </td>
-                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#1e293b" }}>{r.schd_qty}</td>
-                                        <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#059669" }}>{r.grn_qty}</td>
-                                        <td className="pa2-po-td pa2-po-td--r">
-                                            <span className={`pa2-fs-bal-qty-badge ${r.bal_qty_num > 0 ? "has-bal" : "zero-bal"}`}>
-                                                {r.bal_qty}
-                                            </span>
-                                        </td>
-                                        <td className="pa2-po-td pa2-po-td--r pa2-po-value" style={{ color: r.bal_val > 0 ? "#1d4ed8" : "#94a3b8" }}>
-                                            ₹{Number(r.bal_val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="pa2-po-td" style={{ textAlign: "center" }}>
-                                            {r.status === "Delivered" ? (
-                                                <span className="pa2-age-pill pa2-age-pill--green">
-                                                    <CheckCircle2 size={11} /> Delivered
-                                                </span>
-                                            ) : r.status === "Overdue" ? (
-                                                <span className="pa2-age-pill pa2-age-pill--red">
-                                                    <AlertCircle size={11} /> {r.age_days}d · Overdue
-                                                </span>
-                                            ) : r.status === "Due Soon" ? (
-                                                <span className="pa2-age-pill pa2-age-pill--amber">
-                                                    <Clock size={11} /> {r.age_days}d · Due Soon
-                                                </span>
-                                            ) : (
-                                                <span className="pa2-age-pill pa2-age-pill--blue">
-                                                    <CheckCircle2 size={11} /> {r.age_days}d · On Track
-                                                </span>
+                                {fsSupplierDropdownOpen && (
+                                    <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
+                                        <div className="pa2-po-dept-search-box">
+                                            <Search size={12} className="pa2-po-dept-search-icon" />
+                                            <input
+                                                type="text"
+                                                className="pa2-po-dept-search-input"
+                                                placeholder="Search supplier..."
+                                                value={fsSupplierSearchQuery}
+                                                onChange={e => setFsSupplierSearchQuery(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {fsSupplierSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-search-clear"
+                                                    onClick={() => setFsSupplierSearchQuery("")}
+                                                >
+                                                    <X size={10} />
+                                                </button>
                                             )}
-                                        </td>
-                                    </tr>
-                                ))}
-                        </tbody>
-                        {sortedFsRows.length > 0 && (
-                            <tfoot>
-                                <tr className="pa2-fs-summary-tr">
-                                    <td colSpan={5} style={{ fontWeight: "700", textAlign: "right", color: "#1e293b", paddingRight: "1rem" }}>
-                                        Total Schedule Summary:
-                                    </td>
-                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
-                                        {fsTotals.totalPoQty.toLocaleString("en-IN")}
-                                    </td>
-                                    <td></td>
-                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
-                                        {fsTotals.totalSchdQty.toLocaleString("en-IN")}
-                                    </td>
-                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#059669" }}>
-                                        {fsTotals.totalGrnQty.toLocaleString("en-IN")}
-                                    </td>
-                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#d97706" }}>
-                                        {fsTotals.totalBalQty.toLocaleString("en-IN")}
-                                    </td>
-                                    <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#2563eb" }}>
-                                        ₹{Number(fsTotals.totalBalVal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td style={{ textAlign: "center", fontWeight: "700", color: "#059669" }}>
-                                        {fsTotals.fulfillmentPct}% Fulfilled
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        )}
-                    </table>
-                </div>
+                                        </div>
+
+                                        <div className="pa2-po-dept-actions">
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="pa2-po-dept-list">
+                                            {filteredDropdownFsSuppliers.length === 0 ? (
+                                                <div className="pa2-po-dept-empty">No supplier found</div>
+                                            ) : (
+                                                filteredDropdownFsSuppliers.map(sup => {
+                                                    const isSelected = fsSupplierFilter.includes(sup);
+                                                    return (
+                                                        <div
+                                                            key={sup}
+                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                            onClick={() => handleFsSupplierToggle(sup)}
+                                                        >
+                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                {isSelected && <Check size={10} />}
+                                                            </span>
+                                                            <span className="pa2-po-dept-name" title={sup}>{sup}</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Part No Filter (Multiple Selection) */}
+                            <div className="pa2-po-dept-select-wrap" ref={fsPartRef}>
+                                <button
+                                    type="button"
+                                    className={`pa2-po-dept-trigger${fsPartDropdownOpen ? " active" : ""}${fsPartFilter.length > 0 ? " has-filter" : ""}`}
+                                    onClick={() => setFsPartDropdownOpen(!fsPartDropdownOpen)}
+                                    title="Filter by Part No"
+                                >
+                                    <Package size={13} className="pa2-dept-trigger-icon" />
+                                    <span className="pa2-po-dept-trigger-label">
+                                        {fsPartFilter.length === 0
+                                            ? "All Parts"
+                                            : fsPartFilter.length === 1
+                                                ? fsPartFilter[0]
+                                                : `${fsPartFilter.length} Parts`}
+                                    </span>
+                                    {fsPartFilter.length > 0 && (
+                                        <span className="pa2-dept-count-badge">{fsPartFilter.length}</span>
+                                    )}
+                                    <ChevronDown size={12} className="pa2-dept-arrow-icon" />
+                                </button>
+
+                                {fsPartDropdownOpen && (
+                                    <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
+                                        <div className="pa2-po-dept-search-box">
+                                            <Search size={12} className="pa2-po-dept-search-icon" />
+                                            <input
+                                                type="text"
+                                                className="pa2-po-dept-search-input"
+                                                placeholder="Search part no..."
+                                                value={fsPartSearchQuery}
+                                                onChange={e => setFsPartSearchQuery(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {fsPartSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-search-clear"
+                                                    onClick={() => setFsPartSearchQuery("")}
+                                                >
+                                                    <X size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="pa2-po-dept-actions">
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFsPartFilter([]); setFsPage(1); }}
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFsPartFilter([]); setFsPage(1); }}
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="pa2-po-dept-list">
+                                            {filteredDropdownFsParts.length === 0 ? (
+                                                <div className="pa2-po-dept-empty">No part found</div>
+                                            ) : (
+                                                filteredDropdownFsParts.map(part => {
+                                                    const isSelected = fsPartFilter.includes(part);
+                                                    return (
+                                                        <div
+                                                            key={part}
+                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                            onClick={() => handleFsPartToggle(part)}
+                                                        >
+                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                {isSelected && <Check size={10} />}
+                                                            </span>
+                                                            <span className="pa2-po-dept-name" title={part}>{part}</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            </div>
+
+                            {/* Search Box */}
+                            <div className="pa2-fs-search-box">
+                                <Search size={13} className="pa2-fs-search-icon" />
+                                <input
+                                    type="text"
+                                    className="pa2-fs-search-input"
+                                    placeholder="Search schedule..."
+                                    value={fsSearchQuery}
+                                    onChange={e => { setFsSearchQuery(e.target.value); setFsPage(1); }}
+                                />
+                                {fsSearchQuery && (
+                                    <button
+                                        type="button"
+                                        className="pa2-fs-search-clear"
+                                        onClick={() => { setFsSearchQuery(""); setFsPage(1); }}
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="pa2-fs-toolbar pa2-futuristic-toolbar">
+                        {/* Left: Projections Horizon */}
+                        <div className="pa2-futuristic-horizon-group">
+                            <span className="pa2-futuristic-horizon-lbl">
+                                <TrendingUp size={13} style={{ color: "#7c3aed" }} /> Projections:
+                            </span>
+                            <div className="pa2-segmented-control pa2-futuristic-segmented">
+                                <button
+                                    type="button"
+                                    className={`pa2-segment-btn ${futuristicProjectionHorizon === "3M" ? "active" : ""}`}
+                                    onClick={() => { setFuturisticProjectionHorizon("3M"); setFuturisticPage(1); }}
+                                >
+                                    3month
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`pa2-segment-btn ${futuristicProjectionHorizon === "6M" ? "active" : ""}`}
+                                    onClick={() => { setFuturisticProjectionHorizon("6M"); setFuturisticPage(1); }}
+                                >
+                                    6month
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`pa2-segment-btn ${futuristicProjectionHorizon === "1Y" ? "active" : ""}`}
+                                    onClick={() => { setFuturisticProjectionHorizon("1Y"); setFuturisticPage(1); }}
+                                >
+                                    1year
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Right: Dropdowns & Search */}
+                        <div className="pa2-fs-toolbar-right">
+                            <div className="pa2-fs-filters-pair">
+                                {/* Supplier Filter Dropdown */}
+                                <div className="pa2-po-dept-select-wrap pa2-futuristic-select-wrap" ref={futuristicSupplierRef}>
+                                <button
+                                    type="button"
+                                    className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicSupplierDropdownOpen ? " active" : ""}${futuristicSupplierFilter.length > 0 ? " has-filter" : ""}`}
+                                    onClick={() => setFuturisticSupplierDropdownOpen(!futuristicSupplierDropdownOpen)}
+                                    title="Filter by Supplier"
+                                >
+                                    <Building2 size={13} className="pa2-dept-trigger-icon" />
+                                    <span className="pa2-po-dept-trigger-label">
+                                        {futuristicSupplierFilter.length === 0
+                                            ? "All Suppliers"
+                                            : futuristicSupplierFilter.length === 1
+                                                ? futuristicSupplierFilter[0]
+                                                : `${futuristicSupplierFilter.length} Suppliers`}
+                                    </span>
+                                    {futuristicSupplierFilter.length > 0 && (
+                                        <span className="pa2-dept-count-badge">{futuristicSupplierFilter.length}</span>
+                                    )}
+                                    <ChevronDown size={12} className={`pa2-dept-chevron${futuristicSupplierDropdownOpen ? " open" : ""}`} />
+                                </button>
+
+                                {futuristicSupplierDropdownOpen && (
+                                    <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
+                                        <div className="pa2-po-dept-search-box">
+                                            <Search size={12} className="pa2-po-dept-search-icon" />
+                                            <input
+                                                type="text"
+                                                className="pa2-po-dept-search-input"
+                                                placeholder="Search supplier..."
+                                                value={futuristicSupplierSearchQuery}
+                                                onChange={e => setFuturisticSupplierSearchQuery(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {futuristicSupplierSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-search-clear"
+                                                    onClick={() => setFuturisticSupplierSearchQuery("")}
+                                                >
+                                                    <X size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="pa2-po-dept-actions">
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="pa2-po-dept-list">
+                                            {filteredDropdownFuturisticSuppliers.length === 0 ? (
+                                                <div className="pa2-po-dept-empty">No supplier found</div>
+                                            ) : (
+                                                filteredDropdownFuturisticSuppliers.map(sup => {
+                                                    const isSelected = futuristicSupplierFilter.includes(sup);
+                                                    return (
+                                                        <div
+                                                            key={sup}
+                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                            onClick={() => handleFuturisticSupplierToggle(sup)}
+                                                        >
+                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                {isSelected && <Check size={10} />}
+                                                            </span>
+                                                            <span className="pa2-po-dept-name" title={sup}>{sup}</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Parts Filter Dropdown */}
+                            <div className="pa2-po-dept-select-wrap pa2-futuristic-select-wrap" ref={futuristicPartRef}>
+                                <button
+                                    type="button"
+                                    className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicPartDropdownOpen ? " active" : ""}${futuristicPartFilter.length > 0 ? " has-filter" : ""}`}
+                                    onClick={() => setFuturisticPartDropdownOpen(!futuristicPartDropdownOpen)}
+                                    title="Filter by Part No"
+                                >
+                                    <Package size={13} className="pa2-dept-trigger-icon" />
+                                    <span className="pa2-po-dept-trigger-label">
+                                        {futuristicPartFilter.length === 0
+                                            ? "All Parts"
+                                            : futuristicPartFilter.length === 1
+                                                ? futuristicPartFilter[0]
+                                                : `${futuristicPartFilter.length} Parts`}
+                                    </span>
+                                    {futuristicPartFilter.length > 0 && (
+                                        <span className="pa2-dept-count-badge">{futuristicPartFilter.length}</span>
+                                    )}
+                                    <ChevronDown size={12} className={`pa2-dept-chevron${futuristicPartDropdownOpen ? " open" : ""}`} />
+                                </button>
+
+                                {futuristicPartDropdownOpen && (
+                                    <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
+                                        <div className="pa2-po-dept-search-box">
+                                            <Search size={12} className="pa2-po-dept-search-icon" />
+                                            <input
+                                                type="text"
+                                                className="pa2-po-dept-search-input"
+                                                placeholder="Search part no..."
+                                                value={futuristicPartSearchQuery}
+                                                onChange={e => setFuturisticPartSearchQuery(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {futuristicPartSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-search-clear"
+                                                    onClick={() => setFuturisticPartSearchQuery("")}
+                                                >
+                                                    <X size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="pa2-po-dept-actions">
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="pa2-po-dept-action-btn"
+                                                onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="pa2-po-dept-list">
+                                            {filteredDropdownFuturisticParts.length === 0 ? (
+                                                <div className="pa2-po-dept-empty">No part found</div>
+                                            ) : (
+                                                filteredDropdownFuturisticParts.map(part => {
+                                                    const isSelected = futuristicPartFilter.includes(part);
+                                                    return (
+                                                        <div
+                                                            key={part}
+                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                            onClick={() => handleFuturisticPartToggle(part)}
+                                                        >
+                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                {isSelected && <Check size={10} />}
+                                                            </span>
+                                                            <span className="pa2-po-dept-name" title={part}>{part}</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            </div>
+
+                            {/* Search Filter Input */}
+                            <div className="pa2-futuristic-search-wrap">
+                                <Search size={13} className="pa2-futuristic-search-icon" />
+                                <input
+                                    type="text"
+                                    className="pa2-futuristic-search-input"
+                                    placeholder="Search PONO, Supplier, Part, Desc..."
+                                    value={futuristicSearchQuery}
+                                    onChange={e => { setFuturisticSearchQuery(e.target.value); setFuturisticPage(1); }}
+                                />
+                                {futuristicSearchQuery && (
+                                    <button
+                                        type="button"
+                                        className="pa2-futuristic-search-clear"
+                                        onClick={() => { setFuturisticSearchQuery(""); setFuturisticPage(1); }}
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. Section Content: Standard Fulfillment vs Futuristic Schedule */}
+                {fsActiveTab === "standard" ? (
+                    <>
+                        {/* 2. Top Analytics: 4 Compact Summary Metric Cards */}
+                        <div className="pa2-fs-kpi-ribbon">
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}>
+                                    <CalendarCheck2 size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Total Scheduled</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#1e293b" }}>
+                                        {fsTotals.totalSchdQty.toLocaleString("en-IN")} <span className="pa2-fs-kpi-unit">Units</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">{fsTotals.totalLots} Delivery Lots</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}>
+                                    <CheckCircle2 size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Received (GRN Done)</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#059669" }}>
+                                        {fsTotals.totalGrnQty.toLocaleString("en-IN")} <span className="pa2-fs-kpi-pct">({fsTotals.fulfillmentPct}%)</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">{fsTotals.deliveredCount} Lots Complete</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(245, 158, 11, 0.1)", color: "#f59e0b" }}>
+                                    <Clock size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Pending Balance</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#d97706" }}>
+                                        {fsTotals.totalBalQty.toLocaleString("en-IN")} <span className="pa2-fs-kpi-unit">Units</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">₹{(fsTotals.totalBalVal / 100000).toFixed(2)}L Pending</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(239, 68, 68, 0.1)", color: "#ef4444" }}>
+                                    <ShieldAlert size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Critical Overdue</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#dc2626" }}>
+                                        {fsTotals.overdueCount} <span className="pa2-fs-kpi-unit" style={{ color: "#dc2626" }}>Lots</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">&gt;30 Days Past Schedule</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Interactive Fulfillment Graph with Smooth Visibility Toggle */}
+                        <div className="pa2-fs-chart-box">
+                            <div className="pa2-fs-chart-header">
+                                <div className="pa2-fs-chart-title">
+                                    <span className="pa2-fs-chart-dot" />
+                                    {fsChartType === "timeline" && "Month-wise PO Value vs Scheduled Value"}
+                                    {fsChartType === "aging" && "Aging Risk Breakdown (Days Overdue)"}
+                                    {fsChartType === "supplier" && "Top Supplier Delivery Compliance (%)"}
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    {fsShowChart && (
+                                        <div className="pa2-segmented-control pa2-fs-graph-toggle">
+                                            <button
+                                                type="button"
+                                                className={`pa2-segment-btn${fsChartType === "timeline" ? " active" : ""}`}
+                                                onClick={() => setFsChartType("timeline")}
+                                            >
+                                                Month-wise Value
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`pa2-segment-btn${fsChartType === "aging" ? " active" : ""}`}
+                                                onClick={() => setFsChartType("aging")}
+                                            >
+                                                Aging Risk
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`pa2-segment-btn${fsChartType === "supplier" ? " active" : ""}`}
+                                                onClick={() => setFsChartType("supplier")}
+                                            >
+                                                Supplier Compliance
+                                            </button>
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className={`pa2-chart-visibility-btn ${fsShowChart ? "active" : ""}`}
+                                        onClick={() => setFsShowChart(!fsShowChart)}
+                                        title={fsShowChart ? "Hide Graph" : "Show Graph"}
+                                    >
+                                        {fsShowChart ? <EyeOff size={13} /> : <Eye size={13} />}
+                                        <span>{fsShowChart ? "Hide Chart" : "Show Chart"}</span>
+                                    </button>
+                                </div>
+                            </div>
+                            {fsShowChart && (
+                                <div className="pa2-fs-chart-wrapper">
+                                    <canvas ref={fsChartCanvasRef} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 3. Bottom: Fast, Paginated Fulfillment Schedule Ledger Table */}
+                        <div className="pa2-table-card pa2-fs-table-card">
+                            <div className="pa2-table-scroll pa2-fs-table-scroll">
+                                <table className="pa2-po-tbl pa2-fs-tbl">
+                                    <thead>
+                                        <tr>
+                                            {renderFsSortableTh("#", "sno")}
+                                            {renderFsSortableTh("PO NO", "po_number")}
+                                            {renderFsSortableTh("PO DATE", "po_date")}
+                                            {renderFsSortableTh("SUPPLIER", "supplier")}
+                                            {renderFsSortableTh("PARTNO - DESC", "part_no", false, true)}
+                                            {renderFsSortableTh("PO QTY", "po_qty_num", true)}
+                                            {renderFsSortableTh("SCHD DT", "schd_dt")}
+                                            {renderFsSortableTh("SCHD QTY", "schd_qty_num", true)}
+                                            {renderFsSortableTh("GRN QTY", "grn_qty_num", true)}
+                                            {renderFsSortableTh("SCHD / PO BAL QTY", "bal_qty_num", true)}
+                                            {renderFsSortableTh("SCHD / PO BAL VAL", "bal_val", true)}
+                                            {renderFsSortableTh("AGE DAYS", "age_days", false)}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {fsLoading && (
+                                            Array.from({ length: 6 }).map((_, i) => (
+                                                <tr key={i} className="pa2-po-tr">
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "24px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "160px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "80px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "60px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                                    <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "75px", height: "13px" }} /></td>
+                                                </tr>
+                                            ))
+                                        )}
+                                        {!fsLoading && sortedFsRows.length === 0 && (
+                                            <tr>
+                                                <td colSpan={12} className="pa2-nodata-td-wrap">
+                                                    <PaNoData icon={<CalendarRange size={16} style={{ color: "#2563eb" }} />} compact message="No fulfillment schedules found" />
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!fsLoading && pagedFsRows.map((r, i) => (
+                                            <tr key={r.id || i} className="pa2-po-tr">
+                                                <td className="pa2-po-td" style={{ fontWeight: "600", color: "#64748b", width: "42px" }}>
+                                                    {(fsPageSize === "All" ? 0 : (fsPage - 1) * Number(fsPageSize)) + i + 1}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-link" style={{ fontWeight: "700" }}>{r.po_number}</td>
+                                                <td className="pa2-po-td pa2-po-date">
+                                                    {formatFsDate(r.po_date)}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-vendor pa2-fs-vendor" style={{ minWidth: "150px", maxWidth: "250px", whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.35" }}>{r.supplier}</td>
+                                                <td className="pa2-po-td pa2-po-material">
+                                                    <span className="pa2-fs-part-badge">{r.part_no}</span>
+                                                    <span className="pa2-fs-part-desc">{r.description}</span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#475569" }}>{r.po_qty}</td>
+                                                <td className="pa2-po-td pa2-fs-schd-dt">
+                                                    <span className="pa2-fs-date-badge">
+                                                        {formatFsDate(r.schd_dt)}
+                                                    </span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "600", color: "#1e293b" }}>{r.schd_qty}</td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#059669" }}>{r.grn_qty}</td>
+                                                <td className="pa2-po-td pa2-po-td--r">
+                                                    <span className={`pa2-fs-bal-qty-badge ${r.bal_qty_num > 0 ? "has-bal" : "zero-bal"}`}>
+                                                        {r.bal_qty}
+                                                    </span>
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r pa2-po-value" style={{ color: r.bal_val > 0 ? "#1d4ed8" : "#94a3b8" }}>
+                                                    ₹{Number(r.bal_val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="pa2-po-td" style={{ textAlign: "center" }}>
+                                                    {r.status === "Delivered" ? (
+                                                        <span className="pa2-age-pill pa2-age-pill--green">
+                                                            <CheckCircle2 size={11} /> Delivered
+                                                        </span>
+                                                    ) : r.status === "Overdue" ? (
+                                                        <span className="pa2-age-pill pa2-age-pill--red">
+                                                            <AlertCircle size={11} /> {r.age_days}d · Overdue
+                                                        </span>
+                                                    ) : r.status === "Due Soon" ? (
+                                                        <span className="pa2-age-pill pa2-age-pill--amber">
+                                                            <Clock size={11} /> {r.age_days}d · Due Soon
+                                                        </span>
+                                                    ) : (
+                                                        <span className="pa2-age-pill pa2-age-pill--blue">
+                                                            <CheckCircle2 size={11} /> {r.age_days}d · On Track
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    {sortedFsRows.length > 0 && (
+                                        <tfoot>
+                                            <tr className="pa2-fs-summary-tr">
+                                                <td colSpan={5} style={{ fontWeight: "700", textAlign: "right", color: "#1e293b", paddingRight: "1rem" }}>
+                                                    Total Schedule Summary:
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
+                                                    {fsTotals.totalPoQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td></td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#1e293b" }}>
+                                                    {fsTotals.totalSchdQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#059669" }}>
+                                                    {fsTotals.totalGrnQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#d97706" }}>
+                                                    {fsTotals.totalBalQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#2563eb" }}>
+                                                    ₹{Number(fsTotals.totalBalVal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td style={{ textAlign: "center", fontWeight: "700", color: "#059669" }}>
+                                                    {fsTotals.fulfillmentPct}% Fulfilled
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </div>
+
+                            {/* Ultra Fast Pagination Toolbar for Standard View */}
+                            {sortedFsRows.length > 0 && (
+                                <div className="pa2-fs-pagination-bar">
+                                    <div className="pa2-fs-pagination-info">
+                                        Showing <span className="highlight">{sortedFsRows.length === 0 ? 0 : (fsPageSize === "All" ? 1 : (fsPage - 1) * Number(fsPageSize) + 1)}</span> to{" "}
+                                        <span className="highlight">{fsPageSize === "All" ? sortedFsRows.length : Math.min(fsPage * Number(fsPageSize), sortedFsRows.length)}</span> of{" "}
+                                        <span className="highlight">{sortedFsRows.length}</span> Lots
+                                    </div>
+                                    <div className="pa2-fs-pagination-controls">
+                                        <div className="pa2-fs-pagesize-select">
+                                            <span className="pa2-fs-pagesize-label">Rows:</span>
+                                            {[25, 50, 100, "All"].map(sz => (
+                                                <button
+                                                    key={sz}
+                                                    type="button"
+                                                    className={`pa2-fs-pagesize-btn ${fsPageSize === sz ? "active" : ""}`}
+                                                    onClick={() => { setFsPageSize(sz); setFsPage(1); }}
+                                                >
+                                                    {sz}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {fsPageSize !== "All" && totalFsPages > 1 && (
+                                            <div className="pa2-fs-page-nav">
+                                                <button
+                                                    type="button"
+                                                    className="pa2-fs-nav-btn"
+                                                    disabled={fsPage <= 1}
+                                                    onClick={() => setFsPage(prev => Math.max(1, prev - 1))}
+                                                    title="Previous Page"
+                                                >
+                                                    <ChevronLeft size={14} />
+                                                </button>
+                                                <span className="pa2-fs-page-indicator">
+                                                    Page <b>{fsPage}</b> of <b>{totalFsPages}</b>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className="pa2-fs-nav-btn"
+                                                    disabled={fsPage >= totalFsPages}
+                                                    onClick={() => setFsPage(prev => Math.min(totalFsPages, prev + 1))}
+                                                    title="Next Page"
+                                                >
+                                                    <ChevronRight size={14} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Futuristic View: 4 Compact Horizontal KPI Cards */}
+                        <div className="pa2-fs-kpi-ribbon pa2-futuristic-kpi-ribbon">
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}>
+                                    <ShoppingCart size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Total PO Qty</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#1e293b" }}>
+                                        {futuristicTotals.totalPoQty.toLocaleString("en-IN")} <span className="pa2-fs-kpi-unit">Units</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">{futuristicTotals.count} Schedule Lines</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(124, 58, 237, 0.1)", color: "#7c3aed" }}>
+                                    <CalendarCheck2 size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Total Scheduled Qty</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#7c3aed" }}>
+                                        {futuristicTotals.totalSchdQty.toLocaleString("en-IN")} <span className="pa2-fs-kpi-unit" style={{ color: "#7c3aed" }}>Units</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">Target Scheduled Commitments</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}>
+                                    <Clock size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Avg Supplier Lead Time</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#059669" }}>
+                                        {futuristicTotals.avgLeadDays} <span className="pa2-fs-kpi-unit" style={{ color: "#059669" }}>Days</span>
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">Historical fulfillment baseline</span>
+                                </div>
+                            </div>
+
+                            <div className="pa2-fs-kpi-card">
+                                <div className="pa2-fs-kpi-icon-wrap" style={{ background: "rgba(245, 158, 11, 0.1)", color: "#f59e0b" }}>
+                                    <IndianRupee size={17} />
+                                </div>
+                                <div className="pa2-fs-kpi-body">
+                                    <span className="pa2-fs-kpi-title">Pending Balance Value</span>
+                                    <span className="pa2-fs-kpi-value" style={{ color: "#d97706" }}>
+                                        ₹{(futuristicTotals.totalBalVal / 100000).toFixed(2)}L
+                                    </span>
+                                    <span className="pa2-fs-kpi-sub">{futuristicTotals.totalBalQty.toLocaleString("en-IN")} Units Open</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Futuristic Comparative Graph: Schedule & Expected */}
+                        <div className="pa2-fs-chart-box pa2-futuristic-chart-box">
+                            <div className="pa2-fs-chart-header">
+                                <div className="pa2-fs-chart-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <TrendingUp size={15} style={{ color: "#8b5cf6" }} />
+                                    <span>Timeline Projection: Schedule Qty vs Expected Qty</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    {futuristicShowChart && (
+                                        <div className="pa2-futuristic-legend-pills">
+                                            <span className="pa2-futuristic-legend-pill schedule">
+                                                <span className="dot schedule" /> Schedule
+                                            </span>
+                                            <span className="pa2-futuristic-legend-pill expected">
+                                                <span className="dot expected" /> Expected
+                                            </span>
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className={`pa2-chart-visibility-btn ${futuristicShowChart ? "active" : ""}`}
+                                        onClick={() => setFuturisticShowChart(!futuristicShowChart)}
+                                        title={futuristicShowChart ? "Hide Graph" : "Show Graph"}
+                                    >
+                                        {futuristicShowChart ? <EyeOff size={13} /> : <Eye size={13} />}
+                                        <span>{futuristicShowChart ? "Hide Chart" : "Show Chart"}</span>
+                                    </button>
+                                </div>
+                            </div>
+                            {futuristicShowChart && (
+                                <div className="pa2-fs-chart-wrapper">
+                                    <canvas ref={futuristicChartCanvasRef} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Futuristic Bottom: 10-Column Fast Paginated Ledger Table */}
+                        <div className="pa2-table-card pa2-fs-table-card">
+                            <div className="pa2-table-scroll pa2-fs-table-scroll">
+                                <table className="pa2-po-tbl pa2-futuristic-tbl">
+                                    <thead>
+                                        <tr>
+                                            {renderFuturisticSortableTh("Sl.NO", "sno")}
+                                            {renderFuturisticSortableTh("PONO", "po_number")}
+                                            {renderFuturisticSortableTh("Po Date", "po_date")}
+                                            {renderFuturisticSortableTh("supplier", "supplier")}
+                                            {renderFuturisticSortableTh("PartNO - Desc", "part_no", false, true)}
+                                            {renderFuturisticSortableTh("PO Qty", "po_qty_num", true)}
+                                            {renderFuturisticSortableTh("Schd Qty", "schd_qty_num", true)}
+                                            {renderFuturisticSortableTh("Schd Date", "schd_dt")}
+                                            {renderFuturisticSortableTh("Avg Lead Day", "avg_lead_days", true)}
+                                            {renderFuturisticSortableTh("Avg Lead Date", "avg_lead_date_iso")}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sortedFuturisticRows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={10} className="pa2-nodata-td-wrap">
+                                                    <PaNoData icon={<Sparkles size={16} style={{ color: "#8b5cf6" }} />} compact message="No futuristic schedule records found for this selection" />
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            pagedFuturisticRows.map((r, i) => (
+                                                <tr key={r.id || i} className="pa2-po-tr pa2-futuristic-tr">
+                                                    {/* 1. Sl.NO */}
+                                                    <td className="pa2-po-td pa2-futuristic-sno">
+                                                        {(futuristicPageSize === "All" ? 0 : (futuristicPage - 1) * Number(futuristicPageSize)) + i + 1}
+                                                    </td>
+                                                    {/* 2. PONO */}
+                                                    <td className="pa2-po-td pa2-po-link pa2-futuristic-pono">{r.po_number}</td>
+                                                    {/* 3. Po Date */}
+                                                    <td className="pa2-po-td pa2-po-date">
+                                                        {formatFsDate(r.po_date)}
+                                                    </td>
+                                                    {/* 4. supplier */}
+                                                    <td className="pa2-po-td pa2-futuristic-vendor" title={r.supplier}>
+                                                        {r.supplier || "–"}
+                                                    </td>
+                                                    {/* 5. PartNO - Desc */}
+                                                    <td className="pa2-po-td pa2-po-material">
+                                                        <span className="pa2-futuristic-part-badge">{r.part_no || "–"}</span>
+                                                        <span className="pa2-futuristic-desc">{r.description || "–"}</span>
+                                                    </td>
+                                                    {/* 6. PO Qty */}
+                                                    <td className="pa2-po-td pa2-po-td--r pa2-futuristic-poqty">
+                                                        {r.po_qty_num ? r.po_qty_num.toLocaleString("en-IN") : (r.po_qty || "0")}
+                                                    </td>
+                                                    {/* 7. Schd Qty */}
+                                                    <td className="pa2-po-td pa2-po-td--r pa2-futuristic-schdqty">
+                                                        {r.schd_qty_num ? r.schd_qty_num.toLocaleString("en-IN") : (r.schd_qty || "0")}
+                                                    </td>
+                                                    {/* 8. Schd Date */}
+                                                    <td className="pa2-po-td pa2-futuristic-schd-date">
+                                                        <span className="pa2-futuristic-schd-pill">
+                                                            {formatFsDate(r.schd_dt)}
+                                                        </span>
+                                                    </td>
+                                                    {/* 9. Avg Lead Day */}
+                                                    <td className="pa2-po-td pa2-po-td--r">
+                                                        <span className="pa2-futuristic-leaddays-pill">
+                                                            {r.avg_lead_days} Days
+                                                        </span>
+                                                    </td>
+                                                    {/* 10. Avg Lead Date */}
+                                                    <td className="pa2-po-td pa2-futuristic-exp-date">
+                                                        <div className="pa2-futuristic-date-cell">
+                                                            <span className="pa2-futuristic-lead-date-val">{r.avg_lead_date}</span>
+                                                            {r.variance_days !== 0 && (
+                                                                <span className={`pa2-futuristic-var-badge ${r.variance_days > 0 ? "early" : "late"}`}>
+                                                                    {r.variance_days > 0 ? `+${r.variance_days}d Lead Adv` : `${r.variance_days}d Lead Gap`}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                    {sortedFuturisticRows.length > 0 && (
+                                        <tfoot>
+                                            <tr className="pa2-futuristic-tfoot-tr">
+                                                <td colSpan={5} style={{ fontWeight: "700", textAlign: "right", paddingRight: "1rem", color: "#1e293b" }}>
+                                                    Futuristic Projection Summary:
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#3b82f6" }}>
+                                                    {futuristicTotals.totalPoQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#8b5cf6" }}>
+                                                    {futuristicTotals.totalSchdQty.toLocaleString("en-IN")}
+                                                </td>
+                                                <td></td>
+                                                <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#10b981" }}>
+                                                    ~{futuristicTotals.avgLeadDays}d Avg
+                                                </td>
+                                                <td style={{ textAlign: "center", fontWeight: "700", color: "#6366f1" }}>
+                                                    ₹{(futuristicTotals.totalBalVal / 100000).toFixed(2)}L Bal
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </div>
+
+                            {/* Ultra Fast Pagination Toolbar for Futuristic View */}
+                            {sortedFuturisticRows.length > 0 && (
+                                <div className="pa2-fs-pagination-bar pa2-futuristic-pagination-bar">
+                                    <div className="pa2-fs-pagination-info">
+                                        Showing <span className="highlight">{sortedFuturisticRows.length === 0 ? 0 : (futuristicPageSize === "All" ? 1 : (futuristicPage - 1) * Number(futuristicPageSize) + 1)}</span> to{" "}
+                                        <span className="highlight">{futuristicPageSize === "All" ? sortedFuturisticRows.length : Math.min(futuristicPage * Number(futuristicPageSize), sortedFuturisticRows.length)}</span> of{" "}
+                                        <span className="highlight">{sortedFuturisticRows.length}</span> Items
+                                    </div>
+                                    <div className="pa2-fs-pagination-controls">
+                                        <div className="pa2-fs-pagesize-select">
+                                            <span className="pa2-fs-pagesize-label">Rows:</span>
+                                            {[25, 50, 100, "All"].map(sz => (
+                                                <button
+                                                    key={sz}
+                                                    type="button"
+                                                    className={`pa2-fs-pagesize-btn ${futuristicPageSize === sz ? "active" : ""}`}
+                                                    onClick={() => { setFuturisticPageSize(sz); setFuturisticPage(1); }}
+                                                >
+                                                    {sz}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {futuristicPageSize !== "All" && totalFuturisticPages > 1 && (
+                                            <div className="pa2-fs-page-nav">
+                                                <button
+                                                    type="button"
+                                                    className="pa2-fs-nav-btn"
+                                                    disabled={futuristicPage <= 1}
+                                                    onClick={() => setFuturisticPage(prev => Math.max(1, prev - 1))}
+                                                    title="Previous Page"
+                                                >
+                                                    <ChevronLeft size={14} />
+                                                </button>
+                                                <span className="pa2-fs-page-indicator">
+                                                    Page <b>{futuristicPage}</b> of <b>{totalFuturisticPages}</b>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className="pa2-fs-nav-btn"
+                                                    disabled={futuristicPage >= totalFuturisticPages}
+                                                    onClick={() => setFuturisticPage(prev => Math.min(totalFuturisticPages, prev + 1))}
+                                                    title="Next Page"
+                                                >
+                                                    <ChevronRight size={14} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* ── Traceability Table ── */}
             <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginTop: "1.4rem" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
                     <SectionHeader icon={<TrendingUp size={16} style={{ color: "#8b5cf6" }} />} title="Traceability Table" />
-                    <div className="pa2-macdetail-search-wrapper" style={{ margin: 0, width: "260px", position: "relative", display: "flex", alignItems: "center" }}>
-                        <Search size={14} className="pa2-macdetail-search-icon" style={{ position: "absolute", left: "10px", color: "#64748b" }} />
+                    <div className="pa2-macdetail-search-wrapper">
+                        <Search size={14} className="pa2-macdetail-search-icon" />
                         <input
                             type="text"
                             placeholder="Search by Supplier, Ind No, PO No, Material, GRN No, PO Type..."
                             value={traceSearch}
                             onChange={e => setTraceSearch(e.target.value)}
                             className="pa2-macdetail-search-input"
-                            style={{
-                                paddingLeft: "32px",
-                                width: "100%",
-                                height: "36px",
-                                borderRadius: "8px",
-                                border: "1px solid #cbd5e1",
-                                fontSize: "0.82rem",
-                                outline: "none",
-                                background: "#f8fafc",
-                                transition: "all 0.2s"
-                            }}
                         />
                         {traceSearch && (
                             <X size={14} onClick={() => setTraceSearch("")} style={{ position: "absolute", right: "10px", cursor: "pointer", color: "#64748b" }} />

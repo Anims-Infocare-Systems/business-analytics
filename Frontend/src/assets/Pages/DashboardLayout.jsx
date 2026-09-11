@@ -35,6 +35,13 @@ import UsersSetting from "./UsersSetting";
 import Settings from "./Settings";
 import Welcome from "./Welcome";
 import PasswordExpiryModal from "./PasswordExpiryModal";
+import TourGuide from "./TourGuide";
+import TourPromptModal from "./TourPromptModal";
+import {
+    CURRENT_APP_VERSION,
+    hasSeenTour,
+    markTourAsSeen,
+} from "./versionToursData";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -163,7 +170,7 @@ function CategoryLanding({ menuKey, children, onSubClick }) {
             </div>
 
             {/* Cards grid */}
-            <div className="cl-grid">
+            <div className="cl-grid" data-tour="quick-access">
                 {children.map((sub, i) => {
                     const meta = SUB_ITEM_META[sub] || { tone: "blue" };
                     return (
@@ -280,24 +287,74 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
     );
 }
 
-/* ── Clock ───────────────────────────────────────────────── */
+/* ── Clock (Indian Standard Time / IST) ───────────────────── */
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC + 5:30 in milliseconds
+
 function Clock() {
-    const [time, setTime] = useState(new Date());
+    const [time, setTime] = useState(() => new Date());
+    const offsetRef = useRef(0);
+
+    // Sync accurate server/network time offset on mount & periodically
     useEffect(() => {
-        const t = setInterval(() => setTime(new Date()), 1000);
+        let isMounted = true;
+        const syncServerTime = async () => {
+            try {
+                const start = Date.now();
+                const res = await fetch(`${API}/health/`, { method: "GET", cache: "no-store" }).catch(() => null);
+                if (res && res.headers && res.headers.has("date")) {
+                    const serverDate = new Date(res.headers.get("date")).getTime();
+                    const roundTrip = Math.max(0, (Date.now() - start) / 2);
+                    if (!isNaN(serverDate) && isMounted) {
+                        offsetRef.current = (serverDate + roundTrip) - Date.now();
+                    }
+                }
+            } catch {
+                // Graceful fallback to client time
+            }
+        };
+
+        syncServerTime();
+        const syncInterval = setInterval(syncServerTime, 600000); // 10 minutes
+        return () => {
+            isMounted = false;
+            clearInterval(syncInterval);
+        };
+    }, []);
+
+    useEffect(() => {
+        const tick = () => {
+            setTime(new Date(Date.now() + offsetRef.current));
+        };
+        tick();
+        const t = setInterval(tick, 1000);
         return () => clearInterval(t);
     }, []);
 
     const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const h = time.getHours();
-    const ampm = h >= 12 ? "PM" : "AM";
-    const h12 = String(h % 12 || 12).padStart(2, "0");
-    const mm = String(time.getMinutes()).padStart(2, "0");
-    const ss = String(time.getSeconds()).padStart(2, "0");
+    const MONTHS = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+
+    // Compute Indian Standard Time (IST - UTC+05:30) independently of client OS timezone
+    const istTime = new Date(time.getTime() + IST_OFFSET_MS);
+
+    const istH = istTime.getUTCHours();
+    const ampm = istH >= 12 ? "PM" : "AM";
+    const h12 = String(istH % 12 || 12).padStart(2, "0");
+    const mm = String(istTime.getUTCMinutes()).padStart(2, "0");
+    const ss = String(istTime.getUTCSeconds()).padStart(2, "0");
+
+    const dayName = DAYS[istTime.getUTCDay()];
+    const dateNum = istTime.getUTCDate();
+    const monthName = MONTHS[istTime.getUTCMonth()];
+    const fullYear = istTime.getUTCFullYear();
 
     return (
-        <div className="dl-clock">
+        <div 
+            className="dl-clock" 
+            title="Indian Standard Time (IST - UTC+05:30) • Synchronized Operational Clock"
+        >
             <div className="dl-clock__time">
                 <span className="dl-clock__seg">{h12}</span>
                 <span className="dl-clock__colon">:</span>
@@ -305,9 +362,10 @@ function Clock() {
                 <span className="dl-clock__colon">:</span>
                 <span className="dl-clock__seg dl-clock__seg--sec" key={ss}>{ss}</span>
                 <span className="dl-clock__ampm"> {ampm}</span>
+                <span className="dl-clock__tz">IST</span>
             </div>
             <div className="dl-clock__date">
-                {DAYS[time.getDay()]} , {time.getDate()} {MONTHS[time.getMonth()]} {time.getFullYear()}
+                {dayName} , {dateNum} {monthName} {fullYear}
             </div>
         </div>
     );
@@ -369,6 +427,7 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
         <div
             className="dl-sidebar__group"
             style={{ "--idx": index }}
+            data-tour={`menu-${item.key}`}
             onMouseEnter={collapsedMode ? handleMouseEnter : undefined}
             onMouseLeave={collapsedMode ? handleMouseLeave : undefined}
         >
@@ -442,16 +501,20 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
 /* ══════════════════════════════════════════════════════════
    DashboardLayout — root component
    ══════════════════════════════════════════════════════════ */
-/* ── sessionStorage nav helpers ─────────────────────────── */
+/* ── sessionStorage + localStorage nav helpers ─────────────────────────── */
 const NAV_KEY = "ba_nav";
 function readNav() {
     try {
-        const raw = sessionStorage.getItem(NAV_KEY);
+        const raw = sessionStorage.getItem(NAV_KEY) || localStorage.getItem(NAV_KEY);
         return raw ? JSON.parse(raw) : null;
     } catch { return null; }
 }
 function writeNav(data) {
-    try { sessionStorage.setItem(NAV_KEY, JSON.stringify(data)); } catch { }
+    try {
+        const str = JSON.stringify(data);
+        sessionStorage.setItem(NAV_KEY, str);
+        localStorage.setItem(NAV_KEY, str);
+    } catch { }
 }
 
 export default function DashboardLayout() {
@@ -581,6 +644,101 @@ export default function DashboardLayout() {
         try { return sessionStorage.getItem("ba_settings_open") === "1"; }
         catch { return false; }
     });
+
+    /* ── Version Tour states & handlers ──────────────────── */
+    const [showTourPrompt, setShowTourPrompt] = useState(false);
+    const [isTourActive, setIsTourActive] = useState(false);
+    const [activeTourVersion, setActiveTourVersion] = useState(CURRENT_APP_VERSION);
+    const preTourExpandedStateRef = useRef(null);
+    const preTourNavStateRef = useRef(null);
+
+    // Auto-trigger tour prompt if first time logging into current version
+    useEffect(() => {
+        if (!isAuthenticated || isExpired) return;
+        const seen = hasSeenTour(CURRENT_APP_VERSION, userName);
+        if (!seen) {
+            const timer = setTimeout(() => {
+                setShowTourPrompt(true);
+            }, 850);
+            return () => clearTimeout(timer);
+        }
+    }, [isAuthenticated, isExpired, userName]);
+
+    const handleStartTourFromPrompt = () => {
+        markTourAsSeen(CURRENT_APP_VERSION, userName);
+        setShowTourPrompt(false);
+        preTourExpandedStateRef.current = expanded;
+        preTourNavStateRef.current = { activeItem, activeSubItem, openMenu };
+        setExpanded(true); // Always un-collapse sidebar for tour
+        setActiveItem("Welcome");
+        setActiveSubItem(null);
+        setOpenMenu(null);
+        setActiveTourVersion(CURRENT_APP_VERSION);
+        setIsTourActive(true);
+    };
+
+    const handleDismissTourPrompt = () => {
+        markTourAsSeen(CURRENT_APP_VERSION, userName);
+        setShowTourPrompt(false);
+    };
+
+    const handleStartTourFromSettings = (ver = CURRENT_APP_VERSION) => {
+        preTourExpandedStateRef.current = expanded;
+        preTourNavStateRef.current = { activeItem, activeSubItem, openMenu };
+        setExpanded(true); // Always un-collapse sidebar for tour
+        setActiveItem("Welcome");
+        setActiveSubItem(null);
+        setOpenMenu(null);
+        setActiveTourVersion(ver);
+        setIsTourActive(true);
+    };
+
+    const handleTourStepChange = useCallback((step, stepIndex) => {
+        // Ensure sidebar is un-collapsed during the tour
+        setExpanded(true);
+        if (stepIndex <= 3) {
+            // Keep on Welcome for header, profile, clock, and bento tiles
+            setActiveItem("Welcome");
+            setActiveSubItem(null);
+        }
+        if (step.autoOpenMenu) {
+            setOpenMenu(step.autoOpenMenu);
+        } else {
+            setOpenMenu(null);
+        }
+    }, []);
+
+    const handleTourComplete = () => {
+        markTourAsSeen(activeTourVersion, userName);
+        setIsTourActive(false);
+        setOpenMenu(null);
+        if (preTourExpandedStateRef.current !== null) {
+            setExpanded(preTourExpandedStateRef.current);
+            preTourExpandedStateRef.current = null;
+        }
+        if (preTourNavStateRef.current) {
+            setActiveItem(preTourNavStateRef.current.activeItem);
+            setActiveSubItem(preTourNavStateRef.current.activeSubItem);
+            setOpenMenu(preTourNavStateRef.current.openMenu);
+            preTourNavStateRef.current = null;
+        }
+    };
+
+    const handleTourClose = () => {
+        setIsTourActive(false);
+        setOpenMenu(null);
+        if (preTourExpandedStateRef.current !== null) {
+            setExpanded(preTourExpandedStateRef.current);
+            preTourExpandedStateRef.current = null;
+        }
+        if (preTourNavStateRef.current) {
+            setActiveItem(preTourNavStateRef.current.activeItem);
+            setActiveSubItem(preTourNavStateRef.current.activeSubItem);
+            setOpenMenu(preTourNavStateRef.current.openMenu);
+            preTourNavStateRef.current = null;
+        }
+    };
+    /* ─────────────────────────────────────────────────────── */
 
     /* ── Idle / auto-logout state ────────────────────────── */
     const [idleWarning, setIdleWarning] = useState(false);  // show warning modal
@@ -904,6 +1062,7 @@ export default function DashboardLayout() {
             localStorage.removeItem("user");
             localStorage.removeItem("ba_user_rights");
             localStorage.removeItem("ba_settings_profile");
+            localStorage.removeItem(NAV_KEY);
         } catch { /* ignore */ }
 
         fetch(`${API}/logout/`, {
@@ -1015,7 +1174,7 @@ export default function DashboardLayout() {
                 <div className="dl-sidebar__section-label">MENU</div>
 
                 {/* Nav */}
-                <nav className="dl-sidebar__nav">
+                <nav className="dl-sidebar__nav" data-tour="sidebar-nav">
                     {allowedMenuItems.map((item, idx) => (
                         <SidebarItem
                             key={item.key}
@@ -1085,12 +1244,15 @@ export default function DashboardLayout() {
                         </button>
                     )}
                     {/* ✅ Dynamic company name from localStorage */}
-                    <h1 className="dl-header__title">{companyName}</h1>
+                    <h1 className="dl-header__title" data-tour="workspace-header">{companyName}</h1>
                     <div className="dl-header__right">
-                        <Clock />
+                        <div data-tour="live-clock">
+                            <Clock />
+                        </div>
                         <div
                             ref={profileRef}
                             className={`dl-header__profile ${profileDropdownOpen ? "dl-header__profile--active" : ""}`}
+                            data-tour="user-profile"
                             onClick={() => setProfileDropdownOpen(open => !open)}
                         >
                             <div className="dl-header__profile-avatar">{userInitials}</div>
@@ -1160,7 +1322,32 @@ export default function DashboardLayout() {
             </div>
 
             {/* Settings Overlay Modal */}
-            <Settings isOpen={settingsOpen} onClose={() => { setSettingsOpen(false); refreshProfile(); }} isExpiredMode={isExpired} />
+            <Settings
+                isOpen={settingsOpen}
+                onClose={() => { setSettingsOpen(false); refreshProfile(); }}
+                isExpiredMode={isExpired}
+                onStartTour={handleStartTourFromSettings}
+                onNavigateModule={handleWelcomeNavigate}
+            />
+
+            {/* ── Version Interactive Tour Guide ── */}
+            <TourGuide
+                isOpen={isTourActive}
+                version={activeTourVersion}
+                onClose={handleTourClose}
+                onComplete={handleTourComplete}
+                onStepChange={handleTourStepChange}
+            />
+
+            {/* ── First-Time Login Version Tour Prompt Modal ── */}
+            {showTourPrompt && (
+                <TourPromptModal
+                    version={CURRENT_APP_VERSION}
+                    userName={userName}
+                    onStartTour={handleStartTourFromPrompt}
+                    onDismiss={handleDismissTourPrompt}
+                />
+            )}
 
             {/* ── Idle Session Warning Modal ── */}
             {idleWarning && (

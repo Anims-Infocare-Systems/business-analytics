@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./QualityAnalysis.css";
@@ -32,7 +33,26 @@ import {
     Inbox,
     Check,
     Building2,
-    RotateCcw
+    RotateCcw,
+    Truck,
+    Layers,
+    ShieldCheck,
+    FileCheck,
+    Copy,
+    ChevronRight,
+    ChevronLeft,
+    Calendar,
+    Award,
+    Sparkles,
+    Cpu,
+    Factory,
+    FileSpreadsheet,
+    Compass,
+    Eye,
+    Flame,
+    Beaker,
+    CheckSquare,
+    CheckCheck
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -261,7 +281,7 @@ function QualityEmptyState({ message = "No Data found on this period", height = 
 function QualityPremiumSelect({ value, onChange, options }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef(null);
-    
+
     useEffect(() => {
         const handleOutsideClick = (e) => {
             if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -540,6 +560,2338 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
                         )}
                     </div>
                 </div>
+            )}
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QUALITY TIMELINE DATA & COMPONENT
+//  Pipeline sequence in exact order:
+//  Invoice No ---> DC ---> Final Insp --->
+//  Production (Inhouse & Job Order) with Quality Insp --->
+//  GRN Tracking ---> Supplier Details
+// ─────────────────────────────────────────────────────────────────────────────
+
+const QUALITY_TIMELINE_DATA = [
+    {
+        id: "INV-2026-0842",
+        customer: "Roots Multiclean Ltd",
+        partNo: "RMC-CYL-4050",
+        partDescription: "Hydraulic Cylinder Tube Ø40 x 50 x 691 mm",
+        batchLot: "LOT-RMC-2026-42",
+        totalValue: "₹ 6,10,650",
+        billedQty: "150 Nos",
+        auditRating: "99.4%",
+        qualityStatus: "Passed & QA Stamped",
+        dispatchStatus: "Dispatched & Delivered",
+        parts: [
+            {
+                partNo: "RMC-CYL-4050",
+                partDescription: "Hydraulic Cylinder Tube Ø40 x 50 x 691 mm",
+                batchLot: "LOT-RMC-2026-42",
+                billedQty: "100 Nos",
+                partValue: "₹ 4,20,000",
+                auditRating: "99.4%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered",
+                stages: [
+                    {
+                        step: 1,
+                        key: "invoice",
+                        title: "Invoice No",
+                        subtitle: "Billing & Commercial Release",
+                        iconName: "FileSpreadsheet",
+                        badge: "INV-2026-0842",
+                        badgeColor: "#3b82f6",
+                        accentColor: "#2563eb",
+                        metrics: [
+                            { label: "Invoice Number", value: "INV-2026-0842", highlight: true },
+                            { label: "Invoice Date", value: "08-Mar-2026" },
+                            { label: "Billed Quantity", value: "150 Nos", highlight: true },
+                            { label: "Unit Rate", value: "₹ 3,450.00 / No" },
+                            { label: "Taxable Subtotal", value: "₹ 5,17,500.00" },
+                            { label: "GST (CGST+SGST 18%)", value: "₹ 93,150.00" },
+                            { label: "Total Net Payable", value: "₹ 6,10,650.00", highlight: true },
+                            { label: "Customer PO Ref", value: "PO-RMC-2026-7781" },
+                            { label: "PO Order Date", value: "12-Feb-2026" },
+                            { label: "IRN / QR Code", value: "IRN-8841-A902-9982" }
+                        ],
+                        // notes: "Commercial invoice released with automated digital sign-off. Cross-referenced against Customer PO #PO-RMC-2026-7781 line item 01."
+                    },
+                    {
+                        step: 2,
+                        key: "dc",
+                        title: "DC (Delivery Challan)",
+                        subtitle: "Outward Logistics & Movement",
+                        iconName: "Truck",
+                        badge: "DC/2026/03/0184",
+                        badgeColor: "#8b5cf6",
+                        accentColor: "#7c3aed",
+                        metrics: [
+                            { label: "Delivery Challan No", value: "DC/2026/03/0184", highlight: true },
+                            { label: "Challan Date & Time", value: "08-Mar-2026 (04:30 PM)" },
+                            { label: "Dispatched Quantity", value: "150 Nos (5 Sealed Crates)", highlight: true },
+                            { label: "Vehicle Number", value: "TN-38-BZ-4921", highlight: true },
+                            { label: "Transporter Name", value: "VRL Logistics Express Ltd" },
+                            { label: "E-Way Bill Number", value: "3819 4029 8812 (Valid 10-Mar)" },
+                            { label: "GRN/PO Det", value: "PO-RMC-2026-7781 • GRN-2026-02-0492", highlight: true }
+                        ],
+                        // notes: "Security gate seal #GT-8840 applied. Goods inspected for moisture protection packaging and transit cushioning before vehicle exit."
+                    },
+                    {
+                        step: 3,
+                        key: "finalInsp",
+                        title: "Final Insp",
+                        subtitle: "100% Finished Goods Inspection & Hydro Test",
+                        iconName: "CheckCheck",
+                        badge: "FIR-2026-03-098",
+                        badgeColor: "#10b981",
+                        accentColor: "#059669",
+                        metrics: [
+                            { label: "Final Insp Report No", value: "FIR-2026-03-098", highlight: true },
+                            { label: "Inspection Date", value: "07-Mar-2026" },
+                            { label: "Tot Qty", value: "150 Nos", highlight: true },
+                            { label: "Inspected Qty", value: "150 Nos", highlight: true },
+                            { label: "Rej Qty", value: "0 Nos" },
+                            { label: "Rw Qty", value: "0 Nos" },
+                            { label: "Routecard Det", value: "RC-2026-03-8842", highlight: true },
+                            { label: "Insp By", value: "K. Rajesh" }
+                        ],
+                        inspectionRecords: [
+                            { op: "OP 10", routeCard: "RC-2026-03-8842", process: "CNC Facing, Chamfering & Centering", machine: "Doosan Lynx 220", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "S. Selvam", verdict: "PASS" },
+                            { op: "OP 20", routeCard: "RC-2026-03-8842", process: "Precision Deep-Hole Skiving & Burnishing", machine: "BTA Deep-Hole 02", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "M. Anand", verdict: "PASS" },
+                            { op: "OP 30", routeCard: "RC-2026-03-8842", process: "Subcontract Induction Hardening & Chrome", machine: "Apex Surface Tech", shift: "General", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "R. Murugesh", verdict: "PASS" },
+                            { op: "OP 50", routeCard: "RC-2026-03-8842", process: "CNC Port Threading & Flange TIG Welding", machine: "Mori Seiki NLX", shift: "Shift 2", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "P. Vignesh", verdict: "PASS" },
+                            { op: "OP 60", routeCard: "RC-2026-03-8842", process: "Multi-Stage Ultrasonic Clean & Degrease", machine: "SonicWash SW-400", shift: "Shift 2", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "V. Raman", verdict: "PASS" },
+                            { op: "Final QA", routeCard: "RC-2026-03-8842", process: "100% CMM Metrology & 350 Bar Hydro Test", machine: "Zeiss CMM / Test Bench", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "K. Rajesh", verdict: "PASS" }
+                        ],
+                        // notes: "All 150 tubes successfully tested for dimensional compliance on CMM Zeiss Contura and leak-free pressure testing at 350 Bar."
+                    },
+                    {
+                        step: 4,
+                        key: "production",
+                        title: "Production (Inhouse & Job Order) with Quality Insp",
+                        subtitle: "6 Stage Workflow (Inhouse CNC + Subcontract Heat Treat)",
+                        iconName: "Factory",
+                        badge: "RC-2026-03-8842",
+                        badgeColor: "#f59e0b",
+                        accentColor: "#d97706",
+                        routeCardNo: "RC-2026-03-8842",
+                        metrics: [
+                            { label: "Route Card Number", value: "RC-2026-03-8842", highlight: true },
+                            { label: "Routing Operations", value: "6 Ops (4 Inhouse CNC + 2 Subcontract)", highlight: true },
+                            { label: "Primary Subcontractor", value: "Apex Heat Treat & Surface Coating Tech" },
+                            { label: "Job Order Challans", value: "Out: SC-DC-2026-0419 • In: APX-IN-8921" }
+                        ],
+                        inhouseOps: [
+                            { op: "OP 10", process: "CNC Facing, Chamfering & Centering", machine: "Doosan Lynx 220", operator: "S. Selvam", ipqa: "IPQA-2601", status: "Approved", keyMetric: "Face Runout ≤ 0.015 mm" },
+                            { op: "OP 20", process: "Precision Deep-Hole Skiving & Burnishing", machine: "BTA Deep-Hole 02", operator: "M. Anand", ipqa: "IPQA-2602", status: "Approved", keyMetric: "Internal Bore Ra 0.16 µm" },
+                            { op: "OP 50", process: "CNC Port Threading & Flange TIG Welding", machine: "Mori Seiki NLX", operator: "P. Vignesh", ipqa: "IPQA-2605", status: "Approved", keyMetric: "Thread Gauge 6H PASS" },
+                            { op: "OP 60", process: "Multi-Stage Ultrasonic Clean & Degrease", machine: "SonicWash SW-400", operator: "V. Raman", ipqa: "IPQA-2606", status: "Approved", keyMetric: "Gravimetric Millipore 1.2 mg" }
+                        ],
+                        jobOrder: {
+                            vendorName: "Apex Heat Treat & Surface Coating Tech",
+                            subcontractDC: "SC-DC-2026-0419",
+                            inwardChallan: "APX-IN-8921",
+                            items: [
+                                { op: "OP 30 (Job Order)", process: "Induction Hardening & Quenching", po: "PO-JO-2026-319", cert: "HT-CERT-9042", specs: "Hardness: 58-62 HRC (Actual: 59.5 HRC) | Case Depth: 1.35 mm (Spec: 1.2-1.5 mm)", status: "VERIFIED" },
+                                { op: "OP 40 (Job Order)", process: "Hard Chrome Plating & Superfinishing", po: "PO-JO-2026-320", cert: "CR-CERT-4109", specs: "Chrome Thickness: 28.5 µm (Spec: 25-32 µm) | Salt Spray NSS 240 Hrs: PASS", status: "VERIFIED" }
+                            ]
+                        },
+                        notes: "In-process quality inspectors performed first-piece and hourly frequency checks. Subcontract job-order certifications cross-validated before final assembly."
+                    },
+                    {
+                        step: 5,
+                        key: "grn",
+                        title: "GRN Tracking",
+                        subtitle: "Inward Raw Material Receipt & Store Verification",
+                        iconName: "Package",
+                        badge: "GRN-2026-02-0492",
+                        badgeColor: "#06b6d4",
+                        accentColor: "#0891b2",
+                        metrics: [
+                            { label: "GRN Number", value: "GRN-2026-02-0492", highlight: true },
+                            { label: "GRN Inward Date", value: "18-Feb-2026", highlight: true },
+                            { label: "Material Qty", value: "4,850", highlight: true },
+                            { label: "Uom", value: "Kg", highlight: true }
+                        ],
+                        grnRecords: [
+                            {
+                                grnNo: "GRN-2026-02-0492",
+                                grnDate: "18-Feb-2026",
+                                materialQty: "4,850",
+                                uom: "Kg",
+                                okQty: "4,850",
+                                rejQty: "0",
+                                inspBy: "R. Vignesh",
+                                verdict: "PASS"
+                            }
+                        ],
+                        notes: "Raw material inward received and verified against purchase order with 100% heat lot identity and visual store inspection."
+                    },
+                    {
+                        step: 6,
+                        key: "supplier",
+                        title: "Supplier Details",
+                        subtitle: "Tier-1 Mill Approval & Vendor Audit Performance",
+                        iconName: "Building2",
+                        badge: "VEND-JND-0104",
+                        badgeColor: "#ec4899",
+                        accentColor: "#db2777",
+                        metrics: [
+                            { label: "Supplier / Mill Name", value: "Jindal Steel & Seamless Tubes Ltd", highlight: true },
+                            { label: "Raw Material PO Ref", value: "PO-RM-2026-0812", highlight: true },
+                            { label: "Po Date", value: "05-Feb-2026", highlight: true },
+                            { label: "Qty", value: "4,850", highlight: true },
+                            { label: "Uom", value: "Kg", highlight: true }
+                        ],
+                        supplierRecords: [
+                            {
+                                supplierName: "Jindal Steel & Seamless Tubes Ltd",
+                                poRef: "PO-RM-2026-0812",
+                                poDate: "05-Feb-2026",
+                                qty: "4,850",
+                                uom: "Kg",
+                                status: "APPROVED TIER-1"
+                            }
+                        ],
+                        vendorRating: "98.5% Grade A",
+                        rejectionPpm: "0 PPM (Zero Defect)",
+                        traceability: "100% Heat Lot Matched",
+                        notes: "Preferred mill under long-term quality supply agreement with complete traceability back to steel billet casting heat."
+                    }
+                ]
+            },
+            {
+                partNo: "RMC-ROD-2540",
+                partDescription: "Hard Chrome Piston Rod Ø25 x 400 mm",
+                batchLot: "LOT-RMC-2026-43",
+                billedQty: "50 Nos",
+                partValue: "₹ 1,90,650",
+                auditRating: "99.2%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered",
+                stages: [
+                    {
+                        step: 1,
+                        key: "invoice",
+                        title: "Invoice No",
+                        subtitle: "Billing & Commercial Release",
+                        iconName: "FileSpreadsheet",
+                        badge: "INV-2026-0842",
+                        badgeColor: "#3b82f6",
+                        accentColor: "#2563eb",
+                        metrics: [
+                            { label: "Invoice Number", value: "INV-2026-0842", highlight: true },
+                            { label: "Invoice Date", value: "08-Mar-2026" },
+                            { label: "Billed Quantity", value: "50 Nos", highlight: true },
+                            { label: "Unit Rate", value: "₹ 3,813.00 / No" },
+                            { label: "Taxable Subtotal", value: "₹ 1,90,650.00" },
+                            { label: "GST (CGST+SGST 18%)", value: "₹ 34,317.00" },
+                            { label: "Total Net Payable", value: "₹ 2,24,967.00", highlight: true },
+                            { label: "Customer PO Ref", value: "PO-RMC-2026-7781 Item 02" },
+                            { label: "PO Order Date", value: "12-Feb-2026" },
+                            { label: "IRN / QR Code", value: "IRN-8841-A902-9982" }
+                        ]
+                    },
+                    {
+                        step: 2,
+                        key: "dc",
+                        title: "DC (Delivery Challan)",
+                        subtitle: "Outward Logistics & Movement",
+                        iconName: "Truck",
+                        badge: "DC/2026/03/0184",
+                        badgeColor: "#8b5cf6",
+                        accentColor: "#7c3aed",
+                        metrics: [
+                            { label: "Delivery Challan No", value: "DC/2026/03/0184", highlight: true },
+                            { label: "Challan Date & Time", value: "08-Mar-2026 (04:30 PM)" },
+                            { label: "Dispatched Quantity", value: "50 Nos (2 Wooden Cases)", highlight: true },
+                            { label: "Vehicle Number", value: "TN-38-BZ-4921", highlight: true },
+                            { label: "Transporter Name", value: "VRL Logistics Express Ltd" },
+                            { label: "E-Way Bill Number", value: "3819 4029 8812 (Valid 10-Mar)" },
+                            { label: "GRN/PO Det", value: "PO-RMC-2026-7781 • GRN-2026-02-0498", highlight: true }
+                        ]
+                    },
+                    {
+                        step: 3,
+                        key: "finalInsp",
+                        title: "Final Insp",
+                        subtitle: "100% Finished Goods Inspection & Straightness QA",
+                        iconName: "CheckCheck",
+                        badge: "FIR-2026-03-099",
+                        badgeColor: "#10b981",
+                        accentColor: "#059669",
+                        metrics: [
+                            { label: "Final Insp Report No", value: "FIR-2026-03-099", highlight: true },
+                            { label: "Inspection Date", value: "07-Mar-2026" },
+                            { label: "Tot Qty", value: "50 Nos", highlight: true },
+                            { label: "Inspected Qty", value: "50 Nos", highlight: true },
+                            { label: "Rej Qty", value: "0 Nos" },
+                            { label: "Rw Qty", value: "0 Nos" },
+                            { label: "Routecard Det", value: "RC-2026-03-8843", highlight: true },
+                            { label: "Insp By", value: "S. Selvam" }
+                        ],
+                        inspectionRecords: [
+                            { op: "OP 10", routeCard: "RC-2026-03-8843", process: "CNC Peeling, Facing & Chamfering", machine: "Doosan Lynx 220", shift: "Shift 1", totQty: "50", inspQty: "50", okQty: "50", rejQty: "0", rwQty: "0", inspectedBy: "S. Selvam", verdict: "PASS" },
+                            { op: "OP 20", routeCard: "RC-2026-03-8843", process: "Precision Centerless Cylindrical Grinding", machine: "Cincinnati OM-2", shift: "Shift 1", totQty: "50", inspQty: "50", okQty: "50", rejQty: "0", rwQty: "0", inspectedBy: "M. Anand", verdict: "PASS" },
+                            { op: "OP 30", routeCard: "RC-2026-03-8843", process: "Subcontract Hard Chrome Plating 25 µm", machine: "Apex Surface Tech", shift: "General", totQty: "50", inspQty: "50", okQty: "50", rejQty: "0", rwQty: "0", inspectedBy: "R. Murugesh", verdict: "PASS" },
+                            { op: "OP 40", routeCard: "RC-2026-03-8843", process: "Superfinishing & Micro-polishing Ra 0.12", machine: "Nagel Superfinish", shift: "Shift 2", totQty: "50", inspQty: "50", okQty: "50", rejQty: "0", rwQty: "0", inspectedBy: "P. Vignesh", verdict: "PASS" },
+                            { op: "Final QA", routeCard: "RC-2026-03-8843", process: "100% Diameter, Straightness & Plating QA", machine: "Mitutoyo Linear Height", shift: "Shift 1", totQty: "50", inspQty: "50", okQty: "50", rejQty: "0", rwQty: "0", inspectedBy: "S. Selvam", verdict: "PASS" }
+                        ]
+                    },
+                    {
+                        step: 4,
+                        key: "production",
+                        title: "Production (Inhouse & Job Order) with Quality Insp",
+                        subtitle: "Centerless Grinding & Subcontract Hard Chrome Plating",
+                        iconName: "Factory",
+                        badge: "RC-2026-03-8843",
+                        badgeColor: "#f59e0b",
+                        accentColor: "#d97706",
+                        routeCardNo: "RC-2026-03-8843",
+                        metrics: [
+                            { label: "Route Card Number", value: "RC-2026-03-8843", highlight: true },
+                            { label: "Routing Operations", value: "4 Ops (2 Inhouse CNC + 2 Subcontract)", highlight: true },
+                            { label: "Primary Subcontractor", value: "Apex Heat Treat & Surface Coating Tech" },
+                            { label: "Job Order Challans", value: "Out: SC-DC-2026-0422 • In: APX-IN-8940" }
+                        ],
+                        inhouseOps: [
+                            { op: "OP 10", process: "CNC Bar Peeling & Facing", machine: "Haas ST-30", operator: "S. Selvam", ipqa: "IPQA-2611", status: "Approved", keyMetric: "Face Runout ≤ 0.010 mm" },
+                            { op: "OP 20", process: "Precision Centerless Grinding", machine: "Cincinnati OM-2", operator: "M. Anand", ipqa: "IPQA-2614", status: "Approved", keyMetric: "OD Ø25 -0.005/-0.012 mm" }
+                        ],
+                        jobOrder: {
+                            vendorName: "Apex Heat Treat & Surface Coating Tech",
+                            subcontractDC: "SC-DC-2026-0422",
+                            inwardChallan: "APX-IN-8940",
+                            items: [
+                                { op: "OP 30 (Job Order)", process: "Induction Hardening 58-62 HRC", po: "PO-JO-2026-324", cert: "HT-CERT-9080", specs: "Surface Hardness: 60.5 HRC | Case Depth: 1.40 mm", status: "VERIFIED" },
+                                { op: "OP 40 (Job Order)", process: "Hard Chrome Plating 25 µm & Micro-cracking", po: "PO-JO-2026-325", cert: "CR-CERT-4122", specs: "Plating: 27.5 µm | NSS 240 Hrs: PASS", status: "VERIFIED" }
+                            ]
+                        },
+                        notes: "In-process quality inspectors checked chrome plating adhesion and salt spray corrosion resistance."
+                    },
+                    {
+                        step: 5,
+                        key: "grn",
+                        title: "GRN Tracking",
+                        subtitle: "Inward Raw Material Receipt & Store Verification",
+                        iconName: "Package",
+                        badge: "GRN-2026-02-0498",
+                        badgeColor: "#06b6d4",
+                        accentColor: "#0891b2",
+                        metrics: [
+                            { label: "GRN Number", value: "GRN-2026-02-0498", highlight: true },
+                            { label: "GRN Inward Date", value: "20-Feb-2026", highlight: true },
+                            { label: "Material Qty", value: "1,850", highlight: true },
+                            { label: "Uom", value: "Kg", highlight: true }
+                        ],
+                        grnRecords: [
+                            {
+                                grnNo: "GRN-2026-02-0498",
+                                grnDate: "20-Feb-2026",
+                                materialQty: "1,850",
+                                uom: "Kg",
+                                okQty: "1,850",
+                                rejQty: "0",
+                                inspBy: "R. Vignesh",
+                                verdict: "PASS"
+                            }
+                        ],
+                        notes: "EN8D medium carbon steel ground bars received, spark tested, and heat number verified."
+                    },
+                    {
+                        step: 6,
+                        key: "supplier",
+                        title: "Supplier Details",
+                        subtitle: "Tier-1 Mill Approval & Vendor Audit Performance",
+                        iconName: "Building2",
+                        badge: "VEND-TTS-0033",
+                        badgeColor: "#ec4899",
+                        accentColor: "#db2777",
+                        metrics: [
+                            { label: "Supplier / Mill Name", value: "Tata Steel Tubes Division", highlight: true },
+                            { label: "Raw Material PO Ref", value: "PO-RM-2026-0818", highlight: true },
+                            { label: "Po Date", value: "06-Feb-2026", highlight: true },
+                            { label: "Qty", value: "1,850", highlight: true },
+                            { label: "Uom", value: "Kg", highlight: true }
+                        ],
+                        supplierRecords: [
+                            {
+                                supplierName: "Tata Steel Tubes Division",
+                                poRef: "PO-RM-2026-0818",
+                                poDate: "06-Feb-2026",
+                                qty: "1,850",
+                                uom: "Kg",
+                                status: "APPROVED TIER-1"
+                            }
+                        ],
+                        vendorRating: "99.2% Grade A",
+                        rejectionPpm: "0 PPM (Zero Defect)",
+                        traceability: "100% Heat Lot Matched",
+                        notes: "Preferred mill under long-term quality supply agreement with complete traceability back to steel billet casting heat."
+                    }
+                ]
+            }
+        ],
+        stages: [
+            {
+                step: 1,
+                key: "invoice",
+                title: "Invoice No",
+                subtitle: "Billing & Commercial Release",
+                iconName: "FileSpreadsheet",
+                badge: "INV-2026-0842",
+                badgeColor: "#3b82f6",
+                accentColor: "#2563eb",
+                metrics: [
+                    { label: "Invoice Number", value: "INV-2026-0842", highlight: true },
+                    { label: "Invoice Date", value: "08-Mar-2026" },
+                    { label: "Billed Quantity", value: "150 Nos", highlight: true },
+                    { label: "Unit Rate", value: "₹ 3,450.00 / No" },
+                    { label: "Taxable Subtotal", value: "₹ 5,17,500.00" },
+                    { label: "GST (CGST+SGST 18%)", value: "₹ 93,150.00" },
+                    { label: "Total Net Payable", value: "₹ 6,10,650.00", highlight: true },
+                    { label: "Customer PO Ref", value: "PO-RMC-2026-7781" },
+                    { label: "PO Order Date", value: "12-Feb-2026" },
+                    { label: "IRN / QR Code", value: "IRN-8841-A902-9982" }
+                ],
+                // notes: "Commercial invoice released with automated digital sign-off. Cross-referenced against Customer PO #PO-RMC-2026-7781 line item 01."
+            },
+            {
+                step: 2,
+                key: "dc",
+                title: "DC (Delivery Challan)",
+                subtitle: "Outward Logistics & Movement",
+                iconName: "Truck",
+                badge: "DC/2026/03/0184",
+                badgeColor: "#8b5cf6",
+                accentColor: "#7c3aed",
+                metrics: [
+                    { label: "Delivery Challan No", value: "DC/2026/03/0184", highlight: true },
+                    { label: "Challan Date & Time", value: "08-Mar-2026 (04:30 PM)" },
+                    { label: "Dispatched Quantity", value: "150 Nos (5 Sealed Crates)", highlight: true },
+                    { label: "Vehicle Number", value: "TN-38-BZ-4921", highlight: true },
+                    { label: "Transporter Name", value: "VRL Logistics Express Ltd" },
+                    { label: "E-Way Bill Number", value: "3819 4029 8812 (Valid 10-Mar)" },
+                    { label: "GRN/PO Det", value: "PO-RMC-2026-7781 • GRN-2026-02-0492", highlight: true }
+                ],
+                // notes: "Security gate seal #GT-8840 applied. Goods inspected for moisture protection packaging and transit cushioning before vehicle exit."
+            },
+            {
+                step: 3,
+                key: "finalInsp",
+                title: "Final Insp",
+                subtitle: "100% Finished Goods Inspection & Hydro Test",
+                iconName: "CheckCheck",
+                badge: "FIR-2026-03-098",
+                badgeColor: "#10b981",
+                accentColor: "#059669",
+                metrics: [
+                    { label: "Final Insp Report No", value: "FIR-2026-03-098", highlight: true },
+                    { label: "Inspection Date", value: "07-Mar-2026" },
+                    { label: "Tot Qty", value: "150 Nos", highlight: true },
+                    { label: "Inspected Qty", value: "150 Nos", highlight: true },
+                    { label: "Rej Qty", value: "0 Nos" },
+                    { label: "Rw Qty", value: "0 Nos" },
+                    { label: "Routecard Det", value: "RC-2026-03-8842", highlight: true },
+                    { label: "Insp By", value: "K. Rajesh" }
+                ],
+                inspectionRecords: [
+                    { op: "OP 10", routeCard: "RC-2026-03-8842", process: "CNC Facing, Chamfering & Centering", machine: "Doosan Lynx 220", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "S. Selvam", verdict: "PASS" },
+                    { op: "OP 20", routeCard: "RC-2026-03-8842", process: "Precision Deep-Hole Skiving & Burnishing", machine: "BTA Deep-Hole 02", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "M. Anand", verdict: "PASS" },
+                    { op: "OP 30", routeCard: "RC-2026-03-8842", process: "Subcontract Induction Hardening & Chrome", machine: "Apex Surface Tech", shift: "General", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "R. Murugesh", verdict: "PASS" },
+                    { op: "OP 50", routeCard: "RC-2026-03-8842", process: "CNC Port Threading & Flange TIG Welding", machine: "Mori Seiki NLX", shift: "Shift 2", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "P. Vignesh", verdict: "PASS" },
+                    { op: "OP 60", routeCard: "RC-2026-03-8842", process: "Multi-Stage Ultrasonic Clean & Degrease", machine: "SonicWash SW-400", shift: "Shift 2", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "V. Raman", verdict: "PASS" },
+                    { op: "Final QA", routeCard: "RC-2026-03-8842", process: "100% CMM Metrology & 350 Bar Hydro Test", machine: "Zeiss CMM / Test Bench", shift: "Shift 1", totQty: "150", inspQty: "150", okQty: "150", rejQty: "0", rwQty: "0", inspectedBy: "K. Rajesh", verdict: "PASS" }
+                ],
+                // notes: "All 150 tubes successfully tested for dimensional compliance on CMM Zeiss Contura and leak-free pressure testing at 350 Bar."
+            },
+            {
+                step: 4,
+                key: "production",
+                title: "Production (Inhouse & Job Order) with Quality Insp",
+                subtitle: "6 Stage Workflow (Inhouse CNC + Subcontract Heat Treat)",
+                iconName: "Factory",
+                badge: "RC-2026-03-8842",
+                badgeColor: "#f59e0b",
+                accentColor: "#d97706",
+                routeCardNo: "RC-2026-03-8842",
+                metrics: [
+                    { label: "Route Card Number", value: "RC-2026-03-8842", highlight: true },
+                    { label: "Routing Operations", value: "6 Ops (4 Inhouse CNC + 2 Subcontract)", highlight: true },
+                    { label: "Primary Subcontractor", value: "Apex Heat Treat & Surface Coating Tech" },
+                    { label: "Job Order Challans", value: "Out: SC-DC-2026-0419 • In: APX-IN-8921" }
+                ],
+                inhouseOps: [
+                    { op: "OP 10", process: "CNC Facing, Chamfering & Centering", machine: "Doosan Lynx 220", operator: "S. Selvam", ipqa: "IPQA-2601", status: "Approved", keyMetric: "Face Runout ≤ 0.015 mm" },
+                    { op: "OP 20", process: "Precision Deep-Hole Skiving & Burnishing", machine: "BTA Deep-Hole 02", operator: "M. Anand", ipqa: "IPQA-2602", status: "Approved", keyMetric: "Internal Bore Ra 0.16 µm" },
+                    { op: "OP 50", process: "CNC Port Threading & Flange TIG Welding", machine: "Mori Seiki NLX", operator: "P. Vignesh", ipqa: "IPQA-2605", status: "Approved", keyMetric: "Thread Gauge 6H PASS" },
+                    { op: "OP 60", process: "Multi-Stage Ultrasonic Clean & Degrease", machine: "SonicWash SW-400", operator: "V. Raman", ipqa: "IPQA-2606", status: "Approved", keyMetric: "Gravimetric Millipore 1.2 mg" }
+                ],
+                jobOrder: {
+                    vendorName: "Apex Heat Treat & Surface Coating Tech",
+                    subcontractDC: "SC-DC-2026-0419",
+                    inwardChallan: "APX-IN-8921",
+                    items: [
+                        { op: "OP 30 (Job Order)", process: "Induction Hardening & Quenching", po: "PO-JO-2026-319", cert: "HT-CERT-9042", specs: "Hardness: 58-62 HRC (Actual: 59.5 HRC) | Case Depth: 1.35 mm (Spec: 1.2-1.5 mm)", status: "VERIFIED" },
+                        { op: "OP 40 (Job Order)", process: "Hard Chrome Plating & Superfinishing", po: "PO-JO-2026-320", cert: "CR-CERT-4109", specs: "Chrome Thickness: 28.5 µm (Spec: 25-32 µm) | Salt Spray NSS 240 Hrs: PASS", status: "VERIFIED" }
+                    ]
+                },
+                notes: "In-process quality inspectors performed first-piece and hourly frequency checks. Subcontract job-order certifications cross-validated before final assembly."
+            },
+            {
+                step: 5,
+                key: "grn",
+                title: "GRN Tracking",
+                subtitle: "Inward Raw Material Receipt & Store Verification",
+                iconName: "Package",
+                badge: "GRN-2026-02-0492",
+                badgeColor: "#06b6d4",
+                accentColor: "#0891b2",
+                metrics: [
+                    { label: "GRN Number", value: "GRN-2026-02-0492", highlight: true },
+                    { label: "GRN Inward Date", value: "18-Feb-2026", highlight: true },
+                    { label: "Material Qty", value: "4,850", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                grnRecords: [
+                    {
+                        grnNo: "GRN-2026-02-0492",
+                        grnDate: "18-Feb-2026",
+                        materialQty: "4,850",
+                        uom: "Kg",
+                        okQty: "4,850",
+                        rejQty: "0",
+                        inspBy: "R. Vignesh",
+                        verdict: "PASS"
+                    }
+                ],
+                notes: "Raw material inward received and verified against purchase order with 100% heat lot identity and visual store inspection."
+            },
+            {
+                step: 6,
+                key: "supplier",
+                title: "Supplier Details",
+                subtitle: "Tier-1 Mill Approval & Vendor Audit Performance",
+                iconName: "Building2",
+                badge: "VEND-JND-0104",
+                badgeColor: "#ec4899",
+                accentColor: "#db2777",
+                metrics: [
+                    { label: "Supplier / Mill Name", value: "Jindal Steel & Seamless Tubes Ltd", highlight: true },
+                    { label: "Raw Material PO Ref", value: "PO-RM-2026-0812", highlight: true },
+                    { label: "Po Date", value: "05-Feb-2026", highlight: true },
+                    { label: "Qty", value: "4,850", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                supplierRecords: [
+                    {
+                        supplierName: "Jindal Steel & Seamless Tubes Ltd",
+                        poRef: "PO-RM-2026-0812",
+                        poDate: "05-Feb-2026",
+                        qty: "4,850",
+                        uom: "Kg",
+                        status: "APPROVED TIER-1"
+                    }
+                ],
+                vendorRating: "98.5% Grade A",
+                rejectionPpm: "0 PPM (Zero Defect)",
+                traceability: "100% Heat Lot Matched",
+                notes: "Preferred mill under long-term quality supply agreement with complete traceability back to steel billet casting heat."
+            }
+        ]
+    }, {
+        id: "INV-2026-0843",
+        customer: "Hailstone Innovations Pvt Ltd",
+        partNo: "HLS-PIN-6542",
+        partDescription: "Heavy Duty Drive Pinion Shaft Ø65 x 420 mm",
+        batchLot: "LOT-HLS-2026-18",
+        totalValue: "₹ 4,89,600",
+        billedQty: "80 Nos",
+        auditRating: "99.1%",
+        qualityStatus: "Passed & QA Stamped",
+        dispatchStatus: "Dispatched & Delivered",
+        stages: [
+            {
+                step: 1,
+                key: "invoice",
+                title: "Invoice No",
+                subtitle: "Billing & Commercial Release",
+                iconName: "FileSpreadsheet",
+                badge: "INV-2026-0843",
+                badgeColor: "#3b82f6",
+                accentColor: "#2563eb",
+                metrics: [
+                    { label: "Invoice Number", value: "INV-2026-0843", highlight: true },
+                    { label: "Invoice Date", value: "09-Mar-2026" },
+                    { label: "Billed Quantity", value: "80 Nos", highlight: true },
+                    { label: "Unit Rate", value: "₹ 5,100.00 / No" },
+                    { label: "Taxable Subtotal", value: "₹ 4,08,000.00" },
+                    { label: "GST (CGST+SGST 18%)", value: "₹ 73,440.00" },
+                    { label: "Total Net Payable", value: "₹ 4,89,600.00", highlight: true },
+                    { label: "Customer PO Ref", value: "PO-HLS-2026-4109" },
+                    { label: "PO Order Date", value: "16-Feb-2026" }
+                ],
+                notes: "Pinion shaft batch billed under warranty contract for Hailstone primary crushers."
+            },
+            {
+                step: 2,
+                key: "dc",
+                title: "DC (Delivery Challan)",
+                subtitle: "Outward Logistics & Movement",
+                iconName: "Truck",
+                badge: "DC/2026/03/0189",
+                badgeColor: "#8b5cf6",
+                accentColor: "#7c3aed",
+                metrics: [
+                    { label: "Delivery Challan No", value: "DC/2026/03/0189", highlight: true },
+                    { label: "Challan Date & Time", value: "09-Mar-2026 (02:15 PM)" },
+                    { label: "Dispatched Quantity", value: "80 Nos (4 Wooden Pallets)", highlight: true },
+                    { label: "Vehicle Number", value: "KL-08-AW-3184", highlight: true },
+                    { label: "Transporter Name", value: "Southern Roadways Cargo" },
+                    { label: "E-Way Bill Number", value: "3920 1194 0029" },
+                    { label: "GRN/PO Det", value: "PO-HLS-2026-4109 • GRN-2026-02-0504", highlight: true }
+                ],
+                notes: "Loaded with anti-impact wooden dividers between pinions to protect gear teeth."
+            },
+            {
+                step: 3,
+                key: "finalInsp",
+                title: "Final Insp",
+                subtitle: "100% Finished Goods Inspection & Runout Test",
+                iconName: "CheckCheck",
+                badge: "FIR-2026-03-102",
+                badgeColor: "#10b981",
+                accentColor: "#059669",
+                metrics: [
+                    { label: "Final Insp Report No", value: "FIR-2026-03-102", highlight: true },
+                    { label: "Inspection Date", value: "08-Mar-2026" },
+                    { label: "Tot Qty", value: "80 Nos", highlight: true },
+                    { label: "Inspected Qty", value: "80 Nos", highlight: true },
+                    { label: "Rej Qty", value: "0 Nos" },
+                    { label: "Rw Qty", value: "0 Nos" },
+                    { label: "Routecard Det", value: "RC-2026-03-8850", highlight: true },
+                    { label: "Insp By", value: "M. Soundararajan" }
+                ],
+                inspectionRecords: [
+                    { op: "OP 10", routeCard: "RC-2026-03-8850", process: "CNC Rough & Finish OD Turning", machine: "Haas ST-30", shift: "Shift 1", totQty: "80", inspQty: "80", okQty: "80", rejQty: "0", rwQty: "0", inspectedBy: "K. Balaji", verdict: "PASS" },
+                    { op: "OP 20", routeCard: "RC-2026-03-8850", process: "Precision Pinion Gear Hobbing", machine: "Liebherr LC-180", shift: "Shift 1", totQty: "80", inspQty: "80", okQty: "80", rejQty: "0", rwQty: "0", inspectedBy: "P. Ramesh", verdict: "PASS" },
+                    { op: "OP 30", routeCard: "RC-2026-03-8850", process: "Subcontract Vacuum Carburizing", machine: "Thermotreat Tech", shift: "General", totQty: "80", inspQty: "80", okQty: "80", rejQty: "0", rwQty: "0", inspectedBy: "V. Senthil", verdict: "PASS" },
+                    { op: "OP 40", routeCard: "RC-2026-03-8850", process: "CNC Journal & Flank Profile Grinding", machine: "Studer S33", shift: "Shift 2", totQty: "80", inspQty: "80", okQty: "80", rejQty: "0", rwQty: "0", inspectedBy: "T. Dinesh", verdict: "PASS" },
+                    { op: "Final QA", routeCard: "RC-2026-03-8850", process: "100% Tooth Lead, Pitch & Runout QA", machine: "Klingelnberg CNC", shift: "Shift 1", totQty: "80", inspQty: "80", okQty: "80", rejQty: "0", rwQty: "0", inspectedBy: "M. Soundararajan", verdict: "PASS" }
+                ],
+                notes: "Gear tooth flank profile and pitch variance verified on Klingelnberg CNC Gear Tester."
+            },
+            {
+                step: 4,
+                key: "production",
+                title: "Production (Inhouse & Job Order) with Quality Insp",
+                subtitle: "CNC Turning, Hobbing & Subcontract Vacuum Carburizing",
+                iconName: "Factory",
+                badge: "RC-2026-03-8850",
+                badgeColor: "#f59e0b",
+                accentColor: "#d97706",
+                routeCardNo: "RC-2026-03-8850",
+                metrics: [
+                    { label: "Route Card Number", value: "RC-2026-03-8850", highlight: true },
+                    { label: "Routing Operations", value: "4 Ops (3 Inhouse CNC + 1 Subcontract)", highlight: true },
+                    { label: "Primary Subcontractor", value: "SuperTherm Vacuum Carburizing Ltd" },
+                    { label: "Job Order Challans", value: "Out: SC-DC-2026-0428 • In: ST-IN-4421" }
+                ],
+                inhouseOps: [
+                    { op: "OP 10", process: "CNC Rough & Finish Turning", machine: "Mazak Quick Turn 250", operator: "R. Suresh", ipqa: "IPQA-2710", status: "Approved", keyMetric: "Journal Runout ≤ 0.010 mm" },
+                    { op: "OP 20", process: "Precision CNC Gear Hobbing", machine: "Liebherr LC 280", operator: "K. Mohan", ipqa: "IPQA-2712", status: "Approved", keyMetric: "DIN 7 Gear Tooth Class PASS" },
+                    { op: "OP 50", process: "CNC Hard Part Finish Grinding", machine: "Studer S33 Cylindrical", operator: "G. Bala", ipqa: "IPQA-2715", status: "Approved", keyMetric: "Bearing Seat Ra 0.24 µm" }
+                ],
+                jobOrder: {
+                    vendorName: "SuperTherm Vacuum Carburizing Ltd",
+                    subcontractDC: "SC-DC-2026-0428",
+                    inwardChallan: "ST-IN-4421",
+                    items: [
+                        { op: "OP 30 (Job Order)", process: "Vacuum Carburizing & Cryogenic Quench", po: "PO-JO-2026-342", cert: "VC-CERT-8812", specs: "Surface: 60.2 HRC | Effective Case Depth: 1.65 mm (Spec: 1.5 - 1.8 mm)", status: "VERIFIED" }
+                    ]
+                },
+                notes: "100% magnetic particle crack testing (MPI) completed post heat-treatment."
+            },
+            {
+                step: 5,
+                key: "grn",
+                title: "GRN Tracking",
+                subtitle: "20MnCr5 Forged Round Bar Inward Receipt",
+                iconName: "Package",
+                badge: "GRN-2026-02-0504",
+                badgeColor: "#06b6d4",
+                accentColor: "#0891b2",
+                metrics: [
+                    { label: "GRN Number", value: "GRN-2026-02-0504", highlight: true },
+                    { label: "GRN Inward Date", value: "22-Feb-2026", highlight: true },
+                    { label: "Material Qty", value: "3,820", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                grnRecords: [
+                    {
+                        grnNo: "GRN-2026-02-0504",
+                        grnDate: "22-Feb-2026",
+                        materialQty: "3,820",
+                        uom: "Kg",
+                        okQty: "3,820",
+                        rejQty: "0",
+                        inspBy: "M. Soundararajan",
+                        verdict: "PASS"
+                    }
+                ],
+                notes: "Raw forged bars received, identity verified, and cleared for inhouse CNC machining."
+            },
+            {
+                step: 6,
+                key: "supplier",
+                title: "Supplier Details",
+                subtitle: "Kalyani Steels Special Alloy Division",
+                iconName: "Building2",
+                badge: "VEND-KLY-0210",
+                badgeColor: "#ec4899",
+                accentColor: "#db2777",
+                metrics: [
+                    { label: "Supplier / Mill Name", value: "Kalyani Steels Limited", highlight: true },
+                    { label: "Raw Material PO Ref", value: "PO-RM-2026-0834", highlight: true },
+                    { label: "Po Date", value: "10-Feb-2026", highlight: true },
+                    { label: "Qty", value: "3,820", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                supplierRecords: [
+                    {
+                        supplierName: "Kalyani Steels Limited",
+                        poRef: "PO-RM-2026-0834",
+                        poDate: "10-Feb-2026",
+                        qty: "3,820",
+                        uom: "Kg",
+                        status: "APPROVED TIER-1"
+                    }
+                ],
+                vendorRating: "99.1% Grade A",
+                rejectionPpm: "0 PPM (Zero Defect)",
+                traceability: "100% Heat Lot Matched",
+                notes: "Approved supplier for premium transmission alloy forgings."
+            }
+        ]
+    },
+    {
+        id: "INV-2026-0844",
+        customer: "ATS Elgi Limited",
+        partNo: "ELG-CYL-85WF",
+        partDescription: "Hydraulic Cylinder Assembly DIA 85 W/F",
+        batchLot: "LOT-ELGI-2026-09",
+        totalValue: "₹ 7,56,000",
+        billedQty: "120 Nos",
+        auditRating: "99.7%",
+        qualityStatus: "Passed & QA Stamped",
+        dispatchStatus: "Dispatched & Delivered",
+        stages: [
+            {
+                step: 1,
+                key: "invoice",
+                title: "Invoice No",
+                subtitle: "Billing & Commercial Release",
+                iconName: "FileSpreadsheet",
+                badge: "INV-2026-0844",
+                badgeColor: "#3b82f6",
+                accentColor: "#2563eb",
+                metrics: [
+                    { label: "Invoice Number", value: "INV-2026-0844", highlight: true },
+                    { label: "Invoice Date", value: "09-Mar-2026" },
+                    { label: "Billed Quantity", value: "120 Nos", highlight: true },
+                    { label: "Unit Rate", value: "₹ 5,338.98 / No" },
+                    { label: "Taxable Subtotal", value: "₹ 6,40,678.00" },
+                    { label: "GST (18%)", value: "₹ 1,15,322.00" },
+                    { label: "Total Net Payable", value: "₹ 7,56,000.00", highlight: true },
+                    { label: "Customer PO Ref", value: "PO-ELGI-2026-9901" }
+                ],
+                notes: "Commercial release for high-pressure lifting cylinder assembly line."
+            },
+            {
+                step: 2,
+                key: "dc",
+                title: "DC (Delivery Challan)",
+                subtitle: "Outward Logistics & Movement",
+                iconName: "Truck",
+                badge: "DC/2026/03/0194",
+                badgeColor: "#8b5cf6",
+                accentColor: "#7c3aed",
+                metrics: [
+                    { label: "Delivery Challan No", value: "DC/2026/03/0194", highlight: true },
+                    { label: "Challan Date & Time", value: "09-Mar-2026 (05:45 PM)" },
+                    { label: "Dispatched Quantity", value: "120 Nos", highlight: true },
+                    { label: "Vehicle Number", value: "TN-37-DC-8012", highlight: true },
+                    { label: "Transporter Name", value: "ABT Parcel Service Ltd" },
+                    { label: "E-Way Bill Number", value: "3921 8840 2210" },
+                    { label: "GRN/PO Det", value: "PO-ELGI-2026-9901 • GRN-2026-02-0518", highlight: true }
+                ],
+                notes: "Delivered via dedicated local transit truck with shock absorption rubber mounts."
+            },
+            {
+                step: 3,
+                key: "finalInsp",
+                title: "Final Insp",
+                subtitle: "100% High Pressure Hydro & Dimensional Inspection",
+                iconName: "CheckCheck",
+                badge: "FIR-2026-03-110",
+                badgeColor: "#10b981",
+                accentColor: "#059669",
+                metrics: [
+                    { label: "Final Insp Report No", value: "FIR-2026-03-110", highlight: true },
+                    { label: "Inspection Date", value: "09-Mar-2026" },
+                    { label: "Tot Qty", value: "120 Nos", highlight: true },
+                    { label: "Inspected Qty", value: "120 Nos", highlight: true },
+                    { label: "Rej Qty", value: "0 Nos" },
+                    { label: "Rw Qty", value: "0 Nos" },
+                    { label: "Routecard Det", value: "RC-2026-03-8861", highlight: true },
+                    { label: "Insp By", value: "S. Nithyanand" }
+                ],
+                inspectionRecords: [
+                    { op: "OP 10", routeCard: "RC-2026-03-8861", process: "CNC Rough Turning & Port Milling", machine: "BFW Agni VMC", shift: "Shift 1", totQty: "120", inspQty: "120", okQty: "120", rejQty: "0", rwQty: "0", inspectedBy: "A. Karthik", verdict: "PASS" },
+                    { op: "OP 20", routeCard: "RC-2026-03-8861", process: "Vertical CNC Tube Honing", machine: "Sunnen SV-20", shift: "Shift 1", totQty: "120", inspQty: "120", okQty: "120", rejQty: "0", rwQty: "0", inspectedBy: "N. Murthy", verdict: "PASS" },
+                    { op: "OP 30", routeCard: "RC-2026-03-8861", process: "Controlled Gas Nitriding", machine: "Precision Nitriding", shift: "General", totQty: "120", inspQty: "120", okQty: "120", rejQty: "0", rwQty: "0", inspectedBy: "K. Mohan", verdict: "PASS" },
+                    { op: "OP 50", routeCard: "RC-2026-03-8861", process: "Automated Assembly & Seal Fitment", machine: "Assembly Line 01", shift: "Shift 2", totQty: "120", inspQty: "120", okQty: "120", rejQty: "0", rwQty: "0", inspectedBy: "D. Siva", verdict: "PASS" },
+                    { op: "Final QA", routeCard: "RC-2026-03-8861", process: "400 Bar Proof Hydro & Dimension QA", machine: "Hydro Rig 02", shift: "Shift 1", totQty: "120", inspQty: "120", okQty: "120", rejQty: "0", rwQty: "0", inspectedBy: "S. Nithyanand", verdict: "PASS" }
+                ],
+                notes: "Zero external oil weeping or internal piston bypass detected across all units."
+            },
+            {
+                step: 4,
+                key: "production",
+                title: "Production (Inhouse & Job Order) with Quality Insp",
+                subtitle: "Inhouse Boring, Honing & Subcontract Nitriding",
+                iconName: "Factory",
+                badge: "RC-2026-03-8861",
+                badgeColor: "#f59e0b",
+                accentColor: "#d97706",
+                routeCardNo: "RC-2026-03-8861",
+                metrics: [
+                    { label: "Route Card Number", value: "RC-2026-03-8861", highlight: true },
+                    { label: "Routing Operations", value: "4 Ops (3 Inhouse CNC + 1 Subcontract)", highlight: true },
+                    { label: "Primary Subcontractor", value: "Precision Gas Nitriding Solutions" },
+                    { label: "Job Order Challans", value: "Out: SC-DC-2026-0435 • In: PGN-IN-1290" }
+                ],
+                inhouseOps: [
+                    { op: "OP 10", process: "CNC Rough Turning & Port Milling", machine: "BFW Agni VMC", operator: "A. Karthik", ipqa: "IPQA-2840", status: "Approved", keyMetric: "Port Thread PASS" },
+                    { op: "OP 20", process: "Vertical CNC Tube Honing", machine: "Sunnen SV-20", operator: "N. Murthy", ipqa: "IPQA-2842", status: "Approved", keyMetric: "Bore Cylindricity ≤ 0.006 mm" },
+                    { op: "OP 50", process: "Automated Cylinder Assembly & Seal Fitment", machine: "Assembly Line 01", operator: "D. Siva", ipqa: "IPQA-2845", status: "Approved", keyMetric: "Seal Integrity 100% OK" }
+                ],
+                jobOrder: {
+                    vendorName: "Precision Gas Nitriding Solutions",
+                    subcontractDC: "SC-DC-2026-0435",
+                    inwardChallan: "PGN-IN-1290",
+                    items: [
+                        { op: "OP 30 (Job Order)", process: "Controlled Gas Nitriding", po: "PO-JO-2026-360", cert: "GN-CERT-1104", specs: "Case Depth: 0.45 mm | Surface Hardness: 680 HV1 (PASS)", status: "VERIFIED" }
+                    ]
+                },
+                notes: "Seal grooves checked with optical comparator before Parker hydraulic seal fitment."
+            },
+            {
+                step: 5,
+                key: "grn",
+                title: "GRN Tracking",
+                subtitle: "Cold Drawn Seamless Steel Pipe Inward Receipt",
+                iconName: "Package",
+                badge: "GRN-2026-02-0518",
+                badgeColor: "#06b6d4",
+                accentColor: "#0891b2",
+                metrics: [
+                    { label: "GRN Number", value: "GRN-2026-02-0518", highlight: true },
+                    { label: "GRN Inward Date", value: "24-Feb-2026", highlight: true },
+                    { label: "Material Qty", value: "5,140", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                grnRecords: [
+                    {
+                        grnNo: "GRN-2026-02-0518",
+                        grnDate: "24-Feb-2026",
+                        materialQty: "5,140",
+                        uom: "Kg",
+                        okQty: "5,140",
+                        rejQty: "0",
+                        inspBy: "P. Dharmaraj",
+                        verdict: "PASS"
+                    }
+                ],
+                notes: "Fully normalized and stress-relieved seamless tubes inspected and stored in Raw Bay."
+            },
+            {
+                step: 6,
+                key: "supplier",
+                title: "Supplier Details",
+                subtitle: "Tata Steel Tubes Division Approved Vendor",
+                iconName: "Building2",
+                badge: "VEND-TTS-0033",
+                badgeColor: "#ec4899",
+                accentColor: "#db2777",
+                metrics: [
+                    { label: "Supplier / Mill Name", value: "Tata Steel Tubes Division", highlight: true },
+                    { label: "Raw Material PO Ref", value: "PO-RM-2026-0842", highlight: true },
+                    { label: "Po Date", value: "12-Feb-2026", highlight: true },
+                    { label: "Qty", value: "5,140", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                supplierRecords: [
+                    {
+                        supplierName: "Tata Steel Tubes Division",
+                        poRef: "PO-RM-2026-0842",
+                        poDate: "12-Feb-2026",
+                        qty: "5,140",
+                        uom: "Kg",
+                        status: "APPROVED TIER-1"
+                    }
+                ],
+                vendorRating: "99.7% Grade A+",
+                rejectionPpm: "0 PPM (Zero Defect)",
+                traceability: "100% Heat Lot Matched",
+                notes: "Primary strategic partner for high-pressure seamless tubing."
+            }
+        ]
+    },
+    {
+        id: "INV-2026-0845",
+        customer: "Bicelli Geco Hydraulics India",
+        partNo: "BCG-ROD-5080",
+        partDescription: "Hard Chrome Hydraulic Piston Rod Ø50 x 800 mm",
+        batchLot: "LOT-BICE-2026-25",
+        totalValue: "₹ 5,84,000",
+        billedQty: "200 Nos",
+        auditRating: "99.6%",
+        qualityStatus: "Passed & QA Stamped",
+        dispatchStatus: "Dispatched & Delivered",
+        parts: [
+            {
+                partNo: "BCG-ROD-5080",
+                partDescription: "Hard Chrome Hydraulic Piston Rod Ø50 x 800 mm",
+                batchLot: "LOT-BICE-2026-25A",
+                billedQty: "200 Nos",
+                partValue: "₹ 2,40,000",
+                auditRating: "99.6%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered"
+            },
+            {
+                partNo: "BCG-CYL-3260",
+                partDescription: "Double Acting Hydraulic Cylinder Tube Ø60 x 750 mm",
+                batchLot: "LOT-BICE-2026-25B",
+                billedQty: "100 Nos",
+                partValue: "₹ 1,54,000",
+                auditRating: "99.5%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered"
+            },
+            {
+                partNo: "BCG-PST-4520",
+                partDescription: "Precision Forged Hydraulic Piston Head Ø50",
+                batchLot: "LOT-BICE-2026-25C",
+                billedQty: "150 Nos",
+                partValue: "₹ 1,10,000",
+                auditRating: "99.8%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered"
+            },
+            {
+                partNo: "BCG-SEAL-9010",
+                partDescription: "Polyurethane High Pressure Rod Seal Kit",
+                batchLot: "LOT-BICE-2026-25D",
+                billedQty: "200 Sets",
+                partValue: "₹ 80,000",
+                auditRating: "100%",
+                qualityStatus: "Passed & QA Stamped",
+                dispatchStatus: "Dispatched & Delivered"
+            }
+        ],
+        stages: [
+            {
+                step: 1,
+                key: "invoice",
+                title: "Invoice No",
+                subtitle: "Billing & Commercial Release",
+                iconName: "FileSpreadsheet",
+                badge: "INV-2026-0845",
+                badgeColor: "#3b82f6",
+                accentColor: "#2563eb",
+                metrics: [
+                    { label: "Invoice Number", value: "INV-2026-0845", highlight: true },
+                    { label: "Invoice Date", value: "10-Mar-2026" },
+                    { label: "Billed Quantity", value: "200 Nos", highlight: true },
+                    { label: "Unit Rate", value: "₹ 2,474.57 / No" },
+                    { label: "Taxable Subtotal", value: "₹ 4,94,915.00" },
+                    { label: "GST (18%)", value: "₹ 89,085.00" },
+                    { label: "Total Net Payable", value: "₹ 5,84,000.00", highlight: true },
+                    { label: "Customer PO Ref", value: "PO-BCG-2026-3180" }
+                ],
+                notes: "Commercial invoice with electronic tax clearance."
+            },
+            {
+                step: 2,
+                key: "dc",
+                title: "DC (Delivery Challan)",
+                subtitle: "Outward Logistics & Movement",
+                iconName: "Truck",
+                badge: "DC/2026/03/0201",
+                badgeColor: "#8b5cf6",
+                accentColor: "#7c3aed",
+                metrics: [
+                    { label: "Delivery Challan No", value: "DC/2026/03/0201", highlight: true },
+                    { label: "Challan Date & Time", value: "10-Mar-2026 (01:10 PM)" },
+                    { label: "Dispatched Quantity", value: "200 Nos", highlight: true },
+                    { label: "Vehicle Number", value: "TN-40-EE-9912", highlight: true },
+                    { label: "Transporter Name", value: "GATI KWE Express" },
+                    { label: "E-Way Bill Number", value: "3922 4018 7741" },
+                    { label: "GRN/PO Det", value: "PO-BCG-2026-3180 • GRN-2026-02-0530", highlight: true }
+                ],
+                notes: "Shipped in reinforced wooden crates with heavy polyethylene sealing."
+            },
+            {
+                step: 3,
+                key: "finalInsp",
+                title: "Final Insp",
+                subtitle: "100% Piston Rod Chrome & Straightness Inspection",
+                iconName: "CheckCheck",
+                badge: "FIR-2026-03-115",
+                badgeColor: "#10b981",
+                accentColor: "#059669",
+                metrics: [
+                    { label: "Final Insp Report No", value: "FIR-2026-03-115", highlight: true },
+                    { label: "Inspection Date", value: "10-Mar-2026" },
+                    { label: "Tot Qty", value: "200 Nos", highlight: true },
+                    { label: "Inspected Qty", value: "200 Nos", highlight: true },
+                    { label: "Rej Qty", value: "0 Nos" },
+                    { label: "Rw Qty", value: "0 Nos" },
+                    { label: "Routecard Det", value: "RC-2026-03-8874", highlight: true },
+                    { label: "Insp By", value: "C. Prakash" }
+                ],
+                inspectionRecords: [
+                    { op: "OP 10", routeCard: "RC-2026-03-8874", process: "CNC Bar Peeling & Facing", machine: "Doosan Puma GT", shift: "Shift 1", totQty: "200", inspQty: "200", okQty: "200", rejQty: "0", rwQty: "0", inspectedBy: "G. Manoj", verdict: "PASS" },
+                    { op: "OP 20", routeCard: "RC-2026-03-8874", process: "Centerless Cylindrical Grinding", machine: "Cincinnati OM-2", shift: "Shift 1", totQty: "200", inspQty: "200", okQty: "200", rejQty: "0", rwQty: "0", inspectedBy: "R. Saravanan", verdict: "PASS" },
+                    { op: "OP 30", routeCard: "RC-2026-03-8874", process: "Subcontract Hard Chrome Plating", machine: "SuperChrome Tech", shift: "General", totQty: "200", inspQty: "200", okQty: "200", rejQty: "0", rwQty: "0", inspectedBy: "M. Chandran", verdict: "PASS" },
+                    { op: "OP 40", routeCard: "RC-2026-03-8874", process: "Superfinishing & Polishing", machine: "Nagel Superfinish", shift: "Shift 2", totQty: "200", inspQty: "200", okQty: "200", rejQty: "0", rwQty: "0", inspectedBy: "J. Prakash", verdict: "PASS" },
+                    { op: "Final QA", routeCard: "RC-2026-03-8874", process: "100% Diameter, Straightness & Surface QA", machine: "Mitutoyo Linear Height", shift: "Shift 1", totQty: "200", inspQty: "200", okQty: "200", rejQty: "0", rwQty: "0", inspectedBy: "C. Prakash", verdict: "PASS" }
+                ],
+                notes: "Ultra-fine superfinished surface with mirror plating verified under 50x microscope."
+            },
+            {
+                step: 4,
+                key: "production",
+                title: "Production (Inhouse & Job Order) with Quality Insp",
+                subtitle: "CNC Turning, Threading & Subcontract Hard Chrome",
+                iconName: "Factory",
+                badge: "RC-2026-03-8874",
+                badgeColor: "#f59e0b",
+                accentColor: "#d97706",
+                routeCardNo: "RC-2026-03-8874",
+                metrics: [
+                    { label: "Route Card Number", value: "RC-2026-03-8874", highlight: true },
+                    { label: "Routing Operations", value: "3 Ops (2 Inhouse CNC + 1 Subcontract)", highlight: true },
+                    { label: "Primary Subcontractor", value: "Precision Chrome Tech Surface Finishers" },
+                    { label: "Job Order Challans", value: "Out: SC-DC-2026-0442 • In: PCT-IN-9081" }
+                ],
+                inhouseOps: [
+                    { op: "OP 10", process: "CNC Facing, Threading & Eye Turning", machine: "Haas ST-30", operator: "E. Prabhu", ipqa: "IPQA-2901", status: "Approved", keyMetric: "Thread Pitch Error < 0.005 mm" },
+                    { op: "OP 20", process: "Precision Centerless Cylindrical Polishing", machine: "Glebov Superfinisher", operator: "K. Mohan", ipqa: "IPQA-2904", status: "Approved", keyMetric: "Base Ra 0.20 µm" }
+                ],
+                jobOrder: {
+                    vendorName: "Precision Chrome Tech Surface Finishers",
+                    subcontractDC: "SC-DC-2026-0442",
+                    inwardChallan: "PCT-IN-9081",
+                    items: [
+                        { op: "OP 30 (Job Order)", process: "Hard Chrome Plating 25 µm & Micro-cracking", po: "PO-JO-2026-377", cert: "CR-CERT-5501", specs: "Plating: 26.2 µm | Hardness: 950 HV0.1 | NSS 240 Hrs (PASS)", status: "VERIFIED" }
+                    ]
+                },
+                notes: "Surface roughness and chrome micro-crack density checked per ISO 6158."
+            },
+            {
+                step: 5,
+                key: "grn",
+                title: "GRN Tracking",
+                subtitle: "Ck45 / EN8D Induction Hardened Bar Inward Receipt",
+                iconName: "Package",
+                badge: "GRN-2026-02-0529",
+                badgeColor: "#06b6d4",
+                accentColor: "#0891b2",
+                metrics: [
+                    { label: "GRN Number", value: "GRN-2026-02-0529", highlight: true },
+                    { label: "GRN Inward Date", value: "27-Feb-2026", highlight: true },
+                    { label: "Material Qty", value: "6,200", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                grnRecords: [
+                    {
+                        grnNo: "GRN-2026-02-0529",
+                        grnDate: "27-Feb-2026",
+                        materialQty: "6,200",
+                        uom: "Kg",
+                        okQty: "6,200",
+                        rejQty: "0",
+                        inspBy: "C. Prakash",
+                        verdict: "PASS"
+                    }
+                ],
+                notes: "Raw induction bars received, dimensional checks verified, and identity confirmed for production."
+            },
+            {
+                step: 6,
+                key: "supplier",
+                title: "Supplier Details",
+                subtitle: "Salem Steel & Alloy Mills Tier-1 Vendor",
+                iconName: "Building2",
+                badge: "VEND-SLM-0087",
+                badgeColor: "#ec4899",
+                accentColor: "#db2777",
+                metrics: [
+                    { label: "Supplier / Mill Name", value: "Salem Steel & Alloy Mills", highlight: true },
+                    { label: "Raw Material PO Ref", value: "PO-RM-2026-0850", highlight: true },
+                    { label: "Po Date", value: "14-Feb-2026", highlight: true },
+                    { label: "Qty", value: "6,200", highlight: true },
+                    { label: "Uom", value: "Kg", highlight: true }
+                ],
+                supplierRecords: [
+                    {
+                        supplierName: "Salem Steel & Alloy Mills",
+                        poRef: "PO-RM-2026-0850",
+                        poDate: "14-Feb-2026",
+                        qty: "6,200",
+                        uom: "Kg",
+                        status: "APPROVED TIER-1"
+                    }
+                ],
+                vendorRating: "99.6% Grade A",
+                rejectionPpm: "0 PPM (Zero Defect)",
+                traceability: "100% Heat Lot Matched",
+                notes: "Accredited mill with 100% on-time delivery and zero dimensional returns."
+            }
+        ]
+    }
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HELPER: Normalize invoice parts for multi-part invoice support
+// ─────────────────────────────────────────────────────────────────────────────
+export const getInvoiceParts = (inv) => {
+    if (!inv) return [];
+    if (inv.parts && Array.isArray(inv.parts) && inv.parts.length > 0) {
+        return inv.parts;
+    }
+    return [
+        {
+            partNo: inv.partNo,
+            partDescription: inv.partDescription,
+            batchLot: inv.batchLot,
+            billedQty: inv.billedQty,
+            partValue: inv.totalValue,
+            auditRating: inv.auditRating,
+            qualityStatus: inv.qualityStatus,
+            dispatchStatus: inv.dispatchStatus,
+            stages: inv.stages
+        }
+    ];
+};
+
+function QualityTimelineSection() {
+    const [selectedInvId, setSelectedInvId] = useState("INV-2026-0842");
+    const [selectedPartNo, setSelectedPartNo] = useState("RMC-CYL-4050");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [copied, setCopied] = useState(false);
+    const [selectedStageModal, setSelectedStageModal] = useState(null); // 1..6 or null
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [lineItemDropdownOpen, setLineItemDropdownOpen] = useState(false);
+    const [prodTab, setProdTab] = useState("ALL"); // "ALL" | "INHOUSE" | "SUBCONTRACT"
+    const dropdownRef = useRef(null);
+    const lineItemDropdownRef = useRef(null);
+    const searchInputRef = useRef(null);
+
+    const activeInvoice = useMemo(() => {
+        return QUALITY_TIMELINE_DATA.find((inv) => inv.id === selectedInvId) || QUALITY_TIMELINE_DATA[0];
+    }, [selectedInvId]);
+
+    const activePartsList = useMemo(() => {
+        return getInvoiceParts(activeInvoice);
+    }, [activeInvoice]);
+
+    const activePart = useMemo(() => {
+        const found = activePartsList.find((p) => p.partNo === selectedPartNo);
+        return found || activePartsList[0];
+    }, [activePartsList, selectedPartNo]);
+
+    const activeStages = useMemo(() => {
+        return activePart.stages || activeInvoice.stages;
+    }, [activePart, activeInvoice]);
+
+    const handleSelectInvoice = (invId) => {
+        setSelectedInvId(invId);
+        const targetInv = QUALITY_TIMELINE_DATA.find((inv) => inv.id === invId);
+        const parts = getInvoiceParts(targetInv);
+        if (parts.length > 0) {
+            setSelectedPartNo(parts[0].partNo);
+        }
+        setDropdownOpen(false);
+        setLineItemDropdownOpen(false);
+        setSearchQuery("");
+    };
+
+    // Auto-focus search input when dropdown opens
+    useEffect(() => {
+        if (dropdownOpen) {
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 60);
+        }
+    }, [dropdownOpen]);
+
+    const filteredInvoices = useMemo(() => {
+        if (!searchQuery.trim()) {
+            return QUALITY_TIMELINE_DATA;
+        }
+        const q = searchQuery.toLowerCase();
+        return QUALITY_TIMELINE_DATA.filter((inv) => {
+            const parts = getInvoiceParts(inv);
+            const matchPart = parts.some(
+                (p) => p.partNo.toLowerCase().includes(q) || (p.partDescription && p.partDescription.toLowerCase().includes(q))
+            );
+            return (
+                inv.id.toLowerCase().includes(q) ||
+                inv.customer.toLowerCase().includes(q) ||
+                inv.totalValue.toLowerCase().includes(q) ||
+                matchPart
+            );
+        });
+    }, [searchQuery]);
+
+    // Handle click outside to close dropdowns
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setDropdownOpen(false);
+            }
+            if (lineItemDropdownRef.current && !lineItemDropdownRef.current.contains(event.target)) {
+                setLineItemDropdownOpen(false);
+            }
+        };
+        if (dropdownOpen || lineItemDropdownOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [dropdownOpen, lineItemDropdownOpen]);
+
+    // Handle ESC key to close modal or dropdown & lock background scroll
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === "Escape") {
+                setSelectedStageModal(null);
+                setDropdownOpen(false);
+                setLineItemDropdownOpen(false);
+            }
+        };
+        if (selectedStageModal !== null) {
+            window.addEventListener("keydown", handleKeyDown);
+            document.body.style.overflow = "hidden";
+        }
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            document.body.style.overflow = "";
+        };
+    }, [selectedStageModal]);
+
+    const modalStageData = useMemo(() => {
+        if (selectedStageModal === null) return null;
+        return activeStages.find((s) => s.step === selectedStageModal) || null;
+    }, [activeStages, selectedStageModal]);
+
+    const handleCopyAuditTrail = () => {
+        const text = [
+            `========================================================================`,
+            `  QUALITY TIMELINE AUDIT TRAIL — ${activeInvoice.id}`,
+            `========================================================================`,
+            `Customer:     ${activeInvoice.customer}`,
+            `Part No:      ${activePart.partNo} — ${activePart.partDescription}`,
+            `Batch Lot:    ${activePart.batchLot}`,
+            `Billed Qty:   ${activePart.billedQty} | Total: ${activePart.partValue || activeInvoice.totalValue}`,
+            `Quality:      ${activePart.qualityStatus} (Score: ${activePart.auditRating})`,
+            `------------------------------------------------------------------------`,
+            `STAGE 01: [Invoice No]    ${activeInvoice.stages[0].metrics[0].value} (Dt: ${activeInvoice.stages[0].metrics[1].value})`,
+            `STAGE 02: [DC]            ${activeInvoice.stages[1].metrics[0].value} | Veh: ${activeInvoice.stages[1].metrics[3].value}`,
+            `STAGE 03: [Final Insp]    ${activeInvoice.stages[2].metrics[0].value} | Inspected: ${activeInvoice.stages[2].metrics[3].value}`,
+            `STAGE 04: [Production]    ${activeInvoice.stages[3].routeCardNo} | ${activeInvoice.stages[3].inhouseOps.length} Inhouse Ops + Subcontract Heat Treat`,
+            `STAGE 05: [GRN Tracking]  ${activeInvoice.stages[4].metrics[0].value} (Dt: ${activeInvoice.stages[4].metrics[1].value}) | Mat Qty: ${activeInvoice.stages[4].metrics[2].value} ${activeInvoice.stages[4].metrics[3].value}`,
+            `STAGE 06: [Supplier]      ${activeInvoice.stages[5].metrics[0].value} | PO: ${activeInvoice.stages[5].metrics[1].value} (Dt: ${activeInvoice.stages[5].metrics[2].value}) | Qty: ${activeInvoice.stages[5].metrics[3].value} ${activeInvoice.stages[5].metrics[4].value}`,
+            `------------------------------------------------------------------------`,
+            `Status: Complete End-to-End Quality Traceability Verified & Compliant.`,
+            `Standard: ISO 9001:2015 & IATF 16949:2016 Certified Audit Trail.`,
+            `========================================================================`
+        ].join("\n");
+
+        if (navigator && navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2400);
+            }).catch(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2400);
+            });
+        } else {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2400);
+        }
+    };
+
+    const renderStageIcon = (iconName, color, size = 18) => {
+        const props = { size, style: { color, flexShrink: 0 } };
+        switch (iconName) {
+            case "FileSpreadsheet": return <FileSpreadsheet {...props} />;
+            case "Truck": return <Truck {...props} />;
+            case "CheckCheck": return <CheckCheck {...props} />;
+            case "Factory": return <Factory {...props} />;
+            case "Package": return <Package {...props} />;
+            case "Beaker": return <Beaker {...props} />;
+            case "Building2": return <Building2 {...props} />;
+            default: return <ShieldCheck {...props} />;
+        }
+    };
+
+    const getStageSnippet = (stage) => {
+        switch (stage.step) {
+            case 1: {
+                const poMetric = stage.metrics.find((m) => m.label === "Customer PO Ref");
+                return {
+                    primary: `${activeInvoice.billedQty} • ${activeInvoice.totalValue}`,
+                    secondary: poMetric ? `PO: ${poMetric.value}` : "Commercial Release"
+                };
+            }
+            case 2: {
+                const veh = stage.metrics.find((m) => m.label === "Vehicle Number");
+                const transp = stage.metrics.find((m) => m.label === "Transporter Name");
+                return {
+                    primary: veh ? veh.value : stage.badge,
+                    secondary: transp ? transp.value : "Dispatched"
+                };
+            }
+            case 3:
+                return {
+                    primary: "100% Passed (Zero Defect)",
+                    secondary: "350 Bar Hydro • Metrology OK"
+                };
+            case 4:
+                return {
+                    primary: `${stage.inhouseOps.length} Inhouse + 2 Subcontract`,
+                    secondary: "Heat Treat 59.5 HRC • Chrome Plating"
+                };
+            case 5: {
+                const qty = stage.metrics.find((m) => m.label === "Material Qty")?.value || "";
+                const uom = stage.metrics.find((m) => m.label === "Uom")?.value || "";
+                return {
+                    primary: qty ? `${qty} ${uom}` : "Inward Material",
+                    secondary: `GRN: ${stage.badge} • Inward Verified`
+                };
+            }
+            case 6: {
+                const supp = stage.metrics.find((m) => m.label === "Supplier / Mill Name")?.value || "";
+                const poRef = stage.metrics.find((m) => m.label === "Raw Material PO Ref")?.value || "";
+                const poDate = stage.metrics.find((m) => m.label === "Po Date")?.value || "";
+                return {
+                    primary: supp,
+                    secondary: poRef ? `${poRef} • ${poDate}` : "Approved Tier-1 Mill"
+                };
+            }
+            default:
+                return { primary: "Verified", secondary: "Quality Passed" };
+        }
+    };
+
+    return (
+        <div className="qa2-card qa2-card-premium qa2-animate qa2-d3 qa2-timeline-container" id="quality-timeline-section">
+            {/* ── Section Header ── */}
+            <div className="qa2-timeline-header">
+                <div className="qa2-timeline-header-left">
+                    <div className="qa2-timeline-icon-box">
+                        <Layers size={22} className="qa2-timeline-main-icon" />
+                    </div>
+                    <div>
+                        <div className="qa2-timeline-title-row">
+                            <h2 className="qa2-timeline-title">Quality Timeline</h2>
+                            {/* <span className="qa2-timeline-live-pill">
+                                <span className="qa2-timeline-pulse-dot" />
+                                Single Row Pipeline View
+                            </span> */}
+                            {/* <span className="qa2-timeline-iso-badge">
+                                <Award size={13} style={{ strokeWidth: 2.2 }} />
+                                ISO 9001 & IATF 16949
+                            </span> */}
+                        </div>
+                        <p className="qa2-timeline-subtitle">
+                            Continuous 6-stage quality lineage from customer invoice to raw material mill. Click any stage to inspect complete details.
+                        </p>
+                    </div>
+                </div>
+
+                {/* ── Top Header Actions: Search ── */}
+                <div className="qa2-timeline-header-right">
+                    <div className="qa2-timeline-search-box">
+                        <Search size={14} className="qa2-timeline-search-icon" />
+                        <input
+                            type="text"
+                            placeholder="Filter invoice / part..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="qa2-timeline-search-input"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="qa2-timeline-search-clear"
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Unified Hierarchical Selector Dropdown (Invoice + Part No Combined) ── */}
+            <div className="qa2-timeline-selector-strip">
+                <div className="qa2-timeline-strip-label">
+                    <Sparkles size={14} style={{ color: "#f59e0b" }} />
+                    <span>Select Invoice:</span>
+                </div>
+
+                <div className="qa2-timeline-dropdown-wrapper" ref={dropdownRef}>
+                    <button
+                        type="button"
+                        onClick={() => setDropdownOpen((prev) => !prev)}
+                        className={`qa2-timeline-dropdown-trigger ${dropdownOpen ? "active" : ""}`}
+                        aria-expanded={dropdownOpen}
+                        aria-haspopup="listbox"
+                        title="Click to switch active traceability invoice"
+                    >
+                        <div className="qa2-timeline-dropdown-trigger-left">
+                            <span className="qa2-timeline-dropdown-pill">{activeInvoice.id}</span>
+                            <span className="qa2-timeline-dropdown-cust" title={activeInvoice.customer}>
+                                {activeInvoice.customer}
+                            </span>
+                            <span className="qa2-timeline-dropdown-sep">•</span>
+                            <span className="qa2-timeline-dropdown-val">{activeInvoice.totalValue}</span>
+                            <span className="qa2-timeline-dropdown-multi-pill">
+                                {activePartsList.length} {activePartsList.length === 1 ? "Part" : "Parts"}
+                            </span>
+                        </div>
+                        <div className="qa2-timeline-dropdown-trigger-right">
+                            <ChevronDown size={14} className={`qa2-timeline-dropdown-chevron ${dropdownOpen ? "open" : ""}`} />
+                        </div>
+                    </button>
+
+                    {dropdownOpen && (
+                        <div className="qa2-timeline-dropdown-popover" role="listbox">
+                            {/* Integrated Search on Dropdown */}
+                            <div className="qa2-dropdown-search-wrap">
+                                <Search size={14} className="qa2-dropdown-search-icon" />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search invoice no, customer, part..."
+                                    className="qa2-dropdown-search-input"
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSearchQuery("");
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        className="qa2-dropdown-search-clear"
+                                        title="Clear search"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="qa2-timeline-dropdown-popover-header">
+                                <span className="qa2-dropdown-header-title">
+                                    {searchQuery ? `Matching Invoices (${filteredInvoices.length})` : "Select Traceability Invoice"}
+                                </span>
+                                <span className="qa2-dropdown-header-badge">
+                                    {filteredInvoices.length} Invoices Available
+                                </span>
+                            </div>
+
+                            <div className="qa2-timeline-dropdown-popover-list">
+                                {filteredInvoices.length === 0 ? (
+                                    <div className="qa2-dropdown-empty">
+                                        No invoice found matching &ldquo;{searchQuery}&rdquo;
+                                    </div>
+                                ) : (
+                                    filteredInvoices.map((inv) => {
+                                        const isSelected = inv.id === activeInvoice.id;
+                                        const invParts = getInvoiceParts(inv);
+
+                                        return (
+                                            <button
+                                                key={inv.id}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={isSelected}
+                                                onClick={() => handleSelectInvoice(inv.id)}
+                                                className={`qa2-timeline-inv-item ${isSelected ? "selected" : ""}`}
+                                            >
+                                                <div className="qa2-inv-col-id">
+                                                    <FileSpreadsheet size={14} className="qa2-inv-icon" />
+                                                    <span className="qa2-inv-id-text">{inv.id}</span>
+                                                </div>
+
+                                                <div className="qa2-inv-col-cust" title={inv.customer}>
+                                                    <span className="qa2-inv-cust-text">{inv.customer}</span>
+                                                    <span className={`qa2-inv-parts-badge ${invParts.length > 1 ? "multi" : "single"}`}>
+                                                        {invParts.length} {invParts.length === 1 ? "Part" : "Parts"}
+                                                    </span>
+                                                </div>
+
+                                                <div className="qa2-inv-col-amt">
+                                                    <span className="qa2-inv-amt-text">{inv.totalValue}</span>
+                                                </div>
+
+                                                <div className="qa2-inv-col-check">
+                                                    {isSelected ? (
+                                                        <span className="qa2-dropdown-check-circle">
+                                                            <Check size={12} strokeWidth={3} />
+                                                        </span>
+                                                    ) : (
+                                                        <span className="qa2-part-check-placeholder" />
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Active Invoice & Part Overview Card ── */}
+            <div className="qa2-timeline-overview-card">
+                <div className="qa2-timeline-overview-left">
+                    <div className="qa2-timeline-overview-badge-row">
+                        <span className="qa2-timeline-ov-badge-inv">{activeInvoice.id}</span>
+                        <span className="qa2-timeline-ov-badge-part">{activePart.partNo}</span>
+                    </div>
+
+                    <div className="qa2-timeline-overview-part">
+                        <span className="qa2-timeline-ov-partno">{activePart.partNo}</span>
+                        <span className="qa2-timeline-ov-desc">{activePart.partDescription}</span>
+                    </div>
+
+                    {/* Billed Line Items Quick-Selector */}
+                    {activePartsList.length > 0 && (
+                        <div className="qa2-inline-parts-bar">
+                            <span className="qa2-inline-parts-label">Billed Line Items:</span>
+                            {activePartsList.length > 3 ? (
+                                <div className="qa2-inline-parts-dropdown-wrap" ref={lineItemDropdownRef}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setLineItemDropdownOpen((prev) => !prev)}
+                                        className={`qa2-inline-parts-dropdown-trigger ${lineItemDropdownOpen ? "active" : ""}`}
+                                        aria-expanded={lineItemDropdownOpen}
+                                        title="Click to select line item"
+                                    >
+                                        <div className="qa2-parts-dd-trigger-left">
+                                            <span className="qa2-parts-dd-badge">
+                                                Item {activePartsList.findIndex((p) => p.partNo === activePart.partNo) + 1} of {activePartsList.length}
+                                            </span>
+                                            <span className="qa2-parts-dd-partno">{activePart.partNo}</span>
+                                            <span className="qa2-parts-dd-sep">•</span>
+                                            <span className="qa2-parts-dd-desc" title={activePart.partDescription}>
+                                                {activePart.partDescription}
+                                            </span>
+                                            <span className="qa2-parts-dd-qty">
+                                                ({activePart.billedQty}{activePart.partValue ? ` • ${activePart.partValue}` : ""})
+                                            </span>
+                                        </div>
+                                        <ChevronDown size={14} className={`qa2-parts-dd-chevron ${lineItemDropdownOpen ? "open" : ""}`} />
+                                    </button>
+
+                                    {lineItemDropdownOpen && (
+                                        <div className="qa2-inline-parts-dropdown-popover" role="listbox">
+                                            <div className="qa2-parts-dd-popover-header">
+                                                <span className="qa2-parts-dd-popover-title">Select Billed Line Item</span>
+                                                <span className="qa2-parts-dd-count-pill">{activePartsList.length} Items</span>
+                                            </div>
+                                            <div className="qa2-parts-dd-popover-list">
+                                                {activePartsList.map((p, idx) => {
+                                                    const isPartActive = p.partNo === activePart.partNo;
+                                                    return (
+                                                        <button
+                                                            key={p.partNo}
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={isPartActive}
+                                                            onClick={() => {
+                                                                setSelectedPartNo(p.partNo);
+                                                                setLineItemDropdownOpen(false);
+                                                            }}
+                                                            className={`qa2-parts-dd-item ${isPartActive ? "selected" : ""}`}
+                                                        >
+                                                            <div className="qa2-parts-dd-item-left">
+                                                                <div className="qa2-parts-dd-item-top">
+                                                                    <span className="qa2-parts-dd-item-idx">Item {idx + 1}:</span>
+                                                                    <span className="qa2-parts-dd-item-partno">{p.partNo}</span>
+                                                                    <span className="qa2-parts-dd-item-qty">({p.billedQty})</span>
+                                                                    {p.partValue && (
+                                                                        <span className="qa2-parts-dd-item-val">{p.partValue}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="qa2-parts-dd-item-desc">
+                                                                    {p.partDescription}
+                                                                </div>
+                                                            </div>
+                                                            <div className="qa2-parts-dd-item-check">
+                                                                {isPartActive && (
+                                                                    <span className="qa2-dropdown-check-circle">
+                                                                        <Check size={12} strokeWidth={3} />
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="qa2-inline-parts-pills">
+                                    {activePartsList.map((p, idx) => {
+                                        const isPartActive = p.partNo === activePart.partNo;
+                                        return (
+                                            <button
+                                                key={p.partNo}
+                                                type="button"
+                                                onClick={() => setSelectedPartNo(p.partNo)}
+                                                className={`qa2-inline-part-pill ${isPartActive ? "active" : ""}`}
+                                                title={`Select line item: ${p.partNo} — ${p.partDescription}`}
+                                            >
+                                                <span className="pill-index">Item {idx + 1}:</span>
+                                                <span className="pill-part">{p.partNo}</span>
+                                                <span className="pill-qty">({p.billedQty}{p.partValue ? ` • ${p.partValue}` : ""})</span>
+                                                {isPartActive && <span className="pill-dot" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="qa2-timeline-overview-stats">
+                    <div className="qa2-timeline-ov-stat-item">
+                        <span className="qa2-timeline-stat-lbl">Customer</span>
+                        <span className="qa2-timeline-stat-val text-truncate" title={activeInvoice.customer}>
+                            {activeInvoice.customer}
+                        </span>
+                    </div>
+                    <div className="qa2-timeline-ov-stat-item">
+                        <span className="qa2-timeline-stat-lbl">Billed Qty</span>
+                        <span className="qa2-timeline-stat-val">{activePart.billedQty}</span>
+                    </div>
+                    <div className="qa2-timeline-ov-stat-item">
+                        <span className="qa2-timeline-stat-lbl">Part Value</span>
+                        <span className="qa2-timeline-stat-val stat-green">{activePart.partValue || activeInvoice.totalValue}</span>
+                    </div>
+                    <div className="qa2-timeline-ov-stat-item">
+                        <span className="qa2-timeline-stat-lbl">Part No</span>
+                        <span className="qa2-timeline-stat-val text-mono">{activePart.partNo}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── SINGLE ROW PIPELINE VIEW (6 Interconnected Stages) ── */}
+            <div className="qa2-timeline-single-row-wrap">
+                <div className="qa2-timeline-row-caption">
+                    <span className="qa2-timeline-row-caption-title">
+                        End-to-End Traceability Stream (Click any stage to inspect detailed particulars):
+                    </span>
+                    <span className="qa2-timeline-row-caption-hint">
+                        Single Row Sequential View • 6 Stages
+                    </span>
+                </div>
+
+                <div className="qa2-timeline-single-row-pipeline">
+                    {activeStages.map((stage, idx) => {
+                        const snippet = getStageSnippet(stage);
+                        const isLast = idx === activeInvoice.stages.length - 1;
+
+                        return (
+                            <div key={stage.step} className="qa2-timeline-pipe-step-wrapper">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStageModal(stage.step)}
+                                    className={`qa2-timeline-pipe-card stage-${stage.key}`}
+                                    title={`Click to view detailed particulars for ${stage.title}`}
+                                >
+                                    {/* Card Top Row: Step badge & Icon */}
+                                    <div className="qa2-timeline-pipe-top">
+                                        <div className="qa2-timeline-pipe-badge-wrap">
+                                            <span
+                                                className="qa2-timeline-pipe-step-num"
+                                                style={{ background: stage.accentColor }}
+                                            >
+                                                0{stage.step}
+                                            </span>
+                                            <span
+                                                className="qa2-timeline-pipe-step-pill"
+                                                style={{ background: `${stage.accentColor}15`, color: stage.accentColor }}
+                                            >
+                                                Stage 0{stage.step}
+                                            </span>
+                                        </div>
+                                        <div
+                                            className="qa2-timeline-pipe-icon-bubble"
+                                            style={{ background: `${stage.accentColor}12`, borderColor: `${stage.accentColor}35` }}
+                                        >
+                                            {renderStageIcon(stage.iconName, stage.accentColor, 17)}
+                                        </div>
+                                    </div>
+
+                                    {/* Stage Title */}
+                                    <div className="qa2-timeline-pipe-title" title={stage.title}>
+                                        {stage.title}
+                                    </div>
+
+                                    {/* Particular Identifier Badge */}
+                                    <div
+                                        className="qa2-timeline-pipe-id-badge"
+                                        style={{ background: `${stage.badgeColor}15`, color: stage.badgeColor }}
+                                    >
+                                        {stage.badge}
+                                    </div>
+
+                                    {/* Snippet Particular Highlights */}
+                                    <div className="qa2-timeline-pipe-snippet">
+                                        <div className="qa2-timeline-pipe-snippet-primary" title={snippet.primary}>
+                                            {snippet.primary}
+                                        </div>
+                                        <div className="qa2-timeline-pipe-snippet-secondary" title={snippet.secondary}>
+                                            {snippet.secondary}
+                                        </div>
+                                    </div>
+
+                                    {/* Bottom Action / View Details Pill */}
+                                    <div className="qa2-timeline-pipe-bottom">
+                                        <span className="qa2-timeline-pipe-verified">
+                                            <CheckCircle2 size={11} style={{ color: "#10b981" }} />
+                                            <span>Verified</span>
+                                        </span>
+                                        <span className="qa2-timeline-pipe-action-btn">
+                                            <span>Inspect</span>
+                                            <ArrowUpRight size={12} />
+                                        </span>
+                                    </div>
+                                </button>
+
+                                {/* Interconnecting Directional Arrow (Between Steps) */}
+                                {!isLast && (
+                                    <div className="qa2-timeline-pipe-connector" aria-hidden="true">
+                                        <ChevronRight size={18} className="qa2-timeline-pipe-arrow-icon" />
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── DETAILED MODAL / POPUP (Opens on Click via Portal) ── */}
+            {selectedStageModal !== null && modalStageData && createPortal(
+                <div
+                    className="qa2-timeline-modal-overlay"
+                    onClick={() => setSelectedStageModal(null)}
+                >
+                    <div
+                        className="qa2-timeline-modal-box"
+                        onClick={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        {/* Stage colored top accent bar */}
+                        <div
+                            className="qa2-timeline-modal-top-accent"
+                            style={{ background: modalStageData.accentColor }}
+                        />
+
+                        {/* Modal Header */}
+                        <div className="qa2-timeline-modal-header">
+                            <div className="qa2-timeline-modal-header-left">
+                                <div
+                                    className="qa2-timeline-modal-icon-bubble"
+                                    style={{
+                                        background: `${modalStageData.accentColor}15`,
+                                        borderColor: `${modalStageData.accentColor}35`,
+                                        color: modalStageData.accentColor
+                                    }}
+                                >
+                                    {renderStageIcon(modalStageData.iconName, modalStageData.accentColor, 22)}
+                                </div>
+                                <div className="qa2-timeline-modal-header-text">
+                                    <div className="qa2-timeline-modal-title-row">
+                                        <span
+                                            className="qa2-timeline-modal-step-badge"
+                                            style={{
+                                                background: modalStageData.accentColor,
+                                                color: "#ffffff"
+                                            }}
+                                        >
+                                            STAGE 0{modalStageData.step} OF 06
+                                        </span>
+                                        <h3 className="qa2-timeline-modal-title">{modalStageData.title}</h3>
+                                        <span
+                                            className="qa2-timeline-modal-id-pill"
+                                            style={{
+                                                background: `${modalStageData.badgeColor}15`,
+                                                color: modalStageData.badgeColor
+                                            }}
+                                        >
+                                            {modalStageData.badge}
+                                        </span>
+                                        <span className="qa2-timeline-modal-part-badge">
+                                            Part: {activePart.partNo}
+                                        </span>
+                                    </div>
+                                    <p className="qa2-timeline-modal-sub">
+                                        {modalStageData.subtitle}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="qa2-timeline-modal-header-right">
+                                <span className="qa2-timeline-modal-verified-tag">
+                                    <ShieldCheck size={15} style={{ color: "#10b981" }} />
+                                    <span>Quality Verified</span>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStageModal(null)}
+                                    className="qa2-timeline-modal-close-btn"
+                                    title="Close dialog (Esc)"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body: Complete In-Depth Breakdown */}
+                        <div className="qa2-timeline-modal-body">
+                            {/* Key Metrics Grid */}
+                            {modalStageData.metrics && modalStageData.metrics.length > 0 && (
+                                <div className="qa2-timeline-modal-metrics-section">
+                                    <div className="qa2-timeline-inner-title">
+                                        <FileText size={16} style={{ color: modalStageData.accentColor }} />
+                                        <span>Key Parameters & Record Particulars</span>
+                                    </div>
+                                    <div className="qa2-timeline-metrics-grid">
+                                        {modalStageData.metrics.map((m, mIdx) => (
+                                            <div
+                                                key={mIdx}
+                                                className={`qa2-timeline-metric-tile ${m.highlight ? "highlight" : ""}`}
+                                            >
+                                                <span className="qa2-timeline-metric-label">{m.label}</span>
+                                                <span className={`qa2-timeline-metric-value ${m.highlight ? "val-strong" : ""}`}>
+                                                    {m.value}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Specific Deep Dive for Stage 3: Process & Route Card Inspection Table */}
+                            {modalStageData.key === "finalInsp" && modalStageData.inspectionRecords && (
+                                <div className="qa2-timeline-dimension-box">
+                                    <div className="qa2-timeline-inner-title">
+                                        <div className="qa2-timeline-title-with-pill">
+                                            <CheckCheck size={16} style={{ color: "#059669" }} />
+                                            <span>Process & Route Card Inspection Report</span>
+                                        </div>
+                                        <span className="qa2-timeline-badge-count" style={{ background: "#ecfdf5", color: "#047857" }}>
+                                            {modalStageData.inspectionRecords.length} Operations Verified
+                                        </span>
+                                    </div>
+                                    <div className="qa2-timeline-table-wrapper">
+                                        <table className="qa2-timeline-dim-table qa2-routecard-insp-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Routecard No</th>
+                                                    <th>Operation / Process</th>
+                                                    <th>Machine</th>
+                                                    <th>Shift</th>
+                                                    <th style={{ textAlign: "right" }}>Total Qty</th>
+                                                    <th style={{ textAlign: "right" }}>Inspected Qty</th>
+                                                    <th style={{ textAlign: "right" }}>OK Qty</th>
+                                                    <th style={{ textAlign: "right" }}>Rej Qty</th>
+                                                    <th style={{ textAlign: "right" }}>Rw Qty</th>
+                                                    <th>Inspected By</th>
+                                                    <th style={{ textAlign: "center" }}>Verdict</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {modalStageData.inspectionRecords.map((rec, rIdx) => (
+                                                    <tr key={rIdx}>
+                                                        <td className="text-slate-400 font-mono text-xs">{rIdx + 1}</td>
+                                                        <td className="font-mono text-xs font-bold text-blue-600">{rec.routeCard}</td>
+                                                        <td className="font-medium text-slate-800" style={{ fontFamily: "var(--qa-font-body)" }}>
+                                                            <span className="qa2-timeline-op-badge" style={{ marginRight: 6, fontSize: "0.68rem", padding: "1px 6px" }}>{rec.op}</span>
+                                                            {rec.process}
+                                                        </td>
+                                                        <td className="text-slate-600 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.machine}</td>
+                                                        <td className="text-slate-500 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.shift}</td>
+                                                        <td className="font-mono text-right text-slate-700 font-semibold">{rec.totQty}</td>
+                                                        <td className="font-mono text-right text-blue-700 font-bold">{rec.inspQty}</td>
+                                                        <td className="font-mono text-right text-emerald-600 font-bold">{rec.okQty}</td>
+                                                        <td className="font-mono text-right text-slate-400 font-medium">{rec.rejQty}</td>
+                                                        <td className="font-mono text-right text-slate-400 font-medium">{rec.rwQty}</td>
+                                                        <td className="text-slate-700 text-xs font-medium" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.inspectedBy}</td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            <span className="qa2-timeline-pass-tag">
+                                                                <Check size={11} strokeWidth={3} />
+                                                                {rec.verdict}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Specific Deep Dive for Stage 4: Production (Inhouse & Job Order) with Quality Insp - Unique & Distinctive Style */}
+                            {modalStageData.key === "production" && (() => {
+                                const inhouseList = (modalStageData.inhouseOps || []).map((op) => ({
+                                    ...op,
+                                    type: "inhouse",
+                                    opNum: parseInt(op.op.replace(/\D/g, "") || "0", 10)
+                                }));
+
+                                const subcontractList = (modalStageData.jobOrder?.items || []).map((item) => ({
+                                    ...item,
+                                    type: "subcontract",
+                                    vendorName: modalStageData.jobOrder.vendorName,
+                                    subcontractDC: modalStageData.jobOrder.subcontractDC,
+                                    inwardChallan: modalStageData.jobOrder.inwardChallan,
+                                    opNum: parseInt(item.op.replace(/\D/g, "") || "0", 10)
+                                }));
+
+                                const allOpsSorted = [...inhouseList, ...subcontractList].sort((a, b) => a.opNum - b.opNum);
+
+                                const filteredOps = allOpsSorted.filter((op) => {
+                                    if (prodTab === "INHOUSE") return op.type === "inhouse";
+                                    if (prodTab === "SUBCONTRACT") return op.type === "subcontract";
+                                    return true;
+                                });
+
+                                return (
+                                    <div className="qa2-prod-unique-container">
+                                        {/* 1. Chronological Shopfloor Stepper Pipeline - 6 Aligned Steps */}
+                                        <div className="qa2-prod-stepper-box">
+                                            <div className="qa2-prod-stepper-title">
+                                                <div className="qa2-timeline-title-with-pill">
+                                                    <Factory size={16} style={{ color: "#d97706" }} />
+                                                    <span className="qa2-stepper-heading">Manufacturing Process Flow & IPQA Verification Route</span>
+                                                </div>
+                                                <span className="qa2-prod-flow-hint">Chronological Routing (6 Operations)</span>
+                                            </div>
+                                            <div className="qa2-prod-stepper-flow">
+                                                {allOpsSorted.map((stepItem, sIdx) => {
+                                                    const isInhouse = stepItem.type === "inhouse";
+                                                    return (
+                                                        <div key={sIdx} className={`qa2-prod-step-node ${isInhouse ? "node-inhouse" : "node-subcontract"}`}>
+                                                            <div className="qa2-step-node-top">
+                                                                <span className="qa2-step-num">STEP 0{sIdx + 1}</span>
+                                                                {isInhouse ? <Cpu size={12} className="qa2-step-ico inhouse" /> : <Flame size={12} className="qa2-step-ico subcontract" />}
+                                                            </div>
+                                                            <div className="qa2-step-node-op">{stepItem.op}</div>
+                                                            <div className="qa2-step-node-sub">
+                                                                <span className={`qa2-step-pill-tag ${isInhouse ? "pill-inhouse" : "pill-subcontract"}`}>
+                                                                    {isInhouse ? "Inhouse CNC" : "Subcontract"}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* 2. Interactive Navigation & View Switcher */}
+                                        <div className="qa2-prod-action-bar">
+                                            <div className="qa2-prod-filter-tabs">
+                                                <button
+                                                    type="button"
+                                                    className={`qa2-prod-tab-btn ${prodTab === "ALL" ? "active" : ""}`}
+                                                    onClick={() => setProdTab("ALL")}
+                                                >
+                                                    <Layers size={15} />
+                                                    <span>All Operations</span>
+                                                    <span className="qa2-tab-count">{allOpsSorted.length}</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`qa2-prod-tab-btn inhouse ${prodTab === "INHOUSE" ? "active" : ""}`}
+                                                    onClick={() => setProdTab("INHOUSE")}
+                                                >
+                                                    <Cpu size={15} />
+                                                    <span>Inhouse CNC</span>
+                                                    <span className="qa2-tab-count inhouse">{inhouseList.length}</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`qa2-prod-tab-btn subcontract ${prodTab === "SUBCONTRACT" ? "active" : ""}`}
+                                                    onClick={() => setProdTab("SUBCONTRACT")}
+                                                >
+                                                    <Flame size={15} />
+                                                    <span>Subcontract Job Order</span>
+                                                    <span className="qa2-tab-count subcontract">{subcontractList.length}</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="qa2-prod-count-badge">
+                                                <span>{filteredOps.length} Operations Listed</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Process & Route Card Inspection Sheet Table */}
+                                        <div className="qa2-timeline-table-wrapper" style={{ marginTop: 12 }}>
+                                            <table className="qa2-timeline-dim-table qa2-prod-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: "40px" }}>#</th>
+                                                        <th style={{ width: "110px" }}>Op Code</th>
+                                                        <th style={{ width: "130px" }}>Category</th>
+                                                        <th>Process / Routing Description</th>
+                                                        <th>Station / Subcontractor</th>
+                                                        <th>Operator / Challan</th>
+                                                        <th>IPQA Slip / Cert</th>
+                                                        <th>In-Process Quality Finding / Criteria</th>
+                                                        <th style={{ textAlign: "center", width: "90px" }}>Verdict</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredOps.map((op, tIdx) => {
+                                                        const isInhouse = op.type === "inhouse";
+                                                        return (
+                                                            <tr key={tIdx}>
+                                                                <td className="text-slate-400 font-mono text-xs">{tIdx + 1}</td>
+                                                                <td className="font-mono text-xs font-bold text-amber-600">
+                                                                    {op.op}
+                                                                </td>
+                                                                <td>
+                                                                    <span className={`qa2-prod-table-badge ${isInhouse ? "badge-inhouse" : "badge-subcontract"}`}>
+                                                                        {isInhouse ? "Inhouse CNC" : "Subcontract"}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="font-medium text-slate-800" style={{ fontFamily: "var(--qa-font-body)" }}>
+                                                                    {op.process}
+                                                                </td>
+                                                                <td className="text-slate-700 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>
+                                                                    {isInhouse ? op.machine : op.vendorName}
+                                                                </td>
+                                                                <td className="text-slate-600 text-xs font-mono">
+                                                                    {isInhouse ? op.operator : `${op.subcontractDC} / ${op.inwardChallan}`}
+                                                                </td>
+                                                                <td className="font-mono text-xs font-semibold text-slate-700">
+                                                                    {isInhouse ? op.ipqa : op.cert}
+                                                                </td>
+                                                                <td className="text-xs">
+                                                                    <span className={`qa2-prod-table-qa-pill ${isInhouse ? "qa-inhouse" : "qa-subcontract"}`}>
+                                                                        {isInhouse ? op.keyMetric : op.specs}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ textAlign: "center" }}>
+                                                                    <span className="qa2-timeline-pass-tag">
+                                                                        <Check size={11} strokeWidth={3} />
+                                                                        {op.status}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Specific Deep Dive for Stage 5: GRN Inward Quality Inspection & Clearance Table */}
+                            {(modalStageData.key === "grn" || modalStageData.key === "grnMtc") && (
+                                <div className="qa2-timeline-dimension-box">
+                                    <div className="qa2-timeline-inner-title">
+                                        <div className="qa2-timeline-title-with-pill">
+                                            <Package size={16} style={{ color: "#0891b2" }} />
+                                            <span>GRN Inward Inspection & Clearance Details</span>
+                                        </div>
+                                        <span className="qa2-timeline-badge-count" style={{ background: "#ecfeff", color: "#0e7490", border: "1px solid #a5f3fc" }}>
+                                            {(modalStageData.grnRecords || []).length || 1} Record Verified
+                                        </span>
+                                    </div>
+                                    <div className="qa2-timeline-table-wrapper">
+                                        <table className="qa2-timeline-dim-table qa2-grn-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ width: "40px" }}>#</th>
+                                                    <th>GRN Number</th>
+                                                    <th>GRN Inward Date</th>
+                                                    <th style={{ textAlign: "right" }}>Material Qty</th>
+                                                    <th style={{ textAlign: "center", width: "70px" }}>UOM</th>
+                                                    <th style={{ textAlign: "right" }}>OK Qty</th>
+                                                    <th style={{ textAlign: "right" }}>Rej Qty</th>
+                                                    <th>Insp By</th>
+                                                    <th style={{ textAlign: "center", width: "90px" }}>Verdict</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {((modalStageData.grnRecords && modalStageData.grnRecords.length > 0)
+                                                    ? modalStageData.grnRecords
+                                                    : [
+                                                        {
+                                                            grnNo: modalStageData.metrics?.find((m) => m.label === "GRN Number")?.value || modalStageData.badge,
+                                                            grnDate: modalStageData.metrics?.find((m) => m.label === "GRN Inward Date")?.value || "18-Feb-2026",
+                                                            materialQty: modalStageData.metrics?.find((m) => m.label === "Material Qty")?.value || "4,850",
+                                                            uom: modalStageData.metrics?.find((m) => m.label === "Uom")?.value || "Kg",
+                                                            okQty: modalStageData.metrics?.find((m) => m.label === "Material Qty")?.value || "4,850",
+                                                            rejQty: "0",
+                                                            inspBy: "R. Vignesh",
+                                                            verdict: "PASS"
+                                                        }
+                                                    ]
+                                                ).map((rec, gIdx) => (
+                                                    <tr key={gIdx}>
+                                                        <td className="text-slate-400 font-mono text-xs">{gIdx + 1}</td>
+                                                        <td className="font-mono text-xs font-bold text-cyan-700">
+                                                            {rec.grnNo}
+                                                        </td>
+                                                        <td className="font-mono text-xs font-semibold text-slate-700">
+                                                            {rec.grnDate}
+                                                        </td>
+                                                        <td className="font-mono text-right text-slate-900 font-bold text-xs">
+                                                            {rec.materialQty}
+                                                        </td>
+                                                        <td className="font-mono text-center text-slate-700 font-semibold text-xs">
+                                                            <span className="qa2-grn-uom-badge">{rec.uom}</span>
+                                                        </td>
+                                                        <td className="font-mono text-right text-emerald-600 font-bold text-xs">
+                                                            {rec.okQty}
+                                                        </td>
+                                                        <td className="font-mono text-right text-slate-400 font-medium text-xs">
+                                                            {rec.rejQty}
+                                                        </td>
+                                                        <td className="text-slate-800 text-xs font-semibold" style={{ fontFamily: "var(--qa-font-body)" }}>
+                                                            {rec.inspBy}
+                                                        </td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            <span className="qa2-timeline-pass-tag">
+                                                                <Check size={11} strokeWidth={3} />
+                                                                {rec.verdict || "PASS"}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Specific Deep Dive for Stage 6: Supplier Purchase Order & Mill Lineage Table */}
+                            {modalStageData.key === "supplier" && (
+                                <>
+                                    <div className="qa2-timeline-dimension-box" style={{ marginBottom: 16 }}>
+                                        <div className="qa2-timeline-inner-title">
+                                            <div className="qa2-timeline-title-with-pill">
+                                                <Building2 size={16} style={{ color: "#db2777" }} />
+                                                <span>Raw Material Mill Procurement & Purchase Order Lineage</span>
+                                            </div>
+                                            <span className="qa2-timeline-badge-count" style={{ background: "#fdf2f8", color: "#9d174d", border: "1px solid #fbcfe8" }}>
+                                                Tier-1 Certified Mill
+                                            </span>
+                                        </div>
+                                        <div className="qa2-timeline-table-wrapper">
+                                            <table className="qa2-timeline-dim-table qa2-supplier-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: "40px" }}>#</th>
+                                                        <th>Supplier / Mill Name</th>
+                                                        <th>Raw Material PO Ref</th>
+                                                        <th>PO Date</th>
+                                                        <th style={{ textAlign: "right" }}>Qty</th>
+                                                        <th style={{ textAlign: "center", width: "70px" }}>UOM</th>
+                                                        <th style={{ textAlign: "center", width: "120px" }}>Approval Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {((modalStageData.supplierRecords && modalStageData.supplierRecords.length > 0)
+                                                        ? modalStageData.supplierRecords
+                                                        : [
+                                                            {
+                                                                supplierName: modalStageData.metrics?.find((m) => m.label === "Supplier / Mill Name")?.value || "Jindal Steel & Seamless Tubes Ltd",
+                                                                poRef: modalStageData.metrics?.find((m) => m.label === "Raw Material PO Ref")?.value || "PO-RM-2026-0812",
+                                                                poDate: modalStageData.metrics?.find((m) => m.label === "Po Date")?.value || "05-Feb-2026",
+                                                                qty: modalStageData.metrics?.find((m) => m.label === "Qty")?.value || "4,850",
+                                                                uom: modalStageData.metrics?.find((m) => m.label === "Uom")?.value || "Kg",
+                                                                status: "APPROVED TIER-1"
+                                                            }
+                                                        ]
+                                                    ).map((rec, sIdx) => (
+                                                        <tr key={sIdx}>
+                                                            <td className="text-slate-400 font-mono text-xs">{sIdx + 1}</td>
+                                                            <td className="font-semibold text-slate-900" style={{ fontFamily: "var(--qa-font-heading)" }}>
+                                                                {rec.supplierName}
+                                                            </td>
+                                                            <td className="font-mono text-xs font-bold text-pink-700">
+                                                                {rec.poRef}
+                                                            </td>
+                                                            <td className="font-mono text-xs font-semibold text-slate-700">
+                                                                {rec.poDate}
+                                                            </td>
+                                                            <td className="font-mono text-right text-slate-900 font-bold text-xs">
+                                                                {rec.qty}
+                                                            </td>
+                                                            <td className="font-mono text-center text-slate-700 font-semibold text-xs">
+                                                                <span className="qa2-grn-uom-badge">{rec.uom}</span>
+                                                            </td>
+                                                            <td style={{ textAlign: "center" }}>
+                                                                <span className="qa2-timeline-pass-tag">
+                                                                    <Check size={11} strokeWidth={3} />
+                                                                    {rec.status || "APPROVED"}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* 3 Dedicated High-Contrast KPI Cards: Vendor Rating, Rejection PPM, Traceability */}
+                                    <div className="qa2-supp-kpi-grid">
+                                        {/* 1. Vendor Rating Tile */}
+                                        <div className="qa2-supp-kpi-card kpi-emerald">
+                                            <div className="qa2-supp-kpi-header">
+                                                <div className="qa2-supp-kpi-icon-wrap kpi-emerald">
+                                                    <Award size={17} />
+                                                </div>
+                                                <span className="qa2-supp-kpi-label kpi-emerald">Vendor Rating</span>
+                                            </div>
+                                            <div className="qa2-supp-kpi-value kpi-emerald">
+                                                {modalStageData.vendorRating || "98.5% Grade A"}
+                                            </div>
+                                            <div className="qa2-supp-kpi-sub kpi-emerald">
+                                                <span>Tier-1 Preferred Mill</span>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. Rejection PPM Tile */}
+                                        <div className="qa2-supp-kpi-card kpi-blue">
+                                            <div className="qa2-supp-kpi-header">
+                                                <div className="qa2-supp-kpi-icon-wrap kpi-blue">
+                                                    <ShieldCheck size={17} />
+                                                </div>
+                                                <span className="qa2-supp-kpi-label kpi-blue">Rejection PPM</span>
+                                            </div>
+                                            <div className="qa2-supp-kpi-value kpi-blue">
+                                                {modalStageData.rejectionPpm || "0 PPM (Zero Defect)"}
+                                            </div>
+                                            <div className="qa2-supp-kpi-sub kpi-blue">
+                                                <span>100% Acceptance Rate</span>
+                                            </div>
+                                        </div>
+
+                                        {/* 3. Traceability Tile */}
+                                        <div className="qa2-supp-kpi-card kpi-purple">
+                                            <div className="qa2-supp-kpi-header">
+                                                <div className="qa2-supp-kpi-icon-wrap kpi-purple">
+                                                    <CheckCheck size={17} />
+                                                </div>
+                                                <span className="qa2-supp-kpi-label kpi-purple">Traceability</span>
+                                            </div>
+                                            <div className="qa2-supp-kpi-value kpi-purple">
+                                                {modalStageData.traceability || "100% Heat Lot Matched"}
+                                            </div>
+                                            <div className="qa2-supp-kpi-sub kpi-purple">
+                                                <span>Full Billet-to-Bar Lineage</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Stage Footnote / Auditor Notes */}
+                            {modalStageData.notes && (
+                                <div className="qa2-timeline-card-footnote">
+                                    <Info size={14} style={{ color: "#64748b", flexShrink: 0, marginTop: "2px" }} />
+                                    <span>{modalStageData.notes}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer with Stepper & Next/Prev Controls */}
+                        <div className="qa2-timeline-modal-footer">
+                            <div className="qa2-timeline-modal-nav-pills">
+                                {activeInvoice.stages.map((s) => (
+                                    <button
+                                        key={s.step}
+                                        type="button"
+                                        onClick={() => setSelectedStageModal(s.step)}
+                                        className={`qa2-timeline-modal-pill-btn ${s.step === selectedStageModal ? "active" : ""}`}
+                                        title={`Jump to Stage 0${s.step}: ${s.title}`}
+                                        style={s.step === selectedStageModal ? { background: s.accentColor, borderColor: s.accentColor } : {}}
+                                    >
+                                        <span>0{s.step}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="qa2-timeline-modal-nav-actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStageModal(selectedStageModal - 1)}
+                                    disabled={selectedStageModal <= 1}
+                                    className="qa2-timeline-modal-nav-btn"
+                                >
+                                    <ChevronLeft size={14} />
+                                    <span>Prev Stage</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStageModal(selectedStageModal + 1)}
+                                    disabled={selectedStageModal >= 6}
+                                    className="qa2-timeline-modal-nav-btn"
+                                >
+                                    <span>Next Stage</span>
+                                    <ChevronRight size={14} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStageModal(null)}
+                                    className="qa2-timeline-modal-done-btn"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -1857,27 +4209,27 @@ export default function QualityAnalysis() {
             finalParetoData = {
                 labels: paretoData.labels || [],
                 datasets: [
-                    { 
-                        label: "Count", 
-                        data: paretoData.datasets?.[0]?.data || [], 
-                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"], 
-                        borderRadius: 5, 
-                        yAxisID: "y" 
+                    {
+                        label: "Count",
+                        data: paretoData.datasets?.[0]?.data || [],
+                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"],
+                        borderRadius: 5,
+                        yAxisID: "y"
                     },
-                    { 
-                        label: "Cumulative %", 
-                        data: paretoData.datasets?.[1]?.data || [], 
-                        type: "line", 
-                        borderColor: "#2d6de8", 
-                        backgroundColor: "rgba(45,109,232,0.08)", 
-                        borderWidth: 2.5, 
-                        tension: 0.4, 
-                        fill: true, 
-                        pointRadius: 4, 
-                        pointBackgroundColor: "#2d6de8", 
-                        pointBorderColor: "#fff", 
-                        pointBorderWidth: 2, 
-                        yAxisID: "y2" 
+                    {
+                        label: "Cumulative %",
+                        data: paretoData.datasets?.[1]?.data || [],
+                        type: "line",
+                        borderColor: "#2d6de8",
+                        backgroundColor: "rgba(45,109,232,0.08)",
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 4,
+                        pointBackgroundColor: "#2d6de8",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2,
+                        yAxisID: "y2"
                     }
                 ]
             };
@@ -1937,11 +4289,11 @@ export default function QualityAnalysis() {
             finalParetoData = {
                 labels: paretoData.labels || [],
                 datasets: [
-                    { 
-                        label: "Count", 
-                        data: paretoData.datasets?.[0]?.data || [], 
-                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"], 
-                        borderRadius: 6 
+                    {
+                        label: "Count",
+                        data: paretoData.datasets?.[0]?.data || [],
+                        backgroundColor: ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#8b5cf6", "#10b981"],
+                        borderRadius: 6
                     }
                 ]
             };
@@ -2767,12 +5119,12 @@ export default function QualityAnalysis() {
             return sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0);
         }, 0);
 
-        const summaryMatRej = summaryData?.total_mat_rej !== undefined 
-            ? parseFloat(summaryData.total_mat_rej) 
+        const summaryMatRej = summaryData?.total_mat_rej !== undefined
+            ? parseFloat(summaryData.total_mat_rej)
             : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
 
-        const summaryMacRej = summaryData?.total_mac_rej !== undefined 
-            ? parseFloat(summaryData.total_mac_rej) 
+        const summaryMacRej = summaryData?.total_mac_rej !== undefined
+            ? parseFloat(summaryData.total_mac_rej)
             : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
 
         const totalMaterialRej = searchFilteredInspectionRows.length > 0 ? rowsMatRej : summaryMatRej;
@@ -2897,8 +5249,8 @@ export default function QualityAnalysis() {
                                     {selectedCustomers.length === 0
                                         ? "All Customers"
                                         : selectedCustomers.length === 1
-                                        ? selectedCustomers[0]
-                                        : `${selectedCustomers.length} Customers`}
+                                            ? selectedCustomers[0]
+                                            : `${selectedCustomers.length} Customers`}
                                 </span>
                                 {selectedCustomers.length > 0 && (
                                     <span className="qa2-cust-count-badge">{selectedCustomers.length}</span>
@@ -3219,10 +5571,10 @@ export default function QualityAnalysis() {
                     )}
                 </div>
                 <div className="qa2-card qa2-chart-card qa2-card-premium">
-                    <SectionHead 
-                        icon={BarChart2} 
-                        iconColor="#ef4444" 
-                        title="Top Defect Causes" 
+                    <SectionHead
+                        icon={BarChart2}
+                        iconColor="#ef4444"
+                        title="Top Defect Causes"
                         extra={
                             <QualityPremiumSelect
                                 value={paretoChartType}
@@ -3276,8 +5628,8 @@ export default function QualityAnalysis() {
                                             {trendRejCustFilter.length === 0
                                                 ? "Customer: All"
                                                 : trendRejCustFilter.length === 1
-                                                ? trendRejCustFilter[0]
-                                                : `${trendRejCustFilter.length} Customers`}
+                                                    ? trendRejCustFilter[0]
+                                                    : `${trendRejCustFilter.length} Customers`}
                                         </span>
                                         {trendRejCustFilter.length > 0 && (
                                             <span className="qa2-trend-filter-badge">{trendRejCustFilter.length}</span>
@@ -3347,8 +5699,8 @@ export default function QualityAnalysis() {
                                             {trendRejPartFilter.length === 0
                                                 ? "Part: All"
                                                 : trendRejPartFilter.length === 1
-                                                ? trendRejPartFilter[0]
-                                                : `${trendRejPartFilter.length} Parts`}
+                                                    ? trendRejPartFilter[0]
+                                                    : `${trendRejPartFilter.length} Parts`}
                                         </span>
                                         {trendRejPartFilter.length > 0 && (
                                             <span className="qa2-trend-filter-badge">{trendRejPartFilter.length}</span>
@@ -3452,8 +5804,8 @@ export default function QualityAnalysis() {
                                             {trendRwkCustFilter.length === 0
                                                 ? "Customer: All"
                                                 : trendRwkCustFilter.length === 1
-                                                ? trendRwkCustFilter[0]
-                                                : `${trendRwkCustFilter.length} Customers`}
+                                                    ? trendRwkCustFilter[0]
+                                                    : `${trendRwkCustFilter.length} Customers`}
                                         </span>
                                         {trendRwkCustFilter.length > 0 && (
                                             <span className="qa2-trend-filter-badge">{trendRwkCustFilter.length}</span>
@@ -3523,8 +5875,8 @@ export default function QualityAnalysis() {
                                             {trendRwkPartFilter.length === 0
                                                 ? "Part: All"
                                                 : trendRwkPartFilter.length === 1
-                                                ? trendRwkPartFilter[0]
-                                                : `${trendRwkPartFilter.length} Parts`}
+                                                    ? trendRwkPartFilter[0]
+                                                    : `${trendRwkPartFilter.length} Parts`}
                                         </span>
                                         {trendRwkPartFilter.length > 0 && (
                                             <span className="qa2-trend-filter-badge">{trendRwkPartFilter.length}</span>
@@ -4001,8 +6353,8 @@ export default function QualityAnalysis() {
                                         {tableSelectedCustomers.length === 0
                                             ? "All Customers"
                                             : tableSelectedCustomers.length === 1
-                                            ? tableSelectedCustomers[0]
-                                            : `${tableSelectedCustomers.length} Customers`}
+                                                ? tableSelectedCustomers[0]
+                                                : `${tableSelectedCustomers.length} Customers`}
                                     </span>
                                 </div>
                                 <ChevronDown size={12} style={{ color: '#94a3b8', flexShrink: 0, transform: tableCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
@@ -4279,10 +6631,10 @@ export default function QualityAnalysis() {
                                     <span>
                                         {selectedInspTypeFilter === "ALL" ? "All Insp. Types" : selectedInspTypeFilter}
                                     </span>
-                                    <ChevronDown size={10} style={{ 
-                                        color: '#64748b', 
-                                        transition: 'transform 0.2s ease', 
-                                        transform: inspTypeDropdownOpen ? 'rotate(180deg)' : 'none' 
+                                    <ChevronDown size={10} style={{
+                                        color: '#64748b',
+                                        transition: 'transform 0.2s ease',
+                                        transform: inspTypeDropdownOpen ? 'rotate(180deg)' : 'none'
                                     }} />
                                 </button>
 
@@ -4519,7 +6871,7 @@ export default function QualityAnalysis() {
                     }
                 />
                 <div className="qa2-supplier-grid">
-                    
+
                     {/* Left side: Chart/Graph */}
                     <div style={{
                         background: "rgba(255, 255, 255, 0.4)",
@@ -4714,6 +7066,9 @@ export default function QualityAnalysis() {
                 )}
             </div>
 
+            {/* ── Quality Timeline (End-to-End Lineage: Invoice -> DC -> Final Insp -> Prod -> GRN -> Supplier) ── */}
+            <QualityTimelineSection />
+
             {/* ── Traceability (Full Width) ── */}
             <div className="qa2-card qa2-card-premium qa2-animate qa2-d4">
                 <SectionHead
@@ -4800,10 +7155,10 @@ export default function QualityAnalysis() {
                                         {selectedTraceTypeFilter === "INTER" && "Intermediate"}
                                         {selectedTraceTypeFilter === "JOB" && "Job Order"}
                                     </span>
-                                    <ChevronDown size={10} style={{ 
-                                        color: '#64748b', 
-                                        transition: 'transform 0.2s ease', 
-                                        transform: traceTypeDropdownOpen ? 'rotate(180deg)' : 'none' 
+                                    <ChevronDown size={10} style={{
+                                        color: '#64748b',
+                                        transition: 'transform 0.2s ease',
+                                        transform: traceTypeDropdownOpen ? 'rotate(180deg)' : 'none'
                                     }} />
                                 </button>
 

@@ -425,7 +425,7 @@ export default function UsersSetting() {
                                 <span className="us-btn__icon-wrap">
                                     {hideUnder1000 ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </span>
-                                <span>Hide POs ≤ ₹1,000</span>
+                                <span className="us-btn__label">Hide POs ≤ ₹1,000</span>
                                 <span className={`us-switch-pill ${hideUnder1000 ? 'us-switch-pill--on' : ''}`}>
                                     <span className="us-switch-pill__knob" />
                                 </span>
@@ -438,7 +438,7 @@ export default function UsersSetting() {
                                 title="Apply uniform limit across multiple users"
                             >
                                 <Sliders size={15} />
-                                Bulk Set Limit
+                                <span className="us-btn__label">Bulk Set Limit</span>
                             </button>
                         </>
                     )}
@@ -451,7 +451,7 @@ export default function UsersSetting() {
                             disabled={isSaving}
                         >
                             <Save size={15} />
-                            {isSaving ? "Saving…" : "Save Configuration"}
+                            <span className="us-btn__label">{isSaving ? "Saving…" : "Save Configuration"}</span>
                         </button>
                     )}
                 </div>
@@ -599,8 +599,9 @@ export default function UsersSetting() {
                                 {searchQuery && (
                                     <button
                                         type="button"
+                                        className="us-search-box__clear"
                                         onClick={() => setSearchQuery("")}
-                                        style={{ position: "absolute", right: "0.75rem", background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}
+                                        aria-label="Clear search"
                                     >
                                         <X size={14} />
                                     </button>
@@ -638,8 +639,8 @@ export default function UsersSetting() {
                             title="Click to toggle filtering of POs with Amount ≤ ₹1,000"
                         >
                             <span className={hideUnder1000 ? 'us-pulse-dot--emerald' : 'us-pulse-dot--neutral'} />
-                            <span style={{ fontWeight: 700 }}>
-                                POs ≤ ₹1,000: {hideUnder1000 ? <span style={{ color: '#059669' }}>Hidden</span> : <span style={{ color: '#64748b' }}>Shown</span>}
+                            <span className="us-filter-policy-label">
+                                POs ≤ ₹1,000: {hideUnder1000 ? <span className="us-filter-policy-status--active">Hidden</span> : <span className="us-filter-policy-status--inactive">Shown</span>}
                             </span>
                             <span className="us-filter-policy-tag">
                                 {hideUnder1000 ? "Filtering On" : "Show All"}
@@ -675,9 +676,9 @@ export default function UsersSetting() {
                                         const initials = (u.userName || "U").slice(0, 2).toUpperCase();
 
                                         return (
-                                            <tr key={uid}>
+                                            <tr key={uid} className="us-table-row">
                                                 {/* User Cell */}
-                                                <td>
+                                                <td data-label="User Profile" className="us-td us-td--profile">
                                                     <div className="us-user-cell">
                                                         <div className="us-avatar" style={{ background: avatarGrad }}>
                                                             {initials}
@@ -695,7 +696,7 @@ export default function UsersSetting() {
                                                 </td>
 
                                                 {/* Mode Switcher */}
-                                                <td>
+                                                <td data-label="Access Mode" className="us-td us-td--mode">
                                                     <div className="us-mode-toggle">
                                                         <button
                                                             type="button"
@@ -715,7 +716,7 @@ export default function UsersSetting() {
                                                 </td>
 
                                                 {/* Limit Control */}
-                                                <td>
+                                                <td data-label="PO Amount Limit" className="us-td us-td--limit">
                                                     {isUnl ? (
                                                         <span className="us-status-pill us-status-pill--unlimited">
                                                             <Check size={14} />
@@ -764,22 +765,23 @@ export default function UsersSetting() {
                                                 </td>
 
                                                 {/* Active Scope */}
-                                                <td>
+                                                <td data-label="Active Scope" className="us-td us-td--scope">
                                                     <span className="us-status-pill us-status-pill--limited">
                                                         E-Approval Workflow
                                                     </span>
                                                 </td>
 
                                                 {/* Explanation Rule */}
-                                                <td>
+                                                <td data-label="Effective Rule" className="us-td us-td--rule">
                                                     {isUnl ? (
-                                                        <span style={{ fontSize: "0.82rem", color: "#059669", fontWeight: 650, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                                        <span className="us-rule-badge us-rule-badge--unlimited">
                                                             <Check size={14} />
                                                             Full access to all Purchase Orders
                                                         </span>
                                                     ) : (
-                                                        <span style={{ fontSize: "0.82rem", color: "#475569", lineHeight: 1.4 }}>
-                                                            Display POs with Total Amount ≤ <strong>₹ {fmtINR(userCfg.limit)}</strong> ({numberToWordsINR(userCfg.limit)})
+                                                        <span className="us-rule-badge us-rule-badge--limited">
+                                                            Display POs with Total Amount ≤ <strong>₹ {fmtINR(userCfg.limit)}</strong>{" "}
+                                                            <span className="us-rule-words">({numberToWordsINR(userCfg.limit)})</span>
                                                         </span>
                                                     )}
                                                 </td>
@@ -898,7 +900,7 @@ export default function UsersSetting() {
                                         </div>
                                     </div>
 
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                                    <div className="us-modal__words-row">
                                         <div className="us-modal__words-pill">
                                             <Sparkles size={13} />
                                             <span>{numberToWordsINR(bulkLimit)}</span>
@@ -922,13 +924,12 @@ export default function UsersSetting() {
                                     {/* Range Slider */}
                                     <input
                                         type="range"
-                                        className="us-range-slider"
+                                        className="us-range-slider us-modal__range-slider"
                                         min={1000}
                                         max={500000}
                                         step={5000}
                                         value={bulkLimit}
                                         onChange={e => setBulkLimit(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                                        style={{ maxWidth: "100%", width: "100%" }}
                                     />
                                 </div>
                             </div>

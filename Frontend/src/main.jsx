@@ -300,8 +300,38 @@ function markErpUnavailable(message) {
 
 const _fetch = window.fetch;
 window.fetch = async (...args) => {
+  let [resource, config] = args;
+  const url = typeof resource === "string" ? resource : (resource?.url ?? "");
+
+  // Auto-inject credentials: "include" and auth fallback headers for API calls
+  if (typeof url === "string" && url.includes("/api/") && !url.includes("/login/")) {
+    config = config ? { ...config } : {};
+    if (!config.credentials) {
+      config.credentials = "include";
+    }
+
+    try {
+      const rawUser = localStorage.getItem("user");
+      if (rawUser) {
+        const user = JSON.parse(rawUser);
+        if (user && user.company_code && user.username) {
+          const headers = new Headers(config.headers || {});
+          if (!headers.has("X-Company-Code")) {
+            headers.set("X-Company-Code", user.company_code);
+          }
+          if (!headers.has("X-Username")) {
+            headers.set("X-Username", user.username);
+          }
+          config.headers = headers;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    args[1] = config;
+  }
+
   const res = await _fetch(...args);
-  const url = typeof args[0] === "string" ? args[0] : (args[0]?.url ?? "");
 
   if (res.status === 503 && url.includes("/api/") && !url.includes("/login/")) {
     try {
@@ -317,12 +347,14 @@ window.fetch = async (...args) => {
   if (res.status === 401 && !_redirecting401) {
     const isAdminApi = url.includes("/admin/");
     const isUserLoginApi = url.includes("/login/") || url.includes("/forgot-password/") || url.includes("/logout/");
-    if (!isUserLoginApi && !isAdminApi && !isAuthPage()) {
+    const isBackgroundApi = url.includes("/heartbeat/") || url.includes("/log-transaction/");
+    if (!isUserLoginApi && !isAdminApi && !isBackgroundApi && !isAuthPage()) {
       _redirecting401 = true;
       try {
         localStorage.removeItem("user");
         localStorage.removeItem("ba_user_rights");
         localStorage.removeItem("ba_settings_profile");
+        localStorage.removeItem("ba_nav");
         sessionStorage.clear();
       } catch (e) {
         console.error("Storage clear failed:", e);

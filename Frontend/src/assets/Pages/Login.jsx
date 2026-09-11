@@ -184,6 +184,21 @@ async function fetchCompanyLookup(code, signal) {
 export default function LoginPage() {
     const navigate = useNavigate();
 
+    // Auto-redirect if already logged in (e.g. mobile toggles Desktop View / page reloads to root)
+    useEffect(() => {
+        try {
+            const rawUser = localStorage.getItem("user");
+            if (rawUser) {
+                const user = JSON.parse(rawUser);
+                if (user && user.username) {
+                    navigate("/AnimsBusinessAnalytics", { replace: true });
+                }
+            }
+        } catch {
+            /* ignore invalid storage format */
+        }
+    }, [navigate]);
+
     const [userId, setUserId] = useState("");
     const [companyName, setCompanyName] = useState("");
     const [companyState, setCompanyState] = useState("idle"); // idle | loading | found | error | inactive | network

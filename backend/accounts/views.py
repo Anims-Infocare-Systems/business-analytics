@@ -2,6 +2,7 @@ from collections import defaultdict
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from typing import Any
 from datetime import datetime, date
 from calendar import monthrange
 from .models import Tenant
@@ -19,15 +20,9 @@ def decrypt_password(encrypted_password):
     return ''.join(chr(ord(c) - 2) for c in encrypted_password)
 
 def get_tenant_connection(request):
-    """Pull tenant DB details from session and return an open connection."""
-    tenant = request.session.get("tenant")
-    if not tenant:
-        raise ValueError("Session expired. Please login again.")
-    
-    # Check if plan is expired
-    company_code = tenant.get("company_code")
-    if company_code and is_plan_expired(company_code):
-        raise ValueError("Subscription expired. Please renew or upgrade your plan.")
+    """Pull tenant DB details from session and return an open connection (auto-restoring session if needed)."""
+    from .session_utils import get_or_restore_session_tenant
+    tenant = get_or_restore_session_tenant(request, allow_expired=False)
 
     conn = get_connection(
         tenant["erp_server"], tenant["erp_database"], tenant["erp_user"],
@@ -148,7 +143,7 @@ def find_column_ci(cursor, table_schema, table_name, candidates):
 # ─────────────────────────────────────────────────────────────
 #  HEALTH
 # ─────────────────────────────────────────────────────────────
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 def health_check(request):
     return Response({"status": "ok"})
 
@@ -619,7 +614,11 @@ def logout_view(request):
 @api_view(['GET'])
 def heartbeat_view(request):
     from django.db import connection
-    tenant = request.session.get("tenant")
+    from .session_utils import get_or_restore_session_tenant
+    try:
+        tenant = get_or_restore_session_tenant(request, allow_expired=True)
+    except ValueError:
+        tenant = None
     print(f"DEBUG: Heartbeat tick received. Tenant session: {tenant}", flush=True)
     if not tenant:
         print("DEBUG: Heartbeat failed - no session.", flush=True)
@@ -648,7 +647,11 @@ def heartbeat_view(request):
 @api_view(['GET'])
 def log_transaction(request):
     from django.db import connection
-    tenant = request.session.get("tenant")
+    from .session_utils import get_or_restore_session_tenant
+    try:
+        tenant = get_or_restore_session_tenant(request, allow_expired=True)
+    except ValueError:
+        tenant = None
     print(f"DEBUG: log_transaction received. Tenant session: {tenant}", flush=True)
     if not tenant:
         print("DEBUG: log_transaction failed - no session.", flush=True)
@@ -2097,7 +2100,7 @@ def dashboard2_customer_complaints(request):
         rem_sql = f"CAST(M.[{rem_m}] AS NVARCHAR(MAX))" if rem_m else "CAST(NULL AS NVARCHAR(MAX))"
         cor_sql = f"CAST(M.[{cor_m}] AS NVARCHAR(MAX))" if cor_m else "CAST(NULL AS NVARCHAR(MAX))"
         per_sql = f"CAST(M.[{per_m}] AS NVARCHAR(MAX))" if per_m else "CAST(NULL AS NVARCHAR(MAX))"
-        cm_join = ""; customer_sql = "CAST(NULL AS NVARCHAR(512))"
+        cm_join = ""; customer_sql = "CAST(NULL AS NVARCHAR(512))"; cname_cm = None
         tbl_cm = find_first_table(cursor, ["CustMast", "custmast", "CUSTMAST"])
         if tbl_cm and cid_m:
             id_cm = find_first_column(cursor, tbl_cm, ["Id", "id", "ID", "CustId", "custid"])
@@ -2119,7 +2122,7 @@ def dashboard2_customer_complaints(request):
                 apply_block = f"""OUTER APPLY (SELECT TOP 1 {sel_a} AS ActionTaken, {sel_s} AS CompStatus FROM [{tbl_d}] dx WHERE dx.[{cmpno_d}] = M.[{cmpno_m}]{del_dx} ORDER BY (SELECT NULL)) AS Det"""
             else: apply_block = """OUTER APPLY (SELECT CAST(NULL AS NVARCHAR(MAX)) AS ActionTaken, CAST(NULL AS NVARCHAR(200)) AS CompStatus) AS Det"""
         else: apply_block = """OUTER APPLY (SELECT CAST(NULL AS NVARCHAR(MAX)) AS ActionTaken, CAST(NULL AS NVARCHAR(200)) AS CompStatus) AS Det"""
-        mas_where = f"CAST(M.[{date_m}] AS DATE) BETWEEN ? AND ?"; params = [start_date, end_date]
+        mas_where = f"CAST(M.[{date_m}] AS DATE) BETWEEN ? AND ?"; params: list[Any] = [start_date, end_date]
         if del_m: mas_where += f" AND ISNULL(M.[{del_m}], 0) = 0"
         if company_m and company_code: mas_where += f" AND M.[{company_m}] = ?"; params.append(company_code)
         cust_param = request.GET.get("customer") or request.GET.get("customer_name") or request.GET.get("customers") or ""

@@ -129,15 +129,20 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
     "x-csrftoken",
     "x-requested-with",
     "x-admin-token",
+    "x-company-code",
+    "x-username",
 ]
 
 
 # ─── Session ──────────────────────────────────────────────────
-SESSION_ENGINE          = "django.contrib.sessions.backends.db"
-SESSION_COOKIE_SAMESITE = "Lax"   # ✅ allows cookie across ports on localhost
-SESSION_COOKIE_SECURE   = not DEBUG
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_AGE      = 86400   # ✅ session lives 24 hours (in seconds)
+SESSION_ENGINE                  = "django.contrib.sessions.backends.db"
+SESSION_COOKIE_SAMESITE         = "Lax"   # ✅ allows cookie across ports on localhost
+SESSION_COOKIE_SECURE           = not DEBUG
+SESSION_COOKIE_HTTPONLY         = True
+SESSION_COOKIE_AGE              = 86400   # ✅ session lives 24 hours (in seconds)
+SESSION_SAVE_EVERY_REQUEST      = True    # ✅ Refresh cookie expiry on every request
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False   # ✅ Persist cookie across mobile browser process/tab switches
+SESSION_COOKIE_PATH             = "/"     # ✅ Cookie applies across whole domain
 # Cross-subdomain login (e.g. anims.* frontend + api-businessanalytics.* API): set DJANGO_SESSION_COOKIE_DOMAIN=.animserp.com
 _session_domain = os.environ.get("DJANGO_SESSION_COOKIE_DOMAIN", "").strip()
 if _session_domain:

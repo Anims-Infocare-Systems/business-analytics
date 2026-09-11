@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import "./Settings.css";
 import { resolveApiBase } from "../../apiBase";
+import Tips from "./Tips";
 
 const API = resolveApiBase();
 const PROFILE_CACHE_KEY = "ba_settings_profile";
@@ -31,6 +32,12 @@ const Icons = {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
+        </svg>
+    ),
+    Tips: () => (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="12 8 8 12 12 16 16 12 12 8" />
         </svg>
     ),
     Billing: () => (
@@ -91,7 +98,7 @@ const Icons = {
     )
 };
 
-export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
+export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule }) {
     // ── Persist active tab across refresh ──
     const [activeTab, setActiveTab] = useState(() => {
         if (isExpiredMode) return "billing";
@@ -478,6 +485,13 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                 <span className="st-sidebar__nav-icon"><Icons.Account /></span>
                                 <span className="st-sidebar__nav-label">Account</span>
                             </button>
+                            <button
+                                className={`st-sidebar__nav-item ${activeTab === "tips" ? "st-sidebar__nav-item--active" : ""}`}
+                                onClick={() => setActiveTab("tips")}
+                            >
+                                <span className="st-sidebar__nav-icon"><Icons.Tips /></span>
+                                <span className="st-sidebar__nav-label">Tips</span>
+                            </button>
                             {isSuperadmin && (
                                 <button
                                     className={`st-sidebar__nav-item ${activeTab === "billing" ? "st-sidebar__nav-item--active" : ""}`}
@@ -797,6 +811,26 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false }) {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── TAB: TIPS ── */}
+                    {activeTab === "tips" && (
+                        <div className="st-section anim-fade-in-quick">
+                            <Tips
+                                onStartTour={(ver) => {
+                                    handleClose();
+                                    if (typeof onStartTour === "function") {
+                                        setTimeout(() => onStartTour(ver), 320);
+                                    }
+                                }}
+                                onNavigateModule={(target) => {
+                                    handleClose();
+                                    if (typeof onNavigateModule === "function") {
+                                        setTimeout(() => onNavigateModule(target), 320);
+                                    }
+                                }}
+                            />
                         </div>
                     )}
 

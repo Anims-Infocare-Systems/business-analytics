@@ -1463,12 +1463,32 @@ def purchase_analysis_po_table(request):
             ind_rm   = find_column_ci(cursor, sch_ind, nm_ind, ["rmname", "RMName", "RMNAME", "RmName"])
             ind_del  = find_column_ci(cursor, sch_ind, nm_ind, ["deleted", "Deleted", "IsDeleted"])
 
-        pim_pino = pim_deptcode = pim_date = pim_del = None
+        pim_pino = pim_deptcode = pim_date = pim_del = pim_reqby = None
         if q_pim:
             pim_pino = find_column_ci(cursor, sch_pim, nm_pim, ["pino", "PINo", "PINO", "PiNo", "indentno", "IndentNo"])
             pim_date = find_column_ci(cursor, sch_pim, nm_pim, ["pidate", "PIDate", "PIDATE", "PiDate", "pdate", "PDate", "inddate", "IndDate"])
             pim_deptcode = find_column_ci(cursor, sch_pim, nm_pim, ["deptcode", "DeptCode", "DEPTCODE", "Deptcode"])
+            pim_reqby = find_column_ci(cursor, sch_pim, nm_pim, [
+                "requested_by", "RequestedBy", "requestedby", "Requested_By",
+                "reqby", "ReqBy", "REQBY", "Req_By", "req_by",
+                "prepared_by", "PreparedBy", "preparedby", "PREPAREDBY", "PrepBy", "prepby",
+                "created_by", "CreatedBy", "createdby", "CREATEDBY",
+                "username", "UserName", "USERNAME", "user_name", "User_Name", "USER_NAME",
+                "emp_name", "EmpName", "EMPNAME", "EmployeeName", "employee_name",
+                "indent_by", "IndentBy", "INDENTBY", "IndBy", "indby",
+                "request_by", "RequestBy", "requestby", "REQUESTBY"
+            ])
             pim_del  = find_column_ci(cursor, sch_pim, nm_pim, ["deleted", "Deleted", "IsDeleted"])
+
+        po_reqby = find_column_ci(cursor, sch_po, nm_po, [
+            "requested_by", "RequestedBy", "requestedby", "Requested_By",
+            "reqby", "ReqBy", "REQBY", "Req_By", "req_by",
+            "prepared_by", "PreparedBy", "preparedby", "PREPAREDBY", "PrepBy", "prepby",
+            "created_by", "CreatedBy", "createdby", "CREATEDBY",
+            "username", "UserName", "USERNAME", "user_name", "User_Name", "USER_NAME",
+            "emp_name", "EmpName", "EMPNAME", "EmployeeName", "employee_name",
+            "request_by", "RequestBy", "requestby", "REQUESTBY"
+        ]) if q_po else None
 
         dm_deptcode = dm_department = dm_del = None
         if q_dm:
@@ -1582,6 +1602,7 @@ def purchase_analysis_po_table(request):
         dept_sel = "CAST(NULL AS NVARCHAR(256))"
         pi_no_sel = "CAST(NULL AS NVARCHAR(64))"
         pi_dt_sel = "CAST(NULL AS DATE)"
+        reqby_sel = "CAST(NULL AS NVARCHAR(256))"
         dept_line_join = ""
         dept_po_join = ""
 
@@ -1590,11 +1611,14 @@ def purchase_analysis_po_table(request):
 
             pim_join_sql = ""
             pidate_col_sql = "CAST(NULL AS DATE) AS pidate"
+            reqby_col_sql = "CAST(NULL AS NVARCHAR(256)) AS RequestedBy"
             if q_pim and pim_pino:
                 del_pim_sql = f" AND ISNULL(PIM.[{pim_del}], 0) = 0" if pim_del else ""
                 pim_join_sql = f"LEFT JOIN {q_pim} PIM ON LTRIM(RTRIM(PIS.[{ind_pino}])) = LTRIM(RTRIM(PIM.[{pim_pino}])){del_pim_sql}"
                 if pim_date:
                     pidate_col_sql = f"MAX(PIM.[{pim_date}]) AS pidate"
+                if pim_reqby:
+                    reqby_col_sql = f"MAX(LTRIM(RTRIM(PIM.[{pim_reqby}]))) AS RequestedBy"
 
             dm_join_sql = ""
             dept_col_sql = "CAST(NULL AS NVARCHAR(256)) AS Department"
@@ -1613,7 +1637,8 @@ def purchase_analysis_po_table(request):
                             LTRIM(RTRIM(PIS.[{ind_rm}])) AS rmname,
                             MAX(LTRIM(RTRIM(PIS.[{ind_pino}]))) AS pino,
                             {pidate_col_sql},
-                            {dept_col_sql}
+                            {dept_col_sql},
+                            {reqby_col_sql}
                         FROM {q_ind} PIS
                         {pim_join_sql}
                         {dm_join_sql}
@@ -1629,7 +1654,8 @@ def purchase_analysis_po_table(request):
                         LTRIM(RTRIM(PIS.[{ind_pono}])) AS pono,
                         MAX(LTRIM(RTRIM(PIS.[{ind_pino}]))) AS pino,
                         {pidate_col_sql},
-                        {dept_col_sql}
+                        {dept_col_sql},
+                        {reqby_col_sql}
                     FROM {q_ind} PIS
                     {pim_join_sql}
                     {dm_join_sql}
@@ -1639,14 +1665,19 @@ def purchase_analysis_po_table(request):
                 ) DEPT_PO ON LTRIM(RTRIM(M.[{po_pono}])) = DEPT_PO.pono
             """
 
+            po_reqby_sel = f"M.[{po_reqby}]" if po_reqby else "CAST(NULL AS NVARCHAR(256))"
             if dept_line_join:
                 pi_no_sel = f"CAST(COALESCE(DEPT_LINE.pino, DEPT_PO.pino, N'') AS NVARCHAR(64))"
                 pi_dt_sel = f"COALESCE(DEPT_LINE.pidate, DEPT_PO.pidate)"
                 dept_sel  = f"CAST(COALESCE(DEPT_LINE.Department, DEPT_PO.Department, N'') AS NVARCHAR(256))"
+                reqby_sel = f"CAST(COALESCE(DEPT_LINE.RequestedBy, DEPT_PO.RequestedBy, {po_reqby_sel}, N'') AS NVARCHAR(256))"
             else:
                 pi_no_sel = f"CAST(ISNULL(DEPT_PO.pino, N'') AS NVARCHAR(64))"
                 pi_dt_sel = f"DEPT_PO.pidate"
                 dept_sel  = f"CAST(ISNULL(DEPT_PO.Department, N'') AS NVARCHAR(256))"
+                reqby_sel = f"CAST(COALESCE(DEPT_PO.RequestedBy, {po_reqby_sel}, N'') AS NVARCHAR(256))"
+        elif po_reqby:
+            reqby_sel = f"CAST(ISNULL(M.[{po_reqby}], N'') AS NVARCHAR(256))"
 
         # rate select expression
         rate_sel = f"ISNULL(CAST(D.[{det_rate}] AS FLOAT), 0)" if det_rate else "0"
@@ -1686,7 +1717,8 @@ def purchase_analysis_po_table(request):
                 {amnd_sel}                              AS Amnd,
                 {dept_sel}                              AS Department,
                 {pi_no_sel}                             AS PI_No,
-                {pi_dt_sel}                             AS PI_Date
+                {pi_dt_sel}                             AS PI_Date,
+                {reqby_sel}                             AS Requested_By
             FROM {q_po} M
             INNER JOIN {q_det} D
                 ON M.[{po_pono}] = D.[{det_pono}] AND {del_det_sql}
@@ -1728,6 +1760,7 @@ def purchase_analysis_po_table(request):
                 "department":    str(row[12] or "").strip(),
                 "pi_no":         str(row[13] or "").strip(),
                 "pi_date":       _iso(pi_dt),
+                "requested_by":  str(row[15] or "").strip(),
             })
 
         # ── Also query Pending PIs (Purchase Indents awaiting PO generation) ──
@@ -1747,6 +1780,8 @@ def purchase_analysis_po_table(request):
                 pi_dm_sub = f"ISNULL((SELECT TOP 1 DM.[{dm_department}] FROM {q_dm} DM WHERE DM.[{dm_deptcode}] = PIM.[deptcode]{dm_del_cond}), N'–')"
             else:
                 pi_dm_sub = "N'–'"
+
+            pi_reqby_sub = f"ISNULL(PIM.[{pim_reqby}], N'–')" if (q_pim and pim_reqby) else "N'–'"
 
             pis_del_cond = f" AND ISNULL(PIS.[{ind_del}], 0) = 0" if (q_ind and ind_del) else ""
             pis_not_exists = ""
@@ -1779,6 +1814,7 @@ def purchase_analysis_po_table(request):
                     {pi_dm_sub} AS Department,
                     PIM.[pino] AS PI_No,
                     PIM.[pidate] AS PI_Date,
+                    {pi_reqby_sub} AS Requested_By,
                     1 AS is_pi_pending
                 FROM {q_pim} PIM
                 INNER JOIN {q_pid} PID 
@@ -1815,6 +1851,7 @@ def purchase_analysis_po_table(request):
                         "department":    str(row[12] or "–").strip(),
                         "pi_no":         str(row[13] or "").strip(),
                         "pi_date":       _iso(pi_dt),
+                        "requested_by":  str(row[15] or "–").strip(),
                         "is_pi_pending": True,
                     })
             except Exception as e:
