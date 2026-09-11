@@ -244,7 +244,7 @@ export default function Welcome({
                         <span className="wh-kpi__value">{moduleCount || shortcuts.length}</span>
                     </div>
                 </div>
-                <div className="wh-kpi">
+                <div className="wh-kpi" data-tour="live-clock-card">
                     <span className="wh-kpi__icon wh-kpi__icon--violet">
                         <CalendarDays size={18} />
                     </span>

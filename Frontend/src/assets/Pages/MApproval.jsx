@@ -2027,12 +2027,15 @@ export default function MApproval() {
 
     const resolvedStatus = card => card.status;
 
-    const refreshBoard = useCallback(async () => {
+    const refreshBoard = useCallback(async (options = {}) => {
         const from = toYMD(dateRange.from);
         const to = toYMD(dateRange.to || dateRange.from);
         if (!from) return;
         detailCache.current = {};
-        setIsLoading(true);
+        const isSilent = !!options?.silent;
+        if (!isSilent) {
+            setIsLoading(true);
+        }
         try {
             const qsList = new URLSearchParams({ from, to, from_date: from, to_date: to, page: "1", page_size: "2000" });
             const resList = await fetch(`${API}/mapproval/list/?${qsList}`, { credentials: "include" });
@@ -2047,9 +2050,13 @@ export default function MApproval() {
             setCards(fetchedCards);
         } catch (e) {
             console.error(e);
-            setCards([]);
+            if (!isSilent) {
+                setCards([]);
+            }
         } finally {
-            setIsLoading(false);
+            if (!isSilent) {
+                setIsLoading(false);
+            }
         }
     }, [dateRange.from, dateRange.to]);
 
@@ -2097,7 +2104,9 @@ export default function MApproval() {
     }, [cards]);
 
     const openPreview = useCallback(async (listCard) => {
-        const invno = listCard.docKind === "customer_po" ? listCard.id.replace("customer_po:", "") : listCard.poNo;
+        const invno = listCard.docKind === "customer_po"
+            ? (listCard.apoNo ? `${listCard.apoNo}:${listCard.status || "Pending"}` : listCard.id.replace("customer_po:", ""))
+            : listCard.poNo;
         const docKind = (listCard.docKind || "invoice").toLowerCase();
         const cacheKey = listCard.id || `${docKind}:${invno}`;
 
@@ -2114,7 +2123,7 @@ export default function MApproval() {
             return;
         }
 
-        if (detailCache.current[cacheKey]) {
+        if (detailCache.current[cacheKey] && detailCache.current[cacheKey].items && detailCache.current[cacheKey].items.length > 0) {
             setSelected({ ...detailCache.current[cacheKey] });
             setPreviewLoading(false);
             return;
@@ -2176,35 +2185,61 @@ export default function MApproval() {
             const updatedDt = data.approvedDateTime || new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
             const approvedSerials = lineApprovals !== null ? lineApprovals : (card.items || []).map(item => item.poSlNo);
+            const newCardId = card.docKind === "customer_po" ? `customer_po:${card.apoNo}:Approved` : card.id;
+
+            const existingItems = (card.items && card.items.length > 0)
+                ? card.items
+                : (detailCache.current[cacheKey]?.items || []);
+
+            const updatedItems = existingItems.map(item => ({
+                ...item,
+                approved: approvedSerials.includes(item.poSlNo)
+            }));
 
             setCards(prev => prev.map(c =>
-                (c.poNo === card.poNo || c.id === card.id)
+                (c.poNo === card.poNo || c.id === card.id || (card.docKind === "customer_po" && c.apoNo === card.apoNo))
                     ? {
                         ...c,
+                        id: newCardId,
                         status: "Approved",
                         approvedBy: updatedBy,
                         approvedDateTime: updatedDt,
-                        items: (c.items || []).map(item => ({ ...item, approved: approvedSerials.includes(item.poSlNo) }))
+                        items: updatedItems
                     }
                     : c
             ));
 
-            setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id))
+            setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id || (card.docKind === "customer_po" && prev.apoNo === card.apoNo)))
                 ? {
                     ...prev,
+                    id: newCardId,
                     status: "Approved",
                     approvedBy: updatedBy,
                     approvedDateTime: updatedDt,
-                    items: (prev.items || []).map(item => ({ ...item, approved: approvedSerials.includes(item.poSlNo) }))
+                    items: updatedItems
                 }
                 : prev
             );
 
+            // Update cache under both old and new keys so immediate re-open has full items
+            const updatedCardObj = {
+                ...card,
+                id: newCardId,
+                status: "Approved",
+                approvedBy: updatedBy,
+                approvedDateTime: updatedDt,
+                items: updatedItems
+            };
+            detailCache.current[newCardId] = updatedCardObj;
+            if (card.apoNo) {
+                detailCache.current[`customer_po:${card.apoNo}:Approved`] = updatedCardObj;
+                delete detailCache.current[`customer_po:${card.apoNo}:Pending`];
+            }
+
             const displayNo = card.poNo.includes("|") ? card.poNo.split("|")[2] : card.poNo;
             addToast(`${docLabel} ${displayNo} approved`, "success-approve");
             if (docKind === "customer_po") {
-                await refreshBoard();
-                setSelected(null);
+                refreshBoard({ silent: true });
             }
         } catch (e) {
             addToast("Network error — please try again", "error");
@@ -2233,34 +2268,58 @@ export default function MApproval() {
             if (!res.ok && res.status !== 404) { addToast(data.error || "Modify Open failed", "error"); return; }
             delete detailCache.current[cacheKey];
 
+            const newCardId = card.docKind === "customer_po" ? `customer_po:${card.apoNo}:Pending` : card.id;
+
+            const existingItems = (card.items && card.items.length > 0)
+                ? card.items
+                : (detailCache.current[cacheKey]?.items || []);
+
+            const revertedItems = existingItems.map(item => ({ ...item, approved: false }));
+
             setCards(prev => prev.map(c =>
-                (c.poNo === card.poNo || c.id === card.id)
+                (c.poNo === card.poNo || c.id === card.id || (card.docKind === "customer_po" && c.apoNo === card.apoNo))
                     ? {
                         ...c,
+                        id: newCardId,
                         status: "Pending",
                         approvedBy: null,
                         approvedDateTime: null,
-                        items: (c.items || []).map(item => ({ ...item, approved: false }))
+                        items: revertedItems
                     }
                     : c
             ));
 
-            setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id))
+            setSelected(prev => (prev && (prev.poNo === card.poNo || prev.id === card.id || (card.docKind === "customer_po" && prev.apoNo === card.apoNo)))
                 ? {
                     ...prev,
+                    id: newCardId,
                     status: "Pending",
                     approvedBy: null,
                     approvedDateTime: null,
-                    items: (prev.items || []).map(item => ({ ...item, approved: false }))
+                    items: revertedItems
                 }
                 : prev
             );
 
+            // Update cache under both old and new keys so immediate re-open has full items
+            const revertedCardObj = {
+                ...card,
+                id: newCardId,
+                status: "Pending",
+                approvedBy: null,
+                approvedDateTime: null,
+                items: revertedItems
+            };
+            detailCache.current[newCardId] = revertedCardObj;
+            if (card.apoNo) {
+                detailCache.current[`customer_po:${card.apoNo}:Pending`] = revertedCardObj;
+                delete detailCache.current[`customer_po:${card.apoNo}:Approved`];
+            }
+
             const displayNo = card.poNo.includes("|") ? card.poNo.split("|")[2] : card.poNo;
             addToast(`${docLabel} ${displayNo} moved to Pending`, "success-modify");
             if (docKind === "customer_po") {
-                await refreshBoard();
-                setSelected(null);
+                refreshBoard({ silent: true });
             }
         } catch (e) {
             addToast("Network error — please try again", "error");

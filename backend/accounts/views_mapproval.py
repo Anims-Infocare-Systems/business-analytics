@@ -2113,6 +2113,40 @@ def mapproval_detail(request):
                 except Exception as ex:
                     print("[M-APPROVAL] Detail In_PoDet fetch error:", ex)
 
+            # Fallback: If status_filter yielded 0 rows (e.g. document was just approved or reverted to pending),
+            # query all active items for this Apono so preview never displays an empty table!
+            if not item_rows and status_filter:
+                fallback_items_query = """
+                    SELECT RowNo, icode, itcode, itdesc, uom, Qty, rate, amt, poslno, ISNULL(IsApprovePo, 0) AS IsApprovePo
+                    FROM In_PoDet
+                    WHERE Apono = ? AND ISNULL(deleted, 0) = 0
+                    ORDER BY RowNo
+                """
+                fallback_fetched = False
+                if request:
+                    try:
+                        conn, _ = get_tenant_connection(request)
+                        cursor = conn.cursor()
+                        cursor.execute(fallback_items_query, [clean_apono])
+                        desc = cursor.description or []
+                        cols = [col[0] for col in desc]
+                        item_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                        cursor.close()
+                        conn.close()
+                        fallback_fetched = True
+                    except Exception:
+                        pass
+                if not fallback_fetched:
+                    try:
+                        with connection.cursor() as cursor:
+                            local_fallback = fallback_items_query.replace('?', '%s')
+                            cursor.execute(local_fallback, [clean_apono])
+                            desc = cursor.description or []
+                            cols = [col[0] for col in desc]
+                            item_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    except Exception as ex:
+                        print("[M-APPROVAL] Detail fallback In_PoDet fetch error:", ex)
+
             # Map items
             mapped_items = []
             for item in item_rows:

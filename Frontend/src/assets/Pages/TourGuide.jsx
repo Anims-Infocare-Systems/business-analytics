@@ -28,90 +28,127 @@ export default function TourGuide({
         }
     }, [currentStepIndex, isOpen, isCelebrating, currentStep, onStepChange]);
 
+    // Helper: Check if element is genuinely visible and within viewport bounds
+    const isElementVisible = (el) => {
+        if (!el) return false;
+        try {
+            const style = window.getComputedStyle(el);
+            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+                return false;
+            }
+            const rect = el.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) {
+                return false;
+            }
+            // Must not be completely outside viewport (e.g. inside an offscreen drawer)
+            if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= window.innerWidth || rect.top >= window.innerHeight) {
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
     // Measure target element position
     const updateTargetPosition = useCallback(() => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
         let el = document.querySelector(currentStep.targetSelector);
-        if (!el && currentStep.fallbackSelector) {
+        if (!isElementVisible(el) && currentStep.fallbackSelector) {
             el = document.querySelector(currentStep.fallbackSelector);
         }
 
-        if (el) {
+        if (isElementVisible(el)) {
             const rect = el.getBoundingClientRect();
-            // Check if element is actually visible with non-zero dimensions
-            if (rect.width > 0 && rect.height > 0) {
-                const padding = 6;
-                const newRect = {
-                    top: Math.max(4, rect.top - padding),
-                    left: Math.max(4, rect.left - padding),
-                    width: rect.width + (padding * 2),
-                    height: rect.height + (padding * 2)
-                };
-                setTargetRect(newRect);
+            const padding = 6;
+            const newRect = {
+                top: Math.max(4, rect.top - padding),
+                left: Math.max(4, rect.left - padding),
+                width: Math.min(window.innerWidth - 8, rect.width + (padding * 2)),
+                height: rect.height + (padding * 2)
+            };
+            setTargetRect(newRect);
 
-                // Compute popover position
-                const isMobile = window.innerWidth <= 768;
-                const hasSubItems = currentStep.subItems && currentStep.subItems.length > 0;
-                const popoverWidth = Math.min(window.innerWidth - 24, hasSubItems ? 400 : 360);
-                const popoverHeight = hasSubItems ? 280 : 220;
-                const margin = 14;
+            // Compute popover position
+            const isMobile = window.innerWidth <= 768;
 
-                let top = 0;
-                let left = 0;
-                let placement = currentStep.placement || "bottom";
+            if (isMobile) {
+                // Smart mobile docking:
+                // If target element midpoint is in top 48% of screen, dock card at bottom
+                // If target element midpoint is in bottom 52% of screen, dock card at top
+                const targetMidY = newRect.top + (newRect.height / 2);
+                const placeAtBottom = targetMidY < (window.innerHeight * 0.48);
 
-                // On mobile or narrow widths (<820px), avoid right placement that overflows
-                if (isMobile || window.innerWidth < 820) {
-                    if (placement === "right" || placement === "left") {
-                        placement = "bottom";
-                    }
-                }
-
-                if (placement === "bottom") {
-                    top = newRect.top + newRect.height + margin;
-                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
-                    // If bottom overflows viewport, flip to top
-                    if (top + popoverHeight > window.innerHeight - 20) {
-                        top = Math.max(16, newRect.top - popoverHeight - margin);
-                        placement = "top";
-                    }
-                } else if (placement === "top") {
-                    top = newRect.top - popoverHeight - margin;
-                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
-                    if (top < 16) {
-                        top = newRect.top + newRect.height + margin;
-                        placement = "bottom";
-                    }
-                } else if (placement === "right") {
-                    top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
-                    left = newRect.left + newRect.width + margin;
-                    if (left + popoverWidth > window.innerWidth - 20) {
-                        top = newRect.top + newRect.height + margin;
-                        left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
-                        placement = "bottom";
-                    }
-                } else if (placement === "left") {
-                    top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
-                    left = newRect.left - popoverWidth - margin;
-                    if (left < 16) {
-                        top = newRect.top + newRect.height + margin;
-                        left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
-                        placement = "bottom";
-                    }
-                }
-
-                // Keep inside horizontal viewport boundaries
-                left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, left));
-                top = Math.max(12, Math.min(window.innerHeight - popoverHeight - 12, top));
-
-                setPopoverPos({ top, left, placement });
+                setPopoverPos({
+                    top: null,
+                    left: null,
+                    placement: placeAtBottom ? "bottom" : "top",
+                    isMobileDocked: true,
+                    mobileDock: placeAtBottom ? "bottom" : "top"
+                });
                 return;
             }
+
+            // Desktop positioning
+            const hasSubItems = currentStep.subItems && currentStep.subItems.length > 0;
+            const popoverWidth = Math.min(window.innerWidth - 24, hasSubItems ? 400 : 360);
+            const popoverHeight = hasSubItems ? 280 : 220;
+            const margin = 14;
+
+            let top = 0;
+            let left = 0;
+            let placement = currentStep.placement || "bottom";
+
+            if (window.innerWidth < 820) {
+                if (placement === "right" || placement === "left") {
+                    placement = "bottom";
+                }
+            }
+
+            if (placement === "bottom") {
+                top = newRect.top + newRect.height + margin;
+                left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                if (top + popoverHeight > window.innerHeight - 20) {
+                    top = Math.max(16, newRect.top - popoverHeight - margin);
+                    placement = "top";
+                }
+            } else if (placement === "top") {
+                top = newRect.top - popoverHeight - margin;
+                left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                if (top < 16) {
+                    top = newRect.top + newRect.height + margin;
+                    placement = "bottom";
+                }
+            } else if (placement === "right") {
+                top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
+                left = newRect.left + newRect.width + margin;
+                if (left + popoverWidth > window.innerWidth - 20) {
+                    top = newRect.top + newRect.height + margin;
+                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                    placement = "bottom";
+                }
+            } else if (placement === "left") {
+                top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
+                left = newRect.left - popoverWidth - margin;
+                if (left < 16) {
+                    top = newRect.top + newRect.height + margin;
+                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                    placement = "bottom";
+                }
+            }
+
+            // Keep inside horizontal viewport boundaries
+            left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, left));
+            top = Math.max(12, Math.min(window.innerHeight - popoverHeight - 12, top));
+
+            setPopoverPos({ top, left, placement, isMobileDocked: false });
+            return;
         }
 
         // Target not found on screen
         setTargetRect(null);
+        setPopoverPos({ top: 0, left: 0, placement: "bottom", isMobileDocked: false });
     }, [isOpen, isCelebrating, currentStep]);
 
     // Handle step change & scroll target into view
@@ -119,7 +156,7 @@ export default function TourGuide({
         if (!isOpen || isCelebrating || !currentStep) return;
 
         let el = document.querySelector(currentStep.targetSelector);
-        if (!el && currentStep.fallbackSelector) {
+        if (!isElementVisible(el) && currentStep.fallbackSelector) {
             el = document.querySelector(currentStep.fallbackSelector);
         }
 
@@ -137,8 +174,8 @@ export default function TourGuide({
         retryTimersRef.current.forEach(clearTimeout);
         retryTimersRef.current = [];
 
-        // Staggered checks to accommodate CSS menu expand transitions
-        [80, 180, 320].forEach(delay => {
+        // Staggered checks to accommodate CSS menu expand transitions & mobile drawer
+        [80, 180, 320, 460].forEach(delay => {
             const t = setTimeout(updateTargetPosition, delay);
             retryTimersRef.current.push(t);
         });
@@ -234,8 +271,14 @@ export default function TourGuide({
             {/* ── Popover Tooltip ── */}
             {!isCelebrating && currentStep && (
                 <div
-                    className={`tg-popover ${!targetRect ? "tg-popover--centered" : ""}`}
-                    style={targetRect ? { top: `${popoverPos.top}px`, left: `${popoverPos.left}px` } : {}}
+                    className={[
+                        "tg-popover",
+                        !targetRect ? "tg-popover--centered" : "",
+                        popoverPos.isMobileDocked
+                            ? (popoverPos.mobileDock === "top" ? "tg-popover--mobile-top" : "tg-popover--mobile-bottom")
+                            : ""
+                    ].filter(Boolean).join(" ")}
+                    style={targetRect && !popoverPos.isMobileDocked ? { top: `${popoverPos.top}px`, left: `${popoverPos.left}px` } : {}}
                     role="dialog"
                     aria-modal="true"
                 >

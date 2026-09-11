@@ -673,6 +673,7 @@ export default function DashboardLayout() {
         setActiveItem("Welcome");
         setActiveSubItem(null);
         setOpenMenu(null);
+        if (isMobile) setDrawerOpen(false);
         setActiveTourVersion(CURRENT_APP_VERSION);
         setIsTourActive(true);
     };
@@ -689,6 +690,7 @@ export default function DashboardLayout() {
         setActiveItem("Welcome");
         setActiveSubItem(null);
         setOpenMenu(null);
+        if (isMobile) setDrawerOpen(false);
         setActiveTourVersion(ver);
         setIsTourActive(true);
     };
@@ -696,6 +698,14 @@ export default function DashboardLayout() {
     const handleTourStepChange = useCallback((step, stepIndex) => {
         // Ensure sidebar is un-collapsed during the tour
         setExpanded(true);
+        if (isMobile) {
+            // On mobile, if the step is a sidebar menu item, open the drawer so the item is visible!
+            if (step.id && step.id.startsWith("menu-")) {
+                setDrawerOpen(true);
+            } else {
+                setDrawerOpen(false);
+            }
+        }
         if (stepIndex <= 3) {
             // Keep on Welcome for header, profile, clock, and bento tiles
             setActiveItem("Welcome");
@@ -706,12 +716,13 @@ export default function DashboardLayout() {
         } else {
             setOpenMenu(null);
         }
-    }, []);
+    }, [isMobile]);
 
     const handleTourComplete = () => {
         markTourAsSeen(activeTourVersion, userName);
         setIsTourActive(false);
         setOpenMenu(null);
+        if (isMobile) setDrawerOpen(false);
         if (preTourExpandedStateRef.current !== null) {
             setExpanded(preTourExpandedStateRef.current);
             preTourExpandedStateRef.current = null;
@@ -727,6 +738,7 @@ export default function DashboardLayout() {
     const handleTourClose = () => {
         setIsTourActive(false);
         setOpenMenu(null);
+        if (isMobile) setDrawerOpen(false);
         if (preTourExpandedStateRef.current !== null) {
             setExpanded(preTourExpandedStateRef.current);
             preTourExpandedStateRef.current = null;

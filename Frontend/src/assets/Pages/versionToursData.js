@@ -47,7 +47,7 @@ export const VERSION_REGISTRY = [
             {
                 id: "live-clock",
                 targetSelector: "[data-tour='live-clock']",
-                fallbackSelector: ".dl-clock",
+                fallbackSelector: "[data-tour='live-clock-card'], .dl-clock",
                 title: "Live Indian Standard Time (IST)",
                 category: "Operations",
                 badge: "IST Live Clock",
