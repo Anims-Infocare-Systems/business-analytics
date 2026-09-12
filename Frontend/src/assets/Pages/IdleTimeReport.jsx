@@ -303,7 +303,7 @@ function SectionLabel({ label }) {
   );
 }
 
-function Card({ title, badge, badgeColor, badgeBg, accentColor, extra, children }) {
+function Card({ title, badge, badgeColor, badgeBg, accentColor, extra, children, ...rest }) {
   const accent = accentColor || "#2563eb";
   return (
     <div
@@ -312,6 +312,7 @@ function Card({ title, badge, badgeColor, badgeBg, accentColor, extra, children 
         "--card-accent": accent,
         borderTop: `3px solid ${accent}`,
       }}
+      {...rest}
     >
       <div className="itr-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', width: '100%', borderBottom: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1853,7 +1854,7 @@ export default function IdleTimeReport() {
         </div>
 
         {/* ── KPI CARDS ── */}
-        <div className="itr-kpi-grid">
+        <div className="itr-kpi-grid" data-spotlight="itr-kpis">
           {kpiCards.map((k, i) => (
             <div key={i} className="itr-kpi-card"
               style={{
@@ -1890,7 +1891,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Top Idle Reasons + Accepted vs Non-Accepted" />
 
         <div className="itr-g2">
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> Top 10 Idle Reasons</span>} badge="By Hours" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
+          <Card data-spotlight="itr-top-reasons" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> Top 10 Idle Reasons</span>} badge="By Hours" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
             {topReasonsChart.labels.length === 0 ? (
               <EmptyState message="No idle reasons recorded in this period." />
             ) : (
@@ -1898,7 +1899,7 @@ export default function IdleTimeReport() {
             )}
           </Card>
 
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCheckCircle size={16} /> Accepted vs Non-Accepted Idle</span>} badge="% Split" badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#f97316">
+          <Card data-spotlight="itr-accepted-split" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCheckCircle size={16} /> Accepted vs Non-Accepted Idle</span>} badge="% Split" badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#f97316">
             {acceptedIdle.tiles.length === 0 ? (
               <EmptyState message="No accepted / non-accepted split recorded." />
             ) : (
@@ -1921,7 +1922,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Total Idle Hours + Day Wise / Month Wise Trend" />
 
         <div className="itr-g2">
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCalendar size={16} /> Idle Hours + Cost — Month Wise</span>} badge="Oct 25→Mar 26" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
+          <Card data-spotlight="itr-month-wise" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCalendar size={16} /> Idle Hours + Cost — Month Wise</span>} badge="Oct 25→Mar 26" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
             {monthwiseChart.labels.length === 0 ? (
               <EmptyState message="No monthly history available for this selection." />
             ) : (
@@ -2047,7 +2048,7 @@ export default function IdleTimeReport() {
           ))}
         </div>
 
-        <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiRefreshCw size={16} /> No. of Machines Idled — Shift Wise</span>} badge="All Shifts" badgeBg="#f0fdf4" badgeColor="#16a34a" accentColor="#16a34a">
+        <Card data-spotlight="itr-shift-wise" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiRefreshCw size={16} /> No. of Machines Idled — Shift Wise</span>} badge="All Shifts" badgeBg="#f0fdf4" badgeColor="#16a34a" accentColor="#16a34a">
           {shiftChart.labels.length === 0 ? (
             <EmptyState message="No shift metrics recorded for this selection." />
           ) : (
@@ -2072,7 +2073,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Idle Cost % + Cost-Hours Machine + % Wise Ranking" />
 
         <div className="itr-g2">
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiDollarSign size={16} /> Idle Cost & Hours — Top Machines</span>} badge="₹K" badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#f97316">
+          <Card data-spotlight="itr-top-machines-cost" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiDollarSign size={16} /> Idle Cost & Hours — Top Machines</span>} badge="₹K" badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#f97316">
             {costMachineData.labels.length === 0 ? (
               <EmptyState message="No machine idle cost records found." />
             ) : (
@@ -2094,7 +2095,7 @@ export default function IdleTimeReport() {
             )}
           </Card>
 
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> % Wise Idle Machine Ranking</span>} badge="Top 10" badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626">
+          <Card data-spotlight="itr-machine-ranking" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> % Wise Idle Machine Ranking</span>} badge="Top 10" badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626">
             {pctMachineData.labels.length === 0 ? (
               <EmptyState message="No machine idle ranking records found." />
             ) : (
@@ -2113,7 +2114,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Continuous Idle Reasons + Machines Idle Not Entered" />
 
         <div className="itr-g2">
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiRefreshCw size={16} /> Continuous Idle Reasons (≥ 4 hrs)</span>}
+          <Card data-spotlight="itr-continuous-idle" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiRefreshCw size={16} /> Continuous Idle Reasons (≥ 4 hrs)</span>}
             badge={`${continuousIdle.length} Flagged`} badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626">
             <div className="itr-table-scroll itr-table-scroll--continuous">
               <table className="itr-table">
@@ -2139,7 +2140,7 @@ export default function IdleTimeReport() {
             </div>
           </Card>
 
-          <Card title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiAlertTriangle size={16} /> Idle Time Not Entered</span>}
+          <Card data-spotlight="itr-not-entered" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiAlertTriangle size={16} /> Idle Time Not Entered</span>}
             badge={`${idleTimeNotEntered.summary.not_entered ?? 0} Pending`}
             badgeBg="#fff7ed" badgeColor="#f97316" accentColor="#d97706">
             <div className="itr-notent-grid">
@@ -2187,6 +2188,7 @@ export default function IdleTimeReport() {
 
           {/* ── Machine % Wise Idle ── */}
           <Card
+            data-spotlight="itr-machine-percent"
             title={<span style={{ display:"flex", alignItems:"center", gap:"6px" }}><FiBarChart2 size={16}/> Machine % Wise Idle</span>}
             badge="All Machines" badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626"
           >
@@ -2241,6 +2243,7 @@ export default function IdleTimeReport() {
 
           {/* ── Operator Wise Idle Hours ── */}
           <Card
+            data-spotlight="itr-operator-wise"
             title={<span style={{ display:"flex", alignItems:"center", gap:"6px" }}><FiUser size={16}/> Operator Wise Idle Hours</span>}
             badge="With %" badgeBg="#f0fdf4" badgeColor="#16a34a" accentColor="#16a34a"
           >

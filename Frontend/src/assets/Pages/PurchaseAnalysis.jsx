@@ -49,10 +49,12 @@ import {
     Tag,
     SlidersHorizontal,
     BarChart2,
-    CheckCheck
+    CheckCheck,
+    Download
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
+Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 const API_BASE = resolveApiBase();
 
@@ -2538,6 +2540,93 @@ export default function PurchaseAnalysis() {
         };
     }, [filteredPoRows]);
 
+    const handleExportPoDetailsCsv = () => {
+        if (!sortedFilteredPoRows || sortedFilteredPoRows.length === 0) return;
+
+        const headers = [
+            "SL. NO.",
+            "PI NO",
+            "PI DATE",
+            "REQUESTED BY",
+            "PO NUMBER",
+            "PO DATE",
+            "PO TYPE",
+            "DEPARTMENT",
+            "SUPPLIER",
+            "MATERIAL",
+            "QTY",
+            "RATE",
+            "VALUE",
+            "GRN NO",
+            "GRN DATE",
+            "AMND"
+        ];
+
+        const formatTableDate = (val) => {
+            if (!val || val === "–" || val === "-") return "–";
+            const str = String(val).trim();
+            const parts = str.split("-");
+            if (parts.length === 3 && parts[0].length === 4) {
+                const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const [y, m, d] = parts;
+                const monthIndex = parseInt(m, 10) - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    return `${parseInt(d, 10)} ${months[monthIndex]} ${y}`;
+                }
+            }
+            return str;
+        };
+
+        const rows = sortedFilteredPoRows.map((r, index) => {
+            const materialDesc = r.material_code
+                ? `${r.material_code} – ${String(r.material || "").replace(/^[^-]+-\s*/, "")}`
+                : (r.material || "–");
+            const rateVal = r.rate !== undefined && r.rate !== null && r.rate !== "" && !isNaN(Number(r.rate))
+                ? Number(r.rate).toFixed(2)
+                : "–";
+            const amtVal = r.value !== undefined && r.value !== null && r.value !== "" && !isNaN(Number(r.value))
+                ? Number(r.value).toFixed(2)
+                : "–";
+
+            return [
+                index + 1,
+                r.pi_no || r.indent_no || r.ind_no || "–",
+                formatTableDate(r.pi_date || r.indent_date || r.ind_date),
+                r.requested_by || r.req_by || r.prepared_by || r.indent_by || r.created_by || "–",
+                r.po_number && r.po_number !== "–" && r.po_number !== "-" ? r.po_number : "–",
+                formatTableDate(r.po_date),
+                r.po_type || "–",
+                r.department || "–",
+                r.vendor_name || "–",
+                materialDesc,
+                r.po_qty || "–",
+                rateVal,
+                amtVal,
+                r.grn_no && r.grn_no !== "–" && r.grn_no !== "-" ? r.grn_no : "–",
+                formatTableDate(r.grn_date),
+                r.amnd || "N"
+            ];
+        });
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(row => row.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(","))
+        ].join("\r\n");
+
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        const fromStr = dateRange?.from ? new Date(dateRange.from).toISOString().slice(0, 10) : "";
+        const toStr = dateRange?.to ? new Date(dateRange.to).toISOString().slice(0, 10) : "";
+        const dateSuffix = fromStr && toStr ? `_${fromStr}_to_${toStr}` : "";
+        link.setAttribute("download", `Purchase_Order_Details${dateSuffix}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     const filteredAmendedPoRows = useMemo(() => {
         return amendedPoRows.filter(r => {
             const q = searchQuery.toLowerCase().trim();
@@ -3384,6 +3473,72 @@ export default function PurchaseAnalysis() {
             );
         });
     }, [traceRows, traceSearch, searchQuery]);
+
+    const handleExportTraceabilityCsv = () => {
+        if (!filteredTraceData || filteredTraceData.length === 0) return;
+
+        const headers = [
+            "#",
+            "IND NO",
+            "IND DATE",
+            "PO NO",
+            "PO DATE",
+            "PO TYPE",
+            "SUPPLIER NAME",
+            "MATERIAL",
+            "PO QTY",
+            "PO RATE",
+            "PO VALUE",
+            "APPROVED STATUS",
+            "GRN NO",
+            "GRN DATE",
+            "GRN MATERIAL",
+            "GRN OK QTY",
+            "GRN RATE",
+            "GRN VALUE",
+            "AMND"
+        ];
+
+        const rows = filteredTraceData.map((row, index) => [
+            row.sno ?? (index + 1),
+            row.indNo && row.indNo !== "–" && row.indNo !== "-" ? row.indNo : "–",
+            row.indDt || "–",
+            row.indPoNo && row.indPoNo !== "–" && row.indPoNo !== "-" ? row.indPoNo : "–",
+            row.poDt || "–",
+            row.poType || "–",
+            row.supplierName || "–",
+            row.material || "–",
+            row.poQty !== undefined && row.poQty !== null ? row.poQty : "–",
+            row.poRate !== undefined && row.poRate !== null && row.poRate !== "" ? row.poRate : "0.00",
+            row.poValue !== undefined && row.poValue !== null ? row.poValue : "0",
+            row.approvedStatus || "N",
+            row.grnNo && row.grnNo !== "–" && row.grnNo !== "-" ? row.grnNo : "–",
+            row.grnDt || "–",
+            row.grnMaterial || "–",
+            row.grnOky !== undefined && row.grnOky !== null ? row.grnOky : "–",
+            row.grnRate !== undefined && row.grnRate !== null && row.grnRate !== "" ? row.grnRate : "0.00",
+            row.grnValue !== undefined && row.grnValue !== null ? row.grnValue : "0",
+            row.amnd || "N"
+        ]);
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(row => row.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(","))
+        ].join("\r\n");
+
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        const fromStr = dateRange?.from ? new Date(dateRange.from).toISOString().slice(0, 10) : "";
+        const toStr = dateRange?.to ? new Date(dateRange.to).toISOString().slice(0, 10) : "";
+        const dateSuffix = fromStr && toStr ? `_${fromStr}_to_${toStr}` : "";
+        link.setAttribute("download", `Traceability_Report${dateSuffix}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
 
     const trendRef = useRef(null);
     const supRef = useRef(null);
@@ -6027,7 +6182,7 @@ export default function PurchaseAnalysis() {
 
             {/* ── KPI Cards ── */}
             {summaryLoading ? (
-                <div className="pa2-kpi-grid">
+                <div className="pa2-kpi-grid" data-spotlight="pa-kpis">
                     {[1, 2, 3, 4, 5, 6, 7].map(i => (
                         <div className="pa2-kpi-card pa2-pulse-loader" key={i}>
                             <div className="pa2-kpi-top">
@@ -6041,7 +6196,7 @@ export default function PurchaseAnalysis() {
                     ))}
                 </div>
             ) : (
-                <div className="pa2-kpi-grid">
+                <div className="pa2-kpi-grid" data-spotlight="pa-kpis">
                     {[
                         {
                             label: "Total PO Value",
@@ -6260,7 +6415,7 @@ export default function PurchaseAnalysis() {
                     )}
                 </div>
 
-                <div className="pa2-card pa2-chart-card pa2-card-premium">
+                <div className="pa2-card pa2-chart-card pa2-card-premium" data-spotlight="pa-spend-category">
                     <SectionHeader icon={<FolderOpen size={16} style={{ color: "#2d6de8" }} />} title="Spend by Category" />
                     {chartsLoading ? (
                         <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "250px" }}>
@@ -7080,7 +7235,7 @@ export default function PurchaseAnalysis() {
             <div className="pa2-two-col pa2-animate pa2-delay-3">
 
                 {/* PO Pipeline */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-po-pipeline">
                     <SectionHeader icon={<Workflow size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Pipeline"
                         badge={filters.poType !== "All Types" ? filters.poType : "All Types"}
                         badgeCls="pa2-badge-blue" />
@@ -7151,7 +7306,7 @@ export default function PurchaseAnalysis() {
                 </div>
 
                 {/* Supplier Spend Ranking */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-supplier-ranking">
                     <SectionHeader icon={<Trophy size={16} style={{ color: "#f5a623" }} />} title="Supplier Spend Ranking" badge="by PO value" badgeCls="pa2-badge-neutral" />
                     {chartsLoading ? (
                         <div className="pa2-sup-list pa2-pulse-loader" style={{ padding: "1rem" }}>
@@ -7198,7 +7353,7 @@ export default function PurchaseAnalysis() {
             </div>
 
             {/* ── PO Details Table (Dashboard2-style) ── */}
-            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium">
+            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" data-spotlight="pa-po-details">
                 <div className="pa2-table-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", paddingRight: "1.3rem" }}>
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Details" />
                     <div className="pa2-tag-row" style={{ display: "flex", alignItems: "center", gap: "0.8rem", paddingBottom: "0" }}>
@@ -7402,6 +7557,19 @@ export default function PurchaseAnalysis() {
                                 </button>
                             )}
                         </div>
+
+                        {/* Export CSV Option */}
+                        <button
+                            type="button"
+                            className="pa2-export-csv-btn"
+                            onClick={handleExportPoDetailsCsv}
+                            disabled={poLoading || sortedFilteredPoRows.length === 0}
+                            title="Export to CSV"
+                        >
+                            <Download size={14} className="pa2-export-icon" />
+                            <span>Export CSV</span>
+                        </button>
+
                         <span className="pa2-badge pa2-badge-blue" style={{ height: "36px", display: "inline-flex", alignItems: "center", borderRadius: "10px", padding: "0 12px" }}>
                             {poLoading ? "Loading…" : `${filteredPoRows.length} records`}
                         </span>
@@ -7564,7 +7732,7 @@ export default function PurchaseAnalysis() {
             </div>
 
             {/* ── Amended Purchase Order Details ── */}
-            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginTop: "1.4rem" }}>
+            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" data-spotlight="pa-amended-po" style={{ marginTop: "1.4rem" }}>
                 <div className="pa2-table-header">
                     <SectionHeader icon={<ClipboardList size={16} style={{ color: "#8b5cf6" }} />} title="Amended Purchase Order Details" />
                     <div className="pa2-tag-row">
@@ -7700,7 +7868,7 @@ export default function PurchaseAnalysis() {
             </div>
 
             {/* ── PO Fulfillment Schedule Section (Dual Mode: Standard vs Futuristic In-Card Switcher) ── */}
-            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium pa2-fs-section" style={{ marginTop: "1.4rem" }}>
+            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium pa2-fs-section" data-spotlight="pa-futuristic-rol" style={{ marginTop: "1.4rem" }}>
                 {/* 1. Fixed Top Header Bar: Left Mode Switcher Tabs & Right Summary Badge */}
                 <div className="pa2-fs-header-row">
                     {/* Left: Section Tab Buttons */}
@@ -8747,21 +8915,35 @@ export default function PurchaseAnalysis() {
             </div>
 
             {/* ── Traceability Table ── */}
-            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" style={{ marginTop: "1.4rem" }}>
+            <div className="pa2-card pa2-animate pa2-delay-4 pa2-card-premium" data-spotlight="pa-traceability-table" style={{ marginTop: "1.4rem" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
                     <SectionHeader icon={<TrendingUp size={16} style={{ color: "#8b5cf6" }} />} title="Traceability Table" />
-                    <div className="pa2-macdetail-search-wrapper">
-                        <Search size={14} className="pa2-macdetail-search-icon" />
-                        <input
-                            type="text"
-                            placeholder="Search by Supplier, Ind No, PO No, Material, GRN No, PO Type..."
-                            value={traceSearch}
-                            onChange={e => setTraceSearch(e.target.value)}
-                            className="pa2-macdetail-search-input"
-                        />
-                        {traceSearch && (
-                            <X size={14} onClick={() => setTraceSearch("")} style={{ position: "absolute", right: "10px", cursor: "pointer", color: "#64748b" }} />
-                        )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                        <div className="pa2-macdetail-search-wrapper">
+                            <Search size={14} className="pa2-macdetail-search-icon" />
+                            <input
+                                type="text"
+                                placeholder="Search by Supplier, Ind No, PO No, Material, GRN No, PO Type..."
+                                value={traceSearch}
+                                onChange={e => setTraceSearch(e.target.value)}
+                                className="pa2-macdetail-search-input"
+                            />
+                            {traceSearch && (
+                                <X size={14} onClick={() => setTraceSearch("")} style={{ position: "absolute", right: "10px", cursor: "pointer", color: "#64748b" }} />
+                            )}
+                        </div>
+
+                        {/* Export CSV Option */}
+                        <button
+                            type="button"
+                            className="pa2-export-csv-btn"
+                            onClick={handleExportTraceabilityCsv}
+                            disabled={traceLoading || filteredTraceData.length === 0}
+                            title="Export to CSV"
+                        >
+                            <Download size={14} className="pa2-export-icon" />
+                            <span>Export CSV</span>
+                        </button>
                     </div>
                 </div>
                 <div className="pa2-table-scroll" style={{ maxHeight: "350px", overflowY: "auto" }}>
@@ -8844,7 +9026,7 @@ export default function PurchaseAnalysis() {
             <div className="pa2-two-col pa2-animate pa2-delay-4" style={{ marginTop: "1.4rem" }}>
 
                 {/* Short Close Details */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-short-close">
                     <SectionHeader
                         icon={<ClipboardList size={16} style={{ color: "#ef4444" }} />}
                         title="Short Close Details"
@@ -8906,7 +9088,7 @@ export default function PurchaseAnalysis() {
                 </div>
 
                 {/* Price Trend Analysis */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-price-trend">
                     <SectionHeader
                         icon={<TrendingUp size={16} style={{ color: "#10b981" }} />}
                         title="Price Trend Analysis"
@@ -9384,7 +9566,7 @@ export default function PurchaseAnalysis() {
             <div className="pa2-two-col pa2-animate pa2-delay-4">
 
                 {/* Supplier Rating */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-supplier-rating">
                     <SectionHeader
                         icon={<Trophy size={16} style={{ color: "#f5a623" }} />}
                         title="Supplier Rating Analysis"
@@ -9411,7 +9593,7 @@ export default function PurchaseAnalysis() {
                 </div>
 
                 {/* Alerts */}
-                <div className="pa2-card pa2-card-premium">
+                <div className="pa2-card pa2-card-premium" data-spotlight="pa-management-alerts">
                     <SectionHeader
                         icon={<AlertTriangle size={16} style={{ color: "#ef4444" }} />}
                         title="Management Alerts"

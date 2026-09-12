@@ -724,7 +724,7 @@ export default function UserRights() {
                 <StatCard label="Avg Access" value={loading ? "…" : `${stats.avgAccess}%`} icon={BarChart3} color="#8b5cf6" delay=".18s" />
             </div>
 
-            <div className="ur-toolbar">
+            <div className="ur-toolbar" data-spotlight="ur-header">
                 <div className="ur-search-wrap">
                     <svg className="ur-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -776,7 +776,7 @@ export default function UserRights() {
                 </div>
             </div>
 
-            <div className="ur-card">
+            <div className="ur-card" data-spotlight="ur-permissions-matrix">
                 {loading ? (
                     <div className="ur-loading">
                         <div className="ur-loading__spinner" />

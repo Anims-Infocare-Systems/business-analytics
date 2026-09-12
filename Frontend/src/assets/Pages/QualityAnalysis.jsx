@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
+Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 // ─────────────────────────────────────────────
 //  Count-up hook for KPI numbers
@@ -5434,7 +5435,7 @@ export default function QualityAnalysis() {
 
             {/* ── KPI Cards ── */}
             {summaryLoading ? (
-                <div className="qa2-kpi-grid">
+                <div className="qa2-kpi-grid" data-spotlight="qa-kpis">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(i => (
                         <div className="qa2-kpi-card qa2-pulse-loader" key={i}>
                             <div className="qa2-kpi-top">
@@ -5448,7 +5449,7 @@ export default function QualityAnalysis() {
                     ))}
                 </div>
             ) : (
-                <div className="qa2-kpi-grid">
+                <div className="qa2-kpi-grid" data-spotlight="qa-kpis">
                     {activeKpiCards.map((k, i) => {
                         const IconComponent = k.icon;
                         const cleanTrendText = k.trend ? k.trend.replace(/^[↑↓\s]+/, "") : "";
@@ -5478,7 +5479,7 @@ export default function QualityAnalysis() {
 
             {/* ── Charts Row 1: Weekly Inspection Trend (Full Width) ── */}
             <div className="qa2-animate qa2-d3" style={{ marginBottom: "1.3rem" }}>
-                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ marginBottom: 0 }}>
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-weekly-trend" style={{ marginBottom: 0 }}>
                     <SectionHead icon={TrendingUp} iconColor="#3b82f6" title="Weekly Inspection Trend"
                         badge={summaryData?.period || "Jan–Feb 2026"} badgeCls="qa2-badge-blue"
                         extra={
@@ -5525,7 +5526,7 @@ export default function QualityAnalysis() {
 
             {/* ── Charts Row 1.5: Results Split & Defect Category Breakdown (2-col) ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-results-split">
                     <SectionHead icon={BarChart2} iconColor="#10b981" title="Inspection Results Split" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
@@ -5537,7 +5538,7 @@ export default function QualityAnalysis() {
                         <div className="qa2-chart-wrap"><canvas ref={resultRef} /></div>
                     )}
                 </div>
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-defect-breakdown">
                     <SectionHead icon={AlertTriangle} iconColor="#ef4444" title="Defect Category Breakdown" />
                     {chartsLoading ? (
                         <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
@@ -5553,7 +5554,7 @@ export default function QualityAnalysis() {
 
             {/* ── Charts Row 2: 2-col ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-ppm-trend">
                     <SectionHead icon={TrendingUp} iconColor="#f97316" title="Internal Mac Rejection — PPM"
                         badge="Monthly" badgeCls="qa2-badge-orange" />
                     {chartsLoading ? (
@@ -5570,7 +5571,7 @@ export default function QualityAnalysis() {
                         <div className="qa2-chart-wrap"><canvas ref={ppmRef} /></div>
                     )}
                 </div>
-                <div className="qa2-card qa2-chart-card qa2-card-premium">
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-defect-causes">
                     <SectionHead
                         icon={BarChart2}
                         iconColor="#ef4444"
@@ -5606,7 +5607,7 @@ export default function QualityAnalysis() {
             {/* ── Charts Row 3: Rejection & Rework Analytics ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
                 {/* Rejection Analytics Trend Card */}
-                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ overflow: "visible" }}>
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-rejection-trend" style={{ overflow: "visible" }}>
                     <SectionHead
                         icon={AlertTriangle}
                         iconColor="#ef4444"
@@ -5782,7 +5783,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Rework Analytics Trend Card */}
-                <div className="qa2-card qa2-chart-card qa2-card-premium" style={{ overflow: "visible" }}>
+                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-rework-trend" style={{ overflow: "visible" }}>
                     <SectionHead
                         icon={Wrench}
                         iconColor="#f97316"
@@ -5962,7 +5963,7 @@ export default function QualityAnalysis() {
             <div className="qa2-charts-2 qa2-animate qa2-d3">
 
                 {/* Product Quality */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-product-quality">
                     <SectionHead icon={Package} iconColor="#6366f1" title="Product-wise Quality Performance"
                         extra={<span className="qa2-section-sub">Target ≥ 95%</span>} />
                     {prodPerfLoading ? (
@@ -6017,7 +6018,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Defect Cause */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-defect-cause-analysis">
                     <SectionHead icon={AlertTriangle} iconColor="#ef4444" title="Defect Cause Analysis"
                         badge={`${summaryData?.kpis?.rejection_rate_card?.value || "7.5%"} Rejection`} badgeCls="qa2-badge-red" />
                     {defectCausesLoading ? (
@@ -6055,7 +6056,7 @@ export default function QualityAnalysis() {
             <div className="qa2-charts-3-equal qa2-animate qa2-d4">
 
                 {/* Vendor Rejection Analysis */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-vendor-rejection">
                     <SectionHead icon={Users} iconColor="#2d6de8" title="Vendor Rejection Analysis"
                         extra={<span className="qa2-section-sub">Vendor share of total rejections</span>} />
                     <div className="qa2-pq-header">
@@ -6088,7 +6089,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Operation (Process-wise) Rejection Analysis */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-operation-rejection">
                     <SectionHead icon={Activity} iconColor="#0f766e" title="Operation Rejection Analysis"
                         extra={<span className="qa2-section-sub">Process share of total rejections</span>} />
                     <div className="qa2-pq-header">
@@ -6123,7 +6124,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Calibration */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-calibration-status">
                     <SectionHead icon={Wrench} iconColor="#f59e0b" title="Calibration Status"
                         badge={calibrationAlertCount > 0 ? `${calibrationAlertCount} Alert${calibrationAlertCount > 1 ? "s" : ""}` : activeCalibrationRows.length > 0 ? `${activeCalibrationRows.length} Items` : "No Due"}
                         badgeCls={calibrationAlertCount > 0 ? "qa2-badge-orange" : "qa2-badge-green"} />
@@ -6175,7 +6176,7 @@ export default function QualityAnalysis() {
             <div className="qa2-charts-3-equal qa2-animate qa2-d4">
 
                 {/* Top 10 Material Rejection */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-top-material-rejection">
                     <SectionHead icon={Package} iconColor="#f43f5e" title="Top 10 Material Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity material failures</span>} />
                     <div className="qa2-pq-header">
@@ -6199,7 +6200,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Top 10 Machine Rejection */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-top-machine-rejection">
                     <SectionHead icon={Activity} iconColor="#0f766e" title="Top 10 Machine Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity processing failures</span>} />
                     <div className="qa2-pq-header">
@@ -6223,7 +6224,7 @@ export default function QualityAnalysis() {
                 </div>
 
                 {/* Department wise Rejection */}
-                <div className="qa2-card qa2-card-premium">
+                <div className="qa2-card qa2-card-premium" data-spotlight="qa-dept-rejection">
                     <SectionHead icon={Users} iconColor="#2d6de8" title="Department wise Rejection"
                         extra={<span className="qa2-section-sub">Department share of rejections</span>} />
                     <div className="qa2-pq-header">
@@ -6258,7 +6259,7 @@ export default function QualityAnalysis() {
             </div>
 
             {/* ── Full Inspection Table ── */}
-            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium" style={{ overflow: 'visible' }}>
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium" data-spotlight="qa-inspection-records" style={{ overflow: 'visible' }}>
                 <SectionHead
                     icon={FileText}
                     iconColor="#3b82f6"
@@ -6561,7 +6562,7 @@ export default function QualityAnalysis() {
             </div>
 
             {/* ── Rejection & Rework Summary (Full Width) ── */}
-            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium" data-spotlight="qa-rejection-records">
                 <SectionHead
                     icon={XCircle}
                     iconColor="#ef4444"
@@ -6816,7 +6817,7 @@ export default function QualityAnalysis() {
             </div>
 
             {/* ── Supplier Wise Rejection (Full Width, Chart Left, Table Right) ── */}
-            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium">
+            <div className="qa2-card qa2-animate qa2-d4 qa2-card-premium" data-spotlight="qa-supplier-grn">
                 <SectionHead
                     icon={PieChart}
                     iconColor="#8b5cf6"
@@ -7067,10 +7068,12 @@ export default function QualityAnalysis() {
             </div>
 
             {/* ── Quality Timeline (End-to-End Lineage: Invoice -> DC -> Final Insp -> Prod -> GRN -> Supplier) ── */}
-            <QualityTimelineSection />
+            <div data-spotlight="qa-timeline">
+                <QualityTimelineSection />
+            </div>
 
             {/* ── Traceability (Full Width) ── */}
-            <div className="qa2-card qa2-card-premium qa2-animate qa2-d4">
+            <div className="qa2-card qa2-card-premium qa2-animate qa2-d4" data-spotlight="qa-traceability">
                 <SectionHead
                     icon={FileText}
                     iconColor="#8b5cf6"

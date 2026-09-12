@@ -1023,7 +1023,7 @@ export default function EfficiencyReport() {
             </div>
 
             {/* ══ KPI STRIP ══ */}
-            <div className="er-kpi-strip">
+            <div className="er-kpi-strip" data-spotlight="er-kpis">
                 {[
                     { id: "n", label: "Total Records", val: kpi.n, color: "cyan" },
                     { id: "oee", label: "Avg OA Eff %", val: kpi.oee, color: "green" },
@@ -1055,7 +1055,7 @@ export default function EfficiencyReport() {
 
             {/* ══ CHARTS SECTION ══ */}
             {loading ? (
-                <div className="er-charts-section">
+                <div className="er-charts-section" data-spotlight="er-charts">
                     <div className="er-charts-header">
                         <span className="er-charts-title">
                             <BarChart2 size={15} style={{ color: "var(--er-primary)", marginRight: 5 }} />
@@ -1068,7 +1068,7 @@ export default function EfficiencyReport() {
                     </div>
                 </div>
             ) : filtered.length > 0 && (
-                <div className="er-charts-section">
+                <div className="er-charts-section" data-spotlight="er-charts">
                     <div className="er-charts-header">
                         <span className="er-charts-title">
                             <BarChart2 size={15} style={{ color: "var(--er-primary)", marginRight: 5 }} />
@@ -1113,14 +1113,14 @@ export default function EfficiencyReport() {
 
             {/* ══ TOP & BOTTOM PERFORMERS ══ */}
             {loading ? (
-                <div className="er-performers-section">
+                <div className="er-performers-section" data-spotlight="er-performers">
                     <div className="er-performers-grid">
                         <PerformerSkeleton />
                         <PerformerSkeleton />
                     </div>
                 </div>
             ) : filtered.length > 0 ? (
-                <div className="er-performers-section">
+                <div className="er-performers-section" data-spotlight="er-performers">
                     <div className="er-performers-grid">
                         {/* Top Performers Card */}
                         <div className="er-perf-card er-perf-card--top">
@@ -1180,13 +1180,13 @@ export default function EfficiencyReport() {
                     </div>
                 </div>
             ) : (
-                <div className="er-performers-section">
+                <div className="er-performers-section" data-spotlight="er-performers">
                     <ErEmptyState message="No performers found in this period" subtitle="Change filter values or period settings." />
                 </div>
             )}
 
             {/* ══ TABLE AREA ══ */}
-            <div className="er-table-area">
+            <div className="er-table-area" data-spotlight="er-ledger">
 
                 {/* Toolbar */}
                 <div className="er-toolbar">

@@ -23388,7 +23388,7 @@ export default function PlantPerformance1() {
       "--act-border": themeBorderColor,
       "--act-hover-bg": themeHoverBg
     }}>
-      <div className="pp1-fbar">
+      <div className="pp1-fbar" data-spotlight="ppd-filter-bar">
         <PlantPerformance1DatePicker
           from={dateRange.from}
           to={dateRange.to}
@@ -24225,7 +24225,7 @@ export default function PlantPerformance1() {
           style={sideColumnHeight ? { "--pp1-side-h": `${sideColumnHeight}px` } : undefined}
         >
           {(!isStackedLayout || mobileActiveTab === "left") && (
-            <section className={`pp1-panel pp1-panel--left${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
+            <section className={`pp1-panel pp1-panel--left${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`} data-spotlight="ppd-current-state">
               {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
               {panelsCollapsed && (
                 <div className="pp1-dl-rail pp1-dl-rail--left">
@@ -24375,7 +24375,7 @@ export default function PlantPerformance1() {
           )}
 
           {(!isStackedLayout || mobileActiveTab === "center") && (
-            <section className="pp1-center" ref={centerRef}>
+            <section className="pp1-center" ref={centerRef} data-spotlight="ppd-center-detail">
               <div className="pp1-center__glow" />
               <div className="pp1-center__scroll">
                 <CenterTransitionWrapper uid={centerKey} loading={loading} loadingProgress={loadingProgress}>
@@ -24504,7 +24504,7 @@ export default function PlantPerformance1() {
           )}
 
           {(!isStackedLayout || mobileActiveTab === "right") && (
-            <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`}>
+            <section className={`pp1-panel pp1-panel--right${panelsCollapsed ? " pp1-panel--dl-collapsed" : ""}`} data-spotlight="ppd-action-queue">
               {/* ── Collapsed state: icon only centered (DashboardLayout style) ── */}
               {panelsCollapsed && (
                 <div className="pp1-dl-rail pp1-dl-rail--right">

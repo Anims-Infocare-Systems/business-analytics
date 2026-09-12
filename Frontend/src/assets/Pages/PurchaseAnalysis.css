@@ -3,15 +3,191 @@
    Theme: matches DashboardLayout (#2d6de8 / #1a54d4 / #1448b8)
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --pa-font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --pa-font-body: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --pa-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
 
 /* ── Root ─────────────────────────────────────────────────── */
 .pa2-root {
-    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--pa-font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     color: #1a2a5e;
+    letter-spacing: -0.01em;
     padding-bottom: 2.5rem;
     opacity: 0;
     transition: opacity 0.35s ease;
+}
+
+.pa2-root button,
+.pa2-root input,
+.pa2-root select,
+.pa2-root textarea,
+.pa2-root optgroup {
+    font-family: var(--pa-font-body);
+}
+
+/* ── Modern Typography System ─────────────────────────────── */
+.pa2-root h1,
+.pa2-root h2,
+.pa2-root h3,
+.pa2-root h4,
+.pa2-root h5,
+.pa2-root h6,
+.pa2-page-title,
+.pa2-section-title,
+.pa2-filter-bar-title,
+.pa2-card__title,
+.pa2-alert-title,
+.pa2-priority-title,
+.pa2-nodata-title,
+.pa2-total-title,
+.pa2-col-subtitle,
+.pa2-apv-title,
+.pa2-apv-subtitle,
+.pa2-apv-chart-title,
+.pa2-fs-chart-title,
+.pa2-fs-kpi-title,
+.pa2-dept-item-title,
+.pa2-apv-filter-menu-title {
+    font-family: var(--pa-font-heading) !important;
+    letter-spacing: -0.018em;
+}
+
+/* Headings & Display KPI Numbers */
+.pa2-kpi-value,
+.pa2-kpi-val,
+.pa2-stat-val,
+.pa2-strip-val,
+.pa2-pipe-val,
+.pa2-trend-stat-val,
+.pa2-apv-kpi-val,
+.pa2-apv-col-val,
+.pa2-apv-col-avgval,
+.pa2-apv-col-avgpoval,
+.pa2-fs-kpi-val,
+.pa2-po-val,
+.pa2-prod-val,
+.pa2-uom-val,
+.pa2-futuristic-lead-date-val {
+    font-family: var(--pa-font-heading) !important;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Metric, Filter & Section Labels */
+.pa2-filter-label,
+.pa2-kpi-label,
+.pa2-strip-label,
+.pa2-stat-lbl,
+.pa2-pipe-lbl,
+.pa2-trend-stat-label,
+.pa2-apv-kpi-label,
+.pa2-apv-opt-label,
+.pa2-pending-label,
+.pa2-pending-item-label,
+.pa2-fs-tab-label,
+.pa2-fs-pagesize-label,
+.pa2-futuristic-horizon-lbl,
+.pa2-po-dept-trigger-label,
+.pa2-po-pending-trigger-label {
+    font-family: var(--pa-font-heading) !important;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+/* Badges & Tags */
+.pa2-badge,
+.pa2-tag,
+.pa2-stag,
+.pa2-kpi-trend,
+.pa2-days-badge,
+.pa2-total-badge,
+.pa2-dept-count-badge,
+.pa2-po-type-badge,
+.pa2-pt-pct-badge,
+.pa2-pt-tag,
+.pa2-pending-active-badge,
+.pa2-apv-badge,
+.pa2-apv-benchmark-badge,
+.pa2-apv-code-badge,
+.pa2-apv-grn-badge,
+.pa2-apv-icon-badge,
+.pa2-apv-tab-badge,
+.pa2-apv-mat-subtag,
+.pa2-fs-header-badge,
+.pa2-fs-part-badge,
+.pa2-fs-bal-qty-badge,
+.pa2-fs-date-badge,
+.pa2-futuristic-part-badge,
+.pa2-futuristic-var-badge {
+    font-family: var(--pa-font-heading) !important;
+}
+
+/* Action Buttons & Toggles */
+.pa2-btn,
+.pa2-toggle-btn,
+.pa2-segment-btn,
+.pa2-dept-reset-btn,
+.pa2-search-clear-btn,
+.pa2-export-csv-btn,
+.pa2-chart-visibility-btn,
+.pa2-apv-btn,
+.pa2-apv-filter-btn,
+.pa2-apv-filter-action-btn,
+.pa2-apv-tab-btn,
+.pa2-apv-toggle-chart-btn,
+.pa2-fs-nav-btn,
+.pa2-fs-pill-btn,
+.pa2-fs-main-tab-btn,
+.pa2-fs-pagesize-btn,
+.pa2-po-dept-action-btn,
+.pa2-po-pending-trigger,
+.pa2-po-dept-trigger {
+    font-family: var(--pa-font-heading) !important;
+}
+
+/* Table Headers */
+.pa2-root table thead th,
+.pa2-table thead th,
+.pa2-apv-table thead th,
+.pa2-fs-table thead th,
+.pa2-prod-table thead th,
+.pa2-table-head {
+    font-family: var(--pa-font-heading) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+}
+
+/* Table Body Cells */
+.pa2-root table tbody td,
+.pa2-table tbody td,
+.pa2-apv-table tbody td,
+.pa2-fs-table tbody td {
+    font-family: var(--pa-font-body);
+}
+
+/* Tabular Numbers, PO Numbers, Codes & Monospace */
+.pa2-td-mono,
+.pa2-td-r,
+.pa2-th-r,
+.pa2-po-no,
+.pa2-prod-code,
+.pa2-po-num,
+.pa2-item-code,
+.pa2-doc-num,
+.pa2-grn-num,
+.pa2-mono,
+.pa2-total-row td {
+    font-family: var(--pa-font-mono) !important;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv05" 1, "cv08" 1;
 }
 
 .pa2-root--visible {
@@ -976,7 +1152,7 @@
 }
 
 .pa2-td-mono {
-    font-family: 'Courier New', monospace;
+    font-family: var(--pa-font-mono);
     font-size: 0.73rem;
     color: #5a6a9a;
 }
@@ -998,7 +1174,7 @@
 }
 
 .pa2-po-no {
-    font-family: 'Courier New', monospace;
+    font-family: var(--pa-font-mono);
     font-size: 0.75rem;
     font-weight: 700;
     background: #dbeafe;
@@ -2856,7 +3032,7 @@
 .pa2-prod-code {
     font-size: 0.62rem;
     color: #94a3b8;
-    font-family: monospace;
+    font-family: var(--pa-font-mono);
     font-weight: 500;
     margin-bottom: 4px;
 }
@@ -2911,7 +3087,7 @@
 .pa2-toggle-btn {
     background: transparent;
     border: none;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--pa-font-heading);
     font-size: 0.74rem;
     font-weight: 700;
     color: #2d6de8;
@@ -3009,6 +3185,58 @@
     color: #0f172a;
 }
 
+/* ── Purchase Order Details Export CSV Button ── */
+.pa2-export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 13px;
+    background: #ffffff;
+    border: 1.5px solid #0284c7;
+    border-radius: 10px;
+    font-family: var(--pa-font-heading);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #0284c7;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(2, 132, 199, 0.08);
+    white-space: nowrap;
+}
+
+.pa2-export-csv-btn:hover:not(:disabled) {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);
+    transform: translateY(-1px);
+}
+
+.pa2-export-csv-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.15);
+}
+
+.pa2-export-csv-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+    background: #f8fafc;
+    box-shadow: none;
+    transform: none;
+}
+
+.pa2-export-csv-btn .pa2-export-icon {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.pa2-export-csv-btn:hover:not(:disabled) .pa2-export-icon {
+    transform: translateY(1px);
+}
+
 /* ── Pending Status Dropdown ── */
 .pa2-po-pending-select-wrap {
     position: relative;
@@ -3025,7 +3253,7 @@
     background: #ffffff;
     border: 1.5px solid #e2e8f0;
     border-radius: 10px;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--pa-font-heading);
     font-size: 0.76rem;
     font-weight: 600;
     color: #334155;
@@ -3243,7 +3471,7 @@
     background: #ffffff;
     border: 1.5px solid #e2e8f0;
     border-radius: 10px;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--pa-font-heading);
     font-size: 0.76rem;
     font-weight: 600;
     color: #334155;
@@ -3808,7 +4036,7 @@
     border-radius: 8px;
     border: none;
     background: transparent;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--pa-font-heading);
     font-size: 0.72rem;
     font-weight: 600;
     color: #64748b;

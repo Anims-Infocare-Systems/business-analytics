@@ -3,16 +3,167 @@
    Theme: DashboardLayout (#2d6de8 / #1a54d4 / #1448b8)
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --qa-font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --qa-font-body: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --qa-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
 
 /* ── Root ─────────────────────────────────────────────────── */
 .qa2-root {
-    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--qa-font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     color: #1a2a5e;
+    letter-spacing: -0.01em;
     padding-bottom: 2.5rem;
     opacity: 0;
     transition: opacity 0.3s ease;
+}
+
+.qa2-root button,
+.qa2-root input,
+.qa2-root select,
+.qa2-root textarea,
+.qa2-root optgroup {
+    font-family: var(--qa-font-body);
+}
+
+/* ── Modern Typography System ─────────────────────────────── */
+.qa2-root h1,
+.qa2-root h2,
+.qa2-root h3,
+.qa2-root h4,
+.qa2-root h5,
+.qa2-root h6,
+.qa2-page-title,
+.qa2-section-title,
+.qa2-filter-title,
+.qa2-card__title,
+.qa2-insight-title,
+.qa2-priority-title,
+.qa2-cust-item-title,
+.qa2-prod-stepper-title,
+.qa2-timeline-title,
+.qa2-timeline-inner-title,
+.qa2-timeline-pipe-title,
+.qa2-timeline-modal-title,
+.qa2-qa-banner-title,
+.qa2-dropdown-header-title {
+    font-family: var(--qa-font-heading) !important;
+    letter-spacing: -0.018em;
+}
+
+/* Headings & Display KPI Numbers */
+.qa2-kpi-val,
+.qa2-pill-val,
+.qa2-strip-val,
+.qa2-dcb-val,
+.qa2-scrap-box-val,
+.qa2-insight-val,
+.qa2-total-val,
+.qa2-supp-kpi-val,
+.qa2-timeline-stat-val,
+.qa2-timeline-metric-val,
+.qa2-prod-val,
+.qa2-prod-cell-val,
+.qa2-prod-challan-val,
+.qa2-prod-po-val,
+.qa2-dropdown-item-val,
+.qa2-parts-dd-item-val {
+    font-family: var(--qa-font-heading) !important;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Metric and Filter Labels */
+.qa2-fl,
+.qa2-kpi-lbl,
+.qa2-strip-lbl,
+.qa2-pill-lbl,
+.qa2-dcb-lbl,
+.qa2-defect-class-lbl,
+.qa2-scrap-lbl,
+.qa2-scrap-box-lbl,
+.qa2-timeline-stat-lbl {
+    font-family: var(--qa-font-heading) !important;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+/* Badges & Tags */
+.qa2-badge,
+.qa2-tag,
+.qa2-pill,
+.qa2-kpi-trend,
+.qa2-timeline-badge,
+.qa2-prod-badge,
+.qa2-step-pill-tag,
+.qa2-prod-verdict-tag,
+.qa2-prod-count-badge,
+.qa2-cust-count-badge,
+.qa2-dropdown-header-badge,
+.qa2-inv-parts-badge,
+.qa2-grn-uom-badge,
+.qa2-parts-dd-badge,
+.qa2-total-badge,
+.qa2-trend-filter-badge {
+    font-family: var(--qa-font-heading) !important;
+}
+
+/* Action Buttons & Toggles */
+.qa2-btn,
+.qa2-toggle-btn,
+.qa2-trend-filter-btn,
+.qa2-reset-btn,
+.qa2-cust-reset-btn,
+.qa2-trend-reset-btn,
+.qa2-prod-tab-btn,
+.qa2-timeline-btn,
+.qa2-timeline-pipe-action-btn,
+.qa2-timeline-modal-pill-btn,
+.qa2-timeline-modal-done-btn,
+.qa2-timeline-modal-close-btn,
+.qa2-timeline-modal-nav-btn {
+    font-family: var(--qa-font-heading) !important;
+}
+
+/* Table Headers */
+.qa2-root table thead th,
+.qa2-table thead th,
+.qa2-timeline-table thead th,
+.qa2-stage-table thead th {
+    font-family: var(--qa-font-heading) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+}
+
+/* Table Body Cells */
+.qa2-root table tbody td,
+.qa2-table tbody td {
+    font-family: var(--qa-font-body);
+}
+
+/* Tabular Numbers, Inspection & Rejection IDs, Monospace */
+.qa2-td-r,
+.qa2-th-r,
+.qa2-mono,
+.qa2-insp-id,
+.qa2-rej-id,
+.qa2-table-num,
+.qa2-step-num,
+.qa2-timeline-pipe-step-num,
+.qa2-timeline-pipe-id-badge,
+.qa2-total-row td,
+.qa2-metric-num,
+.qa2-doc-code {
+    font-family: var(--qa-font-mono) !important;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv05" 1, "cv08" 1;
 }
 
 .qa2-root--visible {
@@ -790,14 +941,16 @@
 
 .qa2-td-r {
     text-align: right;
+    font-family: var(--qa-font-mono);
     font-variant-numeric: tabular-nums;
 }
 
 .qa2-mono {
-    font-family: inherit;
+    font-family: var(--qa-font-mono);
     font-size: 0.74rem;
     font-weight: 500;
     color: #334155;
+    font-variant-numeric: tabular-nums;
 }
 
 .qa2-nowrap {
@@ -810,7 +963,7 @@
 }
 
 .qa2-insp-id {
-    font-family: inherit;
+    font-family: var(--qa-font-mono);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.2px;
@@ -824,7 +977,7 @@
 }
 
 .qa2-rej-id {
-    font-family: inherit;
+    font-family: var(--qa-font-mono);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.2px;
@@ -1695,7 +1848,7 @@
 .qa2-toggle-btn {
     background: transparent;
     border: none;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--qa-font-heading);
     font-size: 0.74rem;
     font-weight: 700;
     color: #3b82f6;
@@ -1719,7 +1872,7 @@
 .qa2-premium-select-container {
     position: relative;
     display: inline-block;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--qa-font-body);
 }
 
 .qa2-premium-select-trigger {
@@ -2256,7 +2409,7 @@
 
 :root {
     --qa-font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --qa-font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --qa-font-body: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --qa-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
 }
 

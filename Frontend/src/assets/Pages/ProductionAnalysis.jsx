@@ -2752,7 +2752,7 @@ export default function ProductionAnalysis() {
         </div>
       </div>
       {/* ── KPI CARDS ─────────────────────────────────── */}
-      <div className="pa2-kpi-grid">
+      <div className="pa2-kpi-grid" data-spotlight="pda-kpis">
         {pageLoading ? (
           Array.from({ length: 7 }).map((_, idx) => (
             <div key={idx} className="pa2-kpi pa2-kpi--skeleton">
@@ -3082,7 +3082,7 @@ export default function ProductionAnalysis() {
 
       {/* ── DAILY SUMMARY + EFFICIENCY (side by side) ── */}
       <div className="pa2-row-2">
-        <div className="pa2-card pa2-anim" style={{ "--d": "80ms" }}>
+        <div className="pa2-card pa2-anim" data-spotlight="pda-summary" style={{ "--d": "80ms" }}>
           <SectionHeader icon={<FiList size={16} />} title="Daily Production Summary" />
           <div className="pa2-summary-grid">
             {pageLoading ? (
@@ -3099,7 +3099,7 @@ export default function ProductionAnalysis() {
             )}
           </div>
         </div>
-        <div className="pa2-card pa2-anim" style={{ "--d": "120ms" }}>
+        <div className="pa2-card pa2-anim" data-spotlight="pda-machine-efficiency" style={{ "--d": "120ms" }}>
           <SectionHeader icon={<FiAward size={16} />} title="Machine & Operator Efficiency" />
           <div className="pa2-metrics-list">
             {pageLoading ? (
@@ -3122,7 +3122,7 @@ export default function ProductionAnalysis() {
 §1 — PRODUCTION VALUE REPORT
 ══════════════════════════════════════════════ */}
       {/* ── PRODUCTION VALUE REPORT ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "100ms" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-production-value" style={{ "--d": "100ms" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiDollarSign size={16} />} title="Production Value Report" sub="Machine-wise Production Value (₹)" />
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -3160,7 +3160,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── MACHINE HOUR RATE (MHR) CALCULATION ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "105ms", marginTop: "18px" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-mhr" style={{ "--d": "105ms", marginTop: "18px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem", paddingBottom: "12px", borderBottom: "1.5px solid #eef2ff" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Machine Hour Rate (MHR) Cost Analysis" sub="Machine-wise comparative analysis of hourly operating rates (₹/hr)" />
 
@@ -3619,7 +3619,7 @@ export default function ProductionAnalysis() {
       })()}
 
       {/* ── MACHINE OEE GRAPH ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "110ms", marginTop: "18px" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-oee" style={{ "--d": "110ms", marginTop: "18px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiTrendingUp size={16} />} title="Machine Overall Equipment Effectiveness (OEE %)" sub="OEE performance trend analysis — Machine-wise / Month-wise" />
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -3650,7 +3650,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── SETUP TIME MACHINE-WISE SINGLE GRAPH + TABLE ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "120ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-setup-time" style={{ "--d": "120ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiClock size={16} />} title="Setup Time Machine-Wise" sub={`Setup / setting hours comparison grouped by ${setupFilterMode}`} />
 
@@ -3986,7 +3986,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── MACHINE UTILIZATION (%) FULL WIDTH ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "130ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-utilization" style={{ "--d": "130ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
           <SectionHeader icon={<FiActivity size={16} />} title="Machine Utilization (%)" sub={`Active machine running time as percentage of total hours grouped by ${utilFilterMode}`} />
 
@@ -4281,7 +4281,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── MACHINE-WISE REJECTION & REWORK QUALITY ANALYSIS ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "135ms", marginTop: "18px", marginBottom: "18px" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-rejection-rework" style={{ "--d": "135ms", marginTop: "18px", marginBottom: "18px" }}>
         <SectionHeader icon={<FiAlertCircle size={16} style={{ color: "#ef4444" }} />} title="Machine-Wise Rejection & Rework Analysis" sub="Rejection rates and rework rates breakdown by machine" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 450px), 1fr))", gap: "24px", marginTop: "1.2rem" }}>
           <div>
@@ -4365,7 +4365,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── TOP 10 MACHINE UTILIZATION TABLE ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "140ms", marginBottom: "18px" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-top-utilization" style={{ "--d": "140ms", marginBottom: "18px" }}>
         <SectionHeader icon={<FiActivity size={16} />} title="Top 10 Machine Utilization" sub="Active machine running hours vs idle breakdown ordered by highest utilization rate" />
         <div className="pa2-table-wrap" style={{ maxHeight: "310px" }}>
           <table className="pa2-table">
@@ -4441,7 +4441,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── TOP 5 & LEAST 5 OEE MACHINES IN SINGLE SECTION ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "145ms", marginBottom: "18px" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-oee-leaders" style={{ "--d": "145ms", marginBottom: "18px" }}>
         <SectionHeader icon={<FiAward size={16} />} title="OEE Leaders & Laggards" sub="Direct comparison of Top 5 performing vs Least 5 performing machines by Overall Equipment Effectiveness" />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginTop: "1rem" }}>
@@ -4539,7 +4539,7 @@ export default function ProductionAnalysis() {
 
 
       {/* ── MACHINE TREND GRAPHS ── */}
-      <div className="pa2-row-2" style={{ marginBottom: "18px" }}>
+      <div className="pa2-row-2" data-spotlight="pda-machine-added" style={{ marginBottom: "18px" }}>
         <div className="pa2-card pa2-anim" style={{ "--d": "150ms" }}>
           <SectionHeader icon={<FiPlus size={16} />} title="Machine Added Trend" sub="Incubation / addition of new machines in production line month-wise" />
           <div style={{ height: 230, marginTop: "1rem", position: "relative" }}>
@@ -4575,7 +4575,7 @@ export default function ProductionAnalysis() {
       </div>
 
       <div className="pa2-row-2">
-        <div className="pa2-card pa2-card--success pa2-anim" style={{ "--d": "80ms" }}>
+        <div className="pa2-card pa2-card--success pa2-anim" data-spotlight="pda-idle-accepted" style={{ "--d": "80ms" }}>
           <SectionHeader icon={<FiCheckCircle size={16} />} title="Idle Hours — Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${formatHoursMins(totalAcceptedHrs)}  (${idleBreakdown.summary.accepted_pct}%)`} />
           <div className="pa2-idle-layout">
             {pageLoading ? (
@@ -4605,7 +4605,7 @@ export default function ProductionAnalysis() {
             )}
           </div>
         </div>
-        <div className="pa2-card pa2-card--danger pa2-anim" style={{ "--d": "110ms" }}>
+        <div className="pa2-card pa2-card--danger pa2-anim" data-spotlight="pda-idle-non-accepted" style={{ "--d": "110ms" }}>
           <SectionHeader icon={<FiAlertCircle size={16} />} title="Idle Hours — Non-Accepted Reasons" sub={pageLoading ? "Loading..." : `Total: ${formatHoursMins(totalNonAccepted)}  |  ⚠ Needs Action (${idleBreakdown.summary.non_accepted_pct}%)`} />
           <div className="pa2-idle-layout">
             {pageLoading ? (
@@ -4639,7 +4639,7 @@ export default function ProductionAnalysis() {
       {/* ══════════════════════════════════════════════
 NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
 ══════════════════════════════════════════════ */}
-      <div className="pa2-card pa2-card--loss pa2-anim" style={{ "--d": "90ms" }}>
+      <div className="pa2-card pa2-card--loss pa2-anim" data-spotlight="pda-production-loss" style={{ "--d": "90ms" }}>
         <SectionHeader icon={<FiTrendingDown size={16} />} title="Production Loss — Non-Accepted Idle Hours × Rate per Hour" sub="Financial impact of unplanned downtime based on process-specific production rate" />
         <div className="pa2-loss-kpis">
           {pageLoading ? (
@@ -4721,7 +4721,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
       </div>
 
       {/* ── DAILY PRODUCTION DETAILS ── */}
-      <div className="pa2-card pa2-anim" style={{ "--d": "80ms", overflow: "visible" }}>
+      <div className="pa2-card pa2-anim" data-spotlight="pda-daily-details" style={{ "--d": "80ms", overflow: "visible" }}>
         <SectionHeader icon={<FiTable size={16} />} title="Daily Production Details" sub={pageLoading ? "Loading…" : `${filteredTableData.length} shift record(s)`} />
 
         {/* Modern Dedicated Table Toolbar & Filters */}

@@ -946,6 +946,78 @@
     box-shadow: 0 4px 14px rgba(26, 84, 212, .12);
 }
 
+/* ── Spotlight Guide Header Trigger ── */
+.dl-spotlight-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 12px 0 10px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1.5px solid #d0daf5;
+    border-radius: 12px;
+    color: #334155;
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(26, 84, 212, 0.04);
+}
+
+.dl-spotlight-trigger:hover {
+    background: #ffffff;
+    border-color: #2563eb;
+    color: #2563eb;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15);
+    transform: translateY(-1px);
+}
+
+.dl-spotlight-trigger:active {
+    transform: translateY(0);
+}
+
+.dl-spotlight-icon {
+    color: #2563eb;
+    flex-shrink: 0;
+}
+
+.dl-spotlight-label {
+    white-space: nowrap;
+}
+
+.dl-spotlight-shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.3px;
+    margin-left: 2px;
+}
+
+.dl-spotlight-mod {
+    font-size: 0.62rem;
+}
+
+@media (max-width: 900px) {
+    .dl-spotlight-label,
+    .dl-spotlight-shortcut {
+        display: none;
+    }
+    .dl-spotlight-trigger {
+        padding: 0;
+        width: 38px;
+        justify-content: center;
+    }
+}
+
 /* ── Header Right layout ── */
 .dl-header__right {
     display: flex;

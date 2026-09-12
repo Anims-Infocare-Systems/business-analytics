@@ -1063,7 +1063,7 @@ export default function TApproval() {
 
     return (
         <div className="tap-root">
-            <div className="tap-stats">
+            <div className="tap-stats" data-spotlight="tap-stats">
                 {stats.map(s => (
                     <div className="tap-stat" key={s.label}>
                         <div className="tap-stat__label">{s.label}</div>
@@ -1073,7 +1073,7 @@ export default function TApproval() {
                 ))}
             </div>
 
-            <div className="tap-filter">
+            <div className="tap-filter" data-spotlight="tap-filter-bar">
                 <DateRangePicker
                     from={dateRange.from}
                     to={dateRange.to}
@@ -1234,7 +1234,7 @@ export default function TApproval() {
                     </div>
                 </div>
             ) : (
-                <div className="tap-groups">
+                <div className="tap-groups" data-spotlight="tap-approval-queue">
                     {grouped.length === 0 ? (
                         <div className="tap-empty">
                             <div className="tap-empty__icon">📄</div>

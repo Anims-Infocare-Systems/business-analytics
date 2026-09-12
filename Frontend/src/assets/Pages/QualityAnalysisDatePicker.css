@@ -24,7 +24,7 @@
     --qadp-radius: 12px;
     --qadp-tr: .22s cubic-bezier(.23, 1, .32, 1);
 
-    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-family: var(--qa-font-body, 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif);
     font-size: 13px;
     color: var(--qadp-text);
 }
@@ -153,7 +153,7 @@
     color: var(--qadp-sub);
     font-size: .75rem;
     font-weight: 600;
-    font-family: inherit;
+    font-family: var(--qa-font-heading, 'Outfit', -apple-system, sans-serif);
     cursor: pointer;
     transition: all var(--qadp-tr);
     white-space: nowrap;
@@ -258,6 +258,7 @@
 }
 
 .qadp-month-label {
+    font-family: var(--qa-font-heading, 'Outfit', -apple-system, sans-serif);
     font-size: .87rem;
     font-weight: 700;
     color: var(--qadp-text);
@@ -320,6 +321,7 @@
     position: relative;
     line-height: 1.4;
     color: var(--qadp-text);
+    font-variant-numeric: tabular-nums;
 }
 
 .qadp-day:hover:not(.qadp-day--empty) {
@@ -463,7 +465,7 @@
     border-radius: 8px;
     font-size: .82rem;
     font-weight: 700;
-    font-family: inherit;
+    font-family: var(--qa-font-heading, 'Outfit', -apple-system, sans-serif);
     cursor: pointer;
     border: none;
     transition: all var(--qadp-tr);

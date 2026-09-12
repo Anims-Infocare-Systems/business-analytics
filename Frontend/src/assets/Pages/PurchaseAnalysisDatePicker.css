@@ -24,7 +24,7 @@
     --padp-radius:     12px;
     --padp-tr:         .22s cubic-bezier(.23,1,.32,1);
 
-    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-family: var(--pa-font-body, 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif);
     font-size: 13px;
     color: var(--padp-text);
 }
@@ -122,7 +122,7 @@
     color: var(--padp-sub);
     font-size: .75rem;
     font-weight: 600;
-    font-family: inherit;
+    font-family: var(--pa-font-heading, 'Outfit', -apple-system, sans-serif);
     cursor: pointer;
     transition: all var(--padp-tr);
     white-space: nowrap;
@@ -214,6 +214,7 @@
     margin-bottom: .75rem;
 }
 .padp-month-label {
+    font-family: var(--pa-font-heading, 'Outfit', -apple-system, sans-serif);
     font-size: .87rem;
     font-weight: 700;
     color: var(--padp-text);
@@ -269,6 +270,7 @@
     position: relative;
     line-height: 1.4;
     color: var(--padp-text);
+    font-variant-numeric: tabular-nums;
 }
 .padp-day:hover:not(.padp-day--empty) {
     background: var(--padp-accent-lt);
@@ -400,7 +402,7 @@
     border-radius: 8px;
     font-size: .82rem;
     font-weight: 700;
-    font-family: inherit;
+    font-family: var(--pa-font-heading, 'Outfit', -apple-system, sans-serif);
     cursor: pointer;
     border: none;
     transition: all var(--padp-tr);

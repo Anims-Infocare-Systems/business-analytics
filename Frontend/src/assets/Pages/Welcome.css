@@ -172,6 +172,48 @@
   animation: wh-pulse 2s ease-in-out infinite;
 }
 
+/* ── Spotlight Guide Hero Button ── */
+.wh-spotlight-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.wh-spotlight-hero-btn:hover {
+  background: #ffffff;
+  color: #1d4ed8;
+  border-color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.25);
+}
+
+.wh-spotlight-kbd {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: currentColor;
+  letter-spacing: 0.5px;
+}
+
+.wh-spotlight-hero-btn:hover .wh-spotlight-kbd {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
 /* ── KPI row ── */
 .wh-kpi-row {
   display: grid;

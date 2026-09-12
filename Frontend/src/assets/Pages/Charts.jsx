@@ -2321,7 +2321,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
   };
 
   return createPortal(
-    <div className={`ch-modal${closing ? " ch-modal--closing" : ""}`} onMouseDown={e => { if (e.target === e.currentTarget) animatedClose(); }}>
+    <div className={`ch-modal${closing ? " ch-modal--closing" : ""}`} data-spotlight="charts-preview-modal" onMouseDown={e => { if (e.target === e.currentTarget) animatedClose(); }}>
       <div className="ch-modal__content" style={{ backgroundColor: "#ffffff" }}>
         <div className="ch-modal__accent" />
         <div className="ch-modal__hd" style={{ backgroundColor: "#ffffff" }}>
@@ -2413,7 +2413,7 @@ export default function Charts() {
 
   return (
     <div className="ch-root">
-      <div className="ch-filter-bar">
+      <div className="ch-filter-bar" data-spotlight="charts-filter-bar">
         <div className="ch-filter-bar__label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46" /></svg>Filters</div>
         <div className="ch-filter-bar__sep" />
         <div className="ch-filter-bar__dropdowns">
@@ -2428,7 +2428,7 @@ export default function Charts() {
         </div>
       </div>
       {visible.length > 0 ? (
-        <div className="ch-grid">
+        <div className="ch-grid" data-spotlight="charts-grid">
           {visible.map((def, idx) => (
             <ChartCard key={def.id} def={def} idx={idx} onPreview={handlePreview} dateRange={(def.id === "sales-1" || def.id === "sales-2" || def.id === "quality-1" || def.id === "quality-2" || def.id === "quality-3" || def.id === "quality-4" || def.id === "production-1" || def.id === "production-2" || def.id === "production-3" || def.id === "production-4" || def.id === "operations-1" || def.id === "operations-2" || def.id === "purchase-1" || def.id === "purchase-2" || def.id === "vendor-1" || def.id === "vendor-2") ? effectiveDateRange : undefined} />
           ))}

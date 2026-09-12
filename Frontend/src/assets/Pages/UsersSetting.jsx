@@ -139,6 +139,17 @@ export default function UsersSetting() {
         setTimeout(() => setToastMessage(null), 3500);
     }, []);
 
+    // Auto-open E-Approval limits tab when navigated via Spotlight
+    useEffect(() => {
+        const handleSpotlight = (e) => {
+            if (e.detail && (e.detail.id === "us-po-limits" || e.detail.id === "us-threshold-policy")) {
+                setActiveTab("eapproval");
+            }
+        };
+        window.addEventListener("spotlight-section-selected", handleSpotlight);
+        return () => window.removeEventListener("spotlight-section-selected", handleSpotlight);
+    }, []);
+
     // Load initial user limits from localStorage
     const loadStoredLimits = useCallback(() => {
         try {
@@ -397,7 +408,7 @@ export default function UsersSetting() {
             )}
 
             {/* ── Top Header ── */}
-            <div className="us-header">
+            <div className="us-header" data-spotlight="us-hub">
                 <div className="us-header__left">
                     <div className="us-header__icon-box">
                         <SlidersHorizontal size={26} />
@@ -419,6 +430,7 @@ export default function UsersSetting() {
                             <button
                                 type="button"
                                 className={`us-btn us-btn--hide-threshold ${hideUnder1000 ? 'us-btn--hide-active' : 'us-btn--hide-inactive'}`}
+                                data-spotlight="us-threshold-policy"
                                 onClick={handleToggleHideUnder1000}
                                 title="When enabled, POs with Total Amount ≤ ₹1,000 will not be shown in E-Approval"
                             >
@@ -635,6 +647,7 @@ export default function UsersSetting() {
 
                         <div
                             className={`us-filter-policy-badge ${hideUnder1000 ? 'us-filter-policy-badge--active' : ''}`}
+                            data-spotlight="us-threshold-policy"
                             onClick={handleToggleHideUnder1000}
                             title="Click to toggle filtering of POs with Amount ≤ ₹1,000"
                         >
@@ -649,7 +662,7 @@ export default function UsersSetting() {
                     </div>
 
                     {/* User Limits Table */}
-                    <div className="us-table-wrap">
+                    <div className="us-table-wrap" data-spotlight="us-po-limits">
                         <table className="us-table">
                             <thead>
                                 <tr>

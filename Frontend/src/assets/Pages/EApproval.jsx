@@ -1107,7 +1107,7 @@ export default function EApproval() {
         <div className="eap-root">
 
             {/* ── Stats ── */}
-            <div className="eap-stats">
+            <div className="eap-stats" data-spotlight="eap-stats">
                 {stats.map(s => (
                     <div className="eap-stat" key={s.label}>
                         <div className="eap-stat__label">{s.label}</div>
@@ -1118,7 +1118,7 @@ export default function EApproval() {
             </div>
 
             {/* ── Filter ── */}
-            <div className="eap-filter">
+            <div className="eap-filter" data-spotlight="eap-filter-bar">
                 <DateRangePicker
                     from={dateRange.from}
                     to={dateRange.to}
@@ -1291,7 +1291,7 @@ export default function EApproval() {
                     </div>
                 </div>
             ) : (
-                <div className="eap-groups">
+                <div className="eap-groups" data-spotlight="eap-approval-queue">
                     {grouped.length === 0 ? (
                         <div className="eap-empty">
                             <div className="eap-empty__icon">📭</div>

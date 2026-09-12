@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import "./Settings.css";
 import { resolveApiBase } from "../../apiBase";
 import Tips from "./Tips";
+import SpotlightSettingsTab from "./SpotlightSettingsTab";
 
 const API = resolveApiBase();
 const PROFILE_CACHE_KEY = "ba_settings_profile";
@@ -38,6 +39,19 @@ const Icons = {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <polygon points="12 8 8 12 12 16 16 12 12 8" />
+        </svg>
+    ),
+    Spotlight: () => (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3" />
+            <path d="M12 19v3" />
+            <path d="M2 12h3" />
+            <path d="M19 12h3" />
+            <path d="m4.93 4.93 2.12 2.12" />
+            <path d="m16.95 16.95 2.12 2.12" />
+            <path d="m4.93 19.07 2.12-2.12" />
+            <path d="m16.95 7.05 2.12-2.12" />
         </svg>
     ),
     Billing: () => (
@@ -98,7 +112,7 @@ const Icons = {
     )
 };
 
-export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule }) {
+export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule, onSpotlightNavigate, onOpenSpotlight }) {
     // ── Persist active tab across refresh ──
     const [activeTab, setActiveTab] = useState(() => {
         if (isExpiredMode) return "billing";
@@ -117,6 +131,17 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
             setActiveTab("billing");
         }
     }, [isExpiredMode, isOpen]);
+
+    // Switch settings tab if navigated via Spotlight Guide
+    useEffect(() => {
+        const handleSpotlight = (e) => {
+            if (e.detail && e.detail.module === "Settings" && e.detail.settingsTab) {
+                setActiveTab(e.detail.settingsTab);
+            }
+        };
+        window.addEventListener("spotlight-section-selected", handleSpotlight);
+        return () => window.removeEventListener("spotlight-section-selected", handleSpotlight);
+    }, []);
 
     const [isClosing, setIsClosing] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -492,6 +517,13 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 <span className="st-sidebar__nav-icon"><Icons.Tips /></span>
                                 <span className="st-sidebar__nav-label">Tips</span>
                             </button>
+                            <button
+                                className={`st-sidebar__nav-item ${activeTab === "spotlight" ? "st-sidebar__nav-item--active" : ""}`}
+                                onClick={() => setActiveTab("spotlight")}
+                            >
+                                <span className="st-sidebar__nav-icon"><Icons.Spotlight /></span>
+                                <span className="st-sidebar__nav-label">Spotlight</span>
+                            </button>
                             {isSuperadmin && (
                                 <button
                                     className={`st-sidebar__nav-item ${activeTab === "billing" ? "st-sidebar__nav-item--active" : ""}`}
@@ -531,7 +563,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                         const _circ = 2 * Math.PI * 52;
                         const _fill = Math.round(_circ * Math.min(1, _daysLeft / 365));
                         return (
-                            <div className="st-section st-acct-root">
+                            <div className="st-section st-acct-root" data-spotlight="set-account">
 
                                 {/* ── Hero Banner ── */}
                                 <div className="st-acct-hero">
@@ -709,7 +741,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
 
                     {/* ── TAB: BILLING ── */}
                     {activeTab === "billing" && (
-                        <div className="st-section anim-fade-in-quick">
+                        <div className="st-section anim-fade-in-quick" data-spotlight="set-billing">
                             <h2 className="st-section__title">Billing & Subscriptions</h2>
                             <p className="st-section__desc">View your plan status, monitor usage quotas, and manage invoices.</p>
 
@@ -816,7 +848,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
 
                     {/* ── TAB: TIPS ── */}
                     {activeTab === "tips" && (
-                        <div className="st-section anim-fade-in-quick">
+                        <div className="st-section anim-fade-in-quick" data-spotlight="set-tips">
                             <Tips
                                 onStartTour={(ver) => {
                                     handleClose();
@@ -834,9 +866,31 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                         </div>
                     )}
 
+                    {/* ── TAB: SPOTLIGHT ── */}
+                    {activeTab === "spotlight" && (
+                        <div className="st-section anim-fade-in-quick" data-spotlight="set-spotlight">
+                            <SpotlightSettingsTab
+                                onSelectSection={(item) => {
+                                    setIsClosing(false);
+                                    if (typeof onClose === "function") onClose();
+                                    if (typeof onSpotlightNavigate === "function") {
+                                        onSpotlightNavigate(item);
+                                    }
+                                }}
+                                onOpenSpotlight={() => {
+                                    setIsClosing(false);
+                                    if (typeof onClose === "function") onClose();
+                                    if (typeof onOpenSpotlight === "function") {
+                                        onOpenSpotlight();
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
                     {/* ── TAB: ABOUT ── */}
                     {activeTab === "about" && (
-                        <div className="st-section anim-fade-in-quick st-about-tab">
+                        <div className="st-section anim-fade-in-quick st-about-tab" data-spotlight="set-about">
                             <h2 className="st-section__title">About</h2>
                             <p className="st-section__desc">Learn more about the platform, version updates, and the company behind it.</p>
 

@@ -2331,7 +2331,7 @@ export default function MApproval() {
 
     return (
         <div className="map-root">
-            <div className="map-stats">
+            <div className="map-stats" data-spotlight="map-stats">
                 {stats.map(s => (
                     <div className="map-stat" key={s.label}>
                         <div className="map-stat__label">{s.label}</div>
@@ -2341,7 +2341,7 @@ export default function MApproval() {
                 ))}
             </div>
 
-            <div className="map-filter">
+            <div className="map-filter" data-spotlight="map-filter-bar">
                 <DateRangePicker
                     from={dateRange.from}
                     to={dateRange.to}
@@ -2501,7 +2501,7 @@ export default function MApproval() {
                     </div>
                 </div>
             ) : (
-                <div className="map-groups">
+                <div className="map-groups" data-spotlight="map-approval-queue">
                     {grouped.length === 0 ? (
                         <div className="map-empty">
                             <div className="map-empty__icon">📄</div>

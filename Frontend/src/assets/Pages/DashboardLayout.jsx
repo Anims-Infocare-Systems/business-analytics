@@ -42,6 +42,9 @@ import {
     hasSeenTour,
     markTourAsSeen,
 } from "./versionToursData";
+import SpotlightGuide from "./SpotlightGuide";
+import SpotlightBeacon from "./SpotlightBeacon";
+import { SPOTLIGHT_REGISTRY } from "./spotlightRegistry";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -210,7 +213,7 @@ function CategoryLanding({ menuKey, children, onSubClick }) {
 }
 
 /* ── Page content with fade+slide transition ─────────────── */
-function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems }) {
+function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
     const isInitialMount = useRef(true);
     const [visible, setVisible] = useState(true);
     const [content, setContent] = useState({ activeSubItem, activeItem });
@@ -236,7 +239,7 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
 
     let node;
 
-    if (ai === "Welcome") node = <Welcome userName={userName} companyName={companyName} onNavigate={onNavigate} userRights={userRights} isSuperAdmin={isSuperAdmin} />;
+    if (ai === "Welcome") node = <Welcome userName={userName} companyName={companyName} onNavigate={onNavigate} userRights={userRights} isSuperAdmin={isSuperAdmin} onOpenSpotlight={onOpenSpotlight} />;
     else if (si === "Top Management Dashboard") node = <Dashboard1 />;
     else if (si === "Dashboard2") node = <Dashboard2 />;
     else if (si === "Plant Performance Dashboard") node = <PlantPerformance1 />;
@@ -678,6 +681,86 @@ export default function DashboardLayout() {
         setIsTourActive(true);
     };
 
+    /* ── Spotlight Guide State & Handlers ────────────────── */
+    const [spotlightOpen, setSpotlightOpen] = useState(false);
+    const [activeSpotlightTarget, setActiveSpotlightTarget] = useState(null);
+
+    const handleSpotlightNavigate = useCallback((item) => {
+        if (!item) return;
+
+        // 0. Close Spotlight Guide modal
+        setSpotlightOpen(false);
+
+        // 1. Switch active module / tab if needed
+        if (item.module === "Welcome") {
+            setSettingsOpen(false);
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            setActiveItem("Welcome");
+            setActiveSubItem(null);
+            setOpenMenu(null);
+            writeNav({ activeItem: "Welcome", activeSubItem: null, openMenu: null });
+            if (isMobile) setDrawerOpen(false);
+        } else if (item.module === "Charts") {
+            setSettingsOpen(false);
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            setActiveItem("Charts");
+            setActiveSubItem(null);
+            setOpenMenu(null);
+            writeNav({ activeItem: "Charts", activeSubItem: null, openMenu: null });
+            if (isMobile) setDrawerOpen(false);
+        } else if (item.module === "Settings") {
+            if (item.settingsTab) {
+                try { sessionStorage.setItem("ba_settings_tab", item.settingsTab); } catch {}
+            }
+            try { sessionStorage.setItem("ba_settings_open", "1"); } catch {}
+            setSettingsOpen(true);
+            if (isMobile) setDrawerOpen(false);
+        } else if (item.module) {
+            setSettingsOpen(false);
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            handleSubClick(item.module);
+        } else if (item.parentMenu) {
+            setSettingsOpen(false);
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            handleToggle(item.parentMenu);
+        }
+
+        // 2. Set beacon active
+        setActiveSpotlightTarget(item);
+        window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: item }));
+    }, [isMobile]);
+
+    // Global hotkey: Ctrl+K, Cmd+K, or "/"
+    useEffect(() => {
+        const handleGlobalHotkey = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+                e.preventDefault();
+                setSpotlightOpen(prev => !prev);
+            } else if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+                e.preventDefault();
+                setSpotlightOpen(true);
+            }
+        };
+        window.addEventListener("keydown", handleGlobalHotkey);
+        return () => window.removeEventListener("keydown", handleGlobalHotkey);
+    }, []);
+
+    // Deep link support via ?spotlight=<id>
+    useEffect(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const spotlightId = params.get("spotlight");
+            if (spotlightId) {
+                const found = SPOTLIGHT_REGISTRY.find(item => item.id === spotlightId);
+                if (found) {
+                    setTimeout(() => {
+                        handleSpotlightNavigate(found);
+                    }, 400);
+                }
+            }
+        } catch { /* ignore */ }
+    }, [handleSpotlightNavigate]);
+
     const handleDismissTourPrompt = () => {
         markTourAsSeen(CURRENT_APP_VERSION, userName);
         setShowTourPrompt(false);
@@ -985,11 +1068,19 @@ export default function DashboardLayout() {
         return () => window.removeEventListener("resize", onResize);
     }, []);
 
+    const prevNavKeyRef = useRef(`${activeItem}__${activeSubItem}`);
+
     /* scroll-to-top on navigation */
     useEffect(() => {
-        if (contentRef.current)
+        const newNavKey = `${activeItem}__${activeSubItem}`;
+        const isPageChange = newNavKey !== prevNavKeyRef.current;
+        prevNavKeyRef.current = newNavKey;
+
+        // Only scroll to top on an actual module/page change and when not focused on a spotlight target
+        if (isPageChange && !activeSpotlightTarget && contentRef.current) {
             contentRef.current.scrollTo({ top: 0, behavior: "instant" });
-    }, [activeSubItem, activeItem]);
+        }
+    }, [activeSubItem, activeItem, activeSpotlightTarget]);
 
     /* close flyouts when clicking outside collapsed sidebar */
     useEffect(() => {
@@ -1329,6 +1420,7 @@ export default function DashboardLayout() {
                         userRights={userRights}
                         isSuperAdmin={isSuperAdmin}
                         allowedMenuItems={allowedMenuItems}
+                        onOpenSpotlight={() => setSpotlightOpen(true)}
                     />
                 </main>
             </div>
@@ -1340,6 +1432,8 @@ export default function DashboardLayout() {
                 isExpiredMode={isExpired}
                 onStartTour={handleStartTourFromSettings}
                 onNavigateModule={handleWelcomeNavigate}
+                onSpotlightNavigate={handleSpotlightNavigate}
+                onOpenSpotlight={() => setSpotlightOpen(true)}
             />
 
             {/* ── Version Interactive Tour Guide ── */}
@@ -1349,6 +1443,20 @@ export default function DashboardLayout() {
                 onClose={handleTourClose}
                 onComplete={handleTourComplete}
                 onStepChange={handleTourStepChange}
+            />
+
+            {/* ── Spotlight Guide Modal (Command Palette) ── */}
+            <SpotlightGuide
+                isOpen={spotlightOpen}
+                onClose={() => setSpotlightOpen(false)}
+                onSelectSection={handleSpotlightNavigate}
+            />
+
+            {/* ── Spotlight Section Beacon & Guided Tour ── */}
+            <SpotlightBeacon
+                activeTarget={activeSpotlightTarget}
+                onDismiss={() => setActiveSpotlightTarget(null)}
+                onOpenSearch={() => setSpotlightOpen(true)}
             />
 
             {/* ── First-Time Login Version Tour Prompt Modal ── */}

@@ -43,6 +43,7 @@ import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
 
 Chart.register(...registerables, ChartDataLabels);
+Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 const API_BASE = resolveApiBase();
 
@@ -1429,7 +1430,7 @@ function PartWiseHistorySection({
                           {rev.changePercent > 0 ? `+${rev.changePercent.toFixed(1)}%` : `${rev.changePercent.toFixed(1)}%`}
                         </span>
                       </td>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.76rem", fontWeight: "700", color: "#1e40af" }}>
+                      <td style={{ fontFamily: "var(--sa-font-mono)", fontSize: "0.76rem", fontWeight: "700", color: "#1e40af" }}>
                         {rev.partNo}
                       </td>
                       <td>
@@ -1473,6 +1474,8 @@ export default function SalesAnalysis() {
   const [poLedger, setPoLedger] = useState([]);
   const [traceability, setTraceability] = useState([]);
   const [traceCustomerFilter, setTraceCustomerFilter] = useState("");
+  const [traceCustomerOpen, setTraceCustomerOpen] = useState(false);
+  const traceCustomerRef = useRef(null);
   const [traceRcFilter, setTraceRcFilter] = useState("");
   const [tracePoFilter, setTracePoFilter] = useState("");
   const [traceInvFilter, setTraceInvFilter] = useState("");
@@ -1654,6 +1657,31 @@ export default function SalesAnalysis() {
     });
   }, [traceability, selectedCustomers, traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
 
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (traceCustomerRef.current && !traceCustomerRef.current.contains(e.target)) {
+        setTraceCustomerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const matchingTraceCustomers = useMemo(() => {
+    if (!traceCustomerFilter.trim()) return uniqueTraceCustomers;
+    const q = traceCustomerFilter.trim().toLowerCase();
+    return uniqueTraceCustomers.filter((c) => c.toLowerCase().includes(q));
+  }, [uniqueTraceCustomers, traceCustomerFilter]);
+
+  const activeTraceFilterCount = useMemo(() => {
+    return [
+      traceCustomerFilter.trim(),
+      traceRcFilter.trim(),
+      tracePoFilter.trim(),
+      traceInvFilter.trim()
+    ].filter(Boolean).length;
+  }, [traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
+
   const hasActiveTraceFilters = Boolean(
     traceCustomerFilter.trim() || traceRcFilter.trim() || tracePoFilter.trim() || traceInvFilter.trim()
   );
@@ -1663,6 +1691,7 @@ export default function SalesAnalysis() {
     setTraceRcFilter("");
     setTracePoFilter("");
     setTraceInvFilter("");
+    setTraceCustomerOpen(false);
   }, []);
 
   const renderTracePartDesc = useCallback((raw) => {
@@ -5209,7 +5238,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="sa-kpi-grid">
+      <div className="sa-kpi-grid" data-spotlight="sa-kpis">
         {kpiCards.map((k, i) => {
           const Icon = k.icon;
           return (
@@ -5264,7 +5293,7 @@ export default function SalesAnalysis() {
 
       {/* ── Weekly Sales Trend (Full Width Row) ── */}
       <div className="sa-animate" style={{ marginBottom: "1.4rem" }}>
-        <div className="sa-card sa-card--chart" style={{ width: "100%" }}>
+        <div className="sa-card sa-card--chart" data-spotlight="sa-weekly-trend" style={{ width: "100%" }}>
           <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Weekly Sales Trend{!loading && derivedWeeklyTrend?.period ? ` (${derivedWeeklyTrend.period})` : !loading && summary?.period ? ` (${summary.period})` : ""}
@@ -5310,7 +5339,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Revenue by Customer & Product (Dual Column Row) ── */}
-      <div className="sa-donuts-row sa-animate">
+      <div className="sa-donuts-row sa-animate" data-spotlight="sa-revenue-split">
         {/* Customer Revenue Card */}
         <div className="sa-card sa-card--chart sa-card--donut">
           <div className="sa-card__head">
@@ -5435,7 +5464,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* Despatch Planning Status Table Card */}
-      <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate" style={{ marginBottom: "1.4rem" }}>
+      <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate" data-spotlight="sa-despatch-plan" style={{ marginBottom: "1.4rem" }}>
         <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -6081,7 +6110,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Monthly Analytics Section ── */}
-      <div className="sa-card sa-monthly-analytics-card">
+      <div className="sa-card sa-monthly-analytics-card" data-spotlight="sa-monthly-analytics">
         <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Monthly Performance & Bill Type Analytics
@@ -6161,7 +6190,7 @@ export default function SalesAnalysis() {
       <div className="sa-two-col">
 
         {/* Customer Ranking */}
-        <div className="sa-card" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="sa-card" data-spotlight="sa-customer-ranking" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Trophy size={16} style={{ color: "#8b5cf6" }} /> Customer Revenue Ranking
@@ -6193,7 +6222,7 @@ export default function SalesAnalysis() {
         </div>
 
         {/* Month Summary */}
-        <div className="sa-card sa-card--month">
+        <div className="sa-card sa-card--month" data-spotlight="sa-month-summary">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Sales Summary
@@ -6332,7 +6361,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Invoice Table ── */}
-      <div className="sa-card sa-card--table">
+      <div className="sa-card sa-card--table" data-spotlight="sa-invoice-details">
         <div className="sa-card__head">
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
@@ -6430,13 +6459,15 @@ export default function SalesAnalysis() {
       {/* ═══════════════════════════════════════════════════════
           PART-WISE HISTORY & RATE INTELLIGENCE SECTION
       ═══════════════════════════════════════════════════════ */}
-      <PartWiseHistorySection
-        dateRange={dateRange}
-        selectedCustomers={selectedCustomers}
-        loading={loading || tableLoading}
-      />
+      <div data-spotlight="sa-part-wise-history" className="sales-part-wise-history-section">
+        <PartWiseHistorySection
+          dateRange={dateRange}
+          selectedCustomers={selectedCustomers}
+          loading={loading || tableLoading}
+        />
+      </div>
       {/* ── Projection Table ── */}
-      <div className="sa-card sa-card--table sa-proj-card">
+      <div className="sa-card sa-card--table sa-proj-card" data-spotlight="sa-future-projections">
         <div className="sa-card__head">
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
@@ -6648,7 +6679,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Plan vs Actual Section ── */}
-      <div className="sa-card sa-card--table sa-plan-actual-card sa-animate">
+      <div className="sa-card sa-card--table sa-plan-actual-card sa-animate" data-spotlight="sa-plan-vs-actual">
         <div className="sa-card__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Scale size={16} style={{ color: "#8b5cf6" }} />
@@ -6816,7 +6847,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Traceability Table ── */}
-      <div className="sa-card sa-card--table sa-trace-card sa-animate">
+      <div className="sa-card sa-card--table sa-trace-card sa-animate" data-spotlight="sa-traceability">
         <div className="sa-card__head sa-trace-head">
           <div className="sa-trace-head-title-wrap">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -6842,6 +6873,165 @@ export default function SalesAnalysis() {
 
           <div className="sa-trace-head-actions">
             {hasActiveTraceFilters && (
+              <span className="sa-trace-filter-count-badge">
+                {activeTraceFilterCount} {activeTraceFilterCount === 1 ? "filter active" : "filters active"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Modern Neat Filter Bar ── */}
+        <div className="sa-trace-filter-bar">
+          {/* Customer Name Filter */}
+          <div className="sa-trace-filter-field sa-trace-filter-field--cust" ref={traceCustomerRef}>
+            <label className="sa-trace-filter-label" htmlFor="trace-filter-cust">
+              <Building2 size={12} className="sa-trace-filter-icon" />
+              <span>Customer Name</span>
+            </label>
+            <div className="sa-trace-input-wrap">
+              <Search size={13} className="sa-trace-input-lead-icon" />
+              <input
+                id="trace-filter-cust"
+                type="text"
+                className="sa-trace-filter-input"
+                placeholder="Search Customer..."
+                value={traceCustomerFilter}
+                onChange={(e) => {
+                  setTraceCustomerFilter(e.target.value);
+                  setTraceCustomerOpen(true);
+                }}
+                onFocus={() => setTraceCustomerOpen(true)}
+                autoComplete="off"
+              />
+              {traceCustomerFilter && (
+                <button
+                  type="button"
+                  className="sa-trace-input-clear"
+                  onClick={() => {
+                    setTraceCustomerFilter("");
+                    setTraceCustomerOpen(false);
+                  }}
+                  title="Clear Customer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+              {traceCustomerOpen && matchingTraceCustomers.length > 0 && (
+                <ul className="sa-trace-autocomplete-list">
+                  {matchingTraceCustomers.map((cust) => (
+                    <li
+                      key={cust}
+                      className={`sa-trace-autocomplete-item${traceCustomerFilter.toLowerCase() === cust.toLowerCase() ? " is-selected" : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setTraceCustomerFilter(cust);
+                        setTraceCustomerOpen(false);
+                      }}
+                    >
+                      <span className="sa-trace-autocomplete-text">{cust}</span>
+                      {traceCustomerFilter.toLowerCase() === cust.toLowerCase() && (
+                        <Check size={12} className="sa-trace-autocomplete-check" />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Routecard No Filter */}
+          <div className="sa-trace-filter-field">
+            <label className="sa-trace-filter-label" htmlFor="trace-filter-rc">
+              <Layers size={12} className="sa-trace-filter-icon" />
+              <span>Routecard No</span>
+            </label>
+            <div className="sa-trace-input-wrap">
+              <Search size={13} className="sa-trace-input-lead-icon" />
+              <input
+                id="trace-filter-rc"
+                type="text"
+                className="sa-trace-filter-input"
+                placeholder="Search Routecard No..."
+                value={traceRcFilter}
+                onChange={(e) => setTraceRcFilter(e.target.value)}
+                autoComplete="off"
+              />
+              {traceRcFilter && (
+                <button
+                  type="button"
+                  className="sa-trace-input-clear"
+                  onClick={() => setTraceRcFilter("")}
+                  title="Clear Routecard"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* GRN / PO DET Filter */}
+          <div className="sa-trace-filter-field">
+            <label className="sa-trace-filter-label" htmlFor="trace-filter-po">
+              <FileText size={12} className="sa-trace-filter-icon" />
+              <span>GRN / PO DET</span>
+            </label>
+            <div className="sa-trace-input-wrap">
+              <Search size={13} className="sa-trace-input-lead-icon" />
+              <input
+                id="trace-filter-po"
+                type="text"
+                className="sa-trace-filter-input"
+                placeholder="Search GRN / PO..."
+                value={tracePoFilter}
+                onChange={(e) => setTracePoFilter(e.target.value)}
+                autoComplete="off"
+              />
+              {tracePoFilter && (
+                <button
+                  type="button"
+                  className="sa-trace-input-clear"
+                  onClick={() => setTracePoFilter("")}
+                  title="Clear GRN/PO"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Invoice No Filter */}
+          <div className="sa-trace-filter-field">
+            <label className="sa-trace-filter-label" htmlFor="trace-filter-inv">
+              <Search size={12} className="sa-trace-filter-icon" />
+              <span>Invoice No</span>
+            </label>
+            <div className="sa-trace-input-wrap">
+              <Search size={13} className="sa-trace-input-lead-icon" />
+              <input
+                id="trace-filter-inv"
+                type="text"
+                className="sa-trace-filter-input"
+                placeholder="Search Invoice No..."
+                value={traceInvFilter}
+                onChange={(e) => setTraceInvFilter(e.target.value)}
+                autoComplete="off"
+              />
+              {traceInvFilter && (
+                <button
+                  type="button"
+                  className="sa-trace-input-clear"
+                  onClick={() => setTraceInvFilter("")}
+                  title="Clear Invoice No"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Actions: Reset & Filter Count */}
+          {hasActiveTraceFilters && (
+            <div className="sa-trace-filter-actions">
               <button
                 type="button"
                 className="sa-trace-btn-clear-all"
@@ -6851,121 +7041,8 @@ export default function SalesAnalysis() {
                 <RotateCcw size={12} />
                 <span>Reset Filters</span>
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Modern Animated Responsive Filter Bar ── */}
-        <div className="sa-trace-filter-bar">
-          {/* Customer Name Filter */}
-          <div className="sa-trace-filter-field">
-            <label className="sa-trace-filter-label">
-              <Building2 size={13} className="sa-trace-filter-icon" /> Customer Name
-            </label>
-            <div className="sa-trace-input-wrap">
-              <input
-                type="text"
-                className="sa-trace-filter-input"
-                placeholder="Search Customer..."
-                value={traceCustomerFilter}
-                onChange={(e) => setTraceCustomerFilter(e.target.value)}
-                list="trace-customer-list"
-              />
-              <datalist id="trace-customer-list">
-                {uniqueTraceCustomers.map((cust) => (
-                  <option key={cust} value={cust} />
-                ))}
-              </datalist>
-              {traceCustomerFilter && (
-                <button
-                  type="button"
-                  className="sa-trace-input-clear"
-                  onClick={() => setTraceCustomerFilter("")}
-                  title="Clear Customer"
-                >
-                  <X size={13} />
-                </button>
-              )}
             </div>
-          </div>
-
-          {/* Routecard No Filter */}
-          <div className="sa-trace-filter-field">
-            <label className="sa-trace-filter-label">
-              <Layers size={13} className="sa-trace-filter-icon" /> Routecard No
-            </label>
-            <div className="sa-trace-input-wrap">
-              <input
-                type="text"
-                className="sa-trace-filter-input"
-                placeholder="Search Routecard No..."
-                value={traceRcFilter}
-                onChange={(e) => setTraceRcFilter(e.target.value)}
-              />
-              {traceRcFilter && (
-                <button
-                  type="button"
-                  className="sa-trace-input-clear"
-                  onClick={() => setTraceRcFilter("")}
-                  title="Clear Routecard"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* GRN / PO DET Filter */}
-          <div className="sa-trace-filter-field">
-            <label className="sa-trace-filter-label">
-              <FileText size={13} className="sa-trace-filter-icon" /> GRN / PO DET
-            </label>
-            <div className="sa-trace-input-wrap">
-              <input
-                type="text"
-                className="sa-trace-filter-input"
-                placeholder="Search GRN / PO..."
-                value={tracePoFilter}
-                onChange={(e) => setTracePoFilter(e.target.value)}
-              />
-              {tracePoFilter && (
-                <button
-                  type="button"
-                  className="sa-trace-input-clear"
-                  onClick={() => setTracePoFilter("")}
-                  title="Clear GRN/PO"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Invoice No Filter */}
-          <div className="sa-trace-filter-field">
-            <label className="sa-trace-filter-label">
-              <Search size={13} className="sa-trace-filter-icon" /> Invoice No
-            </label>
-            <div className="sa-trace-input-wrap">
-              <input
-                type="text"
-                className="sa-trace-filter-input"
-                placeholder="Search Invoice No..."
-                value={traceInvFilter}
-                onChange={(e) => setTraceInvFilter(e.target.value)}
-              />
-              {traceInvFilter && (
-                <button
-                  type="button"
-                  className="sa-trace-input-clear"
-                  onClick={() => setTraceInvFilter("")}
-                  title="Clear Invoice No"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="sa-table-scroll">
@@ -7042,7 +7119,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── PO Ledger Table ── */}
-      <div className="sa-card sa-card--table sa-po-card sa-animate">
+      <div className="sa-card sa-card--table sa-po-card sa-animate" data-spotlight="sa-po-ledger">
         <div className="sa-card__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileText size={16} style={{ color: "#ec4899" }} />

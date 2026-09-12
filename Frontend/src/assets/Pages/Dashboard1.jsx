@@ -1466,7 +1466,7 @@ export default function Dashboard1() {
 
     return (
         <div className="d1-root">
-            <div className="d1-subhd">
+            <div className="d1-subhd" data-spotlight="tmd-period-controls">
                 <span className="d1-subhd__rpt">
                     Report showing for <strong>{MONTHS_FULL[period.month]} – {period.year}</strong>
                 </span>
@@ -1480,7 +1480,7 @@ export default function Dashboard1() {
             </div>
 
             <SectionHeader title="Key Performance Indicators" collapsed={kpiCollapsed} onToggle={() => setKpiCollapsed(v => !v)} accent="#1a56db" />
-            <div className={`d1-kpi-grid${kpiCollapsed ? " d1-grid--collapsed" : ""}`}>
+            <div className={`d1-kpi-grid${kpiCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-kpis">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)
                 ) : (
@@ -1489,7 +1489,7 @@ export default function Dashboard1() {
             </div>
 
             <SectionHeader title="Charts & Projections" collapsed={chartsCollapsed} onToggle={() => setChartsCollapsed(v => !v)} accent="#10b981" />
-            <div className={`d1-charts-grid${chartsCollapsed ? " d1-grid--collapsed" : ""}`}>
+            <div className={`d1-charts-grid${chartsCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-charts">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => <ChartCardSkeleton key={i} />)
                 ) : (
@@ -1498,7 +1498,7 @@ export default function Dashboard1() {
             </div>
 
             <SectionHeader title="Analysis Tables" collapsed={tablesCollapsed} onToggle={() => setTablesCollapsed(v => !v)} accent="#8b5cf6" />
-            <div className={`d1-tables-grid${tablesCollapsed ? " d1-grid--collapsed" : ""}`}>
+            <div className={`d1-tables-grid${tablesCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-tables">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => <AnalysisTableSkeleton key={i} />)
                 ) : (

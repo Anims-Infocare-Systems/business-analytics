@@ -1,10 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --sa-font-display: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sa-font-body: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sa-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
 
 /* ═══════════════════════════════════════════════════════
    SalesAnalysis.css  —  prefix: sa-
    Matches DashboardLayout colour system exactly.
    Primary: #2d6de8 / #1a54d4 / #1448b8
-   Font:    "Segoe UI", system-ui, sans-serif
+   Typography:
+     • Display / Headings: 'Outfit' (Modern, attractive, bold geometric)
+     • Body / UI:          'Plus Jakarta Sans', 'Inter' (Ultra-clean, crisp)
+     • Numbers / Tabular:  'JetBrains Mono' (Tabular numerals, rates, codes)
    ═══════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────
@@ -83,16 +92,145 @@
 }
 
 /* ──────────────────────────────────────────
-   ROOT
+   ROOT & COMPREHENSIVE TYPOGRAPHY SYSTEM
 ────────────────────────────────────────── */
 .sa-root {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--sa-font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   color: #1a2a5e;
+  letter-spacing: -0.01em;
   padding-bottom: 2.5rem;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.sa-root button,
+.sa-root input,
+.sa-root select,
+.sa-root textarea,
+.sa-root optgroup {
+  font-family: var(--sa-font-body);
+}
+
+/* Headings & Card Titles Across ALL Sections */
+.sa-root h1,
+.sa-root h2,
+.sa-root h3,
+.sa-root h4,
+.sa-root h5,
+.sa-root h6,
+.sa-page-header__title,
+.sa-card__title,
+.sa-filter-card__title,
+.sa-modal__title,
+.sa-despatch-group-name,
+.pwh-title-text h3,
+.sa-chart-title,
+.sa-despatch-group-title {
+  font-family: var(--sa-font-display) !important;
+  letter-spacing: -0.02em;
+}
+
+/* KPI Metric Values & Large Summaries */
+.sa-kpi-card__val,
+.sa-summary-item__val,
+.sa-kpi-val,
+.sa-metric-big {
+  font-family: var(--sa-font-display) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
+/* All Table Headers Across Every Section */
+.sa-root table thead th,
+.sa-table thead th,
+.sa-trace-table thead th,
+.sa-po-table thead th,
+.sa-despatch-table thead th,
+.sa-plan-table thead th,
+.sa-proj-table thead th,
+.sa-mini-table th,
+.pwh-table thead th {
+  font-family: var(--sa-font-display) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* All Table Body Cells */
+.sa-root table tbody td,
+.sa-table tbody td,
+.sa-trace-table tbody td,
+.sa-po-table tbody td,
+.sa-despatch-table tbody td,
+.sa-plan-table tbody td,
+.sa-proj-table tbody td,
+.sa-mini-table td,
+.pwh-table tbody td {
+  font-family: var(--sa-font-body);
+}
+
+/* Numbers, Rates, Financials, Quantities, Codes & Document Identifiers */
+.sa-num,
+.sa-rate,
+.sa-amount,
+.sa-total-badge,
+.sa-inv-total-row td,
+.sa-proj-tfoot-row td,
+.sa-po-total-row td,
+.sa-e-invoice,
+.sa-inv-no,
+.sa-part-no,
+.sa-trace-code,
+.sa-trace-po,
+.sa-trace-inv,
+.sa-trace-part-no,
+.sa-po-code,
+.sa-po-apo-code,
+.sa-po-dc-code,
+.pwh-rate-tag,
+.pwh-badge-val,
+.pwh-history-rate-new,
+.pwh-history-rate-old,
+.pwh-pill-diff {
+  font-family: var(--sa-font-mono) !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv05" 1, "cv08" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Badges, Pills, Chips, Action Buttons & Toggles */
+.sa-badge,
+.sa-chip,
+.sa-trace-record-pill,
+.sa-trace-filter-count-badge,
+.sa-despatch-group-count-badge,
+.sa-despatch-chip,
+.sa-despatch-status-pill,
+.sa-live-badge,
+.sa-toggle-btn,
+.sa-chart-type-toggle button,
+.sa-btn,
+.sa-trace-btn-clear-all,
+.pwh-action-btn,
+.pwh-pill {
+  font-family: var(--sa-font-display) !important;
+  letter-spacing: 0.015em;
+}
+
+/* Filter Labels & Field Headings */
+.sa-trace-filter-label,
+.sa-fl,
+.sa-filter-label,
+.sa-kpi-card__label,
+.sa-summary-item__label,
+.pwh-filter-label {
+  font-family: var(--sa-font-display) !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* Desktop filter wrapper defaults */
@@ -682,13 +820,14 @@
 .sa-mini-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: var(--sa-font-body);
   font-size: 0.74rem;
 }
 
 .sa-mini-table th {
   padding: 0.6rem 0.85rem;
-  font-size: 0.65rem;
+  font-family: var(--sa-font-display);
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -985,17 +1124,17 @@
 .sa-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: var(--sa-font-body);
   font-size: 0.8rem;
 }
 
 .sa-table thead th {
   padding: 0.75rem 1rem;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  font-size: 0.66rem;
+  font-family: var(--sa-font-display);
+  font-size: 0.70rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: #475569;
   background: #f8fafc;
   border-bottom: 2px solid rgba(45, 109, 232, 0.08);
@@ -1008,7 +1147,7 @@
 
 .sa-table tbody td {
   padding: 0.75rem 1rem;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: var(--sa-font-body);
   border-bottom: 1px solid rgba(45, 109, 232, 0.05);
   color: #334155;
   vertical-align: middle;
@@ -1063,7 +1202,7 @@
 
 .sa-inv-total-row td {
   padding: 0.75rem 1rem;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: var(--sa-font-display);
   color: #1e293b !important;
   font-weight: 700;
   background: #f8fafc !important;
@@ -2077,29 +2216,39 @@
 
 /* ── Modern Animated Responsive Filter Bar ── */
 .sa-trace-filter-bar {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  align-items: flex-end;
   gap: 12px;
-  padding: 12px 18px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 10px 18px;
+  background: #ffffff;
   border-bottom: 1px solid rgba(226, 232, 240, 0.9);
   position: relative;
-  transition: background 0.3s ease;
+  z-index: 20;
+  transition: all 0.3s ease;
+  flex-wrap: wrap;
 }
 
 .sa-trace-filter-field {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 1;
+  min-width: 170px;
+  position: relative;
+}
+
+.sa-trace-filter-field--cust {
+  flex: 1.4;
+  min-width: 220px;
 }
 
 .sa-trace-filter-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.71rem;
+  font-size: 0.70rem;
   font-weight: 700;
-  color: #475569;
+  color: #64748b;
   letter-spacing: 0.35px;
   text-transform: uppercase;
   margin: 0;
@@ -2118,20 +2267,34 @@
   width: 100%;
 }
 
+.sa-trace-input-lead-icon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
 .sa-trace-filter-input {
   height: 34px;
   width: 100%;
-  padding: 6px 28px 6px 11px;
+  padding: 6px 28px 6px 30px;
   font-size: 0.81rem;
   border: 1px solid #cbd5e1;
   border-radius: 7px;
-  background: #ffffff;
+  background: #f8fafc;
   color: #1e293b;
   transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.sa-trace-input-wrap:focus-within .sa-trace-input-lead-icon {
+  color: #06b6d4;
 }
 
 .sa-trace-filter-input:hover {
+  background: #ffffff;
   border-color: #94a3b8;
 }
 
@@ -2160,7 +2323,75 @@
 .sa-trace-input-clear:hover {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
-  transform: scale(1.12) rotate(90deg);
+  transform: scale(1.12);
+}
+
+/* ── Custom Autocomplete Dropdown (Replacing datalist) ── */
+.sa-trace-autocomplete-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+  z-index: 100;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+
+.sa-trace-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: #1e293b;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sa-trace-autocomplete-item:hover {
+  background: #ecfeff;
+  color: #0891b2;
+}
+
+.sa-trace-autocomplete-item.is-selected {
+  background: rgba(6, 182, 212, 0.12);
+  color: #0e7490;
+  font-weight: 600;
+}
+
+.sa-trace-autocomplete-check {
+  color: #0891b2;
+  flex-shrink: 0;
+}
+
+/* ── Filter Actions (Reset & Active Count) ── */
+.sa-trace-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sa-trace-filter-count-badge {
+  font-size: 0.70rem;
+  font-weight: 700;
+  color: #0891b2;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
 }
 
 /* ── Traceability Row & Animation ── */
@@ -2213,7 +2444,7 @@
   font-weight: 700;
   color: #0f172a;
   font-size: 0.78rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--sa-font-mono);
   background: rgba(15, 23, 42, 0.04);
   border: 1px solid rgba(15, 23, 42, 0.08);
   padding: 1px 5px;
@@ -2246,7 +2477,7 @@
   border: 1px solid rgba(6, 182, 212, 0.2);
   padding: 3px 8px;
   border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--sa-font-mono);
   font-size: 0.75rem;
   font-weight: 600;
   display: inline-block;
@@ -2267,7 +2498,7 @@
   border: 1px solid rgba(59, 130, 246, 0.2);
   padding: 3px 8px;
   border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--sa-font-mono);
   font-size: 0.75rem;
   font-weight: 600;
   display: inline-block;
@@ -2284,7 +2515,7 @@
 
 .sa-trace-inv {
   color: #4f46e5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--sa-font-mono);
   font-size: 0.78rem;
   font-weight: 600;
   white-space: nowrap !important;
@@ -2422,14 +2653,27 @@
 /* ── Responsiveness for Traceability Filter Bar ── */
 @media (max-width: 1100px) {
   .sa-trace-filter-bar {
-    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .sa-trace-filter-field {
+    min-width: 140px;
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .sa-trace-filter-bar {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
     padding: 10px 12px;
+  }
+  .sa-trace-filter-field {
+    min-width: 100%;
+  }
+  .sa-trace-filter-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 
@@ -2578,7 +2822,7 @@
 .sa-toggle-btn {
   background: transparent;
   border: none;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--sa-font-display);
   font-size: 0.74rem;
   font-weight: 700;
   color: #4f46e5;
@@ -3348,7 +3592,7 @@
   background: transparent;
   outline: none;
   font-size: 0.8rem;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--sa-font-body);
   color: #1e293b;
   width: 100%;
   padding: 2px 0 2px 4px;
@@ -3846,7 +4090,7 @@
 /* Invoice No & Dt */
 
 .sa-po-apo-code {
-  font-family: monospace;
+  font-family: var(--sa-font-mono);
   font-size: 0.76rem;
   color: #64748b;
   font-weight: 500;
@@ -4382,7 +4626,7 @@
 
 .sa-po-total-row td {
   padding: 0.7rem 0.8rem !important;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: var(--sa-font-display);
   color: #1e293b !important;
   font-weight: 700;
   background: #f8fafc !important;
@@ -4562,7 +4806,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--sa-font-body);
 }
 
 /* Header styling */
@@ -4570,13 +4814,13 @@
   background: #f8fafc;
   color: #475569;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 14px 18px;
   border-bottom: 1.5px solid #e2e8f0;
   border-top: none;
-  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--sa-font-display);
 }
 
 /* Align first and last columns nicely */
@@ -4609,7 +4853,7 @@
   font-size: 0.8rem;
   color: #334155;
   border-bottom: 1px solid #f1f5f9;
-  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--sa-font-body);
   vertical-align: middle;
 }
 
@@ -4667,7 +4911,7 @@
   background: #eff6ff;
   color: #1d4ed8;
   border: 1px solid #bfdbfe;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--sa-font-mono);
   font-size: 0.75rem;
   font-weight: 600;
   padding: 3px 8px;

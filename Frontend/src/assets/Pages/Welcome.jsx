@@ -120,6 +120,7 @@ export default function Welcome({
     onNavigate,
     userRights = {},
     isSuperAdmin = false,
+    onOpenSpotlight,
 }) {
     const [greeting, setGreeting] = useState("Welcome");
     const [clock, setClock] = useState(formatTime());
@@ -191,7 +192,7 @@ export default function Welcome({
 
     return (
         <div className="wh-page">
-            <div className="wh-hero">
+            <div className="wh-hero" data-spotlight="wh-hero">
                 <div className="wh-hero__mesh" aria-hidden="true" />
                 <div className="wh-hero__inner">
                     <div className="wh-hero__left">
@@ -217,15 +218,29 @@ export default function Welcome({
                                 </span>
                             </div>
                         </div>
-                        <div className="wh-live-pill">
-                            <span className="wh-live-pill__dot" />
-                            ERP Connected
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            {typeof onOpenSpotlight === "function" && (
+                                <button
+                                    type="button"
+                                    className="wh-spotlight-hero-btn"
+                                    onClick={onOpenSpotlight}
+                                    title="Open Spotlight Guide (Ctrl+K)"
+                                >
+                                    <Sparkles size={13} />
+                                    <span>Spotlight Guide</span>
+                                    <span className="wh-spotlight-kbd">Ctrl K</span>
+                                </button>
+                            )}
+                            <div className="wh-live-pill">
+                                <span className="wh-live-pill__dot" />
+                                ERP Connected
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="wh-kpi-row">
+            <div className="wh-kpi-row" data-spotlight="wh-kpis">
                 <div className="wh-kpi">
                     <span className="wh-kpi__icon wh-kpi__icon--blue">
                         <Shield size={18} />
@@ -273,7 +288,7 @@ export default function Welcome({
                         <span>Contact your administrator to request access.</span>
                     </div>
                 ) : (
-                    <div className="wh-bento" data-tour="quick-access">
+                    <div className="wh-bento" data-tour="quick-access" data-spotlight="wh-quick-access">
                         {shortcuts.map((item, idx) => {
                             const Icon = item.icon;
                             return (
