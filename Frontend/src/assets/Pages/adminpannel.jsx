@@ -7,6 +7,7 @@ import { adminFetch, setAdminToken } from "../../adminAuth";
 import "./adminpannel.css";
 import AnimsUtility from "./AnimsUtility";
 import UserTransactionReport from "./UserTransactionReport";
+import AdminNotification from "./adminnotification";
 
 
 const API = resolveApiBase();
@@ -1509,6 +1510,17 @@ export default function AdminPanel() {
                                 <span className="ap-sidebar-text">User Transaction Report</span>
                             </button>
 
+                            <button 
+                                className={`ap-sidebar-item ${activeTab === "admin_notifications" ? "ap-sidebar-item--active" : ""}`}
+                                onClick={() => setActiveTab("admin_notifications")}
+                            >
+                                <svg className="ap-sidebar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                </svg>
+                                <span className="ap-sidebar-text">Broadcast Notices</span>
+                            </button>
+
                             {String(currentAdminUser || "").trim().toLowerCase() === "admin" && (
                                 <>
                                     <div className="ap-sidebar-section-title" style={{ marginTop: "16px" }}>Settings</div>
@@ -1741,6 +1753,10 @@ export default function AdminPanel() {
                         ) : activeTab === "user_transaction_report" ? (
                             <main className="ap-main-utility">
                                 <UserTransactionReport onAuthLost={handleAdminSessionLost} />
+                            </main>
+                        ) : activeTab === "admin_notifications" ? (
+                            <main className="ap-main-utility">
+                                <AdminNotification onAuthLost={handleAdminSessionLost} />
                             </main>
                         ) : activeTab === "settings_users" && String(currentAdminUser || "").trim().toLowerCase() === "admin" ? (
                             <main className="ap-main ap-animate-fade-in">

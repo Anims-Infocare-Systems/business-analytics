@@ -1659,8 +1659,33 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
   };
   const catColor = CAT_META[def.category]?.color || "#3b82f6";
   const catGlow = hexToRgba(catColor, 0.16);
+
+  const chartSpotlightId = {
+    "sales-1": "ch-sales-po-vs-sales",
+    "sales-2": "ch-sales-otd",
+    "quality-1": "ch-quality-complaints",
+    "quality-2": "ch-quality-rejection-month",
+    "quality-3": "ch-quality-rework-month",
+    "quality-4": "ch-quality-internal-ppm",
+    "production-1": "ch-prod-operator-eff",
+    "production-2": "ch-prod-overall-operator-eff",
+    "production-3": "ch-prod-machine-idle",
+    "production-4": "ch-prod-machine-eff",
+    "operations-1": "ch-ops-overall-eff",
+    "operations-2": "ch-ops-prod-value",
+    "purchase-1": "ch-purch-report-month",
+    "purchase-2": "ch-purch-supplier-rating",
+    "vendor-1": "ch-vendor-rating",
+    "vendor-2": "ch-vendor-rejections"
+  }[def.id] || `ch-card-${def.id}`;
+
   return (
-    <div className="ch-card" style={{ "--cat-color": catColor, "--cat-glow": catGlow, animationDelay: `${0.04 + idx * 0.045}s` }}>
+    <div
+      className="ch-card"
+      data-chart-id={def.id}
+      data-spotlight={chartSpotlightId}
+      style={{ "--cat-color": catColor, "--cat-glow": catGlow, animationDelay: `${0.04 + idx * 0.045}s` }}
+    >
       <div className="ch-card__accent" />
       <div className="ch-card__hd">
         <div className="ch-card__hd-left">

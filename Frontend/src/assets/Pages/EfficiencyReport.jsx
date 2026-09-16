@@ -918,7 +918,7 @@ export default function EfficiencyReport() {
 
                 {/* Row 1 — dates, machine type, efficiency type, clock */}
                 <div className="er-filter-row">
-                    <div className="er-fgroup er-fgroup--daterange">
+                    <div className="er-fgroup er-fgroup--daterange" data-spotlight="er-date-picker">
                         <span className="er-flabel">Date Range</span>
                         <EfficiencyReportDatePicker
                             from={dateRange.from}
@@ -927,7 +927,7 @@ export default function EfficiencyReport() {
                         />
                     </div>
 
-                    <div className="er-fcheck-group">
+                    <div className="er-fcheck-group" data-spotlight="er-filter-dropdowns">
                         <label className={`er-fcheck-item ${chkCNC ? "er-fcheck-item--active" : ""}`}>
                             <input type="checkbox" checked={chkCNC}
                                 onChange={e => setChkCNC(e.target.checked)} />
@@ -965,7 +965,7 @@ export default function EfficiencyReport() {
                 </div>
 
                 {/* Row 2 — team, dept, operator, machine, report type, actions */}
-                <div className="er-filter-row">
+                <div className="er-filter-row" data-spotlight="er-export-controls">
                     {/* <div className="er-fgroup">
                         <span className="er-flabel">Team</span>
                         <input className="er-finput" type="text" placeholder="All Teams"
@@ -1007,7 +1007,7 @@ export default function EfficiencyReport() {
             </div>
 
             {/* ══ TAB BAR ══ */}
-            <div className="er-tabbar">
+            <div className="er-tabbar" data-spotlight="er-mode-switch">
                 {[
                     ["operator", "Operator Efficiency"],
                     ["machine", "Machine Efficiency"],

@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import "./SpotlightBeacon.css";
+import { SPOTLIGHT_REGISTRY } from "./spotlightRegistry";
 import {
     X,
     Check,
@@ -21,7 +22,11 @@ import {
     LayoutDashboard,
     Factory,
     Clock,
-    Compass
+    Compass,
+    ArrowRight,
+    ChevronRight,
+    ChevronLeft,
+    RotateCcw
 } from "lucide-react";
 
 const ICON_MAP = {
@@ -45,10 +50,26 @@ const ICON_MAP = {
     Compass
 };
 
+function getDarkerColor(hex) {
+    if (!hex || !hex.startsWith("#") || hex.length < 7) return "#1d4ed8";
+    try {
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        r = Math.max(0, Math.floor(r * 0.72));
+        g = Math.max(0, Math.floor(g * 0.72));
+        b = Math.max(0, Math.floor(b * 0.72));
+        return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+    } catch {
+        return "#1d4ed8";
+    }
+}
+
 export default function SpotlightBeacon({
     activeTarget,
     onDismiss,
-    onOpenSearch
+    onOpenSearch,
+    onNavigateSection
 }) {
     const [targetRect, setTargetRect] = useState(null);
     const [beaconPos, setBeaconPos] = useState({ top: 0, left: 0, placement: "bottom" });
@@ -97,8 +118,8 @@ export default function SpotlightBeacon({
         }
 
         // Tablet & Desktop: Smart adaptive positioning
-        const cardWidth = Math.min(vw - 32, 420);
-        const cardHeight = 250;
+        const cardWidth = Math.min(vw - 32, 450);
+        const cardHeight = 260;
         const margin = 14;
 
         let placement = "bottom";
@@ -312,17 +333,78 @@ export default function SpotlightBeacon({
         };
     }, [activeTarget, updatePosition, runStabilizationLoop, scrollToElement]);
 
-    // Keyboard ESC to dismiss
+    // Guided Search / Module Tour Context (smart fallback ensures every section has a related tour)
+    const tourContext = useMemo(() => {
+        if (activeTarget?.tourContext && Array.isArray(activeTarget.tourContext.results) && activeTarget.tourContext.results.length > 1) {
+            return activeTarget.tourContext;
+        }
+        if (!activeTarget) return null;
+        // Smart fallback: automatically construct module/category tour
+        const moduleResults = SPOTLIGHT_REGISTRY.filter(
+            item => (item.module && item.module === activeTarget.module) ||
+                    (item.parentMenu && item.parentMenu === activeTarget.parentMenu)
+        );
+        if (moduleResults.length > 1) {
+            const currIdx = moduleResults.findIndex(r => r.id === activeTarget.id);
+            return {
+                query: activeTarget.module || activeTarget.categoryLabel || "Related Features",
+                results: moduleResults,
+                currentIndex: currIdx >= 0 ? currIdx : 0
+            };
+        }
+        return null;
+    }, [activeTarget]);
+
+    const isTourActive = !!(tourContext && Array.isArray(tourContext.results) && tourContext.results.length > 1);
+    const tourResults = isTourActive ? tourContext.results : [];
+    const tourTotal = tourResults.length;
+    const tourIndex = isTourActive ? (tourContext.currentIndex ?? 0) : 0;
+    const hasPrev = isTourActive && tourIndex > 0;
+    const isLastTourStep = isTourActive && tourIndex === tourTotal - 1;
+    const nextItem = isTourActive ? tourResults[(tourIndex + 1) % tourTotal] : null;
+    const prevItem = isTourActive ? tourResults[(tourIndex - 1 + tourTotal) % tourTotal] : null;
+
+    const handleNext = useCallback(() => {
+        if (!isTourActive || !nextItem || typeof onNavigateSection !== "function") return;
+        const nextIndex = (tourIndex + 1) % tourTotal;
+        const updatedTourContext = {
+            ...tourContext,
+            currentIndex: nextIndex
+        };
+        onNavigateSection(nextItem, updatedTourContext);
+    }, [isTourActive, nextItem, tourIndex, tourTotal, tourContext, onNavigateSection]);
+
+    const handlePrev = useCallback(() => {
+        if (!isTourActive || !prevItem || typeof onNavigateSection !== "function") return;
+        const prevIndex = (tourIndex - 1 + tourTotal) % tourTotal;
+        const updatedTourContext = {
+            ...tourContext,
+            currentIndex: prevIndex
+        };
+        onNavigateSection(prevItem, updatedTourContext);
+    }, [isTourActive, prevItem, tourIndex, tourTotal, tourContext, onNavigateSection]);
+
+    // Keyboard navigation: ESC to dismiss, ArrowRight for next, ArrowLeft for prev
     useEffect(() => {
         if (!activeTarget) return;
         const handleKeyDown = (e) => {
             if (e.key === "Escape") {
                 onDismiss();
+            } else if (isTourActive && e.key === "ArrowRight") {
+                if (!["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+                    e.preventDefault();
+                    handleNext();
+                }
+            } else if (isTourActive && e.key === "ArrowLeft") {
+                if (!["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+                    e.preventDefault();
+                    handlePrev();
+                }
             }
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [activeTarget, onDismiss]);
+    }, [activeTarget, isTourActive, handleNext, handlePrev, onDismiss]);
 
     const handleCopyLink = () => {
         if (!activeTarget) return;
@@ -372,11 +454,24 @@ export default function SpotlightBeacon({
             >
                 <div className="sbeacon-card-topbar" style={{ background: `${activeTarget.color || "#2563eb"}10` }}>
                     <div className="sbeacon-card-breadcrumbs">
-                        <span className="sbeacon-card-crumb">{activeTarget.parentMenu}</span>
-                        <span className="sbeacon-card-crumb-sep">›</span>
-                        <span className="sbeacon-card-crumb-active" style={{ color: activeTarget.color || "#2563eb" }}>
-                            {activeTarget.module}
-                        </span>
+                        {isTourActive ? (
+                            <div className="sbeacon-tour-badge" style={{ borderColor: `${activeTarget.color || "#2563eb"}35` }}>
+                                <span className="sbeacon-tour-icon">🔍</span>
+                                <span className="sbeacon-tour-query">"{tourContext.query}"</span>
+                                <span className="sbeacon-tour-sep">•</span>
+                                <span className="sbeacon-tour-step" style={{ color: activeTarget.color || "#2563eb" }}>
+                                    {tourIndex + 1} of {tourTotal}
+                                </span>
+                            </div>
+                        ) : (
+                            <>
+                                <span className="sbeacon-card-crumb">{activeTarget.parentMenu}</span>
+                                <span className="sbeacon-card-crumb-sep">›</span>
+                                <span className="sbeacon-card-crumb-active" style={{ color: activeTarget.color || "#2563eb" }}>
+                                    {activeTarget.module}
+                                </span>
+                            </>
+                        )}
                     </div>
 
                     <div className="sbeacon-card-top-actions">
@@ -408,7 +503,7 @@ export default function SpotlightBeacon({
                         <div className="sbeacon-card-title-group">
                             <div className="sbeacon-card-title-row">
                                 <h3 className="sbeacon-card-title">{activeTarget.title}</h3>
-                                {activeTarget.badge && (
+                                {activeTarget.badge && activeTarget.badge.toLowerCase() !== (activeTarget.categoryLabel || "").toLowerCase() && (
                                     <span className="sbeacon-badge-chip" style={{ color: activeTarget.color || "#2563eb", borderColor: `${activeTarget.color || "#2563eb"}30` }}>
                                         {activeTarget.badge}
                                     </span>
@@ -432,52 +527,156 @@ export default function SpotlightBeacon({
                             </div>
                         </div>
                     )}
+
                 </div>
 
-                <div className="sbeacon-card-footer">
-                    <button
-                        type="button"
-                        className={`sbeacon-btn-link ${copied ? "sbeacon-btn-link--copied" : ""}`}
-                        onClick={handleCopyLink}
-                        title="Copy shareable direct link to this section"
-                    >
-                        {copied ? (
-                            <>
-                                <Check size={13} />
-                                <span>Copied Link</span>
-                            </>
-                        ) : (
-                            <>
-                                <Copy size={13} />
-                                <span>Copy Direct Link</span>
-                            </>
-                        )}
-                    </button>
+                {/* ── Tour Navigation Command Bar (Modern Responsive UI) ── */}
+                {isTourActive ? (
+                    <div className="sbeacon-tour-controller">
+                        {/* Progress Header & Track */}
+                        <div className="sbeacon-tour-progress-row">
+                            <div className="sbeacon-tour-step-info">
+                                <span className="sbeacon-tour-step-pill" style={{ color: activeTarget.color || "#2563eb", background: `${activeTarget.color || "#2563eb"}15` }}>
+                                    Step {tourIndex + 1} of {tourTotal}
+                                </span>
+                                {nextItem && (
+                                    <span className="sbeacon-tour-next-hint" title={`Next: ${nextItem.title}`}>
+                                        Next: <strong className="sbeacon-tour-next-name">{nextItem.title}</strong>
+                                    </span>
+                                )}
+                            </div>
+                            <div className="sbeacon-tour-track">
+                                <div
+                                    className="sbeacon-tour-fill"
+                                    style={{
+                                        width: `${((tourIndex + 1) / tourTotal) * 100}%`,
+                                        background: activeTarget.color || "#2563eb"
+                                    }}
+                                />
+                            </div>
+                        </div>
 
-                    <div className="sbeacon-footer-right">
-                        {typeof onOpenSearch === "function" && (
+                        {/* Navigation Actions Row: Prev and Next Related */}
+                        <div className="sbeacon-tour-actions-row">
                             <button
                                 type="button"
-                                className="sbeacon-btn-ghost"
-                                onClick={() => {
-                                    onDismiss();
-                                    onOpenSearch();
-                                }}
+                                className="sbeacon-btn-tour sbeacon-btn-tour--prev"
+                                onClick={handlePrev}
+                                disabled={!hasPrev}
+                                title={hasPrev ? `Previous related section (${tourIndex} of ${tourTotal})` : "At first matching section"}
                             >
-                                <Sparkles size={13} style={{ marginRight: "4px" }} />
-                                Search More
+                                <ChevronLeft size={16} className="sbeacon-arrow-icon sbeacon-arrow-icon--prev" />
+                                <span>Previous</span>
                             </button>
-                        )}
-                        <button
-                            type="button"
-                            className="sbeacon-btn-primary"
-                            onClick={onDismiss}
-                            style={{ background: activeTarget.color || "#2563eb" }}
-                        >
-                            <span>Got It</span>
-                        </button>
+
+                            <button
+                                type="button"
+                                className="sbeacon-btn-tour sbeacon-btn-tour--next"
+                                onClick={handleNext}
+                                style={{
+                                    background: `linear-gradient(135deg, ${activeTarget.color || "#2563eb"} 0%, ${getDarkerColor(activeTarget.color)} 100%)`,
+                                    boxShadow: `0 4px 16px ${activeTarget.color || "#2563eb"}45`
+                                }}
+                                title={isLastTourStep ? "Restart tour from first result" : `Jump to next: ${nextItem?.title || "section"}`}
+                            >
+                                <span className="sbeacon-tour-glow-shimmer" />
+                                <span className="sbeacon-tour-next-text">
+                                    {isLastTourStep ? "Restart Tour" : "Next Related"}
+                                </span>
+                                {isLastTourStep ? (
+                                    <RotateCcw size={15} className="sbeacon-arrow-icon sbeacon-arrow-icon--rotate" />
+                                ) : (
+                                    <ArrowRight size={15} className="sbeacon-arrow-icon sbeacon-arrow-icon--next" />
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Sub-utility Bar */}
+                        <div className="sbeacon-tour-sub-bar">
+                            <div className="sbeacon-tour-sub-left">
+                                <button
+                                    type="button"
+                                    className={`sbeacon-sub-link ${copied ? "sbeacon-sub-link--copied" : ""}`}
+                                    onClick={handleCopyLink}
+                                    title="Copy shareable direct link to this section"
+                                >
+                                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                                    <span>{copied ? "Copied" : "Copy Link"}</span>
+                                </button>
+
+                                {typeof onOpenSearch === "function" && (
+                                    <button
+                                        type="button"
+                                        className="sbeacon-sub-link"
+                                        onClick={() => {
+                                            onDismiss();
+                                            onOpenSearch(tourContext.query);
+                                        }}
+                                        title={`View all ${tourTotal} results for "${tourContext.query}"`}
+                                    >
+                                        <Sparkles size={12} />
+                                        <span>All ({tourTotal})</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                className="sbeacon-sub-link sbeacon-sub-link--exit"
+                                onClick={onDismiss}
+                                title="Close spotlight guide and remain on this section"
+                            >
+                                <span>Got It (Esc)</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="sbeacon-tour-controller">
+                        <div className="sbeacon-tour-actions-row">
+                            <button
+                                type="button"
+                                className="sbeacon-btn-tour sbeacon-btn-tour--next"
+                                onClick={onDismiss}
+                                style={{
+                                    background: `linear-gradient(135deg, ${activeTarget.color || "#2563eb"} 0%, ${getDarkerColor(activeTarget.color)} 100%)`,
+                                    boxShadow: `0 4px 16px ${activeTarget.color || "#2563eb"}45`,
+                                    width: "100%"
+                                }}
+                                title="Close spotlight guide and remain on this section"
+                            >
+                                <span className="sbeacon-tour-glow-shimmer" />
+                                <span className="sbeacon-tour-next-text">Got It (Esc)</span>
+                                <Check size={15} className="sbeacon-arrow-icon" />
+                            </button>
+                        </div>
+                        <div className="sbeacon-tour-sub-bar">
+                            <button
+                                type="button"
+                                className={`sbeacon-sub-link ${copied ? "sbeacon-sub-link--copied" : ""}`}
+                                onClick={handleCopyLink}
+                                title="Copy shareable direct link to this section"
+                            >
+                                {copied ? <Check size={12} /> : <Copy size={12} />}
+                                <span>{copied ? "Copied" : "Copy Link"}</span>
+                            </button>
+
+                            {typeof onOpenSearch === "function" && (
+                                <button
+                                    type="button"
+                                    className="sbeacon-sub-link"
+                                    onClick={() => {
+                                        onDismiss();
+                                        onOpenSearch();
+                                    }}
+                                    title="Open spotlight guide"
+                                >
+                                    <Sparkles size={12} />
+                                    <span>Explore More</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

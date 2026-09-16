@@ -279,7 +279,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     return createPortal(
         <div className="eap-modal eap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="eap-preview-box">
+            <div className="eap-preview-box" data-spotlight="eap-detail-modal">
 
                 {/* ── Header bar ── */}
                 <div className="eap-prev__hd">
@@ -397,7 +397,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="eap-prev__bottom-grid">
 
                         {/* ── Left Column: Comment & Approval Remarks Box ── */}
-                        <div className="eap-prev__comments-wrap">
+                        <div className="eap-prev__comments-wrap" data-spotlight="eap-remarks-section">
                             <div className="eap-prev__section-label">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -472,7 +472,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         </div>
 
                         {/* ── Right Column: Financial Summary ── */}
-                        <div className="eap-prev__summary-wrap">
+                        <div className="eap-prev__summary-wrap" data-spotlight="eap-financial-breakdown">
                             <div className="eap-prev__section-label">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                                 Financial Summary
@@ -516,7 +516,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 </div>
 
                 {/* ── Footer actions ── */}
-                <div className="eap-prev__footer">
+                <div className="eap-prev__footer" data-spotlight="eap-action-buttons">
                     <div className="eap-prev__footer-left">
                         <button
                             type="button"
@@ -1151,7 +1151,7 @@ export default function EApproval() {
                 </div>
 
                 {/* ── Type Dropdown ── */}
-                <div className="eap-type-dd" ref={typeDropRef}>
+                <div className="eap-type-dd" ref={typeDropRef} data-spotlight="eap-type-tabs">
                     <button
                         ref={typeTriggerRef}
                         type="button"

@@ -115,12 +115,44 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
         }
     }, []);
 
-    // Handle jumping to section
+    // Handle jumping to section with rich Tour Context matching Image 1
     const handleJump = useCallback((item) => {
         if (typeof onSelectSection === "function") {
-            onSelectSection(item);
+            let tourItems = filteredItems;
+            let queryTitle = "";
+
+            if (searchQuery.trim()) {
+                queryTitle = searchQuery.trim();
+                tourItems = filteredItems;
+            } else if (selectedCategory !== "all") {
+                const catObj = SPOTLIGHT_CATEGORIES.find(c => c.id === selectedCategory);
+                queryTitle = catObj?.label || selectedCategory;
+                tourItems = filteredItems;
+            } else {
+                // When in "All Items", group by the item's module (e.g. "Sales Analysis")
+                // so the user tours through all related sections in that module!
+                const moduleGroup = SPOTLIGHT_REGISTRY.filter(
+                    r => r.module === item.module || (r.parentMenu && r.parentMenu === item.parentMenu)
+                );
+                if (moduleGroup.length > 1) {
+                    tourItems = moduleGroup;
+                    queryTitle = item.module || item.parentMenu || "Spotlight";
+                } else {
+                    tourItems = filteredItems;
+                    queryTitle = item.module || "All Features";
+                }
+            }
+
+            const currIdx = tourItems.findIndex(f => f.id === item.id);
+            const tourContext = {
+                query: queryTitle,
+                results: tourItems,
+                currentIndex: currIdx >= 0 ? currIdx : 0
+            };
+
+            onSelectSection(item, tourContext);
         }
-    }, [onSelectSection]);
+    }, [onSelectSection, filteredItems, searchQuery, selectedCategory]);
 
     return (
         <div className="sst-root">
@@ -344,11 +376,13 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
                                     </div>
 
                                     {/* Parent Navigation Breadcrumb */}
-                                    <span className="sst-card__breadcrumb">
+                                    <span className="sst-card__breadcrumb" title={`${item.parentMenu} / ${item.module}`}>
                                         <FolderOpen size={11} className="sst-card__breadcrumb-icon" />
-                                        <span>{item.parentMenu}</span>
-                                        <span className="sst-card__breadcrumb-sep">/</span>
-                                        <span className="sst-card__breadcrumb-curr">{item.module}</span>
+                                        <span className="sst-card__breadcrumb-text">
+                                            <span>{item.parentMenu}</span>
+                                            <span className="sst-card__breadcrumb-sep">/</span>
+                                            <span className="sst-card__breadcrumb-curr">{item.module}</span>
+                                        </span>
                                     </span>
                                 </div>
 

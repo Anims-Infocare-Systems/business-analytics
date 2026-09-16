@@ -459,6 +459,7 @@ export default function UsersSetting() {
                         <button
                             type="button"
                             className="us-btn us-btn--primary"
+                            data-spotlight="us-save-reset-bar"
                             onClick={handleSave}
                             disabled={isSaving}
                         >
@@ -599,7 +600,7 @@ export default function UsersSetting() {
                     {/* Filter & Search Bar */}
                     <div className="us-filter-bar">
                         <div className="us-filter-bar__left">
-                            <div className="us-search-box">
+                            <div className="us-search-box" data-spotlight="us-search-filter">
                                 <Search size={16} className="us-search-box__icon" />
                                 <input
                                     type="text"
@@ -852,7 +853,7 @@ export default function UsersSetting() {
             {/* ── Modern Bulk Limit Setting Modal (Portalled to body to prevent clipping) ── */}
             {bulkModalOpen && createPortal(
                 <div className="us-modal-overlay" onClick={() => setBulkModalOpen(false)}>
-                    <div className="us-modal" onClick={e => e.stopPropagation()}>
+                    <div className="us-modal" data-spotlight="us-bulk-modal" onClick={e => e.stopPropagation()}>
 
                         {/* Header */}
                         <div className="us-modal__hd">
@@ -921,7 +922,7 @@ export default function UsersSetting() {
                                     </div>
 
                                     {/* Quick Presets */}
-                                    <div className="us-presets-wrap">
+                                    <div className="us-presets-wrap" data-spotlight="us-quick-presets">
                                         {PRESETS.map(p => (
                                             <button
                                                 key={p.label}

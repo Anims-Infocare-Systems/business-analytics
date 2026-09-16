@@ -2944,9 +2944,9 @@ def purchase_analysis_supplier_rating(request):
 @api_view(["GET"])
 def purchase_analysis_fulfillment_schedule(request):
     """
-    Returns PO Fulfillment Schedule rows from iss_podet_ShdQty matched with
-    POMas, PODet, CustMast, and grninsubdet.
-    Supports filtering by date range (from, to), dtype, supplier, and search.
+    Returns PO Fulfillment Schedule rows as per the exact PO_DATA + SCH_DATA + GRN_DATA CTE query.
+    Matches PO Details (POMas + PODet) with Schedule (iss_podet_ShdQty) and GRN (grninsubdet).
+    Supports date range (from, to), dtype (PO type), supplier filter, and search.
     """
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2964,26 +2964,18 @@ def purchase_analysis_fulfillment_schedule(request):
     try:
         cursor = conn.cursor()
 
-        sch_sd, nm_sd, q_sd = resolve_erp_table(cursor, ["iss_podet_ShdQty", "iss_podet_shdqty", "ISS_PODET_SHDQTY", "Iss_Podet_ShdQty"])
         sch_m, nm_m, q_m   = resolve_erp_table(cursor, ["POMas", "pomas", "POMAS", "PoMas"])
-        sch_d, nm_d, q_d   = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet"])
-        sch_cm, nm_cm, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST"])
+        sch_d, nm_d, q_d   = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet", "In_PoDet"])
+        sch_sd, nm_sd, q_sd = resolve_erp_table(cursor, ["iss_podet_ShdQty", "iss_podet_shdqty", "ISS_PODET_SHDQTY", "Iss_Podet_ShdQty", "podet_shdqty", "PODet_ShdQty", "PODet_Shd", "iss_podet_shd"])
         sch_gx, nm_gx, q_gx = resolve_erp_table(cursor, ["grninsubdet", "GRNInSubDet", "GrnInSubDet", "GRNINSUBDET"])
+        sch_cm, nm_cm, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST", "CustMast"])
 
-        if not q_sd or not q_m:
+        if not q_m or not q_d:
             if cursor: cursor.close()
             conn.close()
             return Response({"company": tenant.get("company_name", ""), "from": str(start_date), "to": str(end_date), "rows": [], "count": 0}, status=200)
 
-        # 1. Resolve columns for iss_podet_ShdQty
-        sd_pono   = find_column_ci(cursor, sch_sd, nm_sd, ["pono", "PONo", "PONO", "PoNo"])
-        sd_icode  = find_column_ci(cursor, sch_sd, nm_sd, ["icode", "ICode", "ICODE", "rmname", "Rmname", "ItemName"])
-        sd_itcode = find_column_ci(cursor, sch_sd, nm_sd, ["itcode", "ITCode", "ITCODE", "Itcode", "mattype", "Mattype", "partno", "Partno"])
-        sd_shddt  = find_column_ci(cursor, sch_sd, nm_sd, ["shddate", "Shddate", "SHDDATE", "shd_date", "schddate", "SchdDate"])
-        sd_shdqty = find_column_ci(cursor, sch_sd, nm_sd, ["shdQty", "shdqty", "SHDQTY", "ShdQty", "schd_qty", "qty", "Qty"])
-        sd_del    = find_column_ci(cursor, sch_sd, nm_sd, ["deleted", "Deleted", "IsDeleted"])
-
-        # 2. Resolve columns for POMas
+        # 1. Resolve columns for POMas
         po_pono   = find_column_ci(cursor, sch_m, nm_m, ["pono", "PONo", "PONO", "PoNo", "PONumber"])
         po_podate = find_column_ci(cursor, sch_m, nm_m, ["podate", "PODate", "PO_Date", "po_date", "PODt"])
         po_cid    = find_column_ci(cursor, sch_m, nm_m, ["cid", "CId", "CID", "CustId", "custid"])
@@ -2991,185 +2983,423 @@ def purchase_analysis_fulfillment_schedule(request):
         po_del    = find_column_ci(cursor, sch_m, nm_m, ["deleted", "Deleted", "IsDeleted"])
         po_cc     = find_column_ci(cursor, sch_m, nm_m, company_candidates)
 
-        # 3. Resolve columns for PODet
-        det_pono    = find_column_ci(cursor, sch_d, nm_d, ["pono", "PONo", "PONO", "PoNo"]) if q_d else None
-        det_rmname  = find_column_ci(cursor, sch_d, nm_d, ["rmname", "RMName", "RMNAME", "RmName", "ItemName"]) if q_d else None
-        det_mattype = find_column_ci(cursor, sch_d, nm_d, ["mattype", "MatType", "MATTYPE", "Mat_Type"]) if q_d else None
-        det_qty     = find_column_ci(cursor, sch_d, nm_d, ["qty", "Qty", "QTY", "Quantity"]) if q_d else None
-        det_uom     = find_column_ci(cursor, sch_d, nm_d, ["uom", "UOM", "Uom", "Unit"]) if q_d else None
-        det_rate    = find_column_ci(cursor, sch_d, nm_d, ["rate", "Rate", "RATE"]) if q_d else None
-        det_amount  = find_column_ci(cursor, sch_d, nm_d, ["amount", "Amount", "AMOUNT", "Amt", "Value"]) if q_d else None
-        det_del     = find_column_ci(cursor, sch_d, nm_d, ["deleted", "Deleted", "IsDeleted"]) if q_d else None
+        # 2. Resolve columns for PODet
+        det_pono   = find_column_ci(cursor, sch_d, nm_d, ["pono", "PONo", "PONO", "PoNo", "po_no"])
+        det_rmname = find_column_ci(cursor, sch_d, nm_d, ["rmname", "RMName", "RMNAME", "RmName", "ItemName", "itemname", "description", "Description", "icode", "ICode"])
+        det_itcode = find_column_ci(cursor, sch_d, nm_d, ["itcode", "ITCode", "ITCODE", "Itcode", "mattype", "Mattype", "matcode", "MatCode", "partno", "PartNo"])
+        det_icode  = find_column_ci(cursor, sch_d, nm_d, ["icode", "ICode", "ICODE", "ItemCode", "itemcode", "matcode", "MatCode"])
+        det_qty    = find_column_ci(cursor, sch_d, nm_d, ["qty", "Qty", "QTY", "Quantity", "quantity", "poqty", "POQty"])
+        det_amount = find_column_ci(cursor, sch_d, nm_d, ["amount", "Amount", "AMOUNT", "Amt", "amt", "Value", "val"])
+        det_rate   = find_column_ci(cursor, sch_d, nm_d, ["rate", "Rate", "RATE", "Price", "price", "unit_rate"])
+        det_del    = find_column_ci(cursor, sch_d, nm_d, ["deleted", "Deleted", "IsDeleted", "isdeleted"])
 
-        # 4. Resolve columns for CustMast
+        # 3. Resolve columns for iss_podet_ShdQty
+        sd_pono   = find_column_ci(cursor, sch_sd, nm_sd, ["pono", "PONo", "PONO", "PoNo", "po_no", "PONumber"]) if q_sd else None
+        sd_icode  = find_column_ci(cursor, sch_sd, nm_sd, ["icode", "ICode", "ICODE", "rmname", "Rmname", "ItemName", "ItemCode", "matcode"]) if q_sd else None
+        sd_itcode = find_column_ci(cursor, sch_sd, nm_sd, ["itcode", "ITCode", "ITCODE", "Itcode", "mattype", "Mattype", "partno", "Partno", "PartNo", "rmcode", "matcode"]) if q_sd else None
+        sd_shddt  = find_column_ci(cursor, sch_sd, nm_sd, ["shddate", "Shddate", "SHDDATE", "shd_date", "schddate", "SchdDate", "deliverydate", "DeliveryDate", "deldate", "DelDate"]) if q_sd else None
+        sd_shdqty = find_column_ci(cursor, sch_sd, nm_sd, ["shdQty", "shdqty", "SHDQTY", "ShdQty", "schd_qty", "qty", "Qty", "QTY", "Quantity", "quantity"]) if q_sd else None
+        sd_del    = find_column_ci(cursor, sch_sd, nm_sd, ["deleted", "Deleted", "IsDeleted", "isdeleted"]) if q_sd else None
+
+        # 4. Resolve columns for grninsubdet
+        gx_pono   = find_column_ci(cursor, sch_gx, nm_gx, ["pono", "PONo", "PONO", "PoNo", "po_no"]) if q_gx else None
+        gx_rmname = find_column_ci(cursor, sch_gx, nm_gx, ["rmname", "RMName", "RMNAME", "RmName", "ItemName", "itemname", "description", "Description", "icode", "ICode"]) if q_gx else None
+        gx_qty    = find_column_ci(cursor, sch_gx, nm_gx, ["qty", "Qty", "QTY", "Quantity", "quantity", "recqty", "RecQty", "AcceptedQty", "accqty", "acpqty"]) if q_gx else None
+        gx_del    = find_column_ci(cursor, sch_gx, nm_gx, ["deleted", "Deleted", "IsDeleted", "isdeleted"]) if q_gx else None
+
+        # 5. Resolve columns for CustMast / CustAliasMast
         cm_id   = find_column_ci(cursor, sch_cm, nm_cm, ["Id", "id", "ID", "CustId", "custid"]) if q_cm else None
         cm_name = find_column_ci(cursor, sch_cm, nm_cm, ["CName", "cname", "CNAME", "CustName", "Name"]) if q_cm else None
         cm_del  = find_column_ci(cursor, sch_cm, nm_cm, ["deleted", "Deleted", "IsDeleted"]) if q_cm else None
 
-        # 5. Resolve columns for grninsubdet
-        gx_pono   = find_column_ci(cursor, sch_gx, nm_gx, ["pono", "PONo", "PONO", "PoNo"]) if q_gx else None
-        gx_rmname = find_column_ci(cursor, sch_gx, nm_gx, ["rmname", "RMName", "RMNAME", "RmName"]) if q_gx else None
-        gx_qty    = find_column_ci(cursor, sch_gx, nm_gx, ["qty", "Qty", "QTY", "Quantity"]) if q_gx else None
-        gx_del    = find_column_ci(cursor, sch_gx, nm_gx, ["deleted", "Deleted", "IsDeleted"]) if q_gx else None
-
-        if not sd_pono or not sd_shddt or not sd_shdqty or not po_pono or not po_podate:
+        if not po_pono or not po_podate or not det_pono or not det_rmname:
             if cursor: cursor.close()
             conn.close()
-            return Response({"error": "Required schedule columns not found.", "rows": []}, status=500)
+            return Response({"error": "Required PO/PODet columns not found.", "rows": []}, status=500)
 
-        # ── SQL Clauses ─────────────────────────────────────────────
-        del_sd_sql = f"ISNULL(SD.[{sd_del}], 0) = 0" if sd_del else "1=1"
-        del_po_sql = f"AND ISNULL(M.[{po_del}], 0) = 0" if po_del else ""
-        del_det_sql = f"AND ISNULL(D.[{det_del}], 0) = 0" if (q_d and det_del) else ""
-        del_cm_sql = f"AND ISNULL(CM.[{cm_del}], 0) = 0" if (q_cm and cm_del) else ""
-        del_gx_sql = f"ISNULL(G.[{gx_del}], 0) = 0" if (q_gx and gx_del) else "1=1"
+        # ── Filters for PO_DATA CTE ────────────────────────────────
+        del_pm_sql = f"AND ISNULL(PM.[{po_del}], 0) = 0" if po_del else ""
+        del_pd_sql = f"AND ISNULL(PD.[{det_del}], 0) = 0" if det_del else ""
+        sd_del_clause = f"AND ISNULL([{sd_del}], 0) = 0" if sd_del else ""
+        gx_del_clause = f"WHERE ISNULL([{gx_del}], 0) = 0" if gx_del else ""
 
         exclude_filter = ""
         if po_dtype:
-            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N'')))) <> N'JOB ORDER'"
+            exclude_filter = f" AND UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) <> N'JOB ORDER'"
 
         dtype_filter_sql = ""
         dtype_params = []
         if apply_dtype and po_dtype:
-            dtype_filter_sql = f" AND LTRIM(RTRIM(ISNULL(M.[{po_dtype}], N''))) = ?"
+            dtype_filter_sql = f" AND LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N''))) = ?"
             dtype_params.append(dtype_param)
 
         company_sql = ""
         if po_cc and company_code:
-            company_sql = f" AND M.[{po_cc}] = ?"
+            company_sql = f" AND PM.[{po_cc}] = ?"
 
-        # Supplier filters & PO search
-        join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "M", join_if_needed=True)
-        srch_sql, srch_params = _build_po_search_sql(request, cursor, "M")
+        sd_itcode_col = f"MAX(LTRIM(RTRIM(ISNULL([{sd_itcode}], N''))))" if sd_itcode else "CAST(N'' AS NVARCHAR(256))"
+        det_itcode_col = f"MAX(LTRIM(RTRIM(ISNULL(PD.[{det_itcode}], N''))))" if det_itcode else "CAST(N'' AS NVARCHAR(256))"
+        det_icode_col = f"MAX(LTRIM(RTRIM(ISNULL(PD.[{det_icode}], N''))))" if det_icode else "CAST(N'' AS NVARCHAR(256))"
+        branch2_itcode_match = f"OR (SD.itcode <> N'' AND LTRIM(RTRIM(ISNULL(PD.[{det_itcode}], N''))) <> N'' AND LTRIM(RTRIM(ISNULL(PD.[{det_itcode}], N''))) = SD.itcode)" if det_itcode else ""
 
-        # Join CustMast
-        cm_join = ""
-        vendor_sql = "CAST(NULL AS NVARCHAR(512))"
-        if q_cm and cm_id and cm_name and po_cid:
-            cm_join = f"LEFT JOIN {q_cm} CM ON M.[{po_cid}] = CM.[{cm_id}] {del_cm_sql}"
-            vendor_sql = f"LTRIM(RTRIM(ISNULL(CM.[{cm_name}], N'')))"
-
-        # Join PODet
-        d_join = ""
-        det_rm_sel = "CAST(NULL AS NVARCHAR(256))"
-        det_mt_sel = "CAST(NULL AS NVARCHAR(256))"
-        det_qty_sel = "CAST(0 AS FLOAT)"
-        det_uom_sel = "N'NOS'"
-        det_rate_sel = "CAST(0 AS FLOAT)"
-        det_amt_sel = "CAST(0 AS FLOAT)"
-        if q_d and det_pono:
-            match_conds = []
-            if det_rmname and sd_icode:
-                match_conds.append(f"LTRIM(RTRIM(D.[{det_rmname}])) = LTRIM(RTRIM(SD.[{sd_icode}]))")
-            if det_mattype and sd_itcode:
-                match_conds.append(f"LTRIM(RTRIM(D.[{det_mattype}])) = LTRIM(RTRIM(SD.[{sd_itcode}]))")
-            if det_rmname and sd_itcode:
-                match_conds.append(f"LTRIM(RTRIM(D.[{det_rmname}])) = LTRIM(RTRIM(SD.[{sd_itcode}]))")
-            if not match_conds:
-                match_conds = ["1=1"]
-
-            match_clause = " OR ".join(match_conds)
-            d_join = f"LEFT JOIN {q_d} D ON LTRIM(RTRIM(D.[{det_pono}])) = LTRIM(RTRIM(SD.[{sd_pono}])) AND ({match_clause}) {del_det_sql}"
-            if det_rmname: det_rm_sel = f"D.[{det_rmname}]"
-            if det_mattype: det_mt_sel = f"D.[{det_mattype}]"
-            if det_qty: det_qty_sel = f"ISNULL(D.[{det_qty}], 0)"
-            if det_uom: det_uom_sel = f"ISNULL(D.[{det_uom}], N'NOS')"
-            if det_rate: det_rate_sel = f"ISNULL(D.[{det_rate}], 0)"
-            if det_amount: det_amt_sel = f"ISNULL(D.[{det_amount}], 0)"
-
-        # Join GRN
-        grn_join = ""
-        grn_qty_sel = "CAST(0 AS FLOAT)"
-        if q_gx and gx_pono and gx_rmname and gx_qty:
-            grn_match = []
-            if sd_icode: grn_match.append(f"LTRIM(RTRIM(SD.[{sd_icode}])) = GRN.rmname")
-            if sd_itcode: grn_match.append(f"LTRIM(RTRIM(SD.[{sd_itcode}])) = GRN.rmname")
-            if q_d and det_rmname: grn_match.append(f"LTRIM(RTRIM(D.[{det_rmname}])) = GRN.rmname")
-            if not grn_match: grn_match = ["1=1"]
-            grn_match_clause = " OR ".join(grn_match)
-
-            grn_join = f"""
-                LEFT JOIN (
-                    SELECT 
-                        LTRIM(RTRIM(G.[{gx_pono}])) AS pono,
-                        LTRIM(RTRIM(G.[{gx_rmname}])) AS rmname,
-                        SUM(ISNULL(CAST(G.[{gx_qty}] AS FLOAT), 0)) AS grn_qty
-                    FROM {q_gx} G
-                    WHERE {del_gx_sql}
-                    GROUP BY LTRIM(RTRIM(G.[{gx_pono}])), LTRIM(RTRIM(G.[{gx_rmname}]))
-                ) GRN ON LTRIM(RTRIM(SD.[{sd_pono}])) = GRN.pono AND ({grn_match_clause})
+        # ── SCH_DATA CTE ───────────────────────────────────────────
+        if q_sd and sd_pono and sd_icode and sd_shddt and sd_shdqty:
+            sch_data_cte = f"""
+                SELECT
+                    [{sd_pono}] AS pono,
+                    LTRIM(RTRIM(ISNULL([{sd_icode}], N''))) AS icode,
+                    {sd_itcode_col} AS itcode,
+                    CAST([{sd_shddt}] AS DATE) AS shddate,
+                    SUM(ISNULL(CAST([{sd_shdqty}] AS FLOAT), 0)) AS SchdQty
+                FROM {q_sd}
+                WHERE [{sd_shddt}] IS NOT NULL
+                  AND YEAR([{sd_shddt}]) >= 2000
+                  {sd_del_clause}
+                GROUP BY
+                    [{sd_pono}],
+                    LTRIM(RTRIM(ISNULL([{sd_icode}], N''))),
+                    CAST([{sd_shddt}] AS DATE)
             """
-            grn_qty_sel = "ISNULL(GRN.grn_qty, 0)"
+        else:
+            sch_data_cte = """
+                SELECT
+                    CAST(NULL AS NVARCHAR(64)) AS pono,
+                    CAST(NULL AS NVARCHAR(256)) AS icode,
+                    CAST(NULL AS NVARCHAR(256)) AS itcode,
+                    CAST(NULL AS DATE) AS shddate,
+                    CAST(0 AS FLOAT) AS SchdQty
+                WHERE 1=0
+            """
 
-        sd_itcode_sel = f"SD.[{sd_itcode}]" if sd_itcode else "N''"
-        sd_icode_sel = f"SD.[{sd_icode}]" if sd_icode else "N''"
+        # ── GRN_DATA CTE ───────────────────────────────────────────
+        if q_gx and gx_pono and gx_rmname and gx_qty:
+            grn_data_cte = f"""
+                SELECT
+                    [{gx_pono}] AS pono,
+                    LTRIM(RTRIM(ISNULL([{gx_rmname}], N''))) AS rmname,
+                    SUM(ISNULL(CAST([{gx_qty}] AS FLOAT), 0)) AS GRNQty
+                FROM {q_gx}
+                {gx_del_clause}
+                GROUP BY
+                    [{gx_pono}],
+                    LTRIM(RTRIM(ISNULL([{gx_rmname}], N'')))
+            """
+        else:
+            grn_data_cte = """
+                SELECT
+                    CAST(NULL AS NVARCHAR(64)) AS pono,
+                    CAST(NULL AS NVARCHAR(256)) AS rmname,
+                    CAST(0 AS FLOAT) AS GRNQty
+                WHERE 1=0
+            """
+
+        # ── Supplier Name & CustMast Join ──────────────────────────
+        cm_join = ""
+        cm_name_sel = "CAST(NULL AS NVARCHAR(256))"
+        if q_cm and cm_id and cm_name:
+            del_cm_sql = f"AND ISNULL(CM.[{cm_del}], 0) = 0" if cm_del else ""
+            has_alias = table_exists(cursor, "CustAliasMast")
+            if has_alias:
+                sch_cam, nm_cam, q_cam = resolve_erp_table(cursor, ["CustAliasMast", "custaliasmast"])
+                cam_id = find_column_ci(cursor, sch_cam, nm_cam, ["Id", "id", "ID", "CustId"]) if q_cam else None
+                cam_name = find_column_ci(cursor, sch_cam, nm_cam, ["CName", "cname", "CNAME"]) if q_cam else None
+                cam_del = find_column_ci(cursor, sch_cam, nm_cam, ["deleted", "Deleted", "IsDeleted"]) if q_cam else None
+                if cam_id and cam_name:
+                    del_cam_sql = f"AND ISNULL(A.[{cam_del}], 0) = 0" if cam_del else ""
+                    cm_join = f"""
+                        LEFT JOIN {q_cm} CM ON CONVERT(NVARCHAR(128), C.cid) = CONVERT(NVARCHAR(128), CM.[{cm_id}]) {del_cm_sql}
+                        LEFT JOIN {q_cam} A ON CONVERT(NVARCHAR(128), C.cid) = CONVERT(NVARCHAR(128), A.[{cam_id}]) {del_cam_sql}
+                    """
+                    cm_name_sel = f"LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(CM.[{cm_name}], N''))), N''), NULLIF(LTRIM(RTRIM(ISNULL(A.[{cam_name}], N''))), N''))))"
+                else:
+                    cm_join = f"""
+                        LEFT JOIN {q_cm} CM ON CONVERT(NVARCHAR(128), C.cid) = CONVERT(NVARCHAR(128), CM.[{cm_id}]) {del_cm_sql}
+                    """
+                    cm_name_sel = f"LTRIM(RTRIM(ISNULL(CM.[{cm_name}], N'')))"
+            else:
+                cm_join = f"""
+                    LEFT JOIN {q_cm} CM ON CONVERT(NVARCHAR(128), C.cid) = CONVERT(NVARCHAR(128), CM.[{cm_id}]) {del_cm_sql}
+                """
+                cm_name_sel = f"LTRIM(RTRIM(ISNULL(CM.[{cm_name}], N'')))"
+
+        # ── Supplier Filter (request.GET) ──────────────────────────
+        supplier_filter = (request.GET.get("supplier") or "").strip()
+        supplier_where = ""
+        supplier_params = []
+        if supplier_filter and supplier_filter.lower() != "all suppliers":
+            sups = [s.strip() for s in supplier_filter.split(",") if s.strip()]
+            if sups:
+                placeholders = ",".join(["?"] * len(sups))
+                supplier_where = f" AND {cm_name_sel} IN ({placeholders}) "
+                supplier_params.extend(sups)
+
+        # ── Search Filter (request.GET) ────────────────────────────
+        search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+        search_where = ""
+        search_params = []
+        if search_q:
+            search_where = f" AND (C.pono LIKE ? OR C.rmname LIKE ? OR {cm_name_sel} LIKE ?) "
+            like_val = f"%{search_q}%"
+            search_params.extend([like_val, like_val, like_val])
+
+        # ── Assemble Parameters & Full CTE Query ───────────────────
+        s_date_str = str(start_date)
+        e_date_str = str(end_date)
 
         params = []
         if apply_dtype and po_dtype:
             params.extend(dtype_params)
-        if po_cc and company_code:
-            params.append(company_code)
-        params.extend(params_flt)
-        params.extend(srch_params)
-        params.extend([start_date, end_date])
+        params.extend([s_date_str, e_date_str])
+
+        # For Set 2:
+        params.extend([s_date_str, e_date_str])
+        params.extend([s_date_str, e_date_str])
+
+        params.extend(supplier_params)
+        params.extend(search_params)
 
         query = f"""
-            SELECT TOP 3000
-                SD.[{sd_pono}]                         AS po_number,
-                M.[{po_podate}]                        AS po_date,
-                {vendor_sql}                           AS supplier_name,
-                LTRIM(RTRIM(ISNULL({sd_itcode_sel}, N''))) AS sd_itcode,
-                LTRIM(RTRIM(ISNULL({sd_icode_sel}, N'')))  AS sd_icode,
-                LTRIM(RTRIM(ISNULL({det_rm_sel}, N'')))    AS det_rmname,
-                LTRIM(RTRIM(ISNULL({det_mt_sel}, N'')))    AS det_mattype,
-                CAST({det_qty_sel} AS FLOAT)            AS po_qty,
-                CAST({det_uom_sel} AS NVARCHAR(32))     AS uom,
-                SD.[{sd_shddt}]                        AS schd_dt,
-                ISNULL(CAST(SD.[{sd_shdqty}] AS FLOAT), 0) AS schd_qty,
-                CAST({det_rate_sel} AS FLOAT)           AS rate,
-                CAST({det_amt_sel} AS FLOAT)            AS amount,
-                CAST({grn_qty_sel} AS FLOAT)            AS grn_qty
-            FROM {q_sd} SD
-            INNER JOIN {q_m} M ON LTRIM(RTRIM(M.[{po_pono}])) = LTRIM(RTRIM(SD.[{sd_pono}])) {del_po_sql}
+            ;WITH ALL_PO_DATA AS
+            (
+                /* Set 1: All PO items created in date range */
+                SELECT
+                    PM.[{po_pono}]                 AS pono,
+                    CAST(PM.[{po_podate}] AS DATE) AS podate,
+                    PM.[{po_cid}]                  AS cid,
+                    LTRIM(RTRIM(ISNULL(PD.[{det_rmname}], N''))) AS rmname,
+                    {det_itcode_col}               AS itcode,
+                    {det_icode_col}                AS icode,
+                    SUM(ISNULL(CAST(PD.[{det_qty}] AS FLOAT), 0))    AS POQty,
+                    SUM(ISNULL(CAST(PD.[{det_amount}] AS FLOAT), 0)) AS POValue,
+                    MAX(ISNULL(CAST(PD.[{det_rate}] AS FLOAT), 0))   AS Rate
+                FROM {q_m} PM
+                INNER JOIN {q_d} PD
+                    ON PM.[{po_pono}] = PD.[{det_pono}]
+                    {del_pd_sql}
+                WHERE 1=1
+                  {del_pm_sql}
+                  {exclude_filter}
+                  {dtype_filter_sql}
+                  AND CAST(PM.[{po_podate}] AS DATE) BETWEEN ? AND ?
+                GROUP BY
+                    PM.[{po_pono}],
+                    CAST(PM.[{po_podate}] AS DATE),
+                    PM.[{po_cid}],
+                    LTRIM(RTRIM(ISNULL(PD.[{det_rmname}], N'')))
+            ),
+            SCH_DATA AS
+            (
+                /* PO SCHEDULE */
+                {sch_data_cte}
+            ),
+            GRN_DATA AS
+            (
+                /* GRN / INWARD */
+                {grn_data_cte}
+            ),
+            COMBINED_DATA AS
+            (
+                /* 1. All POs created in date range with all their schedules */
+                SELECT
+                    P.pono AS pono,
+                    P.podate AS podate,
+                    P.cid AS cid,
+                    P.rmname AS rmname,
+                    P.POQty AS POQty,
+                    P.Rate AS Rate,
+                    P.POValue AS POValue,
+                    S.shddate AS shddate,
+                    ISNULL(S.SchdQty, 0) AS SchdQty,
+                    ISNULL(G.GRNQty, 0) AS GRNQty
+                FROM ALL_PO_DATA P
+                LEFT JOIN SCH_DATA S
+                    ON P.pono = S.pono
+                   AND (
+                       P.rmname = S.icode
+                       OR (S.itcode <> N'' AND P.itcode <> N'' AND P.itcode = S.itcode)
+                       OR (S.icode <> N'' AND P.icode <> N'' AND P.icode = S.icode)
+                       OR (S.itcode <> N'' AND P.rmname = S.itcode)
+                   )
+                LEFT JOIN GRN_DATA G
+                    ON P.pono = G.pono
+                   AND (
+                       P.rmname = G.rmname
+                       OR (S.icode <> N'' AND S.icode = G.rmname)
+                       OR (S.itcode <> N'' AND S.itcode = G.rmname)
+                   )
+
+                UNION ALL
+
+                /* 2. All Schedules scheduled in date range whose parent PO was NOT created in range */
+                SELECT
+                    SD.pono AS pono,
+                    CAST(PM.[{po_podate}] AS DATE) AS podate,
+                    PM.[{po_cid}] AS cid,
+                    COALESCE(NULLIF(LTRIM(RTRIM(PD.[{det_rmname}])), N''), NULLIF(SD.icode, N''), NULLIF(SD.itcode, N''), N'Item') AS rmname,
+                    ISNULL(CAST(PD.[{det_qty}] AS FLOAT), SD.SchdQty) AS POQty,
+                    ISNULL(CAST(PD.[{det_rate}] AS FLOAT), 0) AS Rate,
+                    ISNULL(CAST(PD.[{det_amount}] AS FLOAT), 0) AS POValue,
+                    SD.shddate AS shddate,
+                    SD.SchdQty AS SchdQty,
+                    ISNULL(G.GRNQty, 0) AS GRNQty
+                FROM SCH_DATA SD
+                LEFT JOIN {q_m} PM
+                    ON PM.[{po_pono}] = SD.pono
+                    {del_pm_sql}
+                    {exclude_filter}
+                LEFT JOIN {q_d} PD
+                    ON PM.[{po_pono}] = PD.[{det_pono}]
+                   AND (
+                       LTRIM(RTRIM(PD.[{det_rmname}])) = SD.icode
+                       {branch2_itcode_match}
+                       OR (SD.itcode <> N'' AND LTRIM(RTRIM(PD.[{det_rmname}])) = SD.itcode)
+                   )
+                   {del_pd_sql}
+                LEFT JOIN GRN_DATA G
+                    ON SD.pono = G.pono
+                   AND (
+                       SD.icode = G.rmname
+                       OR (SD.itcode <> N'' AND SD.itcode = G.rmname)
+                       OR (PD.[{det_rmname}] IS NOT NULL AND LTRIM(RTRIM(PD.[{det_rmname}])) = G.rmname)
+                   )
+                WHERE CAST(SD.shddate AS DATE) BETWEEN ? AND ?
+                  AND (
+                      PM.[{po_podate}] IS NULL
+                      OR CAST(PM.[{po_podate}] AS DATE) NOT BETWEEN ? AND ?
+                  )
+            )
+            SELECT
+                /* # */
+                ROW_NUMBER() OVER
+                (
+                    ORDER BY
+                        C.podate,
+                        C.pono,
+                        C.rmname,
+                        C.shddate
+                ) AS [#],
+
+                /* PO DETAILS */
+                C.pono AS [PO NO],
+                C.podate AS [PO DATE],
+                {cm_name_sel} AS [SUPPLIER],
+                C.rmname AS [PARTNO - DESC],
+                C.POQty AS [PO QTY],
+
+                /* SCHEDULE DETAILS */
+                C.shddate AS [SCHD DT],
+                ISNULL(C.SchdQty, 0) AS [SCHD QTY],
+
+                /* GRN / INWARD */
+                ISNULL(C.GRNQty, 0) AS [GRN QTY],
+
+                /* BALANCE QTY */
+                CASE
+                    WHEN ISNULL(C.SchdQty, 0) - ISNULL(C.GRNQty, 0) < 0
+                        THEN 0
+                    ELSE
+                        ISNULL(C.SchdQty, 0) - ISNULL(C.GRNQty, 0)
+                END AS [SCHD / PO BAL QTY],
+
+                /* BALANCE VALUE */
+                CASE
+                    WHEN ISNULL(C.SchdQty, 0) - ISNULL(C.GRNQty, 0) < 0
+                        THEN 0
+                    ELSE
+                        (
+                            ISNULL(C.SchdQty, 0)
+                            - ISNULL(C.GRNQty, 0)
+                        ) * ISNULL(C.Rate, 0)
+                END AS [SCHD / PO BAL VAL],
+
+                /* AGE DAYS */
+                CASE
+                    WHEN C.shddate IS NULL OR YEAR(C.shddate) < 2000
+                        THEN 0
+                    WHEN ISNULL(C.GRNQty, 0) >= ISNULL(C.SchdQty, 0)
+                        THEN 0
+                    WHEN C.shddate >= CAST(GETDATE() AS DATE)
+                        THEN 0
+                    ELSE
+                        DATEDIFF
+                        (
+                            DAY,
+                            C.shddate,
+                            CAST(GETDATE() AS DATE)
+                        )
+                END AS [AGE DAYS],
+
+                /* STATUS */
+                CASE
+                    WHEN C.shddate IS NULL OR YEAR(C.shddate) < 2000
+                        THEN 'No Schedule'
+                    WHEN ISNULL(C.GRNQty, 0) >= ISNULL(C.SchdQty, 0)
+                        THEN 'Delivered'
+                    WHEN C.shddate >= CAST(GETDATE() AS DATE)
+                        THEN 'On Track'
+                    WHEN DATEDIFF
+                         (
+                             DAY,
+                             C.shddate,
+                             CAST(GETDATE() AS DATE)
+                         ) > 30
+                        THEN 'Overdue'
+                    WHEN DATEDIFF
+                         (
+                             DAY,
+                             C.shddate,
+                             CAST(GETDATE() AS DATE)
+                         ) BETWEEN 15 AND 30
+                        THEN 'Due Soon'
+                    ELSE 'On Track'
+                END AS [STATUS],
+
+                C.Rate AS [Rate],
+                C.POValue AS [POValue]
+
+            FROM COMBINED_DATA C
             {cm_join}
-            {d_join}
-            {grn_join}
-            {join_flt}
-            WHERE {del_sd_sql}
-              {exclude_filter}
-              {dtype_filter_sql}
-              {company_sql}
-              {where_flt}
-              {srch_sql}
-              AND CAST(M.[{po_podate}] AS DATE) BETWEEN ? AND ?
-            ORDER BY SD.[{sd_shddt}] DESC, SD.[{sd_pono}] ASC
+            WHERE 1=1
+              {supplier_where}
+              {search_where}
+
+            ORDER BY
+                C.podate,
+                C.pono,
+                C.rmname,
+                C.shddate;
         """
 
+        logger.info(f"[FS LOG] executing query with {len(params)} params (query markers: {query.count('?')})")
         cursor.execute(query, params)
         raw_rows = []
         for r in cursor.fetchall() or []:
-            po_num, po_dt, sup, itc, icc, rmn, mat, po_q, uom, shd_dt, shd_q, rate, amt, grn_q = r
+            sno, po_num, po_dt, sup, rmn, po_q, shd_dt, shd_q, grn_q, bal_q, bal_val, age_days, status_val, rate, po_val = r
             raw_rows.append({
+                "sno": sno,
                 "po_number": str(po_num or "").strip(),
                 "po_date_obj": po_dt,
                 "supplier": str(sup or "").strip() or "Unassigned",
-                "itcode": str(itc or "").strip(),
-                "icode": str(icc or "").strip(),
                 "rmname": str(rmn or "").strip(),
-                "mattype": str(mat or "").strip(),
                 "po_qty_num": float(po_q or 0),
-                "uom": str(uom or "NOS").strip() or "NOS",
                 "schd_dt_obj": shd_dt,
                 "schd_qty_num": float(shd_q or 0),
+                "grn_qty_num": float(grn_q or 0),
+                "bal_qty_num": float(bal_q or 0),
+                "bal_val": float(bal_val or 0),
+                "age_days": int(age_days or 0),
+                "status": str(status_val or "On Track"),
                 "rate": float(rate or 0),
-                "amount": float(amt or 0),
-                "raw_grn_qty": float(grn_q or 0),
+                "po_value": float(po_val or 0),
             })
+        logger.info(f"[FS LOG] fetched {len(raw_rows)} rows")
 
         cursor.close()
         conn.close()
 
     except Exception as e:
+        logger.exception("Error in purchase_analysis_fulfillment_schedule: %s", e)
+        print(f"[FULFILLMENT ERROR] {e}")
         if cursor:
             try: cursor.close()
             except Exception: pass
@@ -3177,99 +3407,50 @@ def purchase_analysis_fulfillment_schedule(request):
         except Exception: pass
         return Response({"error": f"Database error: {str(e)}", "rows": []}, status=500)
 
-    # Process and allocate cumulative GRN per PO Item
-    today = date.today()
-    item_grn_pool = {}
-    for r in raw_rows:
-        item_key = (r["po_number"], r["itcode"] or r["rmname"] or r["icode"])
-        if item_key not in item_grn_pool:
-            item_grn_pool[item_key] = r["raw_grn_qty"]
-
     def _iso(d):
-        if d is None: return ""
-        if hasattr(d, "isoformat"): return d.isoformat()[:10]
-        return str(d)[:10]
+        if d is None:
+            return ""
+        if hasattr(d, "year") and d.year < 2000:
+            return ""
+        if hasattr(d, "isoformat"):
+            return d.isoformat()[:10]
+        s = str(d)[:10]
+        if s.startswith("1900") or s.startswith("0000"):
+            return ""
+        return s
 
     rows_out = []
     for idx, r in enumerate(raw_rows):
-        item_key = (r["po_number"], r["itcode"] or r["rmname"] or r["icode"])
-        rem_grn = item_grn_pool.get(item_key, 0.0)
-
-        # Fallback for schd_qty and po_qty
-        schd_q = r["schd_qty_num"]
         po_q = r["po_qty_num"]
-        if schd_q <= 0 and po_q > 0:
-            schd_q = po_q
-        if po_q <= 0 and schd_q > 0:
-            po_q = schd_q
+        schd_q = r["schd_qty_num"]
+        grn_q = r["grn_qty_num"]
+        bal_q = r["bal_qty_num"]
+        bal_val = round(r["bal_val"], 2)
+        rate = round(r["rate"], 2)
+        age_days = r["age_days"]
+        status = r["status"]
+        part_no = r["rmname"]
 
-        alloc_grn = min(rem_grn, schd_q)
-        item_grn_pool[item_key] = max(0.0, rem_grn - alloc_grn)
-
-        bal_q = max(0.0, schd_q - alloc_grn)
-
-        rate = r["rate"]
-        amt = r["amount"]
-        if rate <= 0 and amt > 0 and po_q > 0:
-            rate = round(amt / po_q, 2)
-        bal_val = round(bal_q * rate, 2)
-
-        s_dt = r["schd_dt_obj"]
-        s_dt_date = s_dt.date() if hasattr(s_dt, "date") else s_dt
-        p_dt = r["po_date_obj"]
-        p_dt_date = p_dt.date() if hasattr(p_dt, "date") else p_dt
-
-        if s_dt_date and s_dt_date.year > 2000:
-            effective_dt = s_dt_date
-            schd_dt_str = _iso(s_dt)
-        elif p_dt_date:
-            effective_dt = p_dt_date
-            schd_dt_str = _iso(p_dt)
-        else:
-            effective_dt = today
-            schd_dt_str = _iso(today)
-
-        diff_days = (today - effective_dt).days
-        age_days = max(0, diff_days)
-
-        if bal_q <= 0.001:
-            status = "Delivered"
-        elif age_days > 30:
-            status = "Overdue"
-        elif age_days > 15:
-            status = "Due Soon"
-        else:
-            status = "On Track"
-
-        itc = r["itcode"]
-        icc = r["icode"]
-        rmn = r["rmname"]
-        mat = r["mattype"]
-
-        part_no = itc if itc else (rmn or icc)
-        desc = icc if (icc and icc != itc) else (mat or rmn or icc or "Item Component")
-
-        uom = r["uom"]
         rows_out.append({
-            "id": f"{r['po_number']}-{idx + 1}",
+            "id": f"{r['po_number']}-{part_no}-{idx + 1}",
             "sno": idx + 1,
             "po_number": r["po_number"],
             "po_date": _iso(r["po_date_obj"]),
             "supplier": r["supplier"],
             "part_no": part_no,
-            "description": desc,
-            "po_qty": f"{po_q:g} {uom}",
+            "description": "",
+            "po_qty": f"{po_q:g} NOS",
             "po_qty_num": po_q,
-            "schd_dt": schd_dt_str,
-            "schd_qty": f"{schd_q:g} {uom}",
+            "schd_dt": _iso(r["schd_dt_obj"]),
+            "schd_qty": f"{schd_q:g} NOS",
             "schd_qty_num": schd_q,
-            "grn_qty": f"{alloc_grn:g} {uom}",
-            "grn_qty_num": alloc_grn,
-            "bal_qty": f"{bal_q:g} {uom}",
+            "grn_qty": f"{grn_q:g} NOS",
+            "grn_qty_num": grn_q,
+            "bal_qty": f"{bal_q:g} NOS",
             "bal_qty_num": bal_q,
             "bal_val": bal_val,
             "rate": rate,
-            "uom": uom,
+            "uom": "NOS",
             "age_days": age_days,
             "status": status,
         })
@@ -3281,4 +3462,680 @@ def purchase_analysis_fulfillment_schedule(request):
         "count": len(rows_out),
         "rows": rows_out,
     })
+
+
+@api_view(["GET"])
+def purchase_analysis_average_purchase_value(request):
+    """
+    Returns Average Purchase Value (APV) and line-item material classification data
+    based on the exact CTE query:
+    PO_BASE (POMas + PODet) -> ITEM_MASTER (WithMatMas + RawMast + RawProdMast) -> GRN_BASE (grninsubdet + grn_mas).
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e), "rows": []}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+
+        sch_m, nm_m, q_m = resolve_erp_table(cursor, ["POMas", "pomas", "POMAS", "PoMas"])
+        sch_d, nm_d, q_d = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet", "In_PoDet"])
+        sch_wm, nm_wm, q_wm = resolve_erp_table(cursor, ["WithMatMas", "withmatmas", "WITHMATMAS", "WithMat_Mas"])
+        sch_rm, nm_rm, q_rm = resolve_erp_table(cursor, ["RawMast", "rawmast", "RAWMAST", "Raw_Mast"])
+        sch_rpm, nm_rpm, q_rpm = resolve_erp_table(cursor, ["RawProdMast", "rawprodmast", "RAWPRODMAST", "RawProd_Mast"])
+        sch_cm, nm_cm, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST", "CustMast"])
+        sch_gx, nm_gx, q_gx = resolve_erp_table(cursor, ["grninsubdet", "GRNInSubDet", "GrnInSubDet", "GRNINSUBDET"])
+        sch_gm, nm_gm, q_gm = resolve_erp_table(cursor, ["grn_mas", "Grn_Mas", "GRN_MAS", "grnmas"])
+
+        # Fallbacks to standard table names if resolution returned None
+        tbl_m = q_m or "[dbo].[POMas]"
+        tbl_d = q_d or "[dbo].[PODet]"
+        tbl_wm = q_wm or "[dbo].[WithMatMas]"
+        tbl_rm = q_rm or "[dbo].[RawMast]"
+        tbl_rpm = q_rpm or "[dbo].[RawProdMast]"
+        tbl_cm = q_cm or "[dbo].[CustMast]"
+        tbl_gx = q_gx or "[dbo].[grninsubdet]"
+        tbl_gm = q_gm or "[dbo].[grn_mas]"
+
+        query = f"""
+        ;WITH PO_BASE AS
+        (
+            SELECT
+                PM.pono,
+                PM.podate,
+                PM.cid,
+                PM.dtype,
+
+                PD.rmname,
+                PD.mattype,
+                PD.qty,
+                PD.QtyKgs,
+                PD.QtyMtrsKgs,
+                PD.rate,
+                PD.uom,
+                PD.amount,
+                PD.deleted AS PODetDeleted
+
+            FROM {tbl_m} PM
+
+            INNER JOIN {tbl_d} PD
+                ON PM.pono = PD.pono
+               AND ISNULL(PD.deleted, 0) = 0
+
+            WHERE ISNULL(PM.deleted, 0) = 0
+              AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
+
+              AND CAST(PM.podate AS DATE) >= ?
+              AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
+        ),
+
+        ITEM_MASTER AS
+        (
+            SELECT
+                P.rmname,
+
+                WM.PartNo AS WMPartNo,
+                WM.Description AS WMDescription,
+                WM.Rod,
+                WM.Casting,
+                WM.uom AS WMUom,
+
+                RM.Codeno AS RMCodeNo,
+                RM.Description AS RMDescription,
+                RM.SGroup AS RMGroup,
+                RM.Uom AS RMUom,
+
+                RPM.Codeno AS RPMCodeNo,
+                RPM.Description AS RPMDescription,
+                RPM.SGroup AS RPMGroup,
+                RPM.Uom AS RPMUom
+
+            FROM
+            (
+                SELECT DISTINCT rmname
+                FROM PO_BASE
+            ) P
+
+            LEFT JOIN {tbl_wm} WM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(WM.PartNo))
+               AND ISNULL(WM.Deleted, 0) = 0
+
+            LEFT JOIN {tbl_rm} RM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(RM.Codeno))
+               AND ISNULL(RM.Deleted, 0) = 0
+
+            LEFT JOIN {tbl_rpm} RPM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(RPM.Codeno))
+               AND ISNULL(RPM.Deleted, 0) = 0
+        ),
+
+        GRN_BASE AS
+        (
+            SELECT
+                G.pono,
+                LTRIM(RTRIM(G.rmname)) AS rmname,
+                MAX(G.grnno) AS grnno,
+                MAX(GM.grndate) AS grndate,
+                SUM(ISNULL(G.qty, 0)) AS grnqty
+            FROM {tbl_gx} G
+            LEFT JOIN {tbl_gm} GM ON G.grnno = GM.grnno AND ISNULL(GM.deleted, 0) = 0
+            WHERE ISNULL(G.deleted, 0) = 0
+            GROUP BY G.pono, LTRIM(RTRIM(G.rmname))
+        )
+
+        SELECT
+            ROW_NUMBER() OVER
+            (
+                ORDER BY
+                    P.podate,
+                    P.pono,
+                    P.rmname
+            ) AS [SL NO],
+
+            P.pono AS [PONO],
+            P.podate AS [PODATE],
+            P.rmname AS [PARTNO],
+
+            COALESCE
+            (
+                M.WMDescription,
+                M.RMDescription,
+                M.RPMDescription,
+                P.rmname
+            ) AS [DESCRIPTION],
+
+            P.qty AS [PO QTY],
+            P.uom AS [UOM],
+
+            CASE
+                WHEN M.WMPartNo IS NOT NULL
+                     AND ISNULL(M.Casting, 0) = 1
+                    THEN 'Nos (Casting)'
+
+                WHEN M.WMPartNo IS NOT NULL
+                     AND ISNULL(M.Rod, 0) = 1
+                     AND
+                     (
+                         UPPER(ISNULL(P.uom, '')) = 'KGS'
+                         OR
+                         UPPER(ISNULL(P.uom, '')) = 'KG'
+                     )
+                    THEN 'KGS (Rod)'
+
+                WHEN M.WMPartNo IS NOT NULL
+                     AND ISNULL(M.Rod, 0) = 1
+                     AND
+                     (
+                         UPPER(ISNULL(P.uom, '')) = 'MTRS'
+                         OR
+                         UPPER(ISNULL(P.uom, '')) = 'MTR'
+                         OR
+                         UPPER(ISNULL(P.uom, '')) = 'M'
+                     )
+                    THEN 'Mtrs (Rod)'
+
+                WHEN M.WMPartNo IS NOT NULL
+                     AND ISNULL(M.Rod, 0) = 1
+                    THEN 'Rod'
+
+                WHEN M.RMCodeNo IS NOT NULL
+                    THEN 'B.Out'
+
+                WHEN M.RPMCodeNo IS NOT NULL
+                    THEN 'Store Material'
+
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%RAW%'
+                     AND UPPER(ISNULL(P.uom, '')) IN ('MTRS', 'MTR', 'M')
+                    THEN 'Mtrs (Rod)'
+
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%RAW%'
+                     AND UPPER(ISNULL(P.uom, '')) IN ('KGS', 'KG')
+                    THEN 'KGS (Rod)'
+
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%RAW%'
+                     AND UPPER(ISNULL(P.uom, '')) IN ('NOS', 'NO', 'PCS')
+                    THEN 'Nos (Casting)'
+
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%STORE%'
+                    THEN 'Store Material'
+
+                ELSE 'Other'
+            END AS [CATEGORY],
+
+            P.rate AS [PO RATE],
+
+            ISNULL
+            (
+                P.amount,
+                ISNULL(P.qty, 0) * ISNULL(P.rate, 0)
+            ) AS [AMT],
+
+            CM.CName AS [SUPPLIER],
+
+            CASE
+                WHEN M.RPMCodeNo IS NOT NULL
+                    THEN M.RPMGroup
+                WHEN M.RMCodeNo IS NOT NULL
+                    THEN M.RMGroup
+                ELSE NULL
+            END AS [GROUP NAME],
+
+            CASE
+                WHEN M.WMPartNo IS NOT NULL
+                    THEN 'RAW MATERIAL'
+                WHEN M.RMCodeNo IS NOT NULL
+                    THEN 'B.OUT'
+                WHEN M.RPMCodeNo IS NOT NULL
+                    THEN 'STORE MATERIAL'
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%RAW%'
+                    THEN 'RAW MATERIAL'
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.dtype, '')))) LIKE '%STORE%'
+                    THEN 'STORE MATERIAL'
+                ELSE 'RAW MATERIAL'
+            END AS [MATERIAL TYPE],
+
+            GB.grnno AS [GRN NO],
+            GB.grndate AS [GRN DATE],
+            GB.grnqty AS [GRN QTY],
+
+            P.dtype AS [PO DTYPE]
+
+        FROM PO_BASE P
+
+        LEFT JOIN {tbl_cm} CM
+            ON CONVERT(NVARCHAR(128), P.cid) = CONVERT(NVARCHAR(128), CM.Id)
+           AND ISNULL(CM.Deleted, 0) = 0
+
+        LEFT JOIN ITEM_MASTER M
+            ON P.rmname = M.rmname
+
+        LEFT JOIN GRN_BASE GB
+            ON P.pono = GB.pono
+           AND LTRIM(RTRIM(P.rmname)) = GB.rmname
+
+        ORDER BY
+            P.podate,
+            P.pono,
+            P.rmname;
+        """
+
+        cursor.execute(query, [str(start_date), str(end_date)])
+        rows = cursor.fetchall()
+
+        rows_out = []
+        for idx, r in enumerate(rows):
+            sl_no = int(r[0]) if r[0] is not None else (idx + 1)
+            pono = (r[1] or "").strip()
+            podate = str(r[2])[:10] if r[2] else ""
+            partno = (r[3] or "").strip()
+            desc = (r[4] or "").strip()
+            po_qty = float(r[5] or 0)
+            uom = (r[6] or "").strip()
+            category = (r[7] or "Other").strip()
+            po_rate = float(r[8] or 0)
+            amt = float(r[9] or 0)
+            supplier = (r[10] or "").strip()
+            group_name = (r[11] or "").strip() if r[11] else None
+            mat_type = (r[12] or "RAW MATERIAL").strip()
+            grn_no = (r[13] or "–").strip() if r[13] else "–"
+            grn_date = str(r[14])[:10] if r[14] else "–"
+            grn_qty = float(r[15]) if r[15] is not None else None
+            po_dtype = (r[16] or ("Stores Material" if "STORE" in mat_type else "Raw Material")).strip()
+
+            rows_out.append({
+                "sl_no": sl_no,
+                "id": f"{pono}_{partno}_{idx + 1}",
+                "po_number": pono,
+                "pono": pono,
+                "po_date": podate,
+                "podate": podate,
+                "part_no": partno,
+                "partno": partno,
+                "material_code": partno,
+                "description": desc,
+                "material": desc,
+                "po_qty": po_qty,
+                "qty": po_qty,
+                "uom": uom,
+                "unit": uom,
+                "category": category,
+                "po_rate": po_rate,
+                "rate": po_rate,
+                "amt": amt,
+                "value": amt,
+                "amount": amt,
+                "supplier": supplier,
+                "vendor_name": supplier,
+                "group_name": group_name,
+                "material_type": mat_type,
+                "po_type": po_dtype,
+                "dtype": po_dtype,
+                "grn_no": grn_no,
+                "grn_date": grn_date,
+                "grn_qty": grn_qty,
+            })
+
+        return Response({
+            "company": tenant.get("company_name", ""),
+            "from": str(start_date),
+            "to": str(end_date),
+            "count": len(rows_out),
+            "rows": rows_out,
+        })
+
+    except Exception as e:
+        logger.exception("purchase_analysis_average_purchase_value error")
+        return Response({"error": str(e), "rows": []}, status=500)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+@api_view(["GET"])
+def purchase_analysis_advanced_purchase_analytics(request):
+    """
+    Advanced Purchase Analytics:
+    Executes the user's PO & Item Master query along with Commer_BaseRateDet
+    to provide commercial base rates, chronological revisions, PO transactions,
+    variances, and forecasting signals.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn, tenant = get_tenant_connection(request)
+        cursor = conn.cursor()
+
+        start_date, end_date = dashboard2_parse_date_range_default_month(request)
+
+        _, _, q_m = resolve_erp_table(cursor, ["POMas", "pomas", "POMAS", "PoMas"])
+        _, _, q_d = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet", "In_PoDet"])
+        _, _, q_wm = resolve_erp_table(cursor, ["WithMatMas", "withmatmas", "WITHMATMAS", "WithMat_Mas"])
+        _, _, q_rm = resolve_erp_table(cursor, ["RawMast", "rawmast", "RAWMAST", "Raw_Mast"])
+        _, _, q_rpm = resolve_erp_table(cursor, ["RawProdMast", "rawprodmast", "RAWPRODMAST", "RawProd_Mast"])
+        _, _, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST", "CustMast"])
+        _, _, q_commer = resolve_erp_table(cursor, ["Commer_BaseRateDet", "commer_baseratedet", "COMMER_BASERATEDET", "CommerBaseRateDet"])
+
+        tbl_pomas = q_m or "[dbo].[POMas]"
+        tbl_podet = q_d or "[dbo].[PODet]"
+        tbl_withmat = q_wm or "[dbo].[WithMatMas]"
+        tbl_rawmast = q_rm or "[dbo].[RawMast]"
+        tbl_rawprod = q_rpm or "[dbo].[RawProdMast]"
+        tbl_custmast = q_cm or "[dbo].[CustMast]"
+        tbl_commer = q_commer or "[dbo].[Commer_BaseRateDet]"
+
+        # 1. Query PO line items joined with Master Data (WithMatMas, RawMast, RawProdMast, CustMast)
+        query_po = f"""
+        ;WITH PO_BASE AS
+        (
+            SELECT
+                PM.pono,
+                PM.podate,
+                PM.cid,
+                PM.dtype,
+
+                PD.rmname,
+                PD.mattype,
+                PD.qty,
+                PD.QtyKgs,
+                PD.QtyMtrsKgs,
+                PD.rate,
+                PD.uom,
+                PD.amount,
+                PD.deleted AS PODetDeleted
+
+            FROM {tbl_pomas} PM
+
+            INNER JOIN {tbl_podet} PD
+                ON PM.pono = PD.pono
+               AND ISNULL(PD.deleted, 0) = 0
+
+            WHERE ISNULL(PM.deleted, 0) = 0
+              AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
+
+              AND CAST(PM.podate AS DATE) >= ?
+              AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
+        ),
+
+        ITEM_MASTER AS
+        (
+            SELECT
+                P.rmname,
+
+                /* WITH MATERIAL MASTER */
+                WM.PartNo AS WMPartNo,
+                WM.Description AS WMDescription,
+                WM.Rod,
+                WM.Casting,
+                WM.uom AS WMUom,
+
+                /* B.OUT MASTER */
+                RM.Codeno AS RMCodeNo,
+                RM.Description AS RMDescription,
+                RM.SGroup AS RMGroup,
+                RM.Uom AS RMUom,
+
+                /* STORE MATERIAL MASTER */
+                RPM.Codeno AS RPMCodeNo,
+                RPM.Description AS RPMDescription,
+                RPM.SGroup AS RPMGroup,
+                RPM.Uom AS RPMUom
+
+            FROM
+            (
+                SELECT DISTINCT rmname
+                FROM PO_BASE
+            ) P
+
+            LEFT JOIN {tbl_withmat} WM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(WM.PartNo))
+               AND ISNULL(WM.Deleted, 0) = 0
+
+            LEFT JOIN {tbl_rawmast} RM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(RM.Codeno))
+               AND ISNULL(RM.Deleted, 0) = 0
+
+            LEFT JOIN {tbl_rawprod} RPM
+                ON LTRIM(RTRIM(P.rmname)) = LTRIM(RTRIM(RPM.Codeno))
+               AND ISNULL(RPM.Deleted, 0) = 0
+        )
+
+        SELECT
+            ROW_NUMBER() OVER
+            (
+                ORDER BY
+                    P.podate,
+                    P.pono,
+                    P.rmname
+            ) AS [SL NO],
+
+            P.pono AS [PONO],
+            P.podate AS [PODATE],
+            P.rmname AS [PARTNO],
+
+            COALESCE
+            (
+                M.WMDescription,
+                M.RMDescription,
+                M.RPMDescription,
+                P.rmname
+            ) AS [DESCRIPTION],
+
+            P.qty AS [PO QTY],
+            P.uom AS [UOM],
+
+            CASE
+                WHEN M.WMPartNo IS NOT NULL AND ISNULL(M.Casting, 0) = 1
+                    THEN 'Nos (Casting)'
+
+                WHEN M.WMPartNo IS NOT NULL AND ISNULL(M.Rod, 0) = 1 AND
+                     (UPPER(ISNULL(P.uom, '')) = 'KGS' OR UPPER(ISNULL(P.uom, '')) = 'KG')
+                    THEN 'KGS (Rod)'
+
+                WHEN M.WMPartNo IS NOT NULL AND ISNULL(M.Rod, 0) = 1 AND
+                     (UPPER(ISNULL(P.uom, '')) = 'MTRS' OR UPPER(ISNULL(P.uom, '')) = 'MTR' OR UPPER(ISNULL(P.uom, '')) = 'M')
+                    THEN 'Mtrs (Rod)'
+
+                WHEN M.WMPartNo IS NOT NULL AND ISNULL(M.Rod, 0) = 1
+                    THEN 'Rod'
+
+                WHEN M.RMCodeNo IS NOT NULL
+                    THEN 'B.Out'
+
+                WHEN M.RPMCodeNo IS NOT NULL
+                    THEN 'Store Material'
+
+                ELSE 'Other'
+            END AS [CATEGORY],
+
+            P.rate AS [PO RATE],
+
+            ISNULL
+            (
+                P.amount,
+                ISNULL(P.qty, 0) * ISNULL(P.rate, 0)
+            ) AS [AMT],
+
+            CM.CName AS [SUPPLIER],
+
+            CASE
+                WHEN M.RPMCodeNo IS NOT NULL THEN M.RPMGroup
+                WHEN M.RMCodeNo IS NOT NULL THEN M.RMGroup
+                ELSE NULL
+            END AS [GROUP NAME],
+
+            CASE
+                WHEN M.WMPartNo IS NOT NULL THEN 'RAW MATERIAL'
+                WHEN M.RMCodeNo IS NOT NULL THEN 'B.OUT'
+                WHEN M.RPMCodeNo IS NOT NULL THEN 'STORE MATERIAL'
+                ELSE 'UNMAPPED'
+            END AS [MATERIAL TYPE],
+
+            P.dtype AS [PO DTYPE]
+
+        FROM PO_BASE P
+
+        LEFT JOIN {tbl_custmast} CM
+            ON CONVERT(NVARCHAR(128), P.cid) = CONVERT(NVARCHAR(128), CM.Id)
+           AND ISNULL(CM.Deleted, 0) = 0
+
+        LEFT JOIN ITEM_MASTER M
+            ON P.rmname = M.rmname
+
+        ORDER BY
+            P.podate,
+            P.pono,
+            P.rmname;
+        """
+
+        cursor.execute(query_po, [str(start_date), str(end_date)])
+        po_rows = cursor.fetchall()
+
+        # 2. Query Commer_BaseRateDet for commercial rate changes
+        query_commer = f"""
+        SELECT
+            LTRIM(RTRIM(cmno)) AS cmno,
+            LTRIM(RTRIM(PartNo)) AS PartNo,
+            ISNULL(BaseRate, 0) AS BaseRate,
+            CONVERT(VARCHAR(10), BReffdt, 120) AS BReffdt,
+            ISNULL(deleted, 0) AS deleted,
+            ISNULL(SaleRate, 0) AS SaleRate,
+            LTRIM(RTRIM(ISNULL(CurrPref, ''))) AS CurrPref,
+            ISNULL(BRCurrRate, 0) AS BRCurrRate,
+            ISNULL(NetRate, 0) AS NetRate
+        FROM {tbl_commer}
+        WHERE ISNULL(deleted, 0) = 0
+        ORDER BY BReffdt ASC;
+        """
+        cursor.execute(query_commer)
+        commer_rows = cursor.fetchall()
+
+        # Map commercial rates by PartNo
+        commercial_rates = {}
+        for cr in commer_rows:
+            cmno = (cr[0] or "").strip()
+            part_no = (cr[1] or "").strip()
+            base_rate = float(cr[2] or 0)
+            eff_date = str(cr[3])[:10] if cr[3] else ""
+            deleted_flag = bool(cr[4])
+            sale_rate = float(cr[5] or 0)
+            curr_pref = (cr[6] or "").strip()
+            br_curr_rate = float(cr[7] or 0)
+            net_rate = float(cr[8] or 0)
+
+            if not part_no:
+                continue
+
+            item = {
+                "cmno": cmno,
+                "part_no": part_no,
+                "base_rate": base_rate,
+                "eff_date": eff_date,
+                "effective_date": eff_date,
+                "deleted": deleted_flag,
+                "sale_rate": sale_rate,
+                "curr_pref": curr_pref,
+                "curr_rate": br_curr_rate,
+                "net_rate": net_rate,
+            }
+            commercial_rates.setdefault(part_no, []).append(item)
+
+        # Build clean PO rows out
+        po_rows_out = []
+        for idx, r in enumerate(po_rows):
+            sl_no = int(r[0]) if r[0] is not None else (idx + 1)
+            pono = (r[1] or "").strip()
+            podate = str(r[2])[:10] if r[2] else ""
+            partno = (r[3] or "").strip()
+            desc = (r[4] or "").strip()
+            po_qty = float(r[5] or 0)
+            uom = (r[6] or "").strip()
+            category = (r[7] or "Other").strip()
+            po_rate = float(r[8] or 0)
+            amt = float(r[9] or 0)
+            supplier = (r[10] or "").strip()
+            group_name = (r[11] or "").strip() if r[11] else None
+            mat_type = (r[12] or "RAW MATERIAL").strip()
+            po_dtype = (r[13] or ("Stores Material" if "STORE" in mat_type else "Raw Material")).strip()
+
+            # Commercial rate info for this part
+            part_commer = commercial_rates.get(partno, [])
+            valid_base_rates = [c["base_rate"] for c in part_commer if c["base_rate"] > 0]
+            comm_base_rate = valid_base_rates[0] if valid_base_rates else (part_commer[0]["base_rate"] if part_commer else po_rate)
+            comm_latest_rate = valid_base_rates[-1] if valid_base_rates else comm_base_rate
+
+            po_rows_out.append({
+                "sl_no": sl_no,
+                "id": f"{pono}_{partno}_{idx + 1}",
+                "po_number": pono,
+                "pono": pono,
+                "po_date": podate,
+                "podate": podate,
+                "part_no": partno,
+                "partno": partno,
+                "material_code": partno,
+                "description": desc,
+                "material": desc,
+                "po_qty": po_qty,
+                "qty": po_qty,
+                "uom": uom,
+                "unit": uom,
+                "category": category,
+                "po_rate": po_rate,
+                "rate": po_rate,
+                "amt": amt,
+                "value": amt,
+                "amount": amt,
+                "supplier": supplier,
+                "vendor_name": supplier,
+                "group_name": group_name,
+                "material_type": mat_type,
+                "po_type": po_dtype,
+                "dtype": po_dtype,
+                "commercial_base_rate": comm_base_rate,
+                "commercial_latest_rate": comm_latest_rate,
+                "commercial_revision_count": len(part_commer),
+            })
+
+        # Only send commercial rate revisions for the parts present in the filtered POs to keep payload compact
+        filtered_commer_dict = {}
+        distinct_parts = set(p["part_no"] for p in po_rows_out if p["part_no"])
+        for pno in distinct_parts:
+            if pno in commercial_rates:
+                filtered_commer_dict[pno] = commercial_rates[pno]
+
+        return Response({
+            "company": tenant.get("company_name", ""),
+            "from": str(start_date),
+            "to": str(end_date),
+            "count": len(po_rows_out),
+            "po_rows": po_rows_out,
+            "commercial_rates": filtered_commer_dict,
+        })
+
+    except Exception as e:
+        logger.exception("purchase_analysis_advanced_purchase_analytics error")
+        return Response({"error": str(e), "po_rows": [], "commercial_rates": {}}, status=500)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 

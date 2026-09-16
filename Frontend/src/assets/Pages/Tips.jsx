@@ -184,7 +184,7 @@ export default function Tips({ onStartTour, onNavigateModule }) {
 
             {/* ── Interactive Tour Hero Banner ── */}
             {tourSteps.length > 0 && (
-                <div className="tips-tour-hero">
+                <div className="tips-tour-hero" data-spotlight="set-tour-launcher">
                     <div className="tips-tour-hero__mesh" />
                     <div className="tips-tour-hero__mesh tips-tour-hero__mesh--secondary" />
                     <div className="tips-tour-hero__grid-pattern" />

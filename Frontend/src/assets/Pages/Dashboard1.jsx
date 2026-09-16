@@ -669,7 +669,7 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
 // ════════════════════════════════════════════
 //  Chart Card — with hover tooltip
 // ════════════════════════════════════════════
-function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer, formatValue }) {
+function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer, formatValue, spotlightId }) {
     const canvasRef = useRef(null);
     const wrapRef = useRef(null);
     const hitRef = useRef([]);           // stores hit-test rectangles / points
@@ -803,7 +803,7 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
     });
 
     return (
-        <div className={`d1-cc${collapsed ? " d1-cc--collapsed" : ""}`} ref={wrapRef} style={{ position: "relative" }}>
+        <div className={`d1-cc${collapsed ? " d1-cc--collapsed" : ""}`} data-spotlight={spotlightId} ref={wrapRef} style={{ position: "relative" }}>
             <div className="d1-cc__hd">
                 <div className="d1-cc__title">{title}</div>
                 <div className="d1-cc__legend">
@@ -857,7 +857,7 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
 // ════════════════════════════════════════════
 function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, rows, collapsed }) {
     return (
-        <div className={`d1-tc${collapsed ? " d1-tc--collapsed" : ""}`}>
+        <div className={`d1-tc${collapsed ? " d1-tc--collapsed" : ""}`} data-spotlight="tmd-table-dept">
             <div className="d1-tc__hd">
                 <div>
                     <div className="d1-tc__title">{title}</div>
@@ -1142,6 +1142,7 @@ export default function Dashboard1() {
     // Build KPI Cards
     const kpiCards = [
         {
+            spotlightId: "tmd-kpi-sales",
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12" /><path d="M6 8h12" /><path d="m6 13 8.5 8" /><path d="M6 13h3" /><path d="M9 13c6.667 0 6.667-10 0-10" /></svg>),
             delta: salesData ? `${salesData.delta_type === 'up' ? '↑' : '↓'} ${salesData.delta}%` : "—",
@@ -1153,6 +1154,7 @@ export default function Dashboard1() {
             sparkColor: "#1a56db",
         },
         {
+            spotlightId: "tmd-kpi-purchase",
             kgrad: "linear-gradient(90deg,#f59e0b,#fbbf24)", kbg: "#fffbeb", kclr: "#b45309", animDelay: ".07s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>),
             delta: purchaseData ? `${purchaseData.delta_type === "up" ? "↑" : "↓"} ${purchaseData.delta}%` : "—",
@@ -1178,6 +1180,7 @@ export default function Dashboard1() {
             sparkColor: "#f59e0b",
         },
         {
+            spotlightId: "tmd-kpi-oa",
             kgrad: "linear-gradient(90deg,#10b981,#34d399)", kbg: "#ecfdf5", kclr: "#059669", animDelay: ".14s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20h.01M7 20v-4" /><path d="M12 20V10" /><path d="M17 20V4" /><path d="M22 20h.01" /></svg>),
             delta: productionData ? `${productionData.delta_type === "up" ? "↑" : "↓"} ${productionData.delta}%` : "—",
@@ -1189,6 +1192,7 @@ export default function Dashboard1() {
             sparkColor: "#10b981",
         },
         {
+            spotlightId: "tmd-kpi-rejection",
             kgrad: "linear-gradient(90deg,#8b5cf6,#c4b5fd)", kbg: "#f5f3ff", kclr: "#7c3aed", animDelay: ".21s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>),
             delta: qualityValueData ? `${qualityValueData.delta_type === "up" ? "↑" : "↓"} ${qualityValueData.delta}%` : "—",
@@ -1203,6 +1207,7 @@ export default function Dashboard1() {
 
     const chartCards = [
         {
+            spotlightId: "tmd-chart-sales",
             title: "Sales Projections in Lakhs",
             legend: [{ label: "Sales", color: "#1a56db" }, { label: "Projections", color: "#f59e0b" }],
             drawFn: (c) => drawBarChart(
@@ -1229,6 +1234,7 @@ export default function Dashboard1() {
             ),
         },
         {
+            spotlightId: "tmd-chart-purchase",
             title: "Purchase Projections in Lakhs",
             legend: [{ label: "PO", color: "#1a56db" }, { label: "GRN", color: "#f59e0b" }],
             drawFn: (c) => drawBarChart(
@@ -1255,6 +1261,7 @@ export default function Dashboard1() {
             ),
         },
         {
+            spotlightId: "tmd-chart-oa",
             title: "OEE % — Weekly",
             legend: [{ label: "OEE %", color: "#10b981", round: true }],
             drawFn: (c) => {
@@ -1297,6 +1304,7 @@ export default function Dashboard1() {
             canvasHeight: 86,
         },
         {
+            spotlightId: "tmd-chart-rejection",
             title: "Quality Rejections — Weekly",
             legend: [{ label: "Mac Rej", color: "#ef4444", round: true }, { label: "Mat Rej", color: "#1a56db", round: true }],
             drawFn: (c) => {

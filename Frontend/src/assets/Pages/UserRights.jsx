@@ -725,7 +725,7 @@ export default function UserRights() {
             </div>
 
             <div className="ur-toolbar" data-spotlight="ur-header">
-                <div className="ur-search-wrap">
+                <div className="ur-search-wrap" data-spotlight="ur-search-filter">
                     <svg className="ur-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
@@ -766,6 +766,7 @@ export default function UserRights() {
                     </button>
                     <button
                         className={`ur-btn ur-btn--save ${saved ? "ur-btn--saved" : ""} ${hasUnsavedChanges ? "ur-btn--pending" : ""}`}
+                        data-spotlight="ur-save-bar"
                         onClick={handleSave}
                         disabled={loading || !users.length || !hasUnsavedChanges}
                         type="button"
@@ -962,7 +963,7 @@ export default function UserRights() {
             {/* ── Add User Modal ── */}
             {showAddModal && createPortal(
                 <div className="ur-modal" role="dialog" aria-modal="true">
-                    <div className="ur-modal__box">
+                    <div className="ur-modal__box" data-spotlight="ur-add-user-modal" data-spotlight-alt="ur-reset-password-modal">
                         <div className="ur-modal__accent" />
                         <div className="ur-modal__hd">
                             <h3 className="ur-modal__title">Add New User</h3>

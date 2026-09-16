@@ -2650,7 +2650,7 @@ export default function ProductionAnalysis() {
             transition: "opacity 0.2s ease"
           }}
         >
-          <div className="pa2-fg">
+          <div className="pa2-fg" data-spotlight="pda-date-picker">
             <label>Date Range</label>
             <ProductionAnalysisDatePicker
               from={dateRange.from}
@@ -2659,7 +2659,7 @@ export default function ProductionAnalysis() {
               disabled={isGlobalLoading}
             />
           </div>
-          <div className="pa2-fg">
+          <div className="pa2-fg" data-spotlight="pda-export-controls">
             <label>Search</label>
             <div className="pa2-search-input-wrapper">
               <svg className="pa2-search-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -2941,7 +2941,7 @@ export default function ProductionAnalysis() {
 
         return createPortal(
           <div className="pa2-modal-overlay" onClick={() => setSelectedMachine(null)}>
-            <div className="pa2-modal" onClick={e => e.stopPropagation()}>
+            <div className="pa2-modal" data-spotlight="pda-shift-comparison" onClick={e => e.stopPropagation()}>
               <style>{`
                 @keyframes pa2-spin {
                   0% { transform: rotate(0deg); }
@@ -3099,9 +3099,9 @@ export default function ProductionAnalysis() {
             )}
           </div>
         </div>
-        <div className="pa2-card pa2-anim" data-spotlight="pda-machine-efficiency" style={{ "--d": "120ms" }}>
+        <div className="pa2-card pa2-anim" data-spotlight="pda-machine-efficiency" data-spotlight-alt="pda-operator-ranking" style={{ "--d": "120ms" }}>
           <SectionHeader icon={<FiAward size={16} />} title="Machine & Operator Efficiency" />
-          <div className="pa2-metrics-list">
+          <div className="pa2-metrics-list" data-spotlight="pda-operator-ranking">
             {pageLoading ? (
               Array.from({ length: 6 }).map((_, idx) => (
                 <div key={idx} className="pa2-metric-row">
@@ -3457,7 +3457,7 @@ export default function ProductionAnalysis() {
 
         return createPortal(
           <div className="pa2-modal-overlay" onClick={() => setMhrModalOpen(false)}>
-            <div className="pa2-modal pa2-modal--mhr" onClick={e => e.stopPropagation()}>
+            <div className="pa2-modal pa2-modal--mhr" data-spotlight="pda-mhr-modal" onClick={e => e.stopPropagation()}>
 
               {/* Modal Header */}
               <div className="pa2-modal-hdr pa2-modal-hdr--mhr" style={{ "--mc": "#2563eb" }}>

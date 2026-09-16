@@ -5,11 +5,15 @@
 # ════════════════════════════════════════════════════════════════════
 
 import hashlib
+import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from typing import Any, List
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from .views import (
     get_tenant_connection,
@@ -503,6 +507,7 @@ def quality_analysis_summary(request):
     total_scrap = 0
     pending_inspections = 0
     scrap_value_inr = 0.0
+    is_route_card_prod = 1
 
     db_success = False
     db_pending_success = False
@@ -511,6 +516,15 @@ def quality_analysis_summary(request):
 
     try:
         cursor = conn.cursor()
+
+        # ── Check CompanySetting.IsRouteCardProd ──
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsRouteCardProd, 0) FROM CompanySetting")
+            row_rc = cursor.fetchone()
+            if row_rc is not None and row_rc[0] is not None:
+                is_route_card_prod = int(row_rc[0])
+        except Exception as e:
+            logger.warning(f"Error querying CompanySetting.IsRouteCardProd: {e}")
 
         # ── 1. Unified Inspection Aggregates (InJob, InterInspection, FinalInspection) ──
         has_injob = table_exists(cursor, "InJob_Mas") and table_exists(cursor, "InJob_Det")
@@ -540,7 +554,7 @@ def quality_analysis_summary(request):
                 ok_expr = f"CAST(ISNULL(d.[{okqty_col}], 0) AS INT)" if okqty_col else "0"
 
                 where_injob = [f"CAST(m.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
-                params_injob = [start_date, end_date]
+                params_injob: list = [start_date, end_date]
                 if deleted_mas:
                     where_injob.append(f"ISNULL(m.[{deleted_mas}], 0) = 0")
                 if deleted_det:
@@ -615,7 +629,7 @@ def quality_analysis_summary(request):
                     END AS INT)""" if rej_col else "0"
 
                 where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
-                params_inter = [start_date, end_date]
+                params_inter: list = [start_date, end_date]
                 if deleted_col:
                     where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
                 if company_col and company_code:
@@ -698,7 +712,7 @@ def quality_analysis_summary(request):
                         ), 0) AS INT)"""
 
                 where_final = [f"CAST(f.[{finspdate_col}] AS DATE) BETWEEN ? AND ?"]
-                params_final = [start_date, end_date]
+                params_final: list = [start_date, end_date]
                 if deleted_col:
                     where_final.append(f"ISNULL(f.[{deleted_col}], 0) = 0")
                 if company_col and company_code:
@@ -906,8 +920,50 @@ def quality_analysis_summary(request):
                 "trend": "Under watch" if total_mac_rej > 0 else "All clear",
                 "cls": "qa2-t-down" if total_mac_rej > 0 else "qa2-t-up"
             }
-        }
+        },
+        "is_route_card_prod": is_route_card_prod,
+        "IsRouteCardProd": is_route_card_prod,
     })
+
+
+@api_view(["GET"])
+def quality_analysis_settings(request):
+    """
+    Returns CompanySetting values relevant to Quality Analysis:
+      - is_route_card_prod: int (1 or 0)
+    """
+    conn = None
+    cursor = None
+    try:
+        conn, tenant = get_tenant_connection(request)
+        cursor = conn.cursor()
+        is_route_card_prod = 1
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsRouteCardProd, 0) FROM CompanySetting")
+            row = cursor.fetchone()
+            if row is not None and row[0] is not None:
+                is_route_card_prod = int(row[0])
+        except Exception as e:
+            logger.warning(f"Error querying CompanySetting.IsRouteCardProd: {e}")
+
+        return Response({
+            "is_route_card_prod": is_route_card_prod,
+            "IsRouteCardProd": is_route_card_prod,
+        })
+    except Exception as e:
+        logger.exception("quality_analysis_settings error")
+        return Response({"is_route_card_prod": 1, "IsRouteCardProd": 1})
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────

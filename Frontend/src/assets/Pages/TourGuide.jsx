@@ -202,17 +202,57 @@ export default function TourGuide({
         };
     }, [isOpen, updateTargetPosition]);
 
-    // Keyboard navigation
+    // Prevent background scrolling while tour is active
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const preventScroll = (e) => {
+            if (e.target && e.target.closest && e.target.closest(".tg-popover, .tg-celebration-card")) {
+                return;
+            }
+            e.preventDefault();
+        };
+
+        window.addEventListener("wheel", preventScroll, { passive: false });
+        window.addEventListener("touchmove", preventScroll, { passive: false });
+        return () => {
+            window.removeEventListener("wheel", preventScroll);
+            window.removeEventListener("touchmove", preventScroll);
+        };
+    }, [isOpen]);
+
+    // Keyboard navigation & focus trap
     useEffect(() => {
         if (!isOpen) return;
 
         const handleKeyDown = (e) => {
             if (e.key === "Escape") {
+                e.preventDefault();
                 handleClose();
             } else if (e.key === "ArrowRight") {
+                e.preventDefault();
                 handleNext();
             } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
                 handleBack();
+            } else if (e.key === "Tab") {
+                const container = document.querySelector(".tg-celebration-card") || document.querySelector(".tg-popover");
+                if (container) {
+                    const focusables = Array.from(
+                        container.querySelectorAll('button:not([disabled]), [tabindex]:not([tabindex="-1"])')
+                    ).filter(el => el.offsetParent !== null);
+                    if (focusables.length > 0) {
+                        const first = focusables[0];
+                        const last = focusables[focusables.length - 1];
+                        if (e.shiftKey && (document.activeElement === first || !container.contains(document.activeElement))) {
+                            e.preventDefault();
+                            last.focus();
+                        } else if (!e.shiftKey && (document.activeElement === last || !container.contains(document.activeElement))) {
+                            e.preventDefault();
+                            first.focus();
+                        }
+                    }
+                }
             }
         };
 
@@ -252,7 +292,15 @@ export default function TourGuide({
     const progressPercent = ((currentStepIndex + 1) / steps.length) * 100;
 
     return (
-        <div className="tg-portal">
+        <div
+            className="tg-portal"
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+        >
             {/* ── Spotlight Cutout or Backdrop ── */}
             {targetRect && !isCelebrating ? (
                 <div
@@ -263,9 +311,23 @@ export default function TourGuide({
                         width: `${targetRect.width}px`,
                         height: `${targetRect.height}px`,
                     }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseUp={(e) => e.stopPropagation()}
                 />
             ) : (
-                <div className="tg-backdrop-fallback" onClick={handleClose} />
+                <div
+                    className="tg-backdrop-fallback"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseUp={(e) => e.stopPropagation()}
+                />
             )}
 
             {/* ── Popover Tooltip ── */}

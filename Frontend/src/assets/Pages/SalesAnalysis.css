@@ -2423,7 +2423,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: 360px;
+  width: 100%;
 }
 
 .sa-trace-part-multi {
@@ -2481,8 +2481,8 @@
   font-size: 0.75rem;
   font-weight: 600;
   display: inline-block;
-  white-space: nowrap !important;
-  word-break: normal !important;
+  line-height: 1.4;
+  word-break: break-word;
   transition: all 0.2s ease;
 }
 
@@ -2502,8 +2502,8 @@
   font-size: 0.75rem;
   font-weight: 600;
   display: inline-block;
-  white-space: nowrap !important;
-  word-break: normal !important;
+  line-height: 1.4;
+  word-break: break-word;
   transition: all 0.2s ease;
 }
 
@@ -2525,7 +2525,7 @@
 /* ── Traceability Table Structure & Column Widths (9 Columns) ── */
 .sa-trace-table {
   width: 100%;
-  min-width: 1200px !important;
+  min-width: 1440px !important;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
@@ -2540,8 +2540,8 @@
 /* Explicit minimum column widths for 9 columns */
 .sa-trace-table th:nth-child(1),
 .sa-trace-table td:nth-child(1) {
-  width: 48px;
-  min-width: 48px;
+  width: 44px;
+  min-width: 44px;
   text-align: center;
 }
 
@@ -2553,43 +2553,43 @@
 
 .sa-trace-table th:nth-child(3),
 .sa-trace-table td:nth-child(3) {
-  min-width: 250px;
+  min-width: 380px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(4),
 .sa-trace-table td:nth-child(4) {
-  min-width: 115px;
+  min-width: 105px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(5),
 .sa-trace-table td:nth-child(5) {
-  min-width: 110px;
+  min-width: 95px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(6),
 .sa-trace-table td:nth-child(6) {
-  min-width: 115px;
+  min-width: 105px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(7),
 .sa-trace-table td:nth-child(7) {
-  min-width: 110px;
+  min-width: 95px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(8),
 .sa-trace-table td:nth-child(8) {
-  min-width: 130px;
+  min-width: 210px;
   text-align: left;
 }
 
 .sa-trace-table th:nth-child(9),
 .sa-trace-table td:nth-child(9) {
-  min-width: 140px;
+  min-width: 190px;
   text-align: left;
 }
 
@@ -4919,6 +4919,14 @@
   display: inline-block;
 }
 
+.sa-despatch-desc-cell {
+  font-size: 0.79rem;
+  font-weight: 550;
+  color: #334155;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 /* Invoice tag */
 .sa-inv-tag {
   background: #f5f3ff;
@@ -5151,8 +5159,9 @@
 /* Explicit column widths & alignments for Despatch Planning Status Table */
 .sa-despatch-table th:nth-child(1),
 .sa-despatch-table td:nth-child(1) {
-  width: 11%;
+  width: 9%;
   text-align: left;
+  padding-left: 16px;
 }
 
 .sa-despatch-table tbody td:first-child {
@@ -5161,56 +5170,75 @@
 
 .sa-despatch-table th:nth-child(2),
 .sa-despatch-table td:nth-child(2) {
-  width: 22%;
+  width: 35%;
   text-align: left;
+  padding-left: 12px;
+  padding-right: 12px;
+  line-height: 1.35;
 }
 
 .sa-despatch-table th:nth-child(3),
 .sa-despatch-table td:nth-child(3) {
-  width: 10%;
+  width: 6.5%;
   text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(4),
 .sa-despatch-table td:nth-child(4) {
-  width: 8%;
-  text-align: right;
+  width: 5.5%;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(5),
 .sa-despatch-table td:nth-child(5) {
-  width: 8%;
-  text-align: right;
+  width: 5.5%;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(6),
 .sa-despatch-table td:nth-child(6) {
-  width: 8%;
+  width: 5.5%;
   text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(7),
 .sa-despatch-table td:nth-child(7) {
-  width: 7%;
+  width: 6.5%;
   text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(8),
 .sa-despatch-table td:nth-child(8) {
-  width: 7%;
+  width: 6.5%;
   text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(9),
 .sa-despatch-table td:nth-child(9) {
-  width: 9%;
+  width: 8%;
   text-align: right;
+  padding-left: 6px;
+  padding-right: 8px;
 }
 
 .sa-despatch-table th:nth-child(10),
 .sa-despatch-table td:nth-child(10) {
-  width: 10%;
+  width: 12%;
   text-align: center;
+  padding-left: 6px;
+  padding-right: 16px;
 }
 
 /* Modern Status Pills for Despatch Planning Status */
@@ -5236,52 +5264,122 @@
   flex-shrink: 0;
 }
 
-/* Despatched / Completed */
-.sa-despatch-status-pill--completed {
+/* 1. Invoiced and EInvoice maded */
+.sa-despatch-status-pill--einvoiced {
+  background: rgba(5, 150, 105, 0.1);
+  color: #047857;
+  border: 1px solid rgba(5, 150, 105, 0.28);
+}
+
+.sa-despatch-status-pill--einvoiced .sa-status-dot {
+  background: #059669;
+  box-shadow: 0 0 5px rgba(5, 150, 105, 0.6);
+}
+
+/* 2. Invoiced */
+.sa-despatch-status-pill--invoiced {
   background: rgba(16, 185, 129, 0.1);
   color: #065f46;
   border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
-.sa-despatch-status-pill--completed .sa-status-dot {
+.sa-despatch-status-pill--invoiced .sa-status-dot {
   background: #10b981;
   box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
 }
 
-/* Partially Despatched */
-.sa-despatch-status-pill--partial {
+/* 3. Final Qty */
+.sa-despatch-status-pill--final {
   background: rgba(14, 165, 233, 0.1);
   color: #0369a1;
   border: 1px solid rgba(14, 165, 233, 0.28);
 }
 
-.sa-despatch-status-pill--partial .sa-status-dot {
+.sa-despatch-status-pill--final .sa-status-dot {
   background: #0ea5e9;
   box-shadow: 0 0 5px rgba(14, 165, 233, 0.6);
 }
 
-/* Ready to Despatch */
-.sa-despatch-status-pill--ready {
-  background: rgba(124, 58, 237, 0.1);
-  color: #5b21b6;
-  border: 1px solid rgba(124, 58, 237, 0.28);
+/* 4. Under Process */
+.sa-despatch-status-pill--wip {
+  background: rgba(139, 92, 246, 0.1);
+  color: #6d28d9;
+  border: 1px solid rgba(139, 92, 246, 0.28);
 }
 
-.sa-despatch-status-pill--ready .sa-status-dot {
-  background: #7c3aed;
-  box-shadow: 0 0 5px rgba(124, 58, 237, 0.6);
+.sa-despatch-status-pill--wip .sa-status-dot {
+  background: #8b5cf6;
+  box-shadow: 0 0 5px rgba(139, 92, 246, 0.6);
 }
 
-/* Pending */
-.sa-despatch-status-pill--pending {
+/* 5. In Rejection or Rework or Vendor */
+.sa-despatch-status-pill--rejection {
+  background: rgba(236, 72, 153, 0.1);
+  color: #be185d;
+  border: 1px solid rgba(236, 72, 153, 0.28);
+}
+
+.sa-despatch-status-pill--rejection .sa-status-dot {
+  background: #ec4899;
+  box-shadow: 0 0 5px rgba(236, 72, 153, 0.6);
+}
+
+/* 6. NO Routecard */
+.sa-despatch-status-pill--noroutecard {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.sa-despatch-status-pill--noroutecard .sa-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 5px rgba(239, 68, 68, 0.6);
+}
+
+/* 7. No Stock */
+.sa-despatch-status-pill--nostock {
   background: rgba(245, 158, 11, 0.1);
   color: #92400e;
   border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
-.sa-despatch-status-pill--pending .sa-status-dot {
+.sa-despatch-status-pill--nostock .sa-status-dot {
   background: #f59e0b;
   box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
+}
+
+/* Legacy fallback aliases */
+.sa-despatch-status-pill--completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+.sa-despatch-status-pill--completed .sa-status-dot {
+  background: #10b981;
+}
+.sa-despatch-status-pill--partial {
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+}
+.sa-despatch-status-pill--partial .sa-status-dot {
+  background: #0ea5e9;
+}
+.sa-despatch-status-pill--ready {
+  background: rgba(124, 58, 237, 0.1);
+  color: #5b21b6;
+  border: 1px solid rgba(124, 58, 237, 0.28);
+}
+.sa-despatch-status-pill--ready .sa-status-dot {
+  background: #7c3aed;
+}
+.sa-despatch-status-pill--pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: #92400e;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+.sa-despatch-status-pill--pending .sa-status-dot {
+  background: #f59e0b;
 }
 
 /* Column widths for End-to-End Order Traceability Ledger are maintained in .sa-trace-table above */

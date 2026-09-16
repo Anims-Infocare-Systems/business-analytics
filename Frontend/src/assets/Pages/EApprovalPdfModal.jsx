@@ -532,7 +532,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
     };
 
     return createPortal(
-        <div className="eap-pdf-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="eap-pdf-overlay" data-spotlight="eap-pdf-viewer" onClick={e => e.target === e.currentTarget && onClose()}>
 
             {/* ── Top Floating Studio Toolbar ── */}
             <header className="eap-pdf-toolbar">

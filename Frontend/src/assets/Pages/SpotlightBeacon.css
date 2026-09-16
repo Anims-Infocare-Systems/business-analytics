@@ -83,7 +83,7 @@
 /* ── Floating Glassmorphic Tour Beacon Card ── */
 .sbeacon-card {
     position: fixed;
-    width: 420px;
+    width: 450px;
     max-width: calc(100vw - 32px);
     background: #ffffff;
     border-radius: 18px;
@@ -135,6 +135,45 @@
 
 .sbeacon-card-crumb-active {
     font-weight: 700;
+}
+
+/* Guided Search Tour Topbar Badge */
+.sbeacon-tour-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    font-size: 0.72rem;
+    max-width: 250px;
+}
+
+.sbeacon-tour-icon {
+    font-size: 0.74rem;
+    line-height: 1;
+}
+
+.sbeacon-tour-query {
+    font-weight: 700;
+    color: #0f172a;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sbeacon-tour-sep {
+    color: #94a3b8;
+    font-size: 0.7rem;
+}
+
+.sbeacon-tour-step {
+    font-weight: 700;
+    font-size: 0.72rem;
+    white-space: nowrap;
 }
 
 .sbeacon-card-top-actions {
@@ -279,61 +318,225 @@
     flex-shrink: 0;
 }
 
-/* Footer */
-.sbeacon-card-footer {
+/* ═════════════════════════════════════════════════════════════════
+   MODERN GUIDED SEARCH TOUR CONTROLLER (RESPONSIVE & ANIMATED)
+   ═════════════════════════════════════════════════════════════════ */
+.sbeacon-tour-controller {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-top: 1px solid #e2e8f0;
+    padding: 11px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+/* 1. Progress Step Row */
+.sbeacon-tour-progress-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sbeacon-tour-step-info {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px;
-    background: #f8fafc;
-    border-top: 1px solid #f1f5f9;
     gap: 8px;
+    min-width: 0;
 }
 
-.sbeacon-footer-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sbeacon-btn-link {
+.sbeacon-tour-step-pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 7px;
-    font-family: 'Poppins', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 600;
-    background: transparent;
-    border: 1px solid #e2e8f0;
-    color: #64748b;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
 }
 
-.sbeacon-btn-link:hover {
+.sbeacon-tour-next-hint {
+    font-size: 0.72rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.sbeacon-tour-next-name {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* 2. Sleek Animated Progress Track */
+.sbeacon-tour-track {
+    width: 100%;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 99px;
+    overflow: hidden;
+    position: relative;
+}
+
+.sbeacon-tour-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 3. Primary Actions Row: Prev and Next Related */
+.sbeacon-tour-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sbeacon-btn-tour {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    border-radius: 10px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Previous Button */
+.sbeacon-btn-tour--prev {
+    flex: 1;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #334155;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
+    gap: 6px;
+}
+
+.sbeacon-btn-tour--prev:hover:not(:disabled) {
     background: #ffffff;
     color: #0f172a;
-    border-color: #cbd5e1;
+    border-color: #94a3b8;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1.5px);
 }
 
-.sbeacon-btn-link--copied {
-    background: #ecfdf5;
-    color: #059669;
-    border-color: #a7f3d0;
+.sbeacon-btn-tour--prev:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
 }
 
-.sbeacon-btn-ghost {
+.sbeacon-btn-tour--prev:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.sbeacon-arrow-icon {
+    flex-shrink: 0;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sbeacon-btn-tour--prev:hover:not(:disabled) .sbeacon-arrow-icon--prev {
+    transform: translateX(-3px) scale(1.1);
+}
+
+/* Next Related Hero Button */
+.sbeacon-btn-tour--next {
+    flex: 1.7;
+    color: #ffffff;
+    border: none;
+    overflow: hidden;
+    gap: 7px;
+    animation: sbeaconNextBreathing 3s ease-in-out infinite alternate;
+}
+
+@keyframes sbeaconNextBreathing {
+    0% {
+        filter: brightness(1);
+    }
+    100% {
+        filter: brightness(1.05);
+    }
+}
+
+.sbeacon-tour-glow-shimmer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
+    animation: tourShimmerSweep 3.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+@keyframes tourShimmerSweep {
+    0% {
+        transform: translateX(-160%) skewX(-20deg);
+    }
+    40%, 100% {
+        transform: translateX(320%) skewX(-20deg);
+    }
+}
+
+.sbeacon-btn-tour--next:hover {
+    transform: translateY(-2px) scale(1.015);
+    filter: brightness(1.12);
+}
+
+.sbeacon-btn-tour--next:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.sbeacon-btn-tour--next:hover .sbeacon-arrow-icon--next {
+    transform: translateX(4px) scale(1.12);
+}
+
+.sbeacon-btn-tour--next:hover .sbeacon-arrow-icon--rotate {
+    transform: rotate(-180deg) scale(1.1);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sbeacon-tour-next-text {
+    position: relative;
+    z-index: 1;
+}
+
+/* 4. Sub-utility Row */
+.sbeacon-tour-sub-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 3px;
+    gap: 8px;
+}
+
+.sbeacon-tour-sub-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sbeacon-sub-link {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 7px;
+    height: 25px;
+    padding: 0 8px;
+    border-radius: 6px;
     font-family: 'Poppins', sans-serif;
-    font-size: 0.72rem;
+    font-size: 0.69rem;
     font-weight: 600;
     background: transparent;
     border: 1px solid transparent;
@@ -342,96 +545,158 @@
     transition: all 0.15s ease;
 }
 
-.sbeacon-btn-ghost:hover {
-    color: #0f172a;
+.sbeacon-sub-link:hover {
     background: #e2e8f0;
+    color: #0f172a;
 }
 
-.sbeacon-btn-primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 30px;
-    padding: 0 14px;
-    border-radius: 7px;
-    font-family: 'Poppins', sans-serif;
-    font-size: 0.75rem;
+.sbeacon-sub-link--copied {
+    background: #ecfdf5 !important;
+    color: #059669 !important;
+    border-color: #a7f3d0 !important;
+}
+
+.sbeacon-sub-link--exit {
+    color: #64748b;
     font-weight: 600;
-    border: none;
-    color: #ffffff;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
-    transition: all 0.15s ease;
 }
 
-.sbeacon-btn-primary:hover {
-    filter: brightness(1.1);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
-}
-
-.sbeacon-btn-primary:active {
-    transform: translateY(0);
+.sbeacon-sub-link--exit:hover {
+    color: #e11d48;
+    background: #ffe4e6;
 }
 
 /* ── Mobile Compact Docked Mode (< 768px) ── */
+/* ── Mobile Compact Docked Mode (< 768px) ── */
 .sbeacon-card--docked {
     position: fixed !important;
-    left: 10px !important;
-    right: 10px !important;
-    bottom: 10px !important;
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 8px !important;
     top: auto !important;
     width: auto !important;
-    max-width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 16px) !important;
     border-radius: 14px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
     animation: sbeaconDockSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    z-index: 100000;
 }
 
 .sbeacon-card--docked .sbeacon-card-topbar {
-    padding: 7px 12px;
+    padding: 6px 12px;
+}
+
+.sbeacon-card--docked .sbeacon-tour-badge {
+    max-width: 160px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+}
+
+.sbeacon-card--docked .sbeacon-tour-query {
+    max-width: 75px;
 }
 
 .sbeacon-card--docked .sbeacon-card-body {
-    padding: 9px 14px 7px;
+    padding: 7px 12px 5px;
 }
 
 .sbeacon-card--docked .sbeacon-card-header {
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     gap: 8px;
+    align-items: center;
 }
 
 .sbeacon-card--docked .sbeacon-card-icon {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+}
+
+.sbeacon-card--docked .sbeacon-card-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.sbeacon-card--docked .sbeacon-card-title-row {
+    margin-bottom: 2px;
 }
 
 .sbeacon-card--docked .sbeacon-card-title {
-    font-size: 0.88rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100vw - 90px);
+}
+
+.sbeacon-card--docked .sbeacon-badge-chip {
+    display: none;
 }
 
 .sbeacon-card--docked .sbeacon-card-desc {
-    font-size: 0.73rem;
-    margin: 0 0 6px;
-    line-height: 1.35;
+    font-size: 0.7rem;
+    margin: 0;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
+/* Hide bulky capabilities on mobile so highlighted chart/table stays visible */
 .sbeacon-card--docked .sbeacon-card-actions {
-    padding: 4px 8px;
+    display: none;
+}
+
+.sbeacon-card--docked .sbeacon-tour-controller {
+    padding: 6px 12px 8px;
+    gap: 6px;
+}
+
+.sbeacon-card--docked .sbeacon-tour-progress-row {
     gap: 3px;
 }
 
-.sbeacon-card--docked .sbeacon-card-actions-label {
-    font-size: 0.62rem;
+.sbeacon-card--docked .sbeacon-tour-step-pill {
+    font-size: 0.66rem;
+    padding: 1px 7px;
 }
 
-.sbeacon-card--docked .sbeacon-chip {
+.sbeacon-card--docked .sbeacon-tour-next-hint {
+    display: none;
+}
+
+.sbeacon-card--docked .sbeacon-tour-track {
+    height: 3px;
+}
+
+.sbeacon-card--docked .sbeacon-tour-actions-row {
+    gap: 8px;
+}
+
+.sbeacon-card--docked .sbeacon-btn-tour {
+    height: 36px;
+    font-size: 0.77rem;
+    border-radius: 8px;
+}
+
+.sbeacon-card--docked .sbeacon-tour-sub-bar {
+    padding-top: 2px;
+}
+
+.sbeacon-card--docked .sbeacon-sub-link {
+    height: 22px;
+    padding: 0 6px;
     font-size: 0.66rem;
-    padding: 1px 6px;
 }
 
 .sbeacon-card--docked .sbeacon-card-footer {
-    padding: 7px 12px;
+    padding: 6px 10px;
+    gap: 6px;
 }
 
 @keyframes sbeaconDockSlide {

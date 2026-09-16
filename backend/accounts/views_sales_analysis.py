@@ -2160,7 +2160,115 @@ def sales_analysis_plan_vs_actual(request):
 
     start_date, end_date = parse_date_range(request)
 
-    sql = """
+    cursor = None
+    try:
+        cursor = conn.cursor()
+
+        # Resolve Bill_Det column names dynamically
+        bd_partno_col = find_column_ci(
+            cursor, "dbo", "Bill_Det",
+            ["itcode", "ItCode", "ITCODE", "partno", "PartNo", "PARTNO", "Part_No", "PrINTPartNO", "PRINTPARTNO"]
+        ) or "itcode"
+        bd_amt_col = find_column_ci(
+            cursor, "dbo", "Bill_Det",
+            ["amt", "Amt", "AMT"]
+        ) or "amt"
+
+        # Check for einvackno column in Bill_Mas
+        bm_einv_col_name = find_column_ci(
+            cursor, "dbo", "Bill_Mas",
+            ["einvackno", "EInvAckNo", "EINVACKNO", "einv_ackno", "ackno", "AckNo", "EInvoiceAckNo", "e_inv_ack_no"]
+        )
+        if bm_einv_col_name:
+            bm_einv_expr = f"BM.[{bm_einv_col_name}]"
+        else:
+            bm_einv_expr = "CAST(NULL AS NVARCHAR(100))"
+
+        has_rc_stock = table_exists(cursor, "RouteCardStock")
+        has_pcs_stock = table_exists(cursor, "ProdCurrentStock")
+
+        search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+        if search_q:
+            like_val = f"%{search_q}%"
+            uc_plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
+            uc_dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
+            plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
+            dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
+            search_sql = ""
+            params = [
+                start_date, end_date, like_val,  # UC plan
+                start_date, end_date, like_val,  # UC dispatch
+                start_date, end_date, like_val,  # PLAN_DATA
+                start_date, end_date, like_val,  # DISPATCH_DATA
+            ]
+        else:
+            uc_plan_filter = ""
+            uc_dispatch_filter = ""
+            plan_filter = ""
+            dispatch_filter = ""
+            search_sql = ""
+            params = [
+                start_date, end_date, start_date, end_date,
+                start_date, end_date, start_date, end_date,
+            ]
+
+        if has_rc_stock:
+            rc_cte = """
+ROUTE_CARD_STOCK AS
+(
+    SELECT
+        LTRIM(RTRIM(partno)) AS partno,
+        COUNT(DISTINCT CASE WHEN NULLIF(LTRIM(RTRIM(roucardno)), '') IS NOT NULL THEN roucardno END) AS RcCount,
+        SUM(ISNULL(prodqty, 0)) AS ProdQty,
+        SUM(ISNULL(interinspqty, 0)) AS InterInspQty,
+        SUM(ISNULL(finalinspqty, 0)) AS FinalInspQty,
+        SUM(ISNULL(dcqty, 0)) AS DcQty,
+        SUM(ISNULL(Jobqty, 0)) AS JobQty,
+        SUM(ISNULL(rejqty, 0)) AS RejQty,
+        SUM(ISNULL(rwqty, 0)) AS RwQty,
+        SUM(ISNULL(finalinsprejqty, 0)) AS FinalInspRejQty,
+        SUM(ISNULL(CustRWQty, 0)) AS CustRwQty
+    FROM RouteCardStock
+    GROUP BY LTRIM(RTRIM(partno))
+),
+"""
+        else:
+            rc_cte = """
+ROUTE_CARD_STOCK AS
+(
+    SELECT CAST('' AS NVARCHAR(100)) AS partno, 0 AS RcCount, 0.0 AS ProdQty, 0.0 AS InterInspQty, 0.0 AS FinalInspQty, 0.0 AS DcQty, 0.0 AS JobQty, 0.0 AS RejQty, 0.0 AS RwQty, 0.0 AS FinalInspRejQty, 0.0 AS CustRwQty WHERE 1=0
+),
+"""
+
+        if has_pcs_stock:
+            pcs_cte = """
+PROD_CURRENT_STOCK AS
+(
+    SELECT
+        LTRIM(RTRIM(partno)) AS partno,
+        SUM(ISNULL(prodqty, 0)) AS ProdQty,
+        SUM(ISNULL(interinspqty, 0)) AS InterInspQty,
+        SUM(ISNULL(finalinspqty, 0)) AS FinalInspQty,
+        SUM(ISNULL(dcqty, 0)) AS DcQty,
+        SUM(ISNULL(Jobqty, 0)) AS JobQty,
+        SUM(ISNULL(rejqty, 0)) AS RejQty,
+        SUM(ISNULL(rwqty, 0)) AS RwQty,
+        SUM(ISNULL(finalinsprejqty, 0)) AS FinalInspRejQty,
+        SUM(ISNULL(CustRWQty, 0)) AS CustRwQty
+    FROM ProdCurrentStock
+    GROUP BY LTRIM(RTRIM(partno))
+),
+"""
+        else:
+            pcs_cte = """
+PROD_CURRENT_STOCK AS
+(
+    SELECT CAST('' AS NVARCHAR(100)) AS partno, 0.0 AS ProdQty, 0.0 AS InterInspQty, 0.0 AS FinalInspQty, 0.0 AS DcQty, 0.0 AS JobQty, 0.0 AS RejQty, 0.0 AS RwQty, 0.0 AS FinalInspRejQty, 0.0 AS CustRwQty WHERE 1=0
+),
+"""
+
+        sql = f"""
 ;WITH PART_DESCRIPTION AS
 (
     SELECT
@@ -2185,6 +2293,9 @@ def sales_analysis_plan_vs_actual(request):
     FROM CustJobRawMat CJ
     WHERE CJ.deleted = 0
 ),
+
+{rc_cte}
+{pcs_cte}
 
 UNIQUE_COMBINATIONS AS
 (
@@ -2249,6 +2360,7 @@ DISPATCH_DATA AS
         SUM(ISNULL(DD.okqty,0)) AS DispatchQty,
         STRING_AGG(CAST(BM.invno AS VARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY BM.invno) AS InvNo,
         STRING_AGG(CAST(CONVERT(VARCHAR(10), CAST(BM.invdt AS DATE), 103) AS VARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY BM.invno) AS InvDate,
+        MAX(CASE WHEN NULLIF(LTRIM(RTRIM({bm_einv_expr})), '') IS NOT NULL THEN {bm_einv_expr} ELSE NULL END) AS EInvAckNo,
         SUM(ISNULL(BD.[{bd_amt_col}], 0)) AS InvValue
     FROM DC_Det DD
     INNER JOIN DC_Mas DM
@@ -2277,7 +2389,7 @@ SELECT
     MAX(ISNULL(PD.Description, N'')) AS Description,
     UC.ComboDate AS PlanDate,
     SUM(ISNULL(P.PlanQty,0)) AS PlanQty,
-    SUM(ISNULL(P.AvailableQty,0)) AS AvailableQty,
+    COALESCE(NULLIF(SUM(ISNULL(P.AvailableQty,0)), 0), MAX(ISNULL(RCS.FinalInspQty, 0) + ISNULL(PCS.FinalInspQty, 0)), 0) AS AvailableQty,
     SUM(ISNULL(P.PlanReqQty,0)) AS PlanReqQty,
     SUM(ISNULL(D.DispatchQty,0)) AS DispatchQty,
 
@@ -2287,9 +2399,13 @@ SELECT
     END AS DispatchPercentage,
 
     CASE
-        WHEN SUM(ISNULL(D.DispatchQty,0)) >= SUM(ISNULL(P.PlanQty,0)) AND SUM(ISNULL(P.PlanQty,0)) > 0 THEN 'Completed'
-        WHEN SUM(ISNULL(D.DispatchQty,0)) > 0 THEN 'Partial'
-        ELSE 'Pending'
+        WHEN MAX(D.InvNo) IS NOT NULL AND LTRIM(RTRIM(MAX(D.InvNo))) <> '' AND LTRIM(RTRIM(MAX(D.InvNo))) <> '-' AND LTRIM(RTRIM(MAX(D.InvNo))) <> '—' AND MAX(D.EInvAckNo) IS NOT NULL AND LTRIM(RTRIM(MAX(D.EInvAckNo))) <> '' AND LTRIM(RTRIM(MAX(D.EInvAckNo))) <> '-' THEN 'Invoiced and EInvoice maded'
+        WHEN MAX(D.InvNo) IS NOT NULL AND LTRIM(RTRIM(MAX(D.InvNo))) <> '' AND LTRIM(RTRIM(MAX(D.InvNo))) <> '-' AND LTRIM(RTRIM(MAX(D.InvNo))) <> '—' THEN 'Invoiced'
+        WHEN MAX(ISNULL(RCS.FinalInspQty, 0) + ISNULL(RCS.DcQty, 0) + ISNULL(PCS.FinalInspQty, 0) + ISNULL(PCS.DcQty, 0)) > 0 THEN 'Final Qty'
+        WHEN MAX(ISNULL(RCS.ProdQty, 0) + ISNULL(RCS.InterInspQty, 0) + ISNULL(PCS.ProdQty, 0) + ISNULL(PCS.InterInspQty, 0)) > 0 THEN 'Under Process'
+        WHEN MAX(ISNULL(RCS.RejQty, 0) + ISNULL(RCS.RwQty, 0) + ISNULL(RCS.JobQty, 0) + ISNULL(RCS.FinalInspRejQty, 0) + ISNULL(RCS.CustRwQty, 0) + ISNULL(PCS.RejQty, 0) + ISNULL(PCS.RwQty, 0) + ISNULL(PCS.JobQty, 0) + ISNULL(PCS.FinalInspRejQty, 0) + ISNULL(PCS.CustRwQty, 0)) > 0 THEN 'In Rejection or Rework or Vendor'
+        WHEN MAX(ISNULL(RCS.RcCount, 0)) = 0 AND (EXISTS (SELECT 1 FROM RouteCardStock RCS2 WHERE LTRIM(RTRIM(RCS2.partno)) = LTRIM(RTRIM(UC.PartNo))) OR NOT EXISTS (SELECT 1 FROM ProdCurrentStock PCS2 WHERE LTRIM(RTRIM(PCS2.partno)) = LTRIM(RTRIM(UC.PartNo)))) THEN 'NO Routecard'
+        ELSE 'No Stock'
     END AS DispatchStatus,
     MAX(D.InvNo) AS InvNo,
     MAX(D.InvDate) AS InvDate,
@@ -2318,6 +2434,12 @@ LEFT JOIN CustAliasMast CA
 LEFT JOIN PART_DESCRIPTION PD
     ON PD.PartNo = UC.PartNo
 
+LEFT JOIN ROUTE_CARD_STOCK RCS
+    ON RCS.partno = UC.PartNo
+
+LEFT JOIN PROD_CURRENT_STOCK PCS
+    ON PCS.partno = UC.PartNo
+
 {search_sql}
 
 GROUP BY
@@ -2333,73 +2455,7 @@ ORDER BY
     PlanDate;
 """
 
-    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
-
-    # Build per-table part-no filters for plan (DailyDcPlan_Det) and actual (DC_Det)
-    # Both tables use a PartNo column. We embed the LIKE condition directly inside each CTE
-    # so that planned-only rows AND actual-only rows are both returned when searching.
-    if search_q:
-        like_val = f"%{search_q}%"
-        # Filter applied inside UNIQUE_COMBINATIONS sub-queries so rows with PartNo match
-        # from either source (plan or dispatch) are included.
-        uc_plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
-        uc_dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
-        plan_filter = "AND LOWER(DPD.PartNo) LIKE LOWER(?)"
-        dispatch_filter = "AND LOWER(DD.PartNo) LIKE LOWER(?)"
-        # No outer WHERE needed — filtering happens inside each CTE
-        search_sql = ""
-        # We need 8 date params + 4 partno params (one per occurrence)
-        search_params = [like_val, like_val, like_val, like_val]
-    else:
-        uc_plan_filter = ""
-        uc_dispatch_filter = ""
-        plan_filter = ""
-        dispatch_filter = ""
-        search_sql = ""
-        search_params = []
-
-    sql = sql.replace("{search_sql}", search_sql)
-    sql = sql.replace("{uc_plan_filter}", uc_plan_filter)
-    sql = sql.replace("{uc_dispatch_filter}", uc_dispatch_filter)
-    sql = sql.replace("{plan_filter}", plan_filter)
-    sql = sql.replace("{dispatch_filter}", dispatch_filter)
-
-    rows = []
-    cursor = None
-    try:
-        cursor = conn.cursor()
-
-        # Resolve Bill_Det column names dynamically
-        bd_partno_col = find_column_ci(
-            cursor, "dbo", "Bill_Det",
-            ["PrINTPartNO", "PRINTPARTNO", "partno", "PartNo", "PARTNO", "Part_No"]
-        ) or "PrINTPartNO"
-        bd_amt_col = find_column_ci(
-            cursor, "dbo", "Bill_Det",
-            ["amt", "Amt", "AMT"]
-        ) or "amt"
-
-        sql = sql.replace("{bd_partno_col}", bd_partno_col)
-        sql = sql.replace("{bd_amt_col}", bd_amt_col)
-
-        if search_q:
-            # Parameter order matches CTE placeholders:
-            # UNIQUE_COMBINATIONS plan branch:  start_date, end_date, like_val
-            # UNIQUE_COMBINATIONS dispatch:     start_date, end_date, like_val
-            # PLAN_DATA:                        start_date, end_date, like_val
-            # DISPATCH_DATA:                    start_date, end_date, like_val
-            like_val = f"%{search_q}%"
-            params = [
-                start_date, end_date, like_val,  # UC plan
-                start_date, end_date, like_val,  # UC dispatch
-                start_date, end_date, like_val,  # PLAN_DATA
-                start_date, end_date, like_val,  # DISPATCH_DATA
-            ]
-        else:
-            params = [
-                start_date, end_date, start_date, end_date,
-                start_date, end_date, start_date, end_date,
-            ]
+        rows = []
         cursor.execute(sql, params)
         for row in cursor.fetchall() or []:
             customer = str(row[1]) if row[1] else "—"
@@ -2410,6 +2466,7 @@ ORDER BY
             plan_qty = float(row[5] or 0)
             avail_qty = float(row[6] or 0)
             dispatch_qty = float(row[8] or 0)
+            dispatch_status = str(row[10]) if row[10] else "No Stock"
             inv_no = str(row[11]) if row[11] else "—"
             inv_date = str(row[12]) if row[12] else "—"
             inv_value = float(row[13] or 0)
@@ -2418,9 +2475,12 @@ ORDER BY
                 "date": plan_date,
                 "customer": customer,
                 "partNoDesc": part_no_desc,
+                "partNo": part_no,
+                "description": description,
                 "planQty": plan_qty,
                 "availableQty": avail_qty,
                 "dispatchQty": dispatch_qty,
+                "status": dispatch_status,
                 "invNo": inv_no,
                 "invDate": inv_date,
                 "invValue": inv_value,

@@ -77,10 +77,12 @@
     position: fixed;
     inset: 0;
     z-index: 11000;
-    pointer-events: none;
+    pointer-events: auto;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     animation: tg-fade-in 0.28s ease-out both;
     box-sizing: border-box;
+    cursor: default;
+    user-select: none;
 }
 
 .tg-portal *,
@@ -98,6 +100,7 @@
     animation: tg-pulse-glow 3s infinite ease-in-out;
     z-index: 11001;
     box-sizing: border-box;
+    cursor: default;
 }
 
 /* Centered fallback backdrop when target not in DOM */
@@ -109,6 +112,7 @@
     -webkit-backdrop-filter: blur(8px);
     pointer-events: auto;
     z-index: 11001;
+    cursor: default;
 }
 
 /* ── Tooltip Popover Card ── */

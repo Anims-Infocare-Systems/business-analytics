@@ -112,15 +112,36 @@ const Icons = {
     )
 };
 
-export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule, onSpotlightNavigate, onOpenSpotlight }) {
+export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule, onSpotlightNavigate, onOpenSpotlight, initialTab }) {
     // ── Persist active tab across refresh ──
     const [activeTab, setActiveTab] = useState(() => {
         if (isExpiredMode) return "billing";
+        if (initialTab) return initialTab;
         try { return sessionStorage.getItem("ba_settings_tab") || "account"; }
         catch { return "account"; }
     });
 
-    // Write tab to sessionStorage whenever it changes
+    const prevOpenRef = useRef(false);
+    const prevInitialTabRef = useRef(initialTab);
+
+    // Sync tab when opened or when initialTab changes
+    useEffect(() => {
+        if (isOpen) {
+            const justOpened = !prevOpenRef.current;
+            const tabChanged = initialTab && initialTab !== prevInitialTabRef.current;
+            if (justOpened || tabChanged) {
+                if (isExpiredMode) {
+                    setActiveTab("billing");
+                } else if (initialTab) {
+                    setActiveTab(initialTab);
+                }
+            }
+        }
+        prevOpenRef.current = isOpen;
+        prevInitialTabRef.current = initialTab;
+    }, [isOpen, initialTab, isExpiredMode]);
+
+    // Write tab to sessionStorage whenever activeTab changes
     useEffect(() => {
         if (isExpiredMode) return;
         try { sessionStorage.setItem("ba_settings_tab", activeTab); } catch { }
@@ -626,7 +647,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </div>
 
                                 {/* ── Glass Info Tiles ── */}
-                                <div className="st-acct-tiles">
+                                <div className="st-acct-tiles" data-spotlight="set-company-card">
                                     {[
                                         { label: "Company", value: userCompany, d: "M3 21h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11" },
                                         { label: "Company Code", value: companyCode, mono: true, d: "M6 3h12l4 6-10 13L2 9z" },
@@ -649,7 +670,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </div>
 
                                 {/* ── Frosted Password Panel ── */}
-                                <div className="st-acct-pwd">
+                                <div className="st-acct-pwd" data-spotlight="set-change-password">
                                     <div className="st-acct-pwd__top-line" />
                                     <div className="st-acct-pwd__header">
                                         <div className="st-acct-pwd__header-icon">
@@ -773,7 +794,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
 
                             {/* Resource Quotas */}
                             <h3 className="st-subheading">Resource Usage</h3>
-                            <div className="st-quotas">
+                            <div className="st-quotas" data-spotlight="set-plan-quotas">
                                 <div className="st-quota-card">
                                     <div className="st-quota-card__header">
                                         <span className="st-quota-card__label">Active Users</span>
@@ -870,11 +891,11 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                     {activeTab === "spotlight" && (
                         <div className="st-section anim-fade-in-quick" data-spotlight="set-spotlight">
                             <SpotlightSettingsTab
-                                onSelectSection={(item) => {
+                                onSelectSection={(item, tourContext) => {
                                     setIsClosing(false);
                                     if (typeof onClose === "function") onClose();
                                     if (typeof onSpotlightNavigate === "function") {
-                                        onSpotlightNavigate(item);
+                                        onSpotlightNavigate(item, tourContext);
                                     }
                                 }}
                                 onOpenSpotlight={() => {

@@ -296,6 +296,7 @@ export default function Welcome({
                                     key={item.id}
                                     type="button"
                                     className={`wh-tile wh-tile--${item.tone}`}
+                                    data-spotlight={item.id === "users" ? "wh-card-utility" : `wh-card-${item.id}`}
                                     style={{ "--i": idx }}
                                     onClick={() => openShortcut(item.target)}
                                 >

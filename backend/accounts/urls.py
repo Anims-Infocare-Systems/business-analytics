@@ -53,11 +53,17 @@ from .views_production_analysis import (
 )
 from .views_purchaseanalysis import (
     purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table, purchase_analysis_supplier_rating,
-    purchase_analysis_fulfillment_schedule,
+    purchase_analysis_fulfillment_schedule, purchase_analysis_average_purchase_value, purchase_analysis_advanced_purchase_analytics,
 )
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
-    quality_analysis_supplier_rejections,
+    quality_analysis_supplier_rejections, quality_analysis_settings,
+)
+from .views_qualitytimeline import (
+    quality_timeline_invoices_view,
+    quality_timeline_search_view,
+    quality_timeline_detail_view,
+    quality_timeline_stage_view,
 )
 from .views_signup import signup_view
 from .views_settings import settings_profile, settings_change_password, settings_upgrade_plan
@@ -67,6 +73,9 @@ from .views_adminpannel import (
     admin_list_tenant_users, admin_delete_tenant_user, admin_user_transactions
 )
 from .views_animsutility import admin_utility_clients, admin_utility_activity
+from .views_notifications import (
+    active_notifications, admin_list_notifications, admin_create_notification, admin_delete_notification
+)
 
 
 urlpatterns = [
@@ -231,6 +240,8 @@ urlpatterns = [
     path('purchase-analysis/traceability-table/', purchase_analysis_traceability_table, name='purchase_analysis_traceability_table'),
     path('purchase-analysis/supplier-rating/', purchase_analysis_supplier_rating, name='purchase_analysis_supplier_rating'),
     path('purchase-analysis/fulfillment-schedule/', purchase_analysis_fulfillment_schedule, name='purchase_analysis_fulfillment_schedule'),
+    path('purchase-analysis/average-purchase-value/', purchase_analysis_average_purchase_value, name='purchase_analysis_average_purchase_value'),
+    path('purchase-analysis/advanced-purchase-analytics/', purchase_analysis_advanced_purchase_analytics, name='purchase_analysis_advanced_purchase_analytics'),
 
     # ── Quality Analysis ──────────────────────────────────────────────
     path('quality-analysis/summary/', quality_analysis_summary, name='quality_analysis_summary'),
@@ -241,6 +252,18 @@ urlpatterns = [
     path('quality-analysis/calibration/', quality_analysis_calibration, name='quality_analysis_calibration'),
     path('quality-analysis/insights/', quality_analysis_insights, name='quality_analysis_insights'),
     path('quality-analysis/supplier-rejections/', quality_analysis_supplier_rejections, name='quality_analysis_supplier_rejections'),
+    path('quality-analysis/settings/', quality_analysis_settings, name='quality_analysis_settings'),
+
+    # ── Quality Timeline / End-to-End Traceability ────────────────────
+    path('quality-timeline/invoices/', quality_timeline_invoices_view, name='quality_timeline_invoices'),
+    path('quality-timeline/invoices/search/', quality_timeline_search_view, name='quality_timeline_search'),
+    path('quality-timeline/<str:invoice_no>/', quality_timeline_detail_view, name='quality_timeline_detail'),
+    path('quality-timeline/<str:invoice_no>/stage/<int:stage_no>/', quality_timeline_stage_view, name='quality_timeline_stage'),
+    # Aliases under quality-analysis
+    path('quality-analysis/timeline/invoices/', quality_timeline_invoices_view, name='qa_timeline_invoices'),
+    path('quality-analysis/timeline/invoices/search/', quality_timeline_search_view, name='qa_timeline_search'),
+    path('quality-analysis/timeline/<str:invoice_no>/', quality_timeline_detail_view, name='qa_timeline_detail'),
+    path('quality-analysis/timeline/<str:invoice_no>/stage/<int:stage_no>/', quality_timeline_stage_view, name='qa_timeline_stage'),
 
     # ── E-Approval Module ─────────────────────────────────────────────
     path('eapproval/list/', eapproval_list, name='eapproval_list'),
@@ -293,5 +316,11 @@ urlpatterns = [
     path('admin/utility/clients/', admin_utility_clients, name='admin_utility_clients'),
     path('admin/utility/activity/', admin_utility_activity, name='admin_utility_activity'),
     path('admin/reports/user-transactions/', admin_user_transactions, name='admin_user_transactions'),
+
+    # ── Broadcast Notifications ───────────────────────────────────────
+    path('notifications/active/', active_notifications, name='active_notifications'),
+    path('admin/notifications/', admin_list_notifications, name='admin_list_notifications'),
+    path('admin/notifications/create/', admin_create_notification, name='admin_create_notification'),
+    path('admin/notifications/delete/<int:notification_id>/', admin_delete_notification, name='admin_delete_notification'),
 
 ]

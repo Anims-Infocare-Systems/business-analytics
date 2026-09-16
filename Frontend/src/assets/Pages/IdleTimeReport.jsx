@@ -1806,7 +1806,7 @@ export default function IdleTimeReport() {
           </div>
 
           <div className="itr-filter-grid">
-            <div className="itr-filter-group itr-filter-group--daterange">
+            <div className="itr-filter-group itr-filter-group--daterange" data-spotlight="itr-date-picker">
               <label className="itr-filter-label">Date Range</label>
               <IdleTimeReportDatePicker
                 from={dateRange.from}
@@ -1840,7 +1840,7 @@ export default function IdleTimeReport() {
               </div>
             ))}
 
-            <div className="itr-filter-group">
+            <div className="itr-filter-group" data-spotlight="itr-export-controls">
               <label className="itr-filter-label">&nbsp;</label>
               <button
                 className="itr-btn-reset"
@@ -1891,7 +1891,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Top Idle Reasons + Accepted vs Non-Accepted" />
 
         <div className="itr-g2">
-          <Card data-spotlight="itr-top-reasons" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> Top 10 Idle Reasons</span>} badge="By Hours" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
+          <Card data-spotlight="itr-top-reasons" data-spotlight-alt="itr-reason-classification" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiPieChart size={16} />Top 5 Idle Reasons</span>} badge="By Hours" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
             {topReasonsChart.labels.length === 0 ? (
               <EmptyState message="No idle reasons recorded in this period." />
             ) : (

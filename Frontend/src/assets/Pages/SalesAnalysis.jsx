@@ -95,50 +95,35 @@ function isCreditNoteType(btype, invNo) {
   );
 }
 
-function getDespatchStatusMeta(row) {
-  const planned = Number(row.plannedQty) || 0;
-  const despatched = Number(row.despatchQty) || 0;
-  const pending = Number(row.pendingPlannedQty) != null ? Number(row.pendingPlannedQty) : Math.max(0, planned - despatched);
-  const available = Number(row.availableQty) || 0;
-
-  if (row.status && typeof row.status === 'string' && row.status.trim() !== '') {
-    const s = row.status.toLowerCase();
-    if (s.includes('despatch') || s.includes('complete') || s.includes('done')) {
-      return { label: row.status, variant: 'completed' };
-    }
-    if (s.includes('part')) {
-      return { label: row.status, variant: 'partial' };
-    }
-    if (s.includes('ready') || s.includes('avail')) {
-      return { label: row.status, variant: 'ready' };
-    }
-    return { label: row.status, variant: 'pending' };
-  }
-
-  if (pending === 0 && (despatched > 0 || planned > 0)) {
-    return { label: "Despatched", variant: "completed" };
-  }
-  if (despatched > 0 && pending > 0) {
-    return { label: "Partial", variant: "partial" };
-  }
-  if (pending > 0 && available >= pending && available > 0) {
-    return { label: "Ready", variant: "ready" };
-  }
-  if (pending > 0) {
-    return { label: "Pending", variant: "pending" };
-  }
-  if (despatched > 0) {
-    return { label: "Despatched", variant: "completed" };
-  }
-  return { label: "Pending", variant: "pending" };
-}
-
 const DESPATCH_STATUS_OPTIONS = [
-  { id: "Despatched", label: "Despatched", color: "#10b981", bg: "rgba(16, 185, 129, 0.1)", border: "rgba(16, 185, 129, 0.25)" },
-  { id: "Partial", label: "Partial", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.1)", border: "rgba(139, 92, 246, 0.25)" },
-  { id: "Ready", label: "Ready", color: "#0ea5e9", bg: "rgba(14, 165, 233, 0.1)", border: "rgba(14, 165, 233, 0.25)" },
-  { id: "Pending", label: "Pending", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.25)" },
+  { id: "Invoiced and EInvoice maded", label: "Invoiced and EInvoice maded", color: "#059669", bg: "rgba(5, 150, 105, 0.1)", border: "rgba(5, 150, 105, 0.25)", variant: "einvoiced" },
+  { id: "Invoiced", label: "Invoiced", color: "#10b981", bg: "rgba(16, 185, 129, 0.1)", border: "rgba(16, 185, 129, 0.25)", variant: "invoiced" },
+  { id: "Final Qty", label: "Final Qty", color: "#0ea5e9", bg: "rgba(14, 165, 233, 0.1)", border: "rgba(14, 165, 233, 0.25)", variant: "final" },
+  { id: "Under Process", label: "Under Process", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.1)", border: "rgba(139, 92, 246, 0.25)", variant: "wip" },
+  { id: "In Rejection or Rework or Vendor", label: "In Rejection or Rework or Vendor", color: "#ec4899", bg: "rgba(236, 72, 153, 0.1)", border: "rgba(236, 72, 153, 0.25)", variant: "rejection" },
+  { id: "NO Routecard", label: "NO Routecard", color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.25)", variant: "noroutecard" },
+  { id: "No Stock", label: "No Stock", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.25)", variant: "nostock" },
 ];
+
+function getDespatchStatusMeta(row) {
+  const s = (row.status || "").trim();
+  const option = DESPATCH_STATUS_OPTIONS.find(
+    (o) => o.id.toLowerCase() === s.toLowerCase() || o.label.toLowerCase() === s.toLowerCase()
+  );
+  if (option) {
+    return { label: option.label, variant: option.variant, color: option.color };
+  }
+  if (s) {
+    if (s.toLowerCase().includes("einvoice")) return { label: s, variant: "einvoiced", color: "#059669" };
+    if (s.toLowerCase().includes("invoiced")) return { label: s, variant: "invoiced", color: "#10b981" };
+    if (s.toLowerCase().includes("final")) return { label: s, variant: "final", color: "#0ea5e9" };
+    if (s.toLowerCase().includes("process")) return { label: s, variant: "wip", color: "#8b5cf6" };
+    if (s.toLowerCase().includes("rejection") || s.toLowerCase().includes("rework") || s.toLowerCase().includes("vendor")) return { label: s, variant: "rejection", color: "#ec4899" };
+    if (s.toLowerCase().includes("no routecard") || s.toLowerCase().includes("noroutecard")) return { label: s, variant: "noroutecard", color: "#ef4444" };
+    return { label: s, variant: "nostock", color: "#f59e0b" };
+  }
+  return { label: "No Stock", variant: "nostock", color: "#f59e0b" };
+}
 
 function formatLakhs(rupees, decimals = 3) {
   const n = Number(rupees);
@@ -1055,9 +1040,7 @@ function PartWiseHistorySection({
     let fromDate = dateRange.from;
     let toDate = dateRange.to;
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      const dflt = getTodayMonthRange();
-      fromDate = dflt.from;
-      toDate = dflt.to;
+      return;
     }
 
     const params = new URLSearchParams({
@@ -2027,11 +2010,11 @@ export default function SalesAnalysis() {
   const despatchStatusCounts = useMemo(() => {
     const counts = {
       all: 0,
-      Despatched: 0,
-      Partial: 0,
-      Ready: 0,
-      Pending: 0,
     };
+    DESPATCH_STATUS_OPTIONS.forEach(opt => {
+      counts[opt.id] = 0;
+    });
+
     (filteredPlanVsActual || []).forEach((row) => {
       if (despatchDateRange.from || despatchDateRange.to) {
         if (!row.date) return;
@@ -2048,7 +2031,7 @@ export default function SalesAnalysis() {
 
       counts.all += 1;
       const meta = getDespatchStatusMeta(row);
-      const label = meta.label || "Pending";
+      const label = meta.label || "No Stock";
       if (counts[label] !== undefined) {
         counts[label] += 1;
       } else {
@@ -4371,10 +4354,6 @@ export default function SalesAnalysis() {
     let toDate = dateRange.to;
 
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      const dflt = getTodayMonthRange();
-      fromDate = dflt.from;
-      toDate = dflt.to;
-      setDateRange(dflt);
       return;
     }
 
@@ -4642,10 +4621,6 @@ export default function SalesAnalysis() {
     let toDate = dateRange.to;
 
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      const dflt = getTodayMonthRange();
-      fromDate = dflt.from;
-      toDate = dflt.to;
-      setDateRange(dflt);
       return;
     }
 
@@ -4692,9 +4667,7 @@ export default function SalesAnalysis() {
     let fromDate = dateRange.from;
     let toDate = dateRange.to;
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      const dflt = getTodayMonthRange();
-      fromDate = dflt.from;
-      toDate = dflt.to;
+      return;
     }
 
     const params = new URLSearchParams({
@@ -4809,7 +4782,7 @@ export default function SalesAnalysis() {
         <div className="sa-filter-divider" style={{ width: '1px', height: '16px', backgroundColor: 'rgba(45, 109, 232, 0.15)', margin: '0 4px' }} />
 
         {/* Date Range */}
-        <div className="sa-filter-item">
+        <div className="sa-filter-item" data-spotlight="sa-date-picker">
           <span className="sa-filter-label">Date Range</span>
           <SalesAnalysisDatePicker
             from={dateRange.from}
@@ -5059,7 +5032,7 @@ export default function SalesAnalysis() {
         </div>
 
         {/* Invoice Type */}
-        <div className="sa-filter-item" ref={invoiceDropdownRef}>
+        <div className="sa-filter-item" ref={invoiceDropdownRef} data-spotlight="sa-bill-type-filter" data-spotlight-alt="sa-credit-notes">
           <span className="sa-filter-label">Invoice Type</span>
           <div className={`sa-custom-select sa-custom-select--customer${invoiceDropdownOpen ? " sa-active" : ""}`}>
             <button
@@ -6061,7 +6034,7 @@ export default function SalesAnalysis() {
                         return (
                           <tr key={`${customerName}-${rowIdx}`} className="sa-despatch-row" style={{ animationDelay: `${rowIdx * 30}ms` }}>
                             <td><span className="sa-part-no-tag">{row.partNo}</span></td>
-                            <td style={{ color: "#475569" }} title={row.description}>{row.description}</td>
+                            <td className="sa-despatch-desc-cell" title={row.description}>{row.description}</td>
                             <td className="sa-num">
                               <span className={Number(row.pendingPlannedQty) > 0 ? "sa-pending-qty-badge" : "sa-pending-qty-badge sa-pending-qty-badge--zero"}>
                                 {formatQty(row.pendingPlannedQty)}
@@ -6449,7 +6422,7 @@ export default function SalesAnalysis() {
             )}
           </table>
         </div>
-        <div className="sa-action-bar">
+        <div className="sa-action-bar" data-spotlight="sa-export-controls">
           {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to Excel…")}>📥 Export Excel</button> */}
           {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to PDF…")}>📄 Export PDF</button> */}
           {/* <button className="sa-btn sa-btn--ghost" onClick={() => window.print()}>🖨️ Print</button> */}
@@ -7463,7 +7436,7 @@ export default function SalesAnalysis() {
       <div className="sa-two-col">
 
         {/* Top Products */}
-        <div className="sa-card">
+        <div className="sa-card" data-spotlight="sa-top-products">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Package size={16} style={{ color: "#f97316" }} /> Top Products by Revenue
@@ -7505,7 +7478,7 @@ export default function SalesAnalysis() {
         </div>
 
         {/* Insights */}
-        <div className="sa-card">
+        <div className="sa-card" data-spotlight="sa-management-insights">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Lightbulb size={16} style={{ color: "#eab308" }} /> Management Insights

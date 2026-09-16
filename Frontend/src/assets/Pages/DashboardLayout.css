@@ -1548,6 +1548,10 @@
         gap: 8px;
     }
 
+    .dl-header__right {
+        gap: 10px;
+    }
+
     .dl-header__title {
         font-size: 15px;
         max-width: calc(100% - 120px);
@@ -2361,4 +2365,27 @@
 
 @media (max-width: 480px) {
     .dl-idle-modal { padding: 30px 22px 26px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOUR GUIDE ACTIVE MODE — DISABLE BACKGROUND INTERACTION
+   ══════════════════════════════════════════════════════════ */
+.dl-root--tour-active .dl-sidebar,
+.dl-root--tour-active .dl-main,
+.dl-root--tour-active .dl-header,
+.dl-root--tour-active .dl-topbar,
+.dl-root--tour-active .dl-content,
+.dl-root--tour-active .dl-overlay {
+    pointer-events: none !important;
+    user-select: none !important;
+    cursor: default !important;
+}
+
+.dl-root--tour-active .dl-sidebar *,
+.dl-root--tour-active .dl-main *,
+.dl-root--tour-active .dl-header *,
+.dl-root--tour-active .dl-topbar *,
+.dl-root--tour-active .dl-content * {
+    pointer-events: none !important;
+    cursor: default !important;
 }

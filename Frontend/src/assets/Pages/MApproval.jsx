@@ -613,7 +613,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     return createPortal(
         <div className="map-modal map-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="map-preview-box">
+            <div className="map-preview-box" data-spotlight="map-detail-modal">
                 <div className="map-prev__hd">
                     <div className="map-prev__hd-left">
                         <div className="map-prev__hd-icon">
@@ -684,7 +684,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             </div>
                         </>
                     )}
-                    <div className="map-prev__meta-item map-prev__meta-item--compact">
+                    <div className="map-prev__meta-item map-prev__meta-item--compact" data-spotlight="map-signoff-pipeline">
                         <span className="map-prev__meta-label">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                             Approved By
@@ -1499,7 +1499,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                     {/* Alternate Raw Material */}
                     {card.type === "Alternate Raw Material" && (
-                        <div className="map-alt-tab-content animate-fade-in">
+                        <div className="map-alt-tab-content animate-fade-in" data-spotlight="map-alt-rm-compare">
                             {/* Side-by-side comparison cards */}
                             {altItems.length > 0 && (
                                 <div className="map-alt-hero-wrap">
@@ -1669,7 +1669,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     )}
                 </div>
 
-                <div className="map-prev__footer">
+                <div className="map-prev__footer" data-spotlight="map-action-buttons">
                     <button type="button" className="map-prev-btn map-prev-btn--ghost" onClick={onClose}>Close</button>
                     {card.status === "Approved" ? (
                         <button
@@ -2373,7 +2373,8 @@ export default function MApproval() {
                     )}
                 </div>
 
-                <div className="map-type-dd" ref={typeDropRef}>
+                {/* ── Type Dropdown ── */}
+                <div className="map-type-dd" ref={typeDropRef} data-spotlight="map-type-tabs">
                     <button
                         ref={typeTriggerRef}
                         type="button"

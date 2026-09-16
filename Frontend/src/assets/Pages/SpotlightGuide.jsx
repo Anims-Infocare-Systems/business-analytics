@@ -76,7 +76,8 @@ const ICON_MAP = {
 export default function SpotlightGuide({
     isOpen,
     onClose,
-    onSelectSection
+    onSelectSection,
+    initialQuery = ""
 }) {
     const [query, setQuery] = useState("");
     const [activeCategory, setActiveCategory] = useState("all");
@@ -92,14 +93,19 @@ export default function SpotlightGuide({
     // Focus input on modal open
     useEffect(() => {
         if (isOpen) {
-            setQuery("");
+            setQuery(initialQuery || "");
             setActiveCategory("all");
             setSelectedIndex(0);
             setTimeout(() => {
-                if (inputRef.current) inputRef.current.focus();
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                    if (initialQuery) {
+                        inputRef.current.select();
+                    }
+                }
             }, 50);
         }
-    }, [isOpen]);
+    }, [isOpen, initialQuery]);
 
     // Keep selected index within bounds
     useEffect(() => {
@@ -144,7 +150,15 @@ export default function SpotlightGuide({
     const handleSelectItem = (item) => {
         onClose();
         if (typeof onSelectSection === "function") {
-            onSelectSection(item);
+            const trimmedQuery = query ? query.trim() : "";
+            const hasTour = trimmedQuery.length > 0 && results.length > 1;
+            const currentIndex = results.findIndex(r => r.id === item.id);
+            const tourContext = hasTour ? {
+                query: trimmedQuery,
+                results: results,
+                currentIndex: currentIndex >= 0 ? currentIndex : 0
+            } : null;
+            onSelectSection(item, tourContext);
         }
     };
 

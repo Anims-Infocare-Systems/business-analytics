@@ -306,6 +306,7 @@
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -488,26 +489,159 @@
     color: #2563eb;
 }
 
-/* ── Mobile Responsiveness ── */
+/* ── Mobile Responsiveness & Modern Alignment (< 640px) ── */
 @media (max-width: 640px) {
     .sg-overlay {
-        padding: 20px 8px 10px;
+        padding: 12px 8px 12px;
+        align-items: flex-start;
     }
 
     .sg-modal {
+        width: 100% !important;
+        max-width: 100% !important;
         max-height: 90vh;
         border-radius: 16px;
     }
 
     .sg-search-wrap {
-        padding: 12px 14px;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .sg-search-icon-box {
+        width: 28px;
+        height: 28px;
     }
 
     .sg-search-input {
-        font-size: 0.92rem;
+        font-size: 0.88rem;
     }
 
-    .sg-footer-chip:not(:first-child) {
+    .sg-kbd-badge {
         display: none;
+    }
+
+    .sg-categories-bar {
+        padding: 8px 10px;
+        gap: 5px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .sg-cat-pill {
+        padding: 3px 9px;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+    }
+
+    .sg-results-count {
+        display: none;
+    }
+
+    .sg-results-list {
+        padding: 6px 8px;
+        max-height: calc(90vh - 120px);
+    }
+
+    .sg-item {
+        padding: 8px 10px;
+        gap: 9px;
+        border-radius: 10px;
+        margin-bottom: 3px;
+    }
+
+    .sg-item-icon-box {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex-shrink: 0;
+    }
+
+    .sg-item-icon-box svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    .sg-item-top {
+        margin-bottom: 2px;
+        gap: 6px;
+    }
+
+    .sg-item-breadcrumbs {
+        font-size: 0.67rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 62%;
+    }
+
+    .sg-item-badge {
+        font-size: 0.62rem;
+        padding: 1px 5px;
+        border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    .sg-item-title {
+        font-size: 0.82rem;
+        white-space: normal;
+        line-height: 1.25;
+        margin: 1px 0 2px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .sg-item-desc {
+        font-size: 0.71rem;
+        line-height: 1.3;
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+    }
+
+    .sg-item-actions-preview {
+        margin-top: 3px;
+        gap: 4px;
+    }
+
+    .sg-act-chip {
+        font-size: 0.62rem;
+        padding: 1px 5px;
+    }
+
+    /* On mobile, show max 2 chips so they don't wrap onto 3 rows */
+    .sg-act-chip:nth-child(n+3) {
+        display: none;
+    }
+
+    /* Hide the text "Jump & Tour", only show clean enter button */
+    .sg-enter-text {
+        display: none;
+    }
+
+    .sg-enter-btn {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        flex-shrink: 0;
+    }
+
+    .sg-footer {
+        padding: 8px 12px;
+    }
+
+    .sg-footer-left {
+        display: none;
+    }
+
+    .sg-footer-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .sg-brand-pill {
+        font-size: 0.68rem;
     }
 }

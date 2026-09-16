@@ -461,7 +461,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     return createPortal(
         <div className="tap-modal tap-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="tap-preview-box">
+            <div className="tap-preview-box" data-spotlight="tap-detail-modal" data-spotlight-alt="tap-pdf-viewer">
                 <div className="tap-prev__hd">
                     <div className="tap-prev__hd-left">
                         <div className="tap-prev__hd-icon">
@@ -518,7 +518,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                 <div className="tap-prev__body">
                     <div className="tap-prev__section-label">Line Items</div>
-                    <div className="tap-prev__table-wrap">
+                    <div className="tap-prev__table-wrap" data-spotlight="tap-technical-specs">
                         <table className="tap-prev__table">
                             <thead>
                                 <tr>
@@ -589,7 +589,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     </div>
                 </div>
 
-                <div className="tap-prev__footer">
+                <div className="tap-prev__footer" data-spotlight="tap-action-buttons">
                     <button type="button" className="tap-prev-btn tap-prev-btn--ghost" onClick={onClose}>Close</button>
                     {card.status === "Approved" ? (
                         <button
@@ -1106,7 +1106,7 @@ export default function TApproval() {
                 </div>
 
                 {/* ── Type Dropdown ── */}
-                <div className="tap-type-dd" ref={typeDropRef}>
+                <div className="tap-type-dd" ref={typeDropRef} data-spotlight="tap-type-tabs">
                     <button
                         ref={typeTriggerRef}
                         type="button"

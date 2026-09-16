@@ -10,9 +10,9 @@ import {
 } from "react-icons/md";
 
 /* ── Idle session constants ───────────────────────────────── */
-const IDLE_TIMEOUT_MS  = 15 * 60 * 1000;  // 15 minutes total
-const IDLE_WARN_MS     = 14 * 60 * 1000;  // show warning after 14 min
-const IDLE_WARN_SECS   = 60;              // countdown seconds shown in modal
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;  // 15 minutes total
+const IDLE_WARN_MS = 14 * 60 * 1000;  // show warning after 14 min
+const IDLE_WARN_SECS = 60;              // countdown seconds shown in modal
 /* ─────────────────────────────────────────────────────────── */
 
 const API = resolveApiBase();
@@ -45,6 +45,7 @@ import {
 import SpotlightGuide from "./SpotlightGuide";
 import SpotlightBeacon from "./SpotlightBeacon";
 import { SPOTLIGHT_REGISTRY } from "./spotlightRegistry";
+import NotificationDropdown from "./NotificationDropdown";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -59,6 +60,19 @@ const Icons = {
     MIS: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="8" y1="17" x2="8" y2="12" /><line x1="12" y1="17" x2="12" y2="8" /><line x1="16" y1="17" x2="16" y2="14" /></svg>),
     Charts: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,17 8,11 13,14 21,6" /><polyline points="17,6 21,6 21,10" /></svg>),
     Logout: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16,17 21,12 16,7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>),
+    Spotlight: () => (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3" />
+            <path d="M12 19v3" />
+            <path d="M2 12h3" />
+            <path d="M19 12h3" />
+            <path d="m4.93 4.93 2.12 2.12" />
+            <path d="m16.95 16.95 2.12 2.12" />
+            <path d="m4.93 19.07 2.12-2.12" />
+            <path d="m16.95 7.05 2.12-2.12" />
+        </svg>
+    ),
     Setting: () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>),
     Chevron: ({ open }) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`dl-chevron ${open ? "dl-chevron--open" : ""}`}><polyline points="6,9 12,15 18,9" /></svg>),
     ChevronRight: () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9,6 15,12 9,18" /></svg>),
@@ -108,6 +122,18 @@ const MENU_ITEMS = [
     },
 ];
 
+const SPOTLIGHT_SIDEBAR_ITEM = {
+    key: "Spotlight",
+    icon: Icons.Spotlight,
+    children: []
+};
+
+const SETTINGS_SIDEBAR_ITEM = {
+    key: "Settings",
+    icon: Icons.Setting,
+    children: []
+};
+
 /* ── Topbar heading map ───────────────────────────────────── */
 const HEADING_MAP = {
     "Top Management Dashboard": "Top Management Dashboard",
@@ -125,6 +151,7 @@ const HEADING_MAP = {
     "Charts": "Charts & Visualizations",
     "User Rights": "Utility — User Rights",
     "Users Setting": "Utility — Users Setting",
+    "Spotlight": "Spotlight",
     "Settings": "Settings",
     "Welcome": "Workspace Overview",
 };
@@ -354,8 +381,8 @@ function Clock() {
     const fullYear = istTime.getUTCFullYear();
 
     return (
-        <div 
-            className="dl-clock" 
+        <div
+            className="dl-clock"
             title="Indian Standard Time (IST - UTC+05:30) • Synchronized Operational Clock"
         >
             <div className="dl-clock__time">
@@ -527,6 +554,7 @@ export default function DashboardLayout() {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const isAuthenticated = !!user.username;
     const companyName = user.company || "Anims Infocare Systems";
+    const companyCode = user.company_code || user.companyCode || "";
     const userName = user.username || "User";
     const userInitials = (userName.slice(0, 2) || "US").toUpperCase();
     const [userDesignation, setUserDesignation] = useState(user.designation || "Staff");
@@ -647,6 +675,10 @@ export default function DashboardLayout() {
         try { return sessionStorage.getItem("ba_settings_open") === "1"; }
         catch { return false; }
     });
+    const [settingsInitialTab, setSettingsInitialTab] = useState(() => {
+        try { return sessionStorage.getItem("ba_settings_tab") || "account"; }
+        catch { return "account"; }
+    });
 
     /* ── Version Tour states & handlers ──────────────────── */
     const [showTourPrompt, setShowTourPrompt] = useState(false);
@@ -684,8 +716,14 @@ export default function DashboardLayout() {
     /* ── Spotlight Guide State & Handlers ────────────────── */
     const [spotlightOpen, setSpotlightOpen] = useState(false);
     const [activeSpotlightTarget, setActiveSpotlightTarget] = useState(null);
+    const [spotlightInitialQuery, setSpotlightInitialQuery] = useState("");
 
-    const handleSpotlightNavigate = useCallback((item) => {
+    const handleOpenSpotlight = useCallback((query = "") => {
+        setSpotlightInitialQuery(typeof query === "string" ? query : "");
+        setSpotlightOpen(true);
+    }, []);
+
+    const handleSpotlightNavigate = useCallback((item, tourContext = null) => {
         if (!item) return;
 
         // 0. Close Spotlight Guide modal
@@ -694,7 +732,7 @@ export default function DashboardLayout() {
         // 1. Switch active module / tab if needed
         if (item.module === "Welcome") {
             setSettingsOpen(false);
-            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch { }
             setActiveItem("Welcome");
             setActiveSubItem(null);
             setOpenMenu(null);
@@ -702,32 +740,35 @@ export default function DashboardLayout() {
             if (isMobile) setDrawerOpen(false);
         } else if (item.module === "Charts") {
             setSettingsOpen(false);
-            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch { }
             setActiveItem("Charts");
             setActiveSubItem(null);
             setOpenMenu(null);
             writeNav({ activeItem: "Charts", activeSubItem: null, openMenu: null });
             if (isMobile) setDrawerOpen(false);
         } else if (item.module === "Settings") {
-            if (item.settingsTab) {
-                try { sessionStorage.setItem("ba_settings_tab", item.settingsTab); } catch {}
-            }
-            try { sessionStorage.setItem("ba_settings_open", "1"); } catch {}
+            const targetTab = item.settingsTab || "account";
+            setSettingsInitialTab(targetTab);
+            try { sessionStorage.setItem("ba_settings_tab", targetTab); } catch { }
+            try { sessionStorage.setItem("ba_settings_open", "1"); } catch { }
             setSettingsOpen(true);
             if (isMobile) setDrawerOpen(false);
         } else if (item.module) {
             setSettingsOpen(false);
-            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch { }
             handleSubClick(item.module);
         } else if (item.parentMenu) {
             setSettingsOpen(false);
-            try { sessionStorage.setItem("ba_settings_open", "0"); } catch {}
+            try { sessionStorage.setItem("ba_settings_open", "0"); } catch { }
             handleToggle(item.parentMenu);
         }
 
-        // 2. Set beacon active
-        setActiveSpotlightTarget(item);
-        window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: item }));
+        // 2. Set beacon active (preserving tour context if provided)
+        const targetWithContext = tourContext
+            ? { ...item, tourContext }
+            : (item.tourContext ? item : { ...item });
+        setActiveSpotlightTarget(targetWithContext);
+        window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: targetWithContext }));
     }, [isMobile]);
 
     // Global hotkey: Ctrl+K, Cmd+K, or "/"
@@ -735,9 +776,11 @@ export default function DashboardLayout() {
         const handleGlobalHotkey = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
                 e.preventDefault();
+                setSpotlightInitialQuery("");
                 setSpotlightOpen(prev => !prev);
             } else if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
                 e.preventDefault();
+                setSpotlightInitialQuery("");
                 setSpotlightOpen(true);
             }
         };
@@ -838,9 +881,9 @@ export default function DashboardLayout() {
     /* ── Idle / auto-logout state ────────────────────────── */
     const [idleWarning, setIdleWarning] = useState(false);  // show warning modal
     const [countdown, setCountdown] = useState(IDLE_WARN_SECS);
-    const idleTimerRef    = useRef(null);
-    const warnTimerRef    = useRef(null);
-    const countdownRef    = useRef(null);
+    const idleTimerRef = useRef(null);
+    const warnTimerRef = useRef(null);
+    const countdownRef = useRef(null);
     /* ─────────────────────────────────────────────────────── */
     const [erpUnavailable, setErpUnavailable] = useState(() => {
         try {
@@ -890,7 +933,7 @@ export default function DashboardLayout() {
                     setIsExpired(!!data.isExpired);
                     const newPlan = (data.license?.plan_id || "free").toLowerCase().trim();
                     setPlanId(newPlan);
-                    
+
                     if (data.rights) {
                         setUserRights(data.rights);
                         setIsSuperAdmin(!!data.isSuperAdmin);
@@ -955,7 +998,7 @@ export default function DashboardLayout() {
             fetch(`${API}/log-transaction/?${queryParams.toString()}`, {
                 method: "GET",
                 credentials: "include"
-            }).catch(() => {});
+            }).catch(() => { });
         }
     }, [activeSubItem, activeItem, isAuthenticated]);
 
@@ -1058,7 +1101,7 @@ export default function DashboardLayout() {
             const w = window.innerWidth;
             if (w === lastWidth) return;
             lastWidth = w;
-            
+
             setScreenWidth(w);
             if (w >= BP_TABLET) { setExpanded(true); setDrawerOpen(false); }
             else if (w >= BP_MOBILE) { setExpanded(false); setDrawerOpen(false); }
@@ -1112,8 +1155,18 @@ export default function DashboardLayout() {
 
     /* parent-level toggle */
     const handleToggle = (key) => {
-        if (key === "Settings") {
+        if (key === "Spotlight") {
+            setSettingsInitialTab("spotlight");
+            try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
             setSettingsOpen(true);
+            if (isMobile) setDrawerOpen(false);
+            return;
+        }
+        if (key === "Settings") {
+            setSettingsInitialTab("account");
+            try { sessionStorage.setItem("ba_settings_tab", "account"); } catch { }
+            setSettingsOpen(true);
+            if (isMobile) setDrawerOpen(false);
             return;
         }
         const item = MENU_ITEMS.find(m => m.key === key);
@@ -1144,7 +1197,15 @@ export default function DashboardLayout() {
     };
 
     const handleWelcomeNavigate = (target) => {
+        if (target === "Spotlight") {
+            setSettingsInitialTab("spotlight");
+            try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
+            setSettingsOpen(true);
+            return;
+        }
         if (target === "Settings") {
+            setSettingsInitialTab("account");
+            try { sessionStorage.setItem("ba_settings_tab", "account"); } catch { }
             setSettingsOpen(true);
             return;
         }
@@ -1232,7 +1293,7 @@ export default function DashboardLayout() {
     }
 
     return (
-        <div className={`dl-root dark-theme ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"} ${isMobile && drawerOpen ? "dl-root--drawer-open" : ""}`}>
+        <div className={`dl-root dark-theme ${showExpanded ? "dl-root--expanded" : "dl-root--collapsed"} ${isMobile && drawerOpen ? "dl-root--drawer-open" : ""} ${isTourActive ? "dl-root--tour-active" : ""}`}>
 
             {/* Mobile overlay */}
             {isMobile && drawerOpen && (
@@ -1242,6 +1303,8 @@ export default function DashboardLayout() {
             {/* ── Sidebar ─────────────────────────────────── */}
             <aside
                 ref={sidebarRef}
+                inert={isTourActive ? "" : undefined}
+                aria-hidden={isTourActive ? "true" : undefined}
                 className={[
                     "dl-sidebar",
                     showExpanded ? "dl-sidebar--expanded" : "dl-sidebar--collapsed",
@@ -1277,7 +1340,7 @@ export default function DashboardLayout() {
                 <div className="dl-sidebar__section-label">MENU</div>
 
                 {/* Nav */}
-                <nav className="dl-sidebar__nav" data-tour="sidebar-nav">
+                <nav className="dl-sidebar__nav" data-tour="sidebar-nav" data-spotlight="dl-sidebar-nav">
                     {allowedMenuItems.map((item, idx) => (
                         <SidebarItem
                             key={item.key}
@@ -1296,14 +1359,24 @@ export default function DashboardLayout() {
                     <div className="dl-sidebar__divider" />
                     <div className="dl-sidebar__section-label">OTHER</div>
 
+                    <div data-spotlight="dl-command-palette-trigger">
+                        <SidebarItem
+                            item={SPOTLIGHT_SIDEBAR_ITEM}
+                            index={allowedMenuItems.length}
+                            isActive={settingsOpen && settingsInitialTab === "spotlight"}
+                            isOpen={false}
+                            isExpanded={showExpanded}
+                            isMobile={isMobile}
+                            onToggle={handleToggle}
+                            onSubClick={() => { }}
+                            activeSubItem={null}
+                        />
+                    </div>
+
                     <SidebarItem
-                        item={{
-                            key: "Settings",
-                            icon: Icons.Setting,
-                            children: []
-                        }}
-                        index={allowedMenuItems.length}
-                        isActive={activeItem === "Settings"}
+                        item={SETTINGS_SIDEBAR_ITEM}
+                        index={allowedMenuItems.length + 1}
+                        isActive={settingsOpen && settingsInitialTab !== "spotlight"}
                         isOpen={false}
                         isExpanded={showExpanded}
                         isMobile={isMobile}
@@ -1322,6 +1395,7 @@ export default function DashboardLayout() {
                 {!isMobile && (
                     <button
                         className="dl-sidebar__collapse-btn"
+                        data-spotlight="dl-sidebar-collapse"
                         onClick={() => { setExpanded(e => !e); setOpenMenu(null); }}
                         title={expanded ? "Collapse sidebar" : "Expand sidebar"}
                     >
@@ -1333,7 +1407,11 @@ export default function DashboardLayout() {
             </aside>
 
             {/* ── Main area ────────────────────────────────── */}
-            <div className="dl-main">
+            <div
+                className="dl-main"
+                inert={isTourActive ? "" : undefined}
+                aria-hidden={isTourActive ? "true" : undefined}
+            >
 
                 {/* Header */}
                 <header className="dl-header">
@@ -1347,15 +1425,16 @@ export default function DashboardLayout() {
                         </button>
                     )}
                     {/* ✅ Dynamic company name from localStorage */}
-                    <h1 className="dl-header__title" data-tour="workspace-header">{companyName}</h1>
+                    <h1 className="dl-header__title" data-tour="workspace-header" data-spotlight="dl-global-header">{companyName}</h1>
                     <div className="dl-header__right">
-                        <div data-tour="live-clock">
+                        <div data-tour="live-clock" data-spotlight="dl-live-clock">
                             <Clock />
                         </div>
                         <div
                             ref={profileRef}
                             className={`dl-header__profile ${profileDropdownOpen ? "dl-header__profile--active" : ""}`}
                             data-tour="user-profile"
+                            data-spotlight="dl-user-profile-menu"
                             onClick={() => setProfileDropdownOpen(open => !open)}
                         >
                             <div className="dl-header__profile-avatar">{userInitials}</div>
@@ -1389,6 +1468,7 @@ export default function DashboardLayout() {
                                 </div>
                             )}
                         </div>
+                        <NotificationDropdown companyCode={companyCode} userName={userName} />
                     </div>
                 </header>
 
@@ -1434,6 +1514,7 @@ export default function DashboardLayout() {
                 onNavigateModule={handleWelcomeNavigate}
                 onSpotlightNavigate={handleSpotlightNavigate}
                 onOpenSpotlight={() => setSpotlightOpen(true)}
+                initialTab={settingsInitialTab}
             />
 
             {/* ── Version Interactive Tour Guide ── */}
@@ -1448,15 +1529,20 @@ export default function DashboardLayout() {
             {/* ── Spotlight Guide Modal (Command Palette) ── */}
             <SpotlightGuide
                 isOpen={spotlightOpen}
-                onClose={() => setSpotlightOpen(false)}
+                onClose={() => {
+                    setSpotlightOpen(false);
+                    setSpotlightInitialQuery("");
+                }}
                 onSelectSection={handleSpotlightNavigate}
+                initialQuery={spotlightInitialQuery}
             />
 
             {/* ── Spotlight Section Beacon & Guided Tour ── */}
             <SpotlightBeacon
                 activeTarget={activeSpotlightTarget}
                 onDismiss={() => setActiveSpotlightTarget(null)}
-                onOpenSearch={() => setSpotlightOpen(true)}
+                onOpenSearch={(query) => handleOpenSpotlight(query)}
+                onNavigateSection={handleSpotlightNavigate}
             />
 
             {/* ── First-Time Login Version Tour Prompt Modal ── */}

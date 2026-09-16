@@ -134,9 +134,21 @@ export default function SalesAnalysisDatePicker({ from, to, onChange, size, disa
     const [inputErr,  setInputErr]  = useState("");
 
     useEffect(() => {
+        if (disabled) setOpen(false);
+    }, [disabled]);
+
+    useEffect(() => {
         setFromInput(toInputFmt(from));
         setToInput(toInputFmt(to));
         setInputErr("");
+        if (open) {
+            if (from && !to) {
+                setSelecting(from);
+            } else {
+                setSelecting(null);
+            }
+            setHovered(null);
+        }
     }, [from, to, open]);
 
     useEffect(() => {
@@ -181,10 +193,16 @@ export default function SalesAnalysisDatePicker({ from, to, onChange, size, disa
         if (fromInput && !f) { setInputErr("Invalid From date"); return; }
         if (toInput   && !t) { setInputErr("Invalid To date");   return; }
         if (f && t && f > t) { setInputErr("From must be ≤ To"); return; }
+        const nextFrom = f || from;
+        const nextTo = t || to;
+        if (nextFrom && nextTo && nextFrom > nextTo) {
+            setInputErr("From must be ≤ To");
+            return;
+        }
         setInputErr("");
         if (f || t) {
-            onChange({ from: f || from, to: t || to });
-            if (f) setLeft(new Date(f.getFullYear(), f.getMonth(), 1));
+            onChange({ from: nextFrom, to: nextTo });
+            if (nextFrom) setLeft(new Date(nextFrom.getFullYear(), nextFrom.getMonth(), 1));
             setActivePreset(null);
             setSelecting(null);
         }

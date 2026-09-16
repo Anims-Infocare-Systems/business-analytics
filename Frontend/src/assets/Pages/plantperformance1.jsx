@@ -1536,7 +1536,7 @@ function DowntimeReasonView({ data, from, to, loading, uid }) {
   const chartHeight = Math.max(180, (Array.isArray(reasons) ? Math.min(reasons.length, 12) : 1) * 26 + 40);
 
   return (
-    <div className="pp1-dt-view" key={uid}>
+    <div className="pp1-dt-view" key={uid} data-spotlight="ppd-downtime-reasons">
       <div className="pp1-detail__titlebar">
         {/* <span className="pp1-detail__bullet" style={{ background: "#ef4444" }} /> */}
         {/* <p className="pp1-detail__heading">Downtime by Reason</p> */}
@@ -1660,7 +1660,7 @@ function QualitySplitView({ data, loading, uid }) {
   const rebuildToken = qualSplitToken(data);
 
   return (
-    <div className="pp1-qs-view" key={uid}>
+    <div className="pp1-qs-view" key={uid} data-spotlight="ppd-quality-split">
       <div className="pp1-qs-card">
         <div className="pp1-qs-card__hd">
           <div>
@@ -1771,7 +1771,7 @@ function TopDefectsView({ data, loading, uid }) {
 
   return (
     <div className="pp1-dt-view" key={uid}>
-      <div className="pp1-dt-card">
+      <div className="pp1-dt-card" data-spotlight="ppd-defect-categories">
         <div className="pp1-dt-card__hd">
           <div>
             <div className="pp1-dt-card__title">Top Defect Categories</div>
@@ -1891,7 +1891,7 @@ function CustomerComplaintsView({ data, loading, uid }) {
   const rebuildToken = ccChartToken(rows);
 
   return (
-    <div className="pp1-cc-view" key={uid}>
+    <div className="pp1-cc-view" key={uid} data-spotlight="ppd-customer-complaints">
       {/* ── Header ── */}
       <div className="pp1-cc-hd">
         <div className="pp1-cc-hd__left">
@@ -2068,7 +2068,7 @@ function IqcRejectionView({ data, loading, uid }) {
   const rebuildToken = iqcChartToken(data);
 
   return (
-    <div className="pp1-iqc-view" key={uid}>
+    <div className="pp1-iqc-view" key={uid} data-spotlight="ppd-iqc-rejections">
       {/* ── Header ── */}
       <div className="pp1-iqc-hd">
         <div className="pp1-iqc-hd__title">IQC — Incoming Quality Rejections</div>
@@ -2245,7 +2245,7 @@ function IdleTimeView({ data, loading, uid }) {
   const rebuildToken = idleChartToken(data);
 
   return (
-    <div className="pp1-idle-view" key={uid}>
+    <div className="pp1-idle-view" key={uid} data-spotlight="ppd-idle-summary">
       {/* Header */}
       <div className="pp1-idle-hd">
         <div className="pp1-idle-hd__title">Idle Time Summary</div>
@@ -2465,7 +2465,7 @@ function OeeEfficiencyView({ data, loading, uid, from, to }) {
   const formattedFirstPassYield = fi.first_pass_yield != null ? fmtPct(fi.first_pass_yield) : `${qs.pctOk}%`;
 
   return (
-    <div className="pp1-oee-view" key={uid}>
+    <div className="pp1-oee-view" key={uid} data-spotlight="ppd-oee-gauges">
       <div className="pp1-oee-header">
         <div className="pp1-oee-header__accent" />
         <h3 className="pp1-oee-header__title">OEE Efficiency Analysis</h3>
@@ -2982,6 +2982,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
   ];
 
   return (
+    <div className="pp1-otd-spotlight-wrap" data-spotlight="ppd-otd-trend">
     <PremiumDashboardView
       title="OTD"
       icon={Clock}
@@ -3131,6 +3132,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
         </button>
       </div>
     </PremiumDashboardView>
+    </div>
   );
 }
 
@@ -3141,7 +3143,7 @@ function ProductionOutputView({ data, loading, uid }) {
   const formattedOutput = Math.round(outputQty).toLocaleString("en-IN");
 
   return (
-    <div className="pp1-prodout-view" key={uid}>
+    <div className="pp1-prodout-view" key={uid} data-spotlight="ppd-production-output">
       <div className="pp1-prodout-card">
         <div className="pp1-prodout-card__accent" />
         <div className="pp1-prodout-hd">
@@ -3197,7 +3199,7 @@ function FinalInspectionOkView({ data, loading, uid }) {
   const formattedOk = Math.round(okQty).toLocaleString("en-IN");
 
   return (
-    <div className="pp1-fiok-view" key={uid}>
+    <div className="pp1-fiok-view" key={uid} data-spotlight="ppd-final-inspection-ok">
       <div className="pp1-fiok-card">
         <div className="pp1-fiok-card__accent" />
         <div className="pp1-fiok-hd">
@@ -3351,7 +3353,7 @@ function OperatorEfficiencyView({ loading, uid, from, to }) {
   const chartBusy = loading || chartLoading;
 
   return (
-    <div className="pp1-opeff-view" key={uid}>
+    <div className="pp1-opeff-view" key={uid} data-spotlight="ppd-operator-efficiency">
       <div className="pp1-opeff-chart-panel">
         <div className="pp1-opeff-chart-panel__accent" />
         <div className="pp1-opeff-chart-panel__hd">
@@ -3465,7 +3467,7 @@ function PurchaseOrderView({ data, loading, uid }) {
   const rebuildToken = poChartToken(data);
 
   return (
-    <div className="pp1-po-view" key={uid}>
+    <div className="pp1-po-view" key={uid} data-spotlight="ppd-po-status">
       {/* Header */}
       <div className="pp1-po-hd">
         <div className="pp1-po-hd__title">🛒 Purchase Order Status</div>
@@ -3643,7 +3645,7 @@ function GrnPipelineView({ data, loading, uid }) {
   const rebuildToken = grnChartToken(data);
 
   return (
-    <div className="pp1-grn-view" key={uid}>
+    <div className="pp1-grn-view" key={uid} data-spotlight="ppd-grn-pipeline">
       <div className="pp1-grn-hd">
         <div className="pp1-grn-hd__title">GRN Pending Pipeline (Quick View)</div>
         <div className="pp1-grn-hd__sub">
@@ -4261,7 +4263,7 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
   };
 
   return (
-    <div className="pp1-action-detail pp1-center-premium pp1-ct-reveal pp1-ct-reveal--in" key={uid} style={{ "--act-color": "var(--pp1-blue)" }}>
+    <div className="pp1-action-detail pp1-center-premium pp1-ct-reveal pp1-ct-reveal--in" key={uid} data-spotlight="ppd-customer-po-compare" style={{ "--act-color": "var(--pp1-blue)" }}>
       <div className="pp1-action-detail__header pp1-center-premium__header">
         <div className="pp1-action-detail__icon-box pp1-center-premium__icon" style={{ background: "var(--pp1-blue)" }}>
           <Scale size={16} style={{ color: "#fff" }} />
@@ -4897,7 +4899,7 @@ function InspectionView({ type, data, loading, uid }) {
   const rwkFill = type === "final_inspection" ? "#22c55e" : "#f97316";
 
   return (
-    <div className="pp1-insp-view" key={uid}>
+    <div className="pp1-insp-view" key={uid} data-spotlight="ppd-inspection-queues">
       <div className="pp1-insp-hd">
         <div className="pp1-insp-hd__left">
           <div className="pp1-insp-hd__icon">{icon}</div>
@@ -23431,7 +23433,7 @@ export default function PlantPerformance1() {
                   }
                 }}
               >
-                <div className="pp1-target-modal">
+                <div className="pp1-target-modal" data-spotlight="ppd-target-modal">
                   <div className="pp1-target-modal__stripe" />
                   <div className="pp1-target-modal__hd">
                     <div className="pp1-target-modal__title-group">
