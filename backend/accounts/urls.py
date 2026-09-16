@@ -321,6 +321,7 @@ urlpatterns = [
     path('notifications/active/', active_notifications, name='active_notifications'),
     path('admin/notifications/', admin_list_notifications, name='admin_list_notifications'),
     path('admin/notifications/create/', admin_create_notification, name='admin_create_notification'),
+    path('admin/notifications/<int:notification_id>/', admin_delete_notification, name='admin_delete_notification_rest'),
     path('admin/notifications/delete/<int:notification_id>/', admin_delete_notification, name='admin_delete_notification'),
 
 ]

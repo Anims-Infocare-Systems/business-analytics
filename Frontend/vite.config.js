@@ -164,6 +164,10 @@ export default defineConfig(({ mode }) => {
     }),
   ],
 
+  build: {
+    sourcemap: false,
+    chunkSizeWarningLimit: 3500,
+  },
   server: {
     // HTTP only — keeps mobile LAN access working.
     // basicSsl / https:true was removed because self-signed certs

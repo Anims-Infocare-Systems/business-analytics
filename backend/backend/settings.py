@@ -131,6 +131,9 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
     "x-admin-token",
     "x-company-code",
     "x-username",
+    "cache-control",
+    "pragma",
+    "expires",
 ]
 
 

@@ -54,8 +54,10 @@ export default function NotificationDropdown({ companyCode, userName }) {
     const fetchNotifications = useCallback(async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${API}/notifications/active/`, {
-                headers: { "Cache-Control": "no-cache" }
+            const res = await fetch(`${API}/notifications/active/?_t=${Date.now()}`, {
+                method: "GET",
+                credentials: "include",
+                cache: "no-store"
             });
             if (res.ok) {
                 const data = await res.json();
