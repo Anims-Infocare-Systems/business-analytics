@@ -296,15 +296,23 @@ function ClientDrawer({ client, onClose }) {
     );
 }
 
+// Module-level client cache for instant (0ms) tab transitions
+let _clientUtilityCache = null;
+let _clientUtilityCacheTime = 0;
+const CLIENT_CACHE_TTL = 30000; // 30 seconds
+
 /* ════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ════════════════════════════════════════════════════════════ */
 export default function AnimsUtility({ onAuthLost }) {
     useTick(30000); // re-render every 30s to refresh "time ago"
 
-    const [clients, setClients] = useState([]);
-    const [activityFeed, setActivityFeed] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const hasInitialCache = Boolean(_clientUtilityCache && (Date.now() - _clientUtilityCacheTime < CLIENT_CACHE_TTL));
+
+    const [clients, setClients] = useState(() => hasInitialCache ? _clientUtilityCache.clients : []);
+    const [activityFeed, setActivityFeed] = useState(() => hasInitialCache ? _clientUtilityCache.activity : []);
+    const [loading, setLoading] = useState(!hasInitialCache);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
     const [search, setSearch] = useState("");
@@ -338,33 +346,42 @@ export default function AnimsUtility({ onAuthLost }) {
         return opts;
     }, [clients]);
 
-    useEffect(() => {
-        fetchData({ silent: false });
-        // Set up periodic automatic polling every 15 seconds to sync live activity/users silently
-        const interval = setInterval(() => {
-            fetchData({ silent: true });
-        }, 15000);
-        return () => clearInterval(interval);
-    }, []);
-
-    const fetchData = async ({ silent = false } = {}) => {
-        if (!silent) {
+    const fetchData = async ({ silent = false, force = false } = {}) => {
+        if (!silent && !_clientUtilityCache) {
             setLoading(true);
             setErrorMsg("");
         }
+        if (force) {
+            setIsRefreshing(true);
+        }
         try {
+            const clientsUrl = force 
+                ? `${API}/admin/utility/clients/?force_refresh=true` 
+                : `${API}/admin/utility/clients/`;
+            const activityUrl = force 
+                ? `${API}/admin/utility/activity/?force_refresh=true` 
+                : `${API}/admin/utility/activity/`;
+
             const [clientsRes, activityRes] = await Promise.all([
-                adminFetch(`${API}/admin/utility/clients/`),
-                adminFetch(`${API}/admin/utility/activity/`),
+                adminFetch(clientsUrl),
+                adminFetch(activityUrl),
             ]);
 
             const clientsData = await clientsRes.json();
             const activityData = await activityRes.json();
 
             if (clientsRes.ok && activityRes.ok) {
-                setClients(clientsData.clients || []);
-                setActivityFeed(activityData.activity || []);
+                const cList = clientsData.clients || [];
+                const aList = activityData.activity || [];
+                setClients(cList);
+                setActivityFeed(aList);
                 setLastRefresh(new Date());
+
+                _clientUtilityCache = {
+                    clients: cList,
+                    activity: aList
+                };
+                _clientUtilityCacheTime = Date.now();
             } else if (!silent) {
                 const authLost =
                     (clientsRes.status === 403 && clientsData?.code === "admin_auth_required") ||
@@ -375,16 +392,36 @@ export default function AnimsUtility({ onAuthLost }) {
                     setErrorMsg(clientsData.error || activityData.error || "Failed to load monitor data.");
                 }
             }
-        } catch (err) {
-            if (!silent) {
+        } catch {
+            if (!silent && !_clientUtilityCache) {
                 setErrorMsg("Network error. Could not connect to API.");
             }
         } finally {
             if (!silent) {
                 setLoading(false);
             }
+            if (force) {
+                setIsRefreshing(false);
+            }
         }
     };
+
+    useEffect(() => {
+        if (hasInitialCache) {
+            // Silently revalidate in background without blocking UI
+            fetchData({ silent: true });
+        } else {
+            fetchData();
+        }
+
+        // Set up periodic automatic polling every 30 seconds only when browser tab is visible
+        const interval = setInterval(() => {
+            if (typeof document !== "undefined" && !document.hidden) {
+                fetchData({ silent: true });
+            }
+        }, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     /* ── Counts ── */
     const total = clients.length;
@@ -444,7 +481,7 @@ export default function AnimsUtility({ onAuthLost }) {
 
     /* ── Manual refresh ── */
     const handleRefresh = () => {
-        fetchData();
+        fetchData({ force: true });
     };
 
     /* ── Filter pills ── */
@@ -464,8 +501,9 @@ export default function AnimsUtility({ onAuthLost }) {
 
     if (loading) {
         return (
-            <div className="au-root" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "300px" }}>
-                <div style={{ color: "#9ca3af" }}>Querying client stats...</div>
+            <div className="au-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", gap: "16px" }}>
+                <div className="au-spinner"></div>
+                <div style={{ color: "#9ca3af", fontSize: "14px", fontWeight: 500 }}>Connecting to client monitor...</div>
             </div>
         );
     }
@@ -474,7 +512,7 @@ export default function AnimsUtility({ onAuthLost }) {
         return (
             <div className="au-root" style={{ padding: "20px" }}>
                 <div className="ap-error-alert" style={{ marginBottom: "15px" }}>{errorMsg}</div>
-                <button className="au-refresh-btn" onClick={fetchData}>Retry</button>
+                <button className="au-refresh-btn" onClick={() => fetchData({ force: true })}>Retry</button>
             </div>
         );
     }
@@ -497,12 +535,25 @@ export default function AnimsUtility({ onAuthLost }) {
                         </svg>
                         {timeAgo(lastRefresh)}
                     </span>
-                    <button className="au-refresh-btn" onClick={handleRefresh} title="Refresh">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <button 
+                        className={`au-refresh-btn ${isRefreshing ? "au-refresh-btn--refreshing" : ""}`} 
+                        onClick={handleRefresh} 
+                        disabled={isRefreshing}
+                        title="Refresh client monitor"
+                    >
+                        <svg 
+                            className={isRefreshing ? "au-spin" : ""}
+                            width="15" 
+                            height="15" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2.5"
+                        >
                             <polyline points="1,4 1,10 7,10" />
                             <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
                         </svg>
-                        Refresh
+                        {isRefreshing ? "Refreshing..." : "Refresh"}
                     </button>
                 </div>
             </div>

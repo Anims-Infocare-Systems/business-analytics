@@ -4,6 +4,7 @@ import { resolveApiBase } from "../../apiBase";
 import "./PurchaseAnalysis.css";
 import PurchaseAnalysisDatePicker from "./PurchaseAnalysisDatePicker";
 import ChartDataLabels from "chartjs-plugin-datalabels";
+import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 import {
     ShoppingCart,
     Factory,
@@ -2239,11 +2240,11 @@ export default function PurchaseAnalysis() {
         return `${y}-${m}-${day}`;
     };
 
-    const _dflt = { from: startOfMonth, to: endOfMonth };
+    const _dflt = getModuleDefaultDateRange("purchase_analysis", { from: startOfMonth, to: endOfMonth });
     const _saved = readFilterSession("ba_filter_purchase", _dflt);
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [filters, setFilters] = useState({
-        fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
+        fromDate: toIso(_saved.from || startOfMonth), toDate: toIso(_saved.to || endOfMonth),
         poType: "All Types", supplier: ["All Suppliers"],
         department: "Production", status: "All Status",
     });
@@ -5216,11 +5217,12 @@ export default function PurchaseAnalysis() {
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        setDateRange({ from: startOfMonth, to: endOfMonth });
+        const dfltRange = getModuleDefaultDateRange("purchase_analysis", { from: startOfMonth, to: endOfMonth });
+        setDateRange({ from: dfltRange.from, to: dfltRange.to });
         setSearchQuery("");
         setPoTableSearchQuery("");
         setFilters({
-            fromDate: toIso(startOfMonth), toDate: toIso(endOfMonth),
+            fromDate: toIso(dfltRange.from), toDate: toIso(dfltRange.to),
             poType: "All Types", supplier: ["All Suppliers"],
             department: "Production", status: "All Status"
         });

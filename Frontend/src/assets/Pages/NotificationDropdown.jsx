@@ -70,14 +70,53 @@ export default function NotificationDropdown({ companyCode, userName }) {
         }
     }, []);
 
-    // Initial load & periodic background polling every 90 seconds
+    // Initial load, background polling every 10s & real-time cross-tab / window sync
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 90000);
-        return () => clearInterval(interval);
+
+        // 1. Fast periodic background sync every 10 seconds for all connected users
+        const interval = setInterval(fetchNotifications, 10000);
+
+        // 2. Instant cross-tab BroadcastChannel listener (0 ms when broadcast is sent in another tab)
+        let bc = null;
+        try {
+            if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+                bc = new BroadcastChannel("ba_system_broadcasts");
+                bc.onmessage = () => {
+                    fetchNotifications();
+                };
+            }
+        } catch (err) {
+            console.error("BroadcastChannel listener error:", err);
+        }
+
+        // 3. Storage event listener (cross-tab localStorage change trigger)
+        const handleStorage = (e) => {
+            if (e.key === "ba_broadcast_ping") {
+                fetchNotifications();
+            }
+        };
+        window.addEventListener("storage", handleStorage);
+
+        // 4. Instant update when tab becomes active / window is focused
+        const handleVisibilityOrFocus = () => {
+            if (document.visibilityState === "visible") {
+                fetchNotifications();
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+        window.addEventListener("focus", handleVisibilityOrFocus);
+
+        return () => {
+            clearInterval(interval);
+            if (bc) bc.close();
+            window.removeEventListener("storage", handleStorage);
+            document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+            window.removeEventListener("focus", handleVisibilityOrFocus);
+        };
     }, [fetchNotifications]);
 
-    // Close on click outside or Escape
+    // Close flyout on click outside or Escape
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -85,13 +124,15 @@ export default function NotificationDropdown({ companyCode, userName }) {
             }
         };
         const handleKeyDown = (e) => {
-            if (e.key === "Escape") setIsOpen(false);
+            if (e.key === "Escape") {
+                setIsOpen(false);
+            }
         };
         if (isOpen) {
             document.addEventListener("mousedown", handleClickOutside);
             document.addEventListener("touchstart", handleClickOutside);
-            document.addEventListener("keydown", handleKeyDown);
         }
+        document.addEventListener("keydown", handleKeyDown);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
             document.removeEventListener("touchstart", handleClickOutside);
@@ -99,7 +140,7 @@ export default function NotificationDropdown({ companyCode, userName }) {
         };
     }, [isOpen]);
 
-    // Unread count
+    // Unread notifications count
     const unreadCount = useMemo(() => {
         return notifications.filter(n => !readIds.has(n.id)).length;
     }, [notifications, readIds]);
@@ -169,7 +210,9 @@ export default function NotificationDropdown({ companyCode, userName }) {
                 {unreadCount > 0 && (
                     <>
                         <span className="nd-badge-pulse" />
-                        <span className="nd-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                        <span className="nd-badge" key={unreadCount}>
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
                     </>
                 )}
             </button>

@@ -121,6 +121,20 @@ export default function AdminNotification({ onAuthLost }) {
                 toast.success("Broadcast published to all users! Auto-deletes in 15 days.");
                 handleClearForm();
                 fetchNotifications();
+
+                // Instantly notify Dashboard across all open browser tabs to update count automatically
+                try {
+                    if (typeof window !== "undefined") {
+                        if ("BroadcastChannel" in window) {
+                            const bc = new BroadcastChannel("ba_system_broadcasts");
+                            bc.postMessage({ type: "BROADCAST_PUBLISHED", timestamp: Date.now() });
+                            bc.close();
+                        }
+                        localStorage.setItem("ba_broadcast_ping", String(Date.now()));
+                    }
+                } catch (err) {
+                    console.error("Broadcast signal error:", err);
+                }
             } else {
                 toast.error(data.error || "Failed to publish broadcast.");
             }
@@ -159,14 +173,27 @@ export default function AdminNotification({ onAuthLost }) {
 
             const data = await res.json();
             if (res.ok && data.success) {
-                toast.success(`Broadcast #${id} deleted.`);
-                setNotifications(prev => prev.filter(item => item.id !== id));
+                toast.success(`Broadcast #${id} marked as deleted.`);
+                setNotifications(prev => prev.map(item => item.id === id ? { ...item, deleted: true, is_active: false } : item));
                 setStats(prev => ({
                     ...prev,
-                    total: Math.max(0, prev.total - 1),
                     active: Math.max(0, prev.active - 1)
                 }));
                 setDeleteTarget(null);
+
+                // Instantly notify Dashboard across all open browser tabs to update count automatically
+                try {
+                    if (typeof window !== "undefined") {
+                        if ("BroadcastChannel" in window) {
+                            const bc = new BroadcastChannel("ba_system_broadcasts");
+                            bc.postMessage({ type: "BROADCAST_DELETED", timestamp: Date.now() });
+                            bc.close();
+                        }
+                        localStorage.setItem("ba_broadcast_ping", String(Date.now()));
+                    }
+                } catch (err) {
+                    console.error("Broadcast signal error:", err);
+                }
             } else {
                 toast.error(data.error || "Failed to delete notification.");
             }
@@ -195,11 +222,11 @@ export default function AdminNotification({ onAuthLost }) {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [deleteTarget, deletingId]);
 
-    // Filtered notifications list
+    // Filtered notifications list (supports all, active, deleted, and categories)
     const filteredNotifications = useMemo(() => {
         return notifications.filter(item => {
             const matchesCat = filterCategory === "all" || 
-                (filterCategory === "active" ? item.is_active : item.category === filterCategory);
+                (filterCategory === "active" ? (item.is_active && !item.deleted) : filterCategory === "deleted" ? item.deleted : item.category === filterCategory);
             const matchesSearch = !searchTerm.trim() || 
                 item.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                 item.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -536,6 +563,12 @@ export default function AdminNotification({ onAuthLost }) {
                                 Active ({stats.active})
                             </button>
                             <button 
+                                className={`an-filter-tab ${filterCategory === "deleted" ? "an-filter-tab--active" : ""}`}
+                                onClick={() => setFilterCategory("deleted")}
+                            >
+                                Deleted ({notifications.filter(n => n.deleted).length})
+                            </button>
+                            <button 
                                 className={`an-filter-tab ${filterCategory === "maintenance" ? "an-filter-tab--active" : ""}`}
                                 onClick={() => setFilterCategory("maintenance")}
                             >
@@ -567,8 +600,8 @@ export default function AdminNotification({ onAuthLost }) {
                         </button>
                     </div>
 
-                    <div className="an-table-search">
-                        <MdSearch className="an-search-icon" size={16} />
+                    <div className="an-search-box">
+                        <MdSearch size={18} className="an-search-icon" />
                         <input 
                             type="text"
                             className="an-search-input"
@@ -609,10 +642,10 @@ export default function AdminNotification({ onAuthLost }) {
                                 filteredNotifications.map((item) => {
                                     const catMeta = getCategoryDetails(item.category);
                                     return (
-                                        <tr key={item.id}>
+                                        <tr key={item.id} style={item.deleted ? { opacity: 0.65 } : undefined}>
                                             <td style={{ fontWeight: 700, color: "#64748b" }}>#{item.id}</td>
                                             <td>
-                                                <div style={{ fontWeight: 750, color: "#f8fafc", marginBottom: "4px", fontSize: "0.86rem" }}>
+                                                <div style={{ fontWeight: 750, color: "#f8fafc", marginBottom: "4px", fontSize: "0.86rem", textDecoration: item.deleted ? "line-through" : "none" }}>
                                                     {item.title}
                                                 </div>
                                                 <div style={{ fontSize: "0.78rem", color: "#94a3b8", lineHeight: 1.5, maxWidth: "540px", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
@@ -658,7 +691,11 @@ export default function AdminNotification({ onAuthLost }) {
                                                 </span>
                                             </td>
                                             <td>
-                                                {item.is_active ? (
+                                                {item.deleted ? (
+                                                    <span className="an-status-pill an-status-pill--deleted" title="deleted = true">
+                                                        Deleted
+                                                    </span>
+                                                ) : item.is_active ? (
                                                     <span className="an-status-pill an-status-pill--active">
                                                         <MdFiberManualRecord size={7} /> Active
                                                     </span>
@@ -669,15 +706,21 @@ export default function AdminNotification({ onAuthLost }) {
                                                 )}
                                             </td>
                                             <td style={{ textAlign: "right" }}>
-                                                <button 
-                                                    className="an-delete-btn"
-                                                    onClick={() => setDeleteTarget(item)}
-                                                    disabled={deletingId === item.id}
-                                                    title="Delete notification"
-                                                >
-                                                    <MdDelete size={14} />
-                                                    <span>{deletingId === item.id ? "Deleting..." : "Delete"}</span>
-                                                </button>
+                                                {item.deleted ? (
+                                                    <span className="an-deleted-badge" title="Broadcast marked as deleted (deleted = true)">
+                                                        Deleted
+                                                    </span>
+                                                ) : (
+                                                    <button 
+                                                        className="an-delete-btn"
+                                                        onClick={() => setDeleteTarget(item)}
+                                                        disabled={deletingId === item.id}
+                                                        title="Delete notification (marks deleted = true)"
+                                                    >
+                                                        <MdDelete size={14} />
+                                                        <span>{deletingId === item.id ? "Deleting..." : "Delete"}</span>
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -722,7 +765,7 @@ export default function AdminNotification({ onAuthLost }) {
                             Delete Broadcast Notice?
                         </h3>
                         <p className="an-modal-subtitle">
-                            Are you sure you want to permanently delete this broadcast notification? Connected users will immediately stop receiving this notice.
+                            Are you sure you want to delete this broadcast notice? It will be updated with <code>deleted = true</code> and immediately removed from user dashboards.
                         </p>
 
                         {/* Target Preview Card */}

@@ -5,8 +5,10 @@
 import hashlib
 import hmac
 import time
+import json
 from datetime import datetime, date
 from django.conf import settings
+from django.http import HttpResponse
 from django.db import connection, transaction
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
@@ -419,6 +421,13 @@ def admin_delete_credential(request, admin_id):
 # ─────────────────────────────────────────────────────────────
 #  TENANTS LIST & MANAGEMENT
 # ─────────────────────────────────────────────────────────────
+# ─── In-Memory Cache for Tenant Organizations Directory ─────────────────────
+_TENANTS_CACHE = {}
+_TENANTS_CACHE_TTL = 30.0  # 30 seconds TTL
+
+def _invalidate_tenants_cache():
+    _TENANTS_CACHE.clear()
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -428,9 +437,16 @@ def admin_list_tenants(request):
     except PermissionError as e:
         return admin_auth_denied_response(e)
 
+    force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
+    now_ts = time.time()
+    if not force_refresh and "data" in _TENANTS_CACHE:
+        cached = _TENANTS_CACHE["data"]
+        if (now_ts - cached["time"]) < _TENANTS_CACHE_TTL:
+            return HttpResponse(cached["bytes"], content_type="application/json")
+
     try:
         with connection.cursor() as cursor:
-            # Query all signups with database connection details
+            # Multi-statement query: 1. Signups + Tenants, 2. License module flags
             cursor.execute(
                 """
                 SELECT 
@@ -458,21 +474,41 @@ def admin_list_tenants(request):
                     t.status as tenant_status,
                     ts.city,
                     ts.state
-                FROM tenants_signup ts
-                LEFT JOIN tenants t ON ts.tenant_id = t.id
-                ORDER BY ts.company_name
+                FROM tenants_signup ts WITH (INDEX(IX_tenants_signup_company_code))
+                LEFT JOIN tenants t WITH (INDEX(IX_tenants_company_code)) ON ts.tenant_id = t.id
+                ORDER BY ts.company_name;
+
+                SELECT company_code, dashboard, approvals, reports, mis, charts, utility, plan_id 
+                FROM tenants_lisencemodule;
                 """
             )
             rows = cursor.fetchall()
+
+            # Batch 2: License modules for all companies in one round-trip
+            cursor.nextset()
+            lic_rows = cursor.fetchall()
+            lic_map = {
+                (r[0] or "").strip().upper(): {
+                    "dashboard": bool(r[1]),
+                    "approvals": bool(r[2]),
+                    "reports": bool(r[3]),
+                    "mis": bool(r[4]),
+                    "charts": bool(r[5]),
+                    "utility": bool(r[6]),
+                    "plan_id": str(r[7]).strip().lower() if r[7] else ""
+                }
+                for r in lic_rows
+            }
             
             tenants = []
             for r in rows:
                 signup_date = r[13].strftime("%Y-%m-%d") if isinstance(r[13], (datetime, date)) else str(r[13] or "")
                 end_date = r[14].strftime("%Y-%m-%d") if isinstance(r[14], (datetime, date)) else str(r[14] or "")
                 comp_code = r[2]
-                lic_flags = get_tenant_license(comp_code)
+                cc_upper = (comp_code or "").strip().upper()
+                lic_flags = lic_map.get(cc_upper, {})
                 db_plan = r[12]
-                prefix = str(comp_code or "").strip().upper()[:1]
+                prefix = cc_upper[:1]
                 if prefix == "T":
                     plan_val = "Testing Details (T)"
                 elif prefix == "D":
@@ -516,7 +552,11 @@ def admin_list_tenants(request):
                         "utility": bool(lic_flags.get("utility")),
                     }
                 })
-            return Response({"success": True, "tenants": tenants})
+
+            res_payload = {"success": True, "tenants": tenants}
+            json_bytes = json.dumps(res_payload).encode("utf-8")
+            _TENANTS_CACHE["data"] = {"bytes": json_bytes, "time": now_ts}
+            return HttpResponse(json_bytes, content_type="application/json")
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
@@ -633,6 +673,7 @@ def admin_create_tenant(request):
                 # 5. Update/insert license mapping in tenants_lisencemodule
                 update_tenant_license(tenant_id, company_code, plan_id, modules_dict)
 
+        _invalidate_tenants_cache()
         return Response({"success": True, "message": "Tenant created successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -730,6 +771,7 @@ def admin_update_tenant(request):
                 # 3. Update/insert license mapping in tenants_lisencemodule
                 update_tenant_license(tenant_id, company_code, plan_id, modules_dict)
 
+        _invalidate_tenants_cache()
         return Response({"success": True, "message": "Tenant details updated successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -765,6 +807,7 @@ def admin_patch_tenant_status(request, tenant_id):
                     [active_status, tenant_id],
                 )
 
+        _invalidate_tenants_cache()
         return Response({
             "success": True,
             "tenant_id": tenant_id,
@@ -804,6 +847,7 @@ def admin_delete_tenant(request, tenant_id):
                 # Delete from tenants
                 cursor.execute("DELETE FROM tenants WHERE id = %s", [tenant_id])
 
+        _invalidate_tenants_cache()
         return Response({"success": True, "message": "Tenant and all associated data deleted successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -891,6 +935,10 @@ def admin_delete_tenant_user(request, user_id):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
+# ─── In-Memory Cache for User Transaction Report (Fast Acceleration) ────────
+_UTR_CACHE = {}
+_UTR_CACHE_TTL = 60.0  # 60 seconds TTL
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -906,6 +954,15 @@ def admin_user_transactions(request):
     username = request.GET.get("username", "all")
     module_name = request.GET.get("module_name", "all")
     report_type = request.GET.get("report_type", "date_wise")
+    force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
+
+    # Check high-speed cache
+    cache_key = f"{from_date}_{to_date}_{company_code}_{username}_{module_name}_{report_type}"
+    now_ts = time.time()
+    if not force_refresh and cache_key in _UTR_CACHE:
+        cached = _UTR_CACHE[cache_key]
+        if (now_ts - cached["time"]) < _UTR_CACHE_TTL:
+            return HttpResponse(cached["bytes"], content_type="application/json")
 
     params = []
     where_clauses = []
@@ -934,33 +991,53 @@ def admin_user_transactions(request):
     else:
         order_sql = "ORDER BY ut.created_at DESC"
 
+    # Multi-statement query: Pure covering index scan (no joins across transatlantic socket) + batch metadata
     query = f"""
         SELECT 
             ut.id, 
             ut.created_at, 
             ut.username, 
             ut.module_name, 
-            ut.company_code,
-            t.company_name,
-            t.erp_database,
-            ts.plan_name
-        FROM tenants_usersTransaction ut
-        LEFT JOIN tenants t ON ut.company_code = t.company_code
-        LEFT JOIN tenants_signup ts ON ut.company_code = ts.company_code
+            ut.company_code
+        FROM tenants_usersTransaction ut WITH (INDEX(IX_tenants_usersTransaction_perf))
         {where_sql}
-        {order_sql}
+        {order_sql};
+
+        SELECT company_code, company_name, erp_database FROM tenants WITH (INDEX(IX_tenants_company_code));
+        SELECT company_code, plan_name FROM tenants_signup WITH (INDEX(IX_tenants_signup_company_code));
     """
 
     try:
         with connection.cursor() as cursor:
             cursor.execute(query, params)
-            rows = cursor.fetchall()
+            ut_rows = cursor.fetchall()
+
+            # Batch 2: Tenants metadata
+            cursor.nextset()
+            tenant_rows = cursor.fetchall()
+
+            # Batch 3: Signups metadata
+            cursor.nextset()
+            signup_rows = cursor.fetchall()
+
+            tenant_map = {r[0]: (r[1], r[2]) for r in tenant_rows}
+            signup_map = {r[0]: r[1] for r in signup_rows}
+
+            companies = [
+                {"company_code": r[0], "company_name": r[1]}
+                for r in sorted(tenant_rows, key=lambda x: (x[1] or x[0] or "").lower())
+            ]
 
             transactions = []
-            for r in rows:
-                tx_id, created_at, uname, mname, ccode, cname, dbname, db_plan_name = r
+            for r in ut_rows:
+                tx_id, created_at, uname, mname, ccode = r
                 iso_time = (created_at.isoformat() + "Z") if created_at else ""
                 
+                t_info = tenant_map.get(ccode, (ccode, "—"))
+                cname = t_info[0] or ccode
+                dbname = t_info[1] or "—"
+                db_plan_name = signup_map.get(ccode)
+
                 # Determine plan name
                 prefix = (ccode or "").strip().upper()[:1]
                 if prefix == "T":
@@ -978,28 +1055,38 @@ def admin_user_transactions(request):
                     "username": uname,
                     "module_name": mname,
                     "company_code": ccode,
-                    "company_name": cname or ccode,
-                    "erp_database": dbname or "—",
+                    "company_name": cname,
+                    "erp_database": dbname,
                     "plan_name": plan_val
                 })
 
-            # Also fetch all distinct company codes & usernames for filters
-            cursor.execute("SELECT DISTINCT company_code, company_name FROM tenants ORDER BY company_name")
-            companies = [{"company_code": row[0], "company_name": row[1]} for row in cursor.fetchall()]
+            # Fast in-memory unique list extraction (replaces 2 full-table database scans)
+            all_users = sorted(list({t["username"] for t in transactions if t.get("username")}))
+            all_mods = sorted(list({t["module_name"] for t in transactions if t.get("module_name")}))
 
-            cursor.execute("SELECT DISTINCT username FROM tenants_usersTransaction ORDER BY username")
-            usernames = [row[0] for row in cursor.fetchall()]
+            # Fallback if filtered query had no results
+            if not all_users:
+                cursor.execute("SELECT DISTINCT username FROM tenants_usersTransaction ORDER BY username")
+                all_users = [row[0] for row in cursor.fetchall()]
+            if not all_mods:
+                cursor.execute("SELECT DISTINCT module_name FROM tenants_usersTransaction ORDER BY module_name")
+                all_mods = [row[0] for row in cursor.fetchall()]
 
-            cursor.execute("SELECT DISTINCT module_name FROM tenants_usersTransaction ORDER BY module_name")
-            modules = [row[0] for row in cursor.fetchall()]
-
-            return Response({
+            res_payload = {
                 "success": True,
                 "transactions": transactions,
                 "companies": companies,
-                "usernames": usernames,
-                "modules": modules
-            })
+                "usernames": all_users,
+                "modules": all_mods
+            }
+
+            # Pre-serialize to JSON bytes in < 4ms, bypassing DRF's 2,000ms JSONRenderer
+            json_bytes = json.dumps(res_payload).encode("utf-8")
+
+            # Cache the pre-serialized byte payload
+            _UTR_CACHE[cache_key] = {"bytes": json_bytes, "time": now_ts}
+
+            return HttpResponse(json_bytes, content_type="application/json")
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 

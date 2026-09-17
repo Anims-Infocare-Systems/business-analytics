@@ -72,7 +72,7 @@ function renderTipIcon(iconName, category) {
     return <HiSparkles className="tips-icon-svg" />;
 }
 
-export default function Tips({ onStartTour, onNavigateModule }) {
+export default function Tips({ onStartTour, onNavigateModule, onOpenSpotlight, onSwitchToSpotlightTab }) {
     const [selectedVersion, setSelectedVersion] = useState(CURRENT_APP_VERSION);
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [searchQuery, setSearchQuery] = useState("");
@@ -127,6 +127,24 @@ export default function Tips({ onStartTour, onNavigateModule }) {
     const handleLaunchTour = () => {
         if (typeof onStartTour === "function") {
             onStartTour(selectedVersion);
+        }
+    };
+
+    const handleLaunchSpotlight = () => {
+        if (typeof onOpenSpotlight === "function") {
+            onOpenSpotlight();
+        } else {
+            window.dispatchEvent(new CustomEvent("open-spotlight"));
+        }
+    };
+
+    const handleSwitchToSpotlight = () => {
+        if (typeof onSwitchToSpotlightTab === "function") {
+            onSwitchToSpotlightTab();
+        } else if (typeof onOpenSpotlight === "function") {
+            onOpenSpotlight();
+        } else {
+            window.dispatchEvent(new CustomEvent("open-spotlight"));
         }
     };
 
@@ -221,20 +239,57 @@ export default function Tips({ onStartTour, onNavigateModule }) {
                             <span className="tips-hero-chip">
                                 <FiCheck size={13} /> Keyboard Shortcut Support
                             </span>
+                            <button
+                                type="button"
+                                className="tips-hero-chip tips-hero-chip--spotlight"
+                                onClick={handleLaunchSpotlight}
+                                title="Open Spotlight Guide (Ctrl+K)"
+                            >
+                                <HiSparkles size={13} className="tips-chip-sparkle" />
+                                <span>Spotlight (Ctrl+K)</span>
+                            </button>
                         </div>
                     </div>
 
                     <div className="tips-tour-hero__right">
+                        <div className="tips-tour-hero__actions">
+                            <button
+                                type="button"
+                                className="tips-tour-hero__btn tips-tour-hero__btn--tour"
+                                onClick={handleLaunchTour}
+                            >
+                                <span className="tips-tour-hero__btn-icon">
+                                    <FiPlay size={15} style={{ marginLeft: "2px" }} />
+                                </span>
+                                <span className="tips-tour-hero__btn-text">Start Interactive Tour</span>
+                                <span className="tips-tour-hero__btn-shine" />
+                            </button>
+
+                            <button
+                                type="button"
+                                className="tips-tour-hero__btn tips-tour-hero__btn--spotlight"
+                                onClick={handleLaunchSpotlight}
+                                title="Open Spotlight Navigator & Command Palette (Ctrl+K)"
+                            >
+                                <span className="tips-tour-hero__btn-icon tips-tour-hero__btn-icon--spotlight">
+                                    <HiSparkles size={15} />
+                                </span>
+                                <span className="tips-tour-hero__btn-text">Spotlight Guide</span>
+                                <span className="tips-tour-hero__btn-kbd">
+                                    <FiCommand size={10} style={{ marginRight: "2px" }} />K
+                                </span>
+                                <span className="tips-tour-hero__btn-shine" />
+                            </button>
+                        </div>
+
                         <button
                             type="button"
-                            className="tips-tour-hero__btn"
-                            onClick={handleLaunchTour}
+                            className="tips-tour-hero__sub-link"
+                            onClick={handleSwitchToSpotlight}
+                            title="Browse all searchable Spotlight targets in Settings"
                         >
-                            <span className="tips-tour-hero__btn-icon">
-                                <FiPlay size={15} style={{ marginLeft: "2px" }} />
-                            </span>
-                            <span className="tips-tour-hero__btn-text">Start Interactive Tour</span>
-                            <span className="tips-tour-hero__btn-shine" />
+                            <span>Browse 100+ Spotlight Targets</span>
+                            <FiArrowRight size={12} />
                         </button>
                     </div>
                 </div>
@@ -329,7 +384,9 @@ export default function Tips({ onStartTour, onNavigateModule }) {
                                             type="button"
                                             className="tips-card__action-btn"
                                             onClick={() => {
-                                                if (tip.actionTarget && typeof onNavigateModule === "function") {
+                                                if (tip.actionTarget === "Spotlight") {
+                                                    handleLaunchSpotlight();
+                                                } else if (tip.actionTarget && typeof onNavigateModule === "function") {
                                                     onNavigateModule(tip.actionTarget);
                                                 } else {
                                                     handleLaunchTour();

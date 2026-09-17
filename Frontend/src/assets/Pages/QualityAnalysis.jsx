@@ -4,6 +4,7 @@ import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./QualityAnalysis.css";
 import QualityAnalysisDatePicker from "./QualityAnalysisDatePicker";
+import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 import {
     SlidersHorizontal,
     ClipboardCheck,
@@ -24,6 +25,7 @@ import {
     Info,
     ArrowUpRight,
     ArrowDownRight,
+    ArrowRight,
     Pin,
     Search,
     X,
@@ -1621,8 +1623,10 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
 
                                 {/* Interconnecting Directional Arrow (Between Steps) */}
                                 {!isLast && (
-                                    <div className="qa2-timeline-pipe-connector" aria-hidden="true">
-                                        <ChevronRight size={18} className="qa2-timeline-pipe-arrow-icon" />
+                                    <div className="qa2-timeline-pipe-connector" aria-hidden="true" title="Next Lineage Stage">
+                                        <div className="qa2-timeline-pipe-arrow-badge">
+                                            <ArrowRight size={15} strokeWidth={2.4} className="qa2-timeline-pipe-arrow-icon" />
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -2271,11 +2275,11 @@ export default function QualityAnalysis() {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    const _dflt = { from: startOfMonth, to: endOfMonth };
+    const _dflt = getModuleDefaultDateRange("quality_analysis", { from: startOfMonth, to: endOfMonth });
     const _saved = readFilterSession("ba_filter_quality", _dflt);
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [filters, setFilters] = useState({
-        fromDate: formatYmd(startOfMonth), toDate: formatYmd(endOfMonth),
+        fromDate: formatYmd(_saved.from || startOfMonth), toDate: formatYmd(_saved.to || endOfMonth),
         reportType: "All Reports", department: "All Departments",
         product: "All Products", defectType: "All Defects",
     });
@@ -2284,6 +2288,12 @@ export default function QualityAnalysis() {
     const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
     const [customerSearch, setCustomerSearch] = useState("");
     const customerRef = useRef(null);
+    const [selectedRejectionReasons, setSelectedRejectionReasons] = useState([]);
+    const [rejectionReasonDropdownOpen, setRejectionReasonDropdownOpen] = useState(false);
+    const [rejectionReasonSearch, setRejectionReasonSearch] = useState("");
+    const rejectionReasonRef = useRef(null);
+    const [rejectionReasonSectionOpen, setRejectionReasonSectionOpen] = useState(false);
+    const rejectionReasonSectionRef = useRef(null);
     const [selectedType, setSelectedType] = useState("ALL");
     const [tableInspNoSearch, setTableInspNoSearch] = useState("");
     const [tableCustomerSearch, setTableCustomerSearch] = useState("");
@@ -2613,6 +2623,88 @@ export default function QualityAnalysis() {
             setSelectedComplaintCustomers(prev => prev ? prev.filter(c => selectedCustomers.some(sc => sc.toLowerCase() === c.toLowerCase())) : null);
         }
     }, [selectedCustomers]);
+
+    // Unique Rejection Reasons extracted from rejection rows, defect causes & inspection records
+    const uniqueRejectionReasons = useMemo(() => {
+        const set = new Set();
+        // 1. From rejection_rows
+        (recordsData?.rejection_rows || []).forEach(r => {
+            const raw = (r.reason || "").trim();
+            if (raw && raw !== "—" && raw !== "-" && raw !== "None" && raw !== "null") {
+                if (raw.includes(",")) {
+                    raw.split(",").forEach(p => {
+                        const clean = p.trim();
+                        if (clean && clean !== "—" && clean !== "-") set.add(clean);
+                    });
+                } else {
+                    set.add(raw);
+                }
+            }
+        });
+        // 2. From defectCausesData?.causes
+        (defectCausesData?.causes || []).forEach(c => {
+            const name = (c.name || "").trim();
+            if (name && name !== "—" && name !== "-" && name !== "None") {
+                set.add(name);
+            }
+        });
+        // 3. From inspection_records
+        (recordsData?.inspection_records || []).forEach(r => {
+            const raw = (r.reason || r.defect || "").trim();
+            if (raw && raw !== "—" && raw !== "-" && raw !== "None" && raw !== "null") {
+                if (raw.includes(",")) {
+                    raw.split(",").forEach(p => {
+                        const clean = p.trim();
+                        if (clean && clean !== "—" && clean !== "-") set.add(clean);
+                    });
+                } else {
+                    set.add(raw);
+                }
+            }
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [recordsData, defectCausesData]);
+
+    const reasonCountMap = useMemo(() => {
+        const map = {};
+        const rejRows = recordsData?.rejection_rows || [];
+        rejRows.forEach(r => {
+            const raw = (r.reason || "").toLowerCase();
+            if (!raw) return;
+            uniqueRejectionReasons.forEach(reason => {
+                if (raw.includes(reason.toLowerCase())) {
+                    map[reason] = (map[reason] || 0) + 1;
+                }
+            });
+        });
+        return map;
+    }, [recordsData?.rejection_rows, uniqueRejectionReasons]);
+
+    const filteredDropdownReasons = useMemo(() => {
+        if (!rejectionReasonSearch.trim()) return uniqueRejectionReasons;
+        const q = rejectionReasonSearch.toLowerCase().trim();
+        return uniqueRejectionReasons.filter(r => r.toLowerCase().includes(q));
+    }, [uniqueRejectionReasons, rejectionReasonSearch]);
+
+    const handleRejectionReasonToggle = (reason) => {
+        if (!reason || reason === "—" || reason === "-") return;
+        setSelectedRejectionReasons(prev => {
+            if (prev.includes(reason)) {
+                return prev.filter(r => r !== reason);
+            } else {
+                return [...prev, reason];
+            }
+        });
+    };
+
+    const handleSelectAllReasons = () => {
+        setSelectedRejectionReasons([...uniqueRejectionReasons]);
+    };
+
+    const handleClearAllReasons = () => {
+        setSelectedRejectionReasons([]);
+    };
+
 
     // hasNoData = true only when there's genuinely no data AND no search query is active.
     // When a search query is active, even total_inspected=0 is a valid "no results" state
@@ -3011,6 +3103,12 @@ export default function QualityAnalysis() {
             if (customerRef.current && !customerRef.current.contains(event.target)) {
                 setCustomerDropdownOpen(false);
             }
+            if (rejectionReasonRef.current && !rejectionReasonRef.current.contains(event.target)) {
+                setRejectionReasonDropdownOpen(false);
+            }
+            if (rejectionReasonSectionRef.current && !rejectionReasonSectionRef.current.contains(event.target)) {
+                setRejectionReasonSectionOpen(false);
+            }
             if (trendRejCustRef.current && !trendRejCustRef.current.contains(event.target)) {
                 setTrendRejCustDropdownOpen(false);
             }
@@ -3035,6 +3133,8 @@ export default function QualityAnalysis() {
     useEffect(() => {
         if (isGlobalLoading) {
             setCustomerDropdownOpen(false);
+            setRejectionReasonDropdownOpen(false);
+            setRejectionReasonSectionOpen(false);
             setInspTypeDropdownOpen(false);
             setTraceTypeDropdownOpen(false);
             setTrendRejCustDropdownOpen(false);
@@ -3939,12 +4039,14 @@ export default function QualityAnalysis() {
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        setDateRange({ from: startOfMonth, to: endOfMonth });
+        const dfltRange = getModuleDefaultDateRange("quality_analysis", { from: startOfMonth, to: endOfMonth });
+        setDateRange({ from: dfltRange.from, to: dfltRange.to });
         setSelectedCustomers([]);
+        setSelectedRejectionReasons([]);
         setSearchQuery("");
         setFilters({
-            fromDate: formatYmd(startOfMonth),
-            toDate: formatYmd(endOfMonth),
+            fromDate: formatYmd(dfltRange.from),
+            toDate: formatYmd(dfltRange.to),
             reportType: "All Reports",
             department: "All Departments",
             product: "All Products",
@@ -4033,8 +4135,14 @@ export default function QualityAnalysis() {
 
     const activeDefectCauses = useMemo(() => {
         if (hasNoData) return [];
-        return defectCausesData?.causes || [];
-    }, [defectCausesData, hasNoData]);
+        const raw = defectCausesData?.causes || [];
+        if (!selectedRejectionReasons || selectedRejectionReasons.length === 0) return raw;
+        const lowerSelected = selectedRejectionReasons.map(s => s.toLowerCase().trim());
+        return raw.filter(d => {
+            const name = (d.name || "").toLowerCase().trim();
+            return lowerSelected.some(sel => name.includes(sel) || sel.includes(name));
+        });
+    }, [defectCausesData, hasNoData, selectedRejectionReasons]);
 
     const activeDefectClasses = useMemo(() => {
         if (hasNoData) return [
@@ -4173,10 +4281,25 @@ export default function QualityAnalysis() {
         );
     }, [recordsData, hasNoData, searchQuery]);
 
+    const reasonFilteredRejectionRows = useMemo(() => {
+        if (!selectedRejectionReasons || selectedRejectionReasons.length === 0) {
+            return searchFilteredRejectionRows;
+        }
+        const lowerSelected = selectedRejectionReasons.map(s => s.toLowerCase().trim());
+        return searchFilteredRejectionRows.filter(r => {
+            const rawReason = (r.reason || "").toLowerCase();
+            const rawDefect = (r.defect || "").toLowerCase();
+            const combined = `${rawReason} ${rawDefect}`;
+            return lowerSelected.some(sel =>
+                rawReason.includes(sel) || sel.includes(rawReason) || combined.includes(sel)
+            );
+        });
+    }, [searchFilteredRejectionRows, selectedRejectionReasons]);
+
     const typeFilteredRejectionRows = useMemo(() => {
-        if (selectedInspTypeFilter === "ALL") return searchFilteredRejectionRows;
-        return searchFilteredRejectionRows.filter(r => r.inspType === selectedInspTypeFilter);
-    }, [searchFilteredRejectionRows, selectedInspTypeFilter]);
+        if (selectedInspTypeFilter === "ALL") return reasonFilteredRejectionRows;
+        return reasonFilteredRejectionRows.filter(r => r.inspType === selectedInspTypeFilter);
+    }, [reasonFilteredRejectionRows, selectedInspTypeFilter]);
 
     const activeRejectionRows = useMemo(() => {
         if (selectedDispFilter === "ALL") return typeFilteredRejectionRows;
@@ -4202,14 +4325,23 @@ export default function QualityAnalysis() {
 
     const activeReworkQueue = useMemo(() => {
         if (hasNoData) return [];
-        const raw = recordsData?.rework_queue || [];
-        if (!searchQuery) return raw;
-        const q = searchQuery.toLowerCase().trim();
-        return raw.filter(r =>
-            (r.name && r.name.toLowerCase().includes(q)) ||
-            (r.code && r.code.toLowerCase().includes(q))
-        );
-    }, [recordsData, hasNoData, searchQuery]);
+        let raw = recordsData?.rework_queue || [];
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase().trim();
+            raw = raw.filter(r =>
+                (r.name && r.name.toLowerCase().includes(q)) ||
+                (r.code && r.code.toLowerCase().includes(q))
+            );
+        }
+        if (selectedRejectionReasons && selectedRejectionReasons.length > 0) {
+            const lowerSelected = selectedRejectionReasons.map(s => s.toLowerCase().trim());
+            raw = raw.filter(r => {
+                const text = `${r.name || ''} ${r.code || ''}`.toLowerCase();
+                return lowerSelected.some(sel => text.includes(sel));
+            });
+        }
+        return raw;
+    }, [recordsData, hasNoData, searchQuery, selectedRejectionReasons]);
 
     const activeCalibrationRows = useMemo(() => {
         if (hasNoData) return [];
@@ -4694,6 +4826,163 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
+                    {/* Rejection Reason Filter Dropdown */}
+                    <div className="qa2-fg" style={{ width: '270px', flex: '0 0 auto', position: 'relative' }} ref={rejectionReasonRef}>
+                        <label className="qa2-fl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Rejection Reason</span>
+                            {selectedRejectionReasons.length > 0 && (
+                                <span style={{ fontSize: '0.68rem', color: '#ef4444', fontWeight: 600 }}>
+                                    {selectedRejectionReasons.length} active
+                                </span>
+                            )}
+                        </label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                disabled={isGlobalLoading}
+                                className={`qa2-reason-trigger${rejectionReasonDropdownOpen ? " active" : ""}${selectedRejectionReasons.length > 0 ? " has-filter-reason" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setRejectionReasonDropdownOpen(!rejectionReasonDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Rejection Reason"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
+                            >
+                                <AlertTriangle size={14} className="qa2-reason-trigger-icon" style={{ color: selectedRejectionReasons.length > 0 ? '#ef4444' : '#f43f5e' }} />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedRejectionReasons.length === 0
+                                        ? "All Rejection Reasons"
+                                        : selectedRejectionReasons.length === 1
+                                            ? selectedRejectionReasons[0]
+                                            : `${selectedRejectionReasons.length} Reasons Selected`}
+                                </span>
+                                {selectedRejectionReasons.length > 0 && (
+                                    <span className="qa2-reason-count-badge">{selectedRejectionReasons.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${rejectionReasonDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {rejectionReasonDropdownOpen && !isGlobalLoading && (
+                                <div className="qa2-reason-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search rejection reasons..."
+                                            className="qa2-cust-search-input"
+                                            value={rejectionReasonSearch}
+                                            onChange={(e) => setRejectionReasonSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {rejectionReasonSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setRejectionReasonSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions (Select All / Clear) */}
+                                    <div className="qa2-reason-quick-actions">
+                                        <span className="qa2-reason-action-info">
+                                            {selectedRejectionReasons.length === 0
+                                                ? "All reasons included"
+                                                : `${selectedRejectionReasons.length} of ${uniqueRejectionReasons.length} selected`}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                className="qa2-reason-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectAllReasons();
+                                                }}
+                                            >
+                                                Select All
+                                            </button>
+                                            {selectedRejectionReasons.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="qa2-reason-action-btn danger"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClearAllReasons();
+                                                    }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Reasons Option */}
+                                        <div
+                                            className={`qa2-reason-item${selectedRejectionReasons.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedRejectionReasons([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-reason-check-box${selectedRejectionReasons.length === 0 ? " checked" : ""}`}>
+                                                {selectedRejectionReasons.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Rejection Reasons</span>
+                                            <span className="qa2-cust-item-meta">{uniqueRejectionReasons.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownReasons.length === 0 ? (
+                                            <div className="qa2-cust-empty">
+                                                No reasons found
+                                            </div>
+                                        ) : (
+                                            filteredDropdownReasons.map((reason) => {
+                                                const isSelected = selectedRejectionReasons.includes(reason);
+                                                const count = reasonCountMap[reason] || 0;
+                                                return (
+                                                    <div
+                                                        key={reason}
+                                                        className={`qa2-reason-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRejectionReasonToggle(reason);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-reason-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={reason}>{reason}</span>
+                                                        {count > 0 && (
+                                                            <span className="qa2-reason-pill-count">{count}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedRejectionReasons.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-reason-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedRejectionReasons([]);
+                                                }}
+                                            >
+                                                Reset to All Reasons
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="qa2-fg" style={{ width: '240px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Search Records</label>
                         <div className="qa2-search-input-wrapper" style={{ position: 'relative', width: '100%' }}>
@@ -4735,7 +5024,7 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
-                    {(selectedCustomers.length > 0 || searchQuery) && (
+                    {(selectedCustomers.length > 0 || selectedRejectionReasons.length > 0 || searchQuery) && (
                         <div className="qa2-fg" style={{ flex: '0 0 auto' }}>
                             <button
                                 type="button"
@@ -6079,12 +6368,184 @@ export default function QualityAnalysis() {
                                 )}
                             </div>
 
-                            {(selectedDispFilter !== "ALL" || selectedInspTypeFilter !== "ALL") && (
+                            {/* Rejection Reason Multi-Select Filter in Summary Section */}
+                            <div ref={rejectionReasonSectionRef} style={{ position: 'relative', display: 'inline-block' }}>
+                                <button
+                                    onClick={() => setRejectionReasonSectionOpen(p => !p)}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        background: selectedRejectionReasons.length > 0 ? '#fff1f2' : '#ffffff',
+                                        color: selectedRejectionReasons.length > 0 ? '#be123c' : '#334155',
+                                        border: selectedRejectionReasons.length > 0 ? '1px solid #f43f5e' : '1px solid #cbd5e1',
+                                        borderRadius: '6px',
+                                        padding: '4px 10px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                        transition: 'all 0.15s ease',
+                                        outline: 'none',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (selectedRejectionReasons.length === 0) {
+                                            e.currentTarget.style.borderColor = '#fca5a5';
+                                            e.currentTarget.style.background = '#f8fafc';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (selectedRejectionReasons.length === 0) {
+                                            e.currentTarget.style.borderColor = '#cbd5e1';
+                                            e.currentTarget.style.background = '#ffffff';
+                                        }
+                                    }}
+                                >
+                                    <AlertTriangle size={11} style={{ color: selectedRejectionReasons.length > 0 ? '#ef4444' : '#64748b' }} />
+                                    <span>
+                                        {selectedRejectionReasons.length === 0
+                                            ? "All Reasons"
+                                            : selectedRejectionReasons.length === 1
+                                                ? selectedRejectionReasons[0]
+                                                : `${selectedRejectionReasons.length} Reasons`}
+                                    </span>
+                                    {selectedRejectionReasons.length > 0 && (
+                                        <span style={{
+                                            background: '#ef4444',
+                                            color: '#ffffff',
+                                            borderRadius: '999px',
+                                            padding: '1px 5px',
+                                            fontSize: '0.62rem',
+                                            fontWeight: 700,
+                                            lineHeight: 1
+                                        }}>
+                                            {selectedRejectionReasons.length}
+                                        </span>
+                                    )}
+                                    <ChevronDown size={10} style={{
+                                        color: selectedRejectionReasons.length > 0 ? '#be123c' : '#64748b',
+                                        transition: 'transform 0.2s ease',
+                                        transform: rejectionReasonSectionOpen ? 'rotate(180deg)' : 'none'
+                                    }} />
+                                </button>
+
+                                {rejectionReasonSectionOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 4px)',
+                                        right: 0,
+                                        zIndex: 999,
+                                        minWidth: '260px',
+                                        maxWidth: '340px',
+                                        background: '#ffffff',
+                                        border: '1px solid #fecdd3',
+                                        borderRadius: '10px',
+                                        boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.15), 0 4px 10px -2px rgba(239, 68, 68, 0.1)',
+                                        padding: '8px',
+                                    }}>
+                                        <div style={{ position: "relative", display: "flex", alignItems: "center", marginBottom: '6px' }}>
+                                            <Search size={12} style={{ position: "absolute", left: "8px", color: "#94a3b8" }} />
+                                            <input
+                                                type="text"
+                                                placeholder="Search reasons..."
+                                                value={rejectionReasonSearch}
+                                                onChange={(e) => setRejectionReasonSearch(e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "5px 22px 5px 26px",
+                                                    fontSize: "0.74rem",
+                                                    borderRadius: "6px",
+                                                    border: "1px solid #cbd5e1",
+                                                    outline: "none",
+                                                    background: "#f8fafc",
+                                                    color: "#0f172a"
+                                                }}
+                                                autoFocus
+                                            />
+                                            {rejectionReasonSearch && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setRejectionReasonSearch(""); }}
+                                                    style={{ position: "absolute", right: "6px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0 }}
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "2px 4px 6px 4px", fontSize: "0.68rem", borderBottom: '1px solid #f1f5f9' }}>
+                                            <span style={{ color: "#64748b", fontWeight: 500 }}>
+                                                {selectedRejectionReasons.length === 0 ? "All selected" : `${selectedRejectionReasons.length} selected`}
+                                            </span>
+                                            <div style={{ display: "flex", gap: "8px" }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); handleSelectAllReasons(); }}
+                                                    style={{ background: "none", border: "none", color: "#2563eb", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                                                >
+                                                    All
+                                                </button>
+                                                {selectedRejectionReasons.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); handleClearAllReasons(); }}
+                                                        style={{ background: "none", border: "none", color: "#ef4444", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px", marginTop: '4px' }}>
+                                            <div
+                                                className={`qa2-cust-item qa2-reason-item${selectedRejectionReasons.length === 0 ? " is-active" : ""}`}
+                                                onClick={(e) => { e.stopPropagation(); setSelectedRejectionReasons([]); }}
+                                            >
+                                                <div className={`qa2-reason-check-box${selectedRejectionReasons.length === 0 ? " checked" : ""}`}>
+                                                    {selectedRejectionReasons.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                </div>
+                                                <span className="qa2-cust-item-title">All Rejection Reasons</span>
+                                                <span className="qa2-cust-item-meta">{uniqueRejectionReasons.length}</span>
+                                            </div>
+
+                                            <div className="qa2-cust-divider" />
+
+                                            {filteredDropdownReasons.length === 0 ? (
+                                                <div className="qa2-cust-empty">No reasons found</div>
+                                            ) : (
+                                                filteredDropdownReasons.map((reason) => {
+                                                    const isSelected = selectedRejectionReasons.includes(reason);
+                                                    const count = reasonCountMap[reason] || 0;
+                                                    return (
+                                                        <div
+                                                            key={reason}
+                                                            className={`qa2-cust-item qa2-reason-item${isSelected ? " is-active" : ""}`}
+                                                            onClick={(e) => { e.stopPropagation(); handleRejectionReasonToggle(reason); }}
+                                                        >
+                                                            <div className={`qa2-reason-check-box${isSelected ? " checked" : ""}`}>
+                                                                {isSelected && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={reason}>{reason}</span>
+                                                            {count > 0 && <span className="qa2-reason-pill-count">{count}</span>}
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {(selectedDispFilter !== "ALL" || selectedInspTypeFilter !== "ALL" || selectedRejectionReasons.length > 0) && (
                                 <button
                                     className="qa2-clear-type-filter-btn"
                                     onClick={() => {
                                         setSelectedDispFilter("ALL");
                                         setSelectedInspTypeFilter("ALL");
+                                        setSelectedRejectionReasons([]);
                                     }}
                                     style={{
                                         background: 'none',
@@ -6144,7 +6605,15 @@ export default function QualityAnalysis() {
                                                 </td>
                                                 <td className="qa2-mono qa2-muted" style={getRejColStyle("Part No")}>{partNo}</td>
                                                 <td style={getRejColStyle("Description")}>{description}</td>
-                                                <td style={getRejColStyle("Reason")}>{r.reason}</td>
+                                                <td style={getRejColStyle("Reason")}>
+                                                    <span
+                                                        className={`qa2-reason-cell-tag${selectedRejectionReasons.some(s => r.reason && r.reason.toLowerCase().includes(s.toLowerCase())) ? " is-active" : ""}`}
+                                                        onClick={() => handleRejectionReasonToggle(r.reason)}
+                                                        title="Click to filter by this rejection reason"
+                                                    >
+                                                        {r.reason}
+                                                    </span>
+                                                </td>
                                                 <td className="qa2-td-r" style={getRejColStyle("Qty")}>{r.qty}</td>
                                                 <td style={getRejColStyle("Disposition")}>
                                                     <span

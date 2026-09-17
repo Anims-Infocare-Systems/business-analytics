@@ -365,7 +365,7 @@ function drawLineChart(canvas, sets, range, labelsOrHeight = [], h = 118, format
                 : pad.l + i * (cw / (labels.length - 1))
         );
         ctx.fillStyle = "#64748b";
-        ctx.font = "600 9.5px 'DM Sans',sans-serif";
+        ctx.font = "600 8.5px 'DM Sans',sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         labels.forEach((label, i) => ctx.fillText(label, pxLabel(i), chartHeight - 14));
@@ -397,6 +397,19 @@ function getWeeklyQuantityRange(seriesCollection) {
     if (max <= 0) return [0, 10];
     const pad = Math.max(5, max * 0.15);
     return [0, max + pad];
+}
+
+function getWeekDayLabels(period, rawLabels) {
+    const year = period?.year ?? new Date().getFullYear();
+    const month = period?.month ?? new Date().getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const w5 = lastDay > 28 ? `29-${lastDay}` : "29";
+    const defaultRanges = ["1-7", "8-14", "15-21", "22-28", w5];
+    const count = (rawLabels && rawLabels.length) ? rawLabels.length : defaultRanges.length;
+    return Array.from({ length: count }, (_, idx) => {
+        const rng = defaultRanges[idx] || `${idx * 7 + 1}-${Math.min((idx + 1) * 7, lastDay)}`;
+        return `W${idx + 1} (${rng})`;
+    });
 }
 
 // ════════════════════════════════════════════
@@ -1196,8 +1209,8 @@ export default function Dashboard1() {
             kgrad: "linear-gradient(90deg,#8b5cf6,#c4b5fd)", kbg: "#f5f3ff", kclr: "#7c3aed", animDelay: ".21s",
             icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>),
             delta: qualityValueData ? `${qualityValueData.delta_type === "up" ? "↑" : "↓"} ${qualityValueData.delta}%` : "—",
-            deltaType: qualityValueData ? qualityValueData.delta_type : "na",
-            label: "Quality Value",
+            deltaType: qualityValueData ? (qualityValueData.delta_type === "dn" || qualityValueData.delta_type === "down" ? "up" : qualityValueData.delta_type === "up" ? "dn" : "na") : "na",
+            label: "Rejection Value",
             value: qualityValueData ? formatRupees(qualityValueData.current_value) : "—",
             footer: qualityValueData ? `${MONTHS_FULL[period.month]} ${period.year} · ${qualityValueData.fy_label}` : `${MONTHS_FULL[period.month]} ${period.year}`,
             sparkData: getSparkData(qualityValueData, [12, 18, 14, 16, 10, 15, 12]),
@@ -1265,9 +1278,7 @@ export default function Dashboard1() {
             title: "OEE % — Weekly",
             legend: [{ label: "OEE %", color: "#10b981", round: true }],
             drawFn: (c) => {
-                const oaWeeklyLabels = oaEfficiencyWeeklyData?.labels?.length
-                    ? oaEfficiencyWeeklyData.labels
-                    : [];
+                const oaWeeklyLabels = getWeekDayLabels(period, oaEfficiencyWeeklyData?.labels);
                 const oaWeeklySeries = oaEfficiencyWeeklyData?.data?.length
                     ? oaEfficiencyWeeklyData.data
                     : [];
@@ -1294,7 +1305,7 @@ export default function Dashboard1() {
                             </span>
                         ) : null;
                     })()}
-                    {(oaEfficiencyWeeklyData?.labels?.length ? oaEfficiencyWeeklyData.labels : []).map((label, index) => (
+                    {getWeekDayLabels(period, oaEfficiencyWeeklyData?.labels).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "9px" }}>
                             {label}: {oaEfficiencyWeeklyData?.data?.[index] != null ? `${formatMetric(oaEfficiencyWeeklyData.data[index])}%` : "—"}
                         </span>
@@ -1305,12 +1316,10 @@ export default function Dashboard1() {
         },
         {
             spotlightId: "tmd-chart-rejection",
-            title: "Quality Rejections — Weekly",
+            title: "Quality Rejection Qty — Weekly",
             legend: [{ label: "Mac Rej", color: "#ef4444", round: true }, { label: "Mat Rej", color: "#1a56db", round: true }],
             drawFn: (c) => {
-                const qualityWeeklyLabels = qualityRejectionsWeeklyData?.labels?.length
-                    ? qualityRejectionsWeeklyData.labels
-                    : [];
+                const qualityWeeklyLabels = getWeekDayLabels(period, qualityRejectionsWeeklyData?.labels);
                 const machineSeries = qualityRejectionsWeeklyData?.machine?.length
                     ? qualityRejectionsWeeklyData.machine
                     : [];
@@ -1349,7 +1358,7 @@ export default function Dashboard1() {
                             </span>
                         ) : null;
                     })()}
-                    {(qualityRejectionsWeeklyData?.labels?.length ? qualityRejectionsWeeklyData.labels : []).map((label, index) => (
+                    {getWeekDayLabels(period, qualityRejectionsWeeklyData?.labels).map((label, index) => (
                         <span key={label} className="d1-cc__foot-val" style={{ fontSize: "8.5px" }}>
                             {label}:{" "}
                             <span style={{ color: "#ef4444" }}>
@@ -1427,6 +1436,7 @@ export default function Dashboard1() {
                 { cells: [{ val: "Today" }, getSalesAnalysisCell("today", "sales"), getSalesAnalysisCell("today", "lab"), getSalesAnalysisCell("today", "exp"), withTrend(getSalesAnalysisCell("today", "total"), getSalesTrend("today", "yesterday", "total"))] },
                 { cells: [{ val: "YDA" }, getSalesAnalysisCell("yesterday", "sales"), getSalesAnalysisCell("yesterday", "lab"), getSalesAnalysisCell("yesterday", "exp"), withTrend(getSalesAnalysisCell("yesterday", "total"), getSalesTrend("yesterday", "day_before_yesterday", "total"))] },
                 { rowClass: "d1-row-month", cells: [{ val: "Month" }, getSalesAnalysisCell("month", "sales"), getSalesAnalysisCell("month", "lab"), getSalesAnalysisCell("month", "exp"), withTrend(getSalesAnalysisCell("month", "total"), getSalesTrend("month", "prev_month", "total"))] },
+                { cells: [{ val: "Prev. month" }, getSalesAnalysisCell("prev_month", "sales"), getSalesAnalysisCell("prev_month", "lab"), getSalesAnalysisCell("prev_month", "exp"), withTrend(getSalesAnalysisCell("prev_month", "total"), getSalesTrend("prev_month", "prev_prev_month", "total"))] },
                 { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, getSalesAnalysisCell("quarter", "sales"), getSalesAnalysisCell("quarter", "lab"), getSalesAnalysisCell("quarter", "exp"), withTrend(getSalesAnalysisCell("quarter", "total"), getSalesTrend("quarter", "prev_quarter", "total"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getSalesAnalysisCell("financial_year", "sales"), getSalesAnalysisCell("financial_year", "lab"), getSalesAnalysisCell("financial_year", "exp"), getSalesAnalysisCell("financial_year", "total")] },
             ],
@@ -1439,6 +1449,7 @@ export default function Dashboard1() {
                 { cells: [{ val: "Today" }, withTrend(getPurchaseAnalysisCell("today", "po"), getPurchaseTrend("today", "yesterday", "po")), withTrend(getPurchaseAnalysisCell("today", "grn"), getPurchaseTrend("today", "yesterday", "grn"))] },
                 { cells: [{ val: "YDA" }, withTrend(getPurchaseAnalysisCell("yesterday", "po"), getPurchaseTrend("yesterday", "day_before_yesterday", "po")), withTrend(getPurchaseAnalysisCell("yesterday", "grn"), getPurchaseTrend("yesterday", "day_before_yesterday", "grn"))] },
                 { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getPurchaseAnalysisCell("month", "po"), getPurchaseTrend("month", "prev_month", "po")), withTrend(getPurchaseAnalysisCell("month", "grn"), getPurchaseTrend("month", "prev_month", "grn"))] },
+                { cells: [{ val: "Prev. month" }, withTrend(getPurchaseAnalysisCell("prev_month", "po"), getPurchaseTrend("prev_month", "prev_prev_month", "po")), withTrend(getPurchaseAnalysisCell("prev_month", "grn"), getPurchaseTrend("prev_month", "prev_prev_month", "grn"))] },
                 { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getPurchaseAnalysisCell("quarter", "po"), getPurchaseTrend("quarter", "prev_quarter", "po")), withTrend(getPurchaseAnalysisCell("quarter", "grn"), getPurchaseTrend("quarter", "prev_quarter", "grn"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getPurchaseAnalysisCell("financial_year", "po"), getPurchaseAnalysisCell("financial_year", "grn")] },
             ],
@@ -1451,12 +1462,13 @@ export default function Dashboard1() {
                 { cells: [{ val: "Todays OA Eff %" }, withTrend(getProductionAnalysisCell("today"), getProductionTrend("today", "yesterday"))] },
                 { cells: [{ val: "Yesterdays OA Eff %" }, withTrend(getProductionAnalysisCell("yesterday"), getProductionTrend("yesterday", "day_before_yesterday"))] },
                 { rowClass: "d1-row-month", cells: [{ val: "Monthly OA Eff %" }, withTrend(getProductionAnalysisCell("month"), getProductionTrend("month", "prev_month"))] },
+                { cells: [{ val: "Prev. Monthly OA Eff %" }, withTrend(getProductionAnalysisCell("prev_month"), getProductionTrend("prev_month", "prev_prev_month"))] },
                 { rowClass: "d1-row-qtr", cells: [{ val: "Quarterly OA Eff %" }, withTrend(getProductionAnalysisCell("quarter"), getProductionTrend("quarter", "prev_quarter"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin OA Eff %" }, getProductionAnalysisCell("financial_year")] },
             ],
         },
         {
-            title: "Quality Analysis",
+            title: "Quality Rejection Analysis",
             sub: qualityRejectionsWeeklyData?.fy_label
                 ? `Material vs machine rejection qty · ${qualityRejectionsWeeklyData.fy_label}`
                 : "Material vs machine rejection qty",
@@ -1466,6 +1478,7 @@ export default function Dashboard1() {
                 { cells: [{ val: "Today" }, withTrend(getQualityRejectionAnalysisCell("today", "material"), getQualityTrend("today", "yesterday", "material")), withTrend(getQualityRejectionAnalysisCell("today", "machine"), getQualityTrend("today", "yesterday", "machine"))] },
                 { cells: [{ val: "YDA" }, withTrend(getQualityRejectionAnalysisCell("yesterday", "material"), getQualityTrend("yesterday", "day_before_yesterday", "material")), withTrend(getQualityRejectionAnalysisCell("yesterday", "machine"), getQualityTrend("yesterday", "day_before_yesterday", "machine"))] },
                 { rowClass: "d1-row-month", cells: [{ val: "Month" }, withTrend(getQualityRejectionAnalysisCell("month", "material"), getQualityTrend("month", "prev_month", "material")), withTrend(getQualityRejectionAnalysisCell("month", "machine"), getQualityTrend("month", "prev_month", "machine"))] },
+                { cells: [{ val: "Prev. month" }, withTrend(getQualityRejectionAnalysisCell("prev_month", "material"), getQualityTrend("prev_month", "prev_prev_month", "material")), withTrend(getQualityRejectionAnalysisCell("prev_month", "machine"), getQualityTrend("prev_month", "prev_prev_month", "machine"))] },
                 { rowClass: "d1-row-qtr", cells: [{ val: "Qtr." }, withTrend(getQualityRejectionAnalysisCell("quarter", "material"), getQualityTrend("quarter", "prev_quarter", "material")), withTrend(getQualityRejectionAnalysisCell("quarter", "machine"), getQualityTrend("quarter", "prev_quarter", "machine"))] },
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getQualityRejectionAnalysisCell("financial_year", "material"), getQualityRejectionAnalysisCell("financial_year", "machine")] },
             ],

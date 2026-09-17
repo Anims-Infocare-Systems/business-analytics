@@ -225,6 +225,8 @@ export default function Welcome({
                                     className="wh-spotlight-hero-btn"
                                     onClick={onOpenSpotlight}
                                     title="Open Spotlight Guide (Ctrl+K)"
+                                    data-tour="spotlight-guide"
+                                    data-spotlight="wh-spotlight-btn"
                                 >
                                     <Sparkles size={13} />
                                     <span>Spotlight Guide</span>

@@ -46,6 +46,7 @@ import SpotlightGuide from "./SpotlightGuide";
 import SpotlightBeacon from "./SpotlightBeacon";
 import { SPOTLIGHT_REGISTRY } from "./spotlightRegistry";
 import NotificationDropdown from "./NotificationDropdown";
+import { fetchCompanyDateSettings } from "./dateSettingsHelper";
 
 /* ── Breakpoints ─────────────────────────────────────────── */
 const BP_MOBILE = 768;
@@ -699,6 +700,13 @@ export default function DashboardLayout() {
         }
     }, [isAuthenticated, isExpired, userName]);
 
+    // Automatically synchronize company-wide date presets from database on login/mount
+    useEffect(() => {
+        if (isAuthenticated && !isExpired) {
+            fetchCompanyDateSettings();
+        }
+    }, [isAuthenticated, isExpired]);
+
     const handleStartTourFromPrompt = () => {
         markTourAsSeen(CURRENT_APP_VERSION, userName);
         setShowTourPrompt(false);
@@ -771,7 +779,7 @@ export default function DashboardLayout() {
         window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: targetWithContext }));
     }, [isMobile]);
 
-    // Global hotkey: Ctrl+K, Cmd+K, or "/"
+    // Global hotkey: Ctrl+K, Cmd+K, or "/" & custom open-spotlight event
     useEffect(() => {
         const handleGlobalHotkey = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -784,8 +792,18 @@ export default function DashboardLayout() {
                 setSpotlightOpen(true);
             }
         };
+
+        const handleCustomOpen = () => {
+            setSpotlightInitialQuery("");
+            setSpotlightOpen(true);
+        };
+
         window.addEventListener("keydown", handleGlobalHotkey);
-        return () => window.removeEventListener("keydown", handleGlobalHotkey);
+        window.addEventListener("open-spotlight", handleCustomOpen);
+        return () => {
+            window.removeEventListener("keydown", handleGlobalHotkey);
+            window.removeEventListener("open-spotlight", handleCustomOpen);
+        };
     }, []);
 
     // Deep link support via ?spotlight=<id>

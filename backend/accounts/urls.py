@@ -36,7 +36,7 @@ from .views_mapproval import (
 )
 from .views_userrights import (
     user_rights_list, user_rights_me, user_rights_update, user_rights_bulk_save,
-    user_rights_add_user, user_rights_delete,
+    user_rights_add_user, user_rights_delete, user_settings_date_presets,
 )
 from .views_sales_analysis import (
     sales_analysis_summary_strip, sales_analysis_grand_total, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
@@ -296,6 +296,7 @@ urlpatterns = [
     path('user-rights/bulk-save/', user_rights_bulk_save, name='user_rights_bulk_save'),
     path('user-rights/add-user/', user_rights_add_user, name='user_rights_add_user'),
     path('user-rights/delete/<int:user_id>/', user_rights_delete, name='user_rights_delete'),
+    path('user-settings/date-presets/', user_settings_date_presets, name='user_settings_date_presets'),
 
     # ── Admin Panel ───────────────────────────────────────────────────
     path('admin/login/', admin_login, name='admin_login'),

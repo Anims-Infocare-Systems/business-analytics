@@ -28,6 +28,12 @@ import "./UserTransactionReport.css";
 
 const API = resolveApiBase();
 
+const isExcludedFromTopModule = (name) => {
+    if (!name) return true;
+    const lower = String(name).toLowerCase().trim();
+    return lower === "login" || lower === "logout";
+};
+
 function CustomSelect({ label, value, onChange, options, icon: Icon, placeholder }) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
@@ -553,6 +559,24 @@ function CustomDateRangePicker({ fromDate, toDate, onChange }) {
     );
 }
 
+// Module-level client cache for instant (0ms) tab transitions
+let _clientUtrCache = null;
+let _clientUtrCacheTime = 0;
+const CLIENT_CACHE_TTL = 60000; // 60 seconds
+
+function getPageNumbers(current, total) {
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    if (current <= 4) {
+        return [1, 2, 3, 4, 5, "...", total];
+    }
+    if (current >= total - 3) {
+        return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+    }
+    return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
 export default function UserTransactionReport({ onAuthLost }) {
     const getLocalFormattedDate = (d) => {
         const y = d.getFullYear();
@@ -576,15 +600,21 @@ export default function UserTransactionReport({ onAuthLost }) {
     const [selectedOrgModal, setSelectedOrgModal] = useState(null);
     const [selectedUserModal, setSelectedUserModal] = useState(null);
 
-    const [companies, setCompanies] = useState([]);
-    const [usernames, setUsernames] = useState([]);
-    const [modules, setModules] = useState([]);
+    const hasInitialCache = Boolean(_clientUtrCache && (Date.now() - _clientUtrCacheTime < CLIENT_CACHE_TTL));
 
-    const [transactions, setTransactions] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [companies, setCompanies] = useState(() => hasInitialCache ? _clientUtrCache.companies : []);
+    const [usernames, setUsernames] = useState(() => hasInitialCache ? _clientUtrCache.usernames : []);
+    const [modules, setModules] = useState(() => hasInitialCache ? _clientUtrCache.modules : []);
+    const [transactions, setTransactions] = useState(() => hasInitialCache ? _clientUtrCache.transactions : []);
+    const [loading, setLoading] = useState(!hasInitialCache);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [sortConfig, setSortConfig] = useState({ key: "timestamp", direction: "desc" });
+
+    // High-performance pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50); // 25, 50, 100, 250, 'all'
 
     const handleResetFilters = () => {
         const now = new Date();
@@ -602,6 +632,7 @@ export default function UserTransactionReport({ onAuthLost }) {
         setSelectedUserModal(null);
         setSearchQuery("");
         setSortConfig({ key: "timestamp", direction: "desc" });
+        setCurrentPage(1);
     };
 
     const requestSort = (key) => {
@@ -621,21 +652,40 @@ export default function UserTransactionReport({ onAuthLost }) {
             : <MdArrowDownward className="utr-sort-icon utr-sort-icon--active" size={14} />;
     };
 
-    const fetchReport = useCallback(async ({ silent = false } = {}) => {
-        if (!silent) {
+    const fetchReport = useCallback(async ({ silent = false, force = false } = {}) => {
+        if (!silent && !_clientUtrCache) {
             setLoading(true);
             setErrorMsg("");
         }
+        if (force) {
+            setIsRefreshing(true);
+        }
 
         try {
-            const res = await adminFetch(`${API}/admin/reports/user-transactions/`);
+            const url = force 
+                ? `${API}/admin/reports/user-transactions/?force_refresh=true` 
+                : `${API}/admin/reports/user-transactions/`;
+            const res = await adminFetch(url);
             const data = await res.json();
 
             if (res.ok) {
-                setTransactions(data.transactions || []);
-                setCompanies(data.companies || []);
-                setUsernames(data.usernames || []);
-                setModules(data.modules || []);
+                const txs = data.transactions || [];
+                const comps = data.companies || [];
+                const unames = data.usernames || [];
+                const mods = data.modules || [];
+
+                setTransactions(txs);
+                setCompanies(comps);
+                setUsernames(unames);
+                setModules(mods);
+
+                _clientUtrCache = {
+                    transactions: txs,
+                    companies: comps,
+                    usernames: unames,
+                    modules: mods
+                };
+                _clientUtrCacheTime = Date.now();
             } else {
                 const authLost = res.status === 403 && data?.code === "admin_auth_required";
                 if (authLost && onAuthLost) {
@@ -648,12 +698,23 @@ export default function UserTransactionReport({ onAuthLost }) {
             setErrorMsg("Network error. Could not connect to API.");
         } finally {
             if (!silent) setLoading(false);
+            if (force) setIsRefreshing(false);
         }
     }, [onAuthLost]);
 
     useEffect(() => {
-        fetchReport();
-    }, [fetchReport]);
+        if (hasInitialCache) {
+            // Silently revalidate in background without blocking UI
+            fetchReport({ silent: true });
+        } else {
+            fetchReport();
+        }
+    }, [fetchReport, hasInitialCache]);
+
+    // Reset pagination to page 1 whenever any filter changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [fromDate, toDate, selectedCompanies, selectedUser, selectedModule, selectedSeries, selectedPlan, searchQuery, sortConfig]);
 
     const baseFilteredTransactions = useMemo(() => {
         return transactions.filter(t => {
@@ -721,6 +782,16 @@ export default function UserTransactionReport({ onAuthLost }) {
         return list;
     }, [baseFilteredTransactions, selectedSeries, selectedPlan, sortConfig]);
 
+    const totalTransactions = filteredTransactions.length;
+    const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(totalTransactions / pageSize));
+    const validCurrentPage = Math.min(currentPage, totalPages);
+
+    const paginatedTransactions = useMemo(() => {
+        if (pageSize === "all") return filteredTransactions;
+        const start = (validCurrentPage - 1) * pageSize;
+        return filteredTransactions.slice(start, start + pageSize);
+    }, [filteredTransactions, validCurrentPage, pageSize]);
+
     const stats = useMemo(() => {
         const total = filteredTransactions.length;
         const uniqueUsers = new Set(
@@ -730,7 +801,7 @@ export default function UserTransactionReport({ onAuthLost }) {
         const moduleCounts = {};
         filteredTransactions.forEach(t => {
             const modName = (t.module_name || "").trim();
-            if (modName) {
+            if (modName && !isExcludedFromTopModule(modName)) {
                 moduleCounts[modName] = (moduleCounts[modName] || 0) + 1;
             }
         });
@@ -770,7 +841,9 @@ export default function UserTransactionReport({ onAuthLost }) {
             if (t.username) groupMap[code].users.add((t.username || "").toLowerCase().trim());
             if (t.module_name) {
                 const m = (t.module_name || "").trim();
-                if (m) groupMap[code].modules[m] = (groupMap[code].modules[m] || 0) + 1;
+                if (m && !isExcludedFromTopModule(m)) {
+                    groupMap[code].modules[m] = (groupMap[code].modules[m] || 0) + 1;
+                }
             }
         });
 
@@ -838,7 +911,9 @@ export default function UserTransactionReport({ onAuthLost }) {
             }
             if (t.module_name) {
                 const m = t.module_name.trim();
-                if (m) userMap[u].modules[m] = (userMap[u].modules[m] || 0) + 1;
+                if (m && !isExcludedFromTopModule(m)) {
+                    userMap[u].modules[m] = (userMap[u].modules[m] || 0) + 1;
+                }
             }
         });
 
@@ -1079,9 +1154,14 @@ export default function UserTransactionReport({ onAuthLost }) {
                     <p className="utr-subtitle">Monitor report usage and analytics across tenant organizations</p>
                 </div>
                 <div className="utr-header-actions">
-                    <button className="utr-btn-icon" onClick={() => fetchReport()} title="Refresh Report Data">
-                        <MdRefresh size={18} />
-                        <span>Refresh</span>
+                    <button 
+                        className={`utr-btn-icon ${isRefreshing ? "utr-btn-icon--refreshing" : ""}`} 
+                        onClick={() => fetchReport({ force: true })} 
+                        disabled={isRefreshing}
+                        title="Refresh Report Data (Fetches fresh data from database)"
+                    >
+                        <MdRefresh size={18} className={isRefreshing ? "utr-spin" : ""} />
+                        <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
                     </button>
                     <button 
                         className="utr-btn-icon utr-btn-icon--export" 
@@ -1370,7 +1450,8 @@ export default function UserTransactionReport({ onAuthLost }) {
                         </table>
                     </div>
                 ) : (
-                    <div className="utr-table-wrapper">
+                    <>
+                        <div className="utr-table-wrapper">
                         <table className="utr-table">
                             <thead>
                                 <tr>
@@ -1426,12 +1507,13 @@ export default function UserTransactionReport({ onAuthLost }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredTransactions.map((t, index) => {
+                                {paginatedTransactions.map((t, index) => {
                                     const { date, time } = formatLocalTime(t.timestamp);
                                     const seriesPrefix = (t.company_code || "")[0]?.toLowerCase() || 'a';
+                                    const rowNumber = pageSize === "all" ? index + 1 : (validCurrentPage - 1) * pageSize + index + 1;
                                     return (
                                         <tr className="utr-tr" key={t.id} style={{ "--idx": index % 10 }}>
-                                            <td className="utr-td utr-td--index">{index + 1}</td>
+                                            <td className="utr-td utr-td--index">{rowNumber}</td>
                                             <td className="utr-td utr-td--date">{date}</td>
                                             <td className="utr-td utr-td--time">{time}</td>
                                             <td className="utr-td utr-td--username">
@@ -1452,6 +1534,97 @@ export default function UserTransactionReport({ onAuthLost }) {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* High-Performance Modern Pagination Controls */}
+                    {viewMode === "detailed" && totalTransactions > 0 && (
+                        <div className="utr-pagination-bar">
+                            <div className="utr-pagination-info">
+                                Showing <span className="utr-pagination-highlight">{pageSize === "all" ? 1 : Math.min((validCurrentPage - 1) * pageSize + 1, totalTransactions)}</span> to <span className="utr-pagination-highlight">{pageSize === "all" ? totalTransactions : Math.min(validCurrentPage * pageSize, totalTransactions)}</span> of <span className="utr-pagination-highlight">{totalTransactions.toLocaleString()}</span> entries
+                            </div>
+
+                            <div className="utr-pagination-controls">
+                                <div className="utr-page-size-wrap">
+                                    <span className="utr-page-size-label">Rows per page:</span>
+                                    <select 
+                                        className="utr-page-size-select"
+                                        value={pageSize}
+                                        onChange={(e) => {
+                                            const val = e.target.value === "all" ? "all" : Number(e.target.value);
+                                            setPageSize(val);
+                                            setCurrentPage(1);
+                                        }}
+                                    >
+                                        <option value={25}>25</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                        <option value={250}>250</option>
+                                        <option value="all">All ({totalTransactions})</option>
+                                    </select>
+                                </div>
+
+                                {pageSize !== "all" && totalPages > 1 && (
+                                    <div className="utr-page-nav">
+                                        <button
+                                            type="button"
+                                            className="utr-page-nav-btn"
+                                            onClick={() => setCurrentPage(1)}
+                                            disabled={validCurrentPage === 1}
+                                            title="First Page"
+                                        >
+                                            «
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="utr-page-nav-btn"
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={validCurrentPage === 1}
+                                            title="Previous Page"
+                                        >
+                                            ‹
+                                        </button>
+
+                                        <div className="utr-page-numbers">
+                                            {getPageNumbers(validCurrentPage, totalPages).map((p, idx) => {
+                                                if (p === "...") {
+                                                    return <span key={`ellipsis-${idx}`} className="utr-page-ellipsis">…</span>;
+                                                }
+                                                return (
+                                                    <button
+                                                        key={p}
+                                                        type="button"
+                                                        className={`utr-page-number-btn ${p === validCurrentPage ? "utr-page-number-btn--active" : ""}`}
+                                                        onClick={() => setCurrentPage(p)}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            className="utr-page-nav-btn"
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={validCurrentPage === totalPages}
+                                            title="Next Page"
+                                        >
+                                            ›
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="utr-page-nav-btn"
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            disabled={validCurrentPage === totalPages}
+                                            title="Last Page"
+                                        >
+                                            »
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    </>
                 )}
             </div>
 

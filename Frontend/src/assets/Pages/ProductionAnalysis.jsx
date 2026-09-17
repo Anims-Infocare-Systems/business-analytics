@@ -6,6 +6,7 @@ import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
 import ProductionAnalysisDatePicker from "./ProductionAnalysisDatePicker";
 import { resolveApiBase } from "../../apiBase";
+import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 Chart.register(...registerables, ChartDataLabels);
 
 // Global premium styling overrides for Chart.js
@@ -645,9 +646,23 @@ const formatDateToYYYYMMDD = (d) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatShiftLogDate = (val) => {
+  if (!val || val === "—") return "—";
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return String(val);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return String(val);
+  }
+};
+
 export default function ProductionAnalysis() {
   const _now = new Date();
-  const _dflt = { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) };
+  const _dflt = getModuleDefaultDateRange("production_analysis", { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) });
   const _saved = readFilterSession("ba_filter_production", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
 
@@ -3001,6 +3016,7 @@ export default function ProductionAnalysis() {
                     <table className="pa2-modal-table">
                       <thead>
                         <tr>
+                          <th>Date</th>
                           <th>Operator</th>
                           <th>Part No.</th>
                           <th>Process</th>
@@ -3011,6 +3027,9 @@ export default function ProductionAnalysis() {
                       <tbody>
                         {shiftLogs.map((r, idx) => (
                           <tr key={idx}>
+                            <td className="pa2-modal-td-date">
+                              <span>{formatShiftLogDate(r.date || r.entry_date || r.EntryDate || r.shift_date)}</span>
+                            </td>
                             <td className="pa2-modal-td-operator">
                               <div className="pa2-modal-op-avatar" style={{ background: selectedMachine.color }}>{(r.operator || "").charAt(0)}</div>
                               <span>{r.operator}</span>
@@ -3023,7 +3042,7 @@ export default function ProductionAnalysis() {
                         ))}
                         {shiftLogs.length === 0 && (
                           <tr>
-                            <td colSpan={5} style={{ textAlign: "center", color: "#94a3b8", padding: "16px" }}>No shift logs found for this machine</td>
+                            <td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: "16px" }}>No shift logs found for this machine</td>
                           </tr>
                         )}
                       </tbody>

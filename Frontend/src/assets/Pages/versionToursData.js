@@ -16,6 +16,7 @@ export const VERSION_REGISTRY = [
         isCurrent: true,
         tagline: "Dynamic Analytics, Intelligent KPI Dashboards & Streamlined Approvals",
         highlights: [
+            "Spotlight Guide & Command Palette (Ctrl + K)",
             "Interactive Product Tour & Version-specific Tips Hub",
             "Enhanced Plant Performance & Top Management KPI Dashboards",
             "Multi-tier Approval Workflows (E-Approval, T-Approval & M-Approval)",
@@ -73,7 +74,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: "Dashboard",
                 title: "Dashboard Suite",
                 category: "Executive & Plant",
-                badge: "Module 1 of 7",
+                badge: "Module 1 of 8",
                 description: "Real-time executive intelligence and shop-floor cockpits:",
                 subItems: [
                     { title: "Top Management Dashboard", desc: "Executive KPI overview across sales, receivables, procurement, and quality indices." },
@@ -89,7 +90,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: "Approvals",
                 title: "Approvals Workflow Suite",
                 category: "Workflows",
-                badge: "Module 2 of 7",
+                badge: "Module 2 of 8",
                 description: "Multi-tiered electronic sign-off pipelines with instant PDF voucher generation:",
                 subItems: [
                     { title: "E-Approval", desc: "Commercial & Purchase Order financial threshold sign-offs." },
@@ -106,7 +107,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: "Reports",
                 title: "Analytical Reports Suite",
                 category: "Business Intelligence",
-                badge: "Module 3 of 7",
+                badge: "Module 3 of 8",
                 description: "Deep-dive data intelligence with granular date filters, custom presets, and CSV/PDF exports:",
                 subItems: [
                     { title: "Sales Analysis", desc: "Customer order trends, product performance, and target vs actual metrics." },
@@ -124,7 +125,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: "MIS",
                 title: "MIS Operational Reports",
                 category: "Operations & Efficiency",
-                badge: "Module 4 of 7",
+                badge: "Module 4 of 8",
                 description: "Management Information System reports designed for operational optimization:",
                 subItems: [
                     { title: "Idle Time Report", desc: "Machine stoppage breakdown by reason, operator, and production line." },
@@ -140,7 +141,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: null,
                 title: "Analytics Charts & Trends",
                 category: "Visual Analytics",
-                badge: "Module 5 of 7",
+                badge: "Module 5 of 8",
                 description: "Interactive multi-series charts and visual data graphs. Toggle series, inspect hover tooltips, and export high-resolution chart graphics.",
                 placement: "right",
                 iconName: "TrendingUp"
@@ -152,7 +153,7 @@ export const VERSION_REGISTRY = [
                 autoOpenMenu: "Utility",
                 title: "System Utility & Administration",
                 category: "User Administration",
-                badge: "Module 6 of 7",
+                badge: "Module 6 of 8",
                 description: "Role-based access control and approval governance:",
                 subItems: [
                     { title: "User Rights", desc: "Assign and restrict module access permissions per user profile." },
@@ -162,13 +163,31 @@ export const VERSION_REGISTRY = [
                 iconName: "ShieldAlert"
             },
             {
+                id: "menu-Spotlight",
+                targetSelector: "[data-tour='menu-Spotlight']",
+                fallbackSelector: "[data-spotlight='dl-command-palette-trigger'], .wh-spotlight-hero-btn, .dl-sidebar__item",
+                autoOpenMenu: null,
+                title: "Spotlight Navigator & Command Palette",
+                category: "Productivity & Search",
+                badge: "Module 7 of 8",
+                kbdShortcut: "Ctrl + K",
+                description: "Instant universal search across the entire Business Analytics ecosystem. Launch the Command Palette from here or press Ctrl + K anywhere to jump directly to any report, approval, or KPI card with real-time DOM highlighting.",
+                subItems: [
+                    { title: "Universal Command Search", desc: "Instantly locate 100+ indexed reports, vouchers, master data, and settings." },
+                    { title: "Visual Pulsing Spotlight", desc: "Directly routes to target modules and illuminates the exact control with a live halo." },
+                    { title: "Keyboard Quick-Trigger", desc: "Press Ctrl+K (Cmd+K) or '/' from any screen for rapid keyboard navigation." }
+                ],
+                placement: "right",
+                iconName: "Sparkles"
+            },
+            {
                 id: "menu-Settings",
                 targetSelector: "[data-tour='menu-Settings']",
                 fallbackSelector: ".dl-sidebar__item",
                 autoOpenMenu: null,
                 title: "Settings, Tips & Subscriptions",
                 category: "System Configuration",
-                badge: "Module 7 of 7",
+                badge: "Module 8 of 8",
                 description: "Manage account settings, update passwords, view subscription quotas and invoices, and open the Tips & Tour menu anytime to discover new features or replay this tour!",
                 placement: "right",
                 iconName: "Settings"
@@ -250,6 +269,21 @@ export const VERSION_REGISTRY = [
                 ],
                 actionLabel: "User Rights",
                 actionTarget: "User Rights"
+            },
+            {
+                id: "tip-240-6",
+                title: "Instant Navigation with Spotlight Guide",
+                category: "Productivity",
+                type: "SHORTCUT",
+                icon: "Sparkles",
+                summary: "Press Ctrl + K anytime to open the Spotlight Command Palette and jump directly to any KPI, report, or approval.",
+                steps: [
+                    "Press Ctrl + K (or Cmd + K on macOS) anywhere across the application.",
+                    "Start typing to search 100+ indexed reports, KPIs, approval workflows, or settings.",
+                    "Press Enter or click any result to jump directly to the target element with a live glowing spotlight halo."
+                ],
+                actionLabel: "Launch Spotlight",
+                actionTarget: "Spotlight"
             }
         ]
     },

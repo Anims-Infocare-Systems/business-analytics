@@ -1568,6 +1568,13 @@
     background: #fafbfc;
 }
 
+.pa2-modal-td-date {
+    font-weight: 600;
+    color: #475569;
+    font-size: 11.5px;
+    white-space: nowrap;
+}
+
 .pa2-modal-td-operator {
     display: flex;
     align-items: center;

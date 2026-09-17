@@ -155,6 +155,9 @@ export default function PlantPerformance1DatePicker({ from, to, onChange, disabl
     useEffect(() => {
         setFromInput(toInputFmt(from));
         setToInput(toInputFmt(to));
+        if (from && !isNaN(from.getTime())) {
+            setLeft(new Date(from.getFullYear(), from.getMonth(), 1));
+        }
         setInputErr("");
     }, [from, to, open]);
 

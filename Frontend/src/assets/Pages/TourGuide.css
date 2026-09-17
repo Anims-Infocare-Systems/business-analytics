@@ -194,6 +194,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px 10px;
+    gap: 10px;
+}
+
+.tg-popover__badge-cluster {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .tg-step-badge {
@@ -209,6 +217,46 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+}
+
+.tg-step-badge--spotlight {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%);
+    border-color: rgba(14, 165, 233, 0.35);
+    color: #0284c7;
+}
+
+.tg-pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #0284c7;
+    box-shadow: 0 0 6px #0284c7;
+    animation: tgPulseDot 1.8s infinite ease-in-out;
+}
+
+@keyframes tgPulseDot {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 10px #0284c7; }
+}
+
+.tg-kbd-pill {
+    display: inline-flex;
+    align-items: center;
+}
+
+.tg-kbd-pill kbd {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.06);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-bottom: 2px solid rgba(15, 23, 42, 0.22);
+    border-radius: 5px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 750;
+    color: #334155;
+    font-family: inherit;
+    letter-spacing: 0.02em;
 }
 
 .tg-skip-btn {
@@ -249,8 +297,61 @@
 
 .tg-step-icon {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: #2563eb;
     font-size: 18px;
+    flex-shrink: 0;
+}
+
+.tg-step-icon-svg {
+    width: 20px;
+    height: 20px;
+}
+
+.tg-step-icon-svg--sparkles {
+    color: #0284c7;
+    filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.45));
+}
+
+.tg-spotlight-tip-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(14, 165, 233, 0.1) 100%);
+    border: 1px solid rgba(14, 165, 233, 0.28);
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0369a1;
+    margin: 4px 0 10px;
+    line-height: 1.45;
+}
+
+.tg-spotlight-sparkle-anim {
+    color: #0284c7;
+    flex-shrink: 0;
+    animation: tgSparkleSpin 3s linear infinite;
+}
+
+@keyframes tgSparkleSpin {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(15deg) scale(1.18); }
+    100% { transform: rotate(0deg) scale(1); }
+}
+
+.tg-mini-kbd {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-bottom: 2px solid #94a3b8;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 10.5px;
+    font-family: inherit;
+    font-weight: 750;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .tg-step-desc {

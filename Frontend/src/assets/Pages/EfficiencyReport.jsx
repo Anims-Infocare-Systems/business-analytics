@@ -8,6 +8,7 @@ import { User, Settings, Search, ChevronDown, BarChart2, X, Trophy, AlertTriangl
 import { resolveApiBase } from "../../apiBase";
 import "./EfficiencyReport.css";
 import EfficiencyReportDatePicker from "./EfficiencyReportDatePicker";
+import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 
 const API_BASE = resolveApiBase();
 
@@ -681,7 +682,9 @@ function writeFilterSession(key, data) {
 
 export default function EfficiencyReport() {
     /* ── Filter state ── */
-    const _dflt = { from: new Date(2026, 6, 1), to: new Date(2026, 6, 31) };
+    const _now = new Date();
+    const _fallback = { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) };
+    const _dflt = getModuleDefaultDateRange("efficiency_report", _fallback);
     const _saved = readFilterSession("ba_filter_efficiency", _dflt);
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [loading, setLoading] = useState(false);

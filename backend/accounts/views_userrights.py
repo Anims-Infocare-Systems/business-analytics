@@ -652,3 +652,112 @@ def user_rights_bulk_save(request):
             else f"Saved rights with {len(errors)} error(s)."
         ),
     })
+
+
+def _ensure_company_date_settings_table(cursor):
+    """Ensures company_date_settings table exists in default database."""
+    cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'company_date_settings')
+        BEGIN
+            CREATE TABLE company_date_settings (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                company_code NVARCHAR(100) NOT NULL,
+                module_key NVARCHAR(100) NOT NULL,
+                preset_id NVARCHAR(100) NOT NULL,
+                updated_by NVARCHAR(100) NULL,
+                updated_at DATETIME DEFAULT GETDATE()
+            );
+            CREATE UNIQUE NONCLUSTERED INDEX UQ_CompanyDateSettings ON company_date_settings (company_code, module_key);
+        END
+    """)
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def user_settings_date_presets(request):
+    """
+    Manages default date range presets strictly isolated by company_code.
+    GET:  Returns company-wide default presets for all configured modules.
+    POST: Updates company-wide default presets for this specific company.
+    """
+    try:
+        tenant = get_session_tenant(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    company = _company_code(tenant)
+    if not company:
+        return Response({"error": "Invalid company context."}, status=400)
+
+    try:
+        with connection.cursor() as cursor:
+            _ensure_company_date_settings_table(cursor)
+
+            if request.method == "POST":
+                data = request.data or {}
+                presets = data.get("presets", {})
+                current_user = str(tenant.get("username") or "Admin").strip()
+
+                if not isinstance(presets, dict):
+                    return Response({"error": "Field 'presets' must be an object."}, status=400)
+
+                for module_key, preset_id in presets.items():
+                    m_key = str(module_key).strip()
+                    p_id = str(preset_id).strip()
+                    if not m_key or not p_id:
+                        continue
+
+                    # Upsert row for this company_code and module_key
+                    cursor.execute("""
+                        IF EXISTS (
+                            SELECT 1 FROM company_date_settings
+                            WHERE UPPER(LTRIM(RTRIM(company_code))) = UPPER(LTRIM(RTRIM(%s)))
+                              AND UPPER(LTRIM(RTRIM(module_key))) = UPPER(LTRIM(RTRIM(%s)))
+                        )
+                        BEGIN
+                            UPDATE company_date_settings
+                            SET preset_id = %s,
+                                updated_by = %s,
+                                updated_at = GETDATE()
+                            WHERE UPPER(LTRIM(RTRIM(company_code))) = UPPER(LTRIM(RTRIM(%s)))
+                              AND UPPER(LTRIM(RTRIM(module_key))) = UPPER(LTRIM(RTRIM(%s)));
+                        END
+                        ELSE
+                        BEGIN
+                            INSERT INTO company_date_settings (company_code, module_key, preset_id, updated_by, updated_at)
+                            VALUES (%s, %s, %s, %s, GETDATE());
+                        END
+                    """, [
+                        company, m_key,
+                        p_id, current_user, company, m_key,
+                        company, m_key, p_id, current_user
+                    ])
+
+                return Response({
+                    "success": True,
+                    "company_code": company,
+                    "message": f"Saved date settings for company {company}.",
+                    "presets": presets
+                })
+
+            # GET method: fetch presets for this company
+            cursor.execute("""
+                SELECT module_key, preset_id
+                FROM company_date_settings
+                WHERE UPPER(LTRIM(RTRIM(company_code))) = UPPER(LTRIM(RTRIM(%s)))
+            """, [company])
+            rows = cursor.fetchall()
+
+            saved_presets = {}
+            for row in rows:
+                saved_presets[row[0]] = row[1]
+
+            return Response({
+                "success": True,
+                "company_code": company,
+                "presets": saved_presets
+            })
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+

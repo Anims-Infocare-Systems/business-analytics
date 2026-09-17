@@ -2098,6 +2098,22 @@ export const SPOTLIGHT_REGISTRY = [
         color: "#10b981",
         iconName: "Scale"
     },
+    {
+        id: "us-date-settings",
+        title: "Users Setting — Date Setting Option (Default Range Automation)",
+        module: "Users Setting",
+        parentMenu: "Utility",
+        categoryType: "utility",
+        categoryLabel: "Date Automation",
+        targetSelector: "[data-spotlight='us-date-settings']",
+        fallbackSelector: ".us-datesetting-wrap",
+        description: "Configure default date range presets (e.g. Last 3 Months) across Plant Performance, Analytical Reports, and MIS modules that auto-load upon opening.",
+        tags: ["date setting", "date setting option", "default date", "last 3 months", "plant performance date", "reports date", "mis date", "date presets"],
+        keyActions: ["Set Module Default Date Presets", "1-Click Bulk Apply to All Modules", "Live Date Range Previews"],
+        badge: "Date Setting",
+        color: "#6366f1",
+        iconName: "Calendar"
+    },
 
     // ═════════════════════════════════════════════════════════════════
     //  10. SETTINGS & SYSTEM CONFIGURATION

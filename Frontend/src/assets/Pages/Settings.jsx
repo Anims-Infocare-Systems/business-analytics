@@ -883,6 +883,15 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                         setTimeout(() => onNavigateModule(target), 320);
                                     }
                                 }}
+                                onOpenSpotlight={() => {
+                                    handleClose();
+                                    if (typeof onOpenSpotlight === "function") {
+                                        setTimeout(() => onOpenSpotlight(), 320);
+                                    }
+                                }}
+                                onSwitchToSpotlightTab={() => {
+                                    setActiveTab("spotlight");
+                                }}
                             />
                         </div>
                     )}

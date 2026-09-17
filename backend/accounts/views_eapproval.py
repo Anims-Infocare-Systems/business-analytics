@@ -348,7 +348,7 @@ def _po_cte_sql(include_amnd: bool = False, is_approve_supp_po: bool = True, is_
     base_sql += "\n        )\n"
     return base_sql
 
-
+from typing import Optional
 def _list_filter_sql(type_filter: str, status_filter: str, search_q: str, params: list, user_rule: dict | None = None) -> str:
     """Extra WHERE on CTE `po` (unqualified column names)."""
     filt = " WHERE 1=1 "

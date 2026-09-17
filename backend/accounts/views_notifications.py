@@ -1,9 +1,16 @@
 # ════════════════════════════════════════════════════════════════
 #  views_notifications.py
 #  System Broadcast Notifications & 15-Day Auto-Expiry Engine
+#  Strictly Anchor All Datetimes to Indian Standard Time (IST: UTC+5:30)
 # ════════════════════════════════════════════════════════════════
 import json
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
+try:
+    from zoneinfo import ZoneInfo
+    IST_TZ = ZoneInfo("Asia/Kolkata")
+except Exception:
+    IST_TZ = timezone(timedelta(hours=5, minutes=30))
+
 from django.db import connection
 from django.conf import settings
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -12,8 +19,19 @@ from rest_framework.response import Response
 from .views_adminpannel import check_admin_auth, admin_auth_denied_response, get_username_from_token, _admin_token_from_request
 
 
+def get_ist_now():
+    """
+    Return current Indian Standard Time (IST: UTC+5:30) as a naive datetime object.
+    Independent of host machine or database server clock offset.
+    """
+    try:
+        return datetime.now(IST_TZ).replace(tzinfo=None)
+    except Exception:
+        return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
+
+
 def ensure_notifications_table():
-    """Ensure system_notifications table exists in master database."""
+    """Ensure system_notifications table exists in master database and has 'deleted' column."""
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -28,10 +46,19 @@ def ensure_notifications_table():
                         priority NVARCHAR(20) DEFAULT 'normal',
                         target_audience NVARCHAR(100) DEFAULT 'all',
                         sender_admin NVARCHAR(100) DEFAULT 'Admin',
-                        created_at DATETIME DEFAULT GETDATE(),
+                        created_at DATETIME,
                         expires_at DATETIME NOT NULL,
-                        is_active BIT DEFAULT 1
+                        is_active BIT DEFAULT 1,
+                        deleted BIT DEFAULT 0
                     );
+                END
+                """
+            )
+            cursor.execute(
+                """
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('system_notifications') AND name = 'deleted')
+                BEGIN
+                    ALTER TABLE system_notifications ADD deleted BIT DEFAULT 0;
                 END
                 """
             )
@@ -40,28 +67,34 @@ def ensure_notifications_table():
 
 
 def purge_expired_notifications(cursor):
-    """Automatically purge notifications exceeding the 15-day TTL."""
+    """Automatically purge notifications exceeding the 15-day TTL based on IST."""
     try:
+        now_ist = get_ist_now()
         cursor.execute(
             """
             DELETE FROM system_notifications 
-            WHERE expires_at < GETDATE() OR DATEDIFF(day, created_at, GETDATE()) > 15
-            """
+            WHERE expires_at < %s
+            """,
+            [now_ist]
         )
     except Exception as e:
         print(f"[Notifications] purge_expired_notifications error: {e}")
 
 
-def format_time_ago(dt):
-    """Format datetime into human-friendly relative time."""
+def format_time_ago(dt, now=None):
+    """Format datetime into human-friendly relative time based on IST."""
     if not dt:
         return "Just now"
-    now = datetime.now()
+    if now is None:
+        now = get_ist_now()
     if isinstance(dt, str):
         try:
             dt = datetime.fromisoformat(dt.replace("Z", ""))
         except Exception:
             return dt
+    if hasattr(dt, "tzinfo") and dt.tzinfo is not None:
+        dt = dt.astimezone(IST_TZ).replace(tzinfo=None)
+        
     diff = now - dt
     seconds = int(diff.total_seconds())
     if seconds < 60:
@@ -87,10 +120,12 @@ def format_time_ago(dt):
 def active_notifications(request):
     """
     Fetch active, non-expired broadcast notifications for regular users.
-    Automatically purges records older than 15 days.
+    Automatically purges records older than 15 days and excludes deleted records (deleted = 0).
+    Timestamps strictly calculated in Indian Standard Time (IST).
     """
     ensure_notifications_table()
     try:
+        now_ist = get_ist_now()
         with connection.cursor() as cursor:
             purge_expired_notifications(cursor)
 
@@ -105,23 +140,29 @@ def active_notifications(request):
                     target_audience, 
                     sender_admin, 
                     created_at, 
-                    expires_at,
-                    DATEDIFF(day, GETDATE(), expires_at) as days_remaining,
-                    DATEDIFF(hour, created_at, GETDATE()) as hours_old
+                    expires_at
                 FROM system_notifications
-                WHERE is_active = 1 AND expires_at >= GETDATE()
+                WHERE is_active = 1 
+                  AND (deleted IS NULL OR deleted = 0)
+                  AND expires_at >= %s
                 ORDER BY 
                     CASE WHEN priority = 'urgent' THEN 1 ELSE 2 END,
                     created_at DESC
-                """
+                """,
+                [now_ist]
             )
             rows = cursor.fetchall()
             
             notifications = []
             for r in rows:
-                nid, title, message, category, priority, audience, sender, created_at, expires_at, days_rem, hours_old = r
+                nid, title, message, category, priority, audience, sender, created_at, expires_at = r
                 
-                days_left = max(0, days_rem) if days_rem is not None else 15
+                if isinstance(expires_at, datetime):
+                    days_left = max(0, (expires_at.date() - now_ist.date()).days)
+                elif isinstance(expires_at, date):
+                    days_left = max(0, (expires_at - now_ist.date()).days)
+                else:
+                    days_left = 15
                 
                 notifications.append({
                     "id": nid,
@@ -134,7 +175,7 @@ def active_notifications(request):
                     "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                     "expires_at": expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at),
                     "created_at_formatted": created_at.strftime("%d %b %Y, %I:%M %p") if isinstance(created_at, datetime) else str(created_at),
-                    "time_ago": format_time_ago(created_at) if isinstance(created_at, datetime) else "Recently",
+                    "time_ago": format_time_ago(created_at, now_ist),
                     "days_remaining": days_left,
                     "expiry_label": f"Auto-deletes in {days_left}d" if days_left > 1 else ("Expires today" if days_left == 1 else "Expiring soon"),
                 })
@@ -142,7 +183,8 @@ def active_notifications(request):
             return Response({
                 "count": len(notifications),
                 "notifications": notifications,
-                "server_time": datetime.now().isoformat()
+                "server_time": now_ist.isoformat(),
+                "server_time_ist": now_ist.strftime("%d %b %Y, %I:%M %p")
             })
     except Exception as e:
         return Response({"error": f"Failed to fetch notifications: {str(e)}", "notifications": []}, status=500)
@@ -154,7 +196,8 @@ def active_notifications(request):
 @permission_classes([AllowAny])
 def admin_list_notifications(request):
     """
-    List all system broadcast notifications with lifecycle & delivery stats.
+    List all system broadcast notifications with lifecycle, delivery stats, and deleted field.
+    All calculations strictly anchored to Indian Standard Time (IST).
     Admin token authenticated.
     """
     try:
@@ -164,6 +207,7 @@ def admin_list_notifications(request):
 
     ensure_notifications_table()
     try:
+        now_ist = get_ist_now()
         with connection.cursor() as cursor:
             purge_expired_notifications(cursor)
 
@@ -180,7 +224,7 @@ def admin_list_notifications(request):
                     created_at, 
                     expires_at,
                     is_active,
-                    DATEDIFF(day, GETDATE(), expires_at) as days_remaining
+                    deleted
                 FROM system_notifications
                 ORDER BY created_at DESC
                 """
@@ -194,10 +238,17 @@ def admin_list_notifications(request):
             alert_count = 0
 
             for r in rows:
-                nid, title, message, category, priority, audience, sender, created_at, expires_at, is_active, days_rem = r
+                nid, title, message, category, priority, audience, sender, created_at, expires_at, is_active, deleted_val = r
                 
-                days_left = max(0, days_rem) if days_rem is not None else 15
-                is_currently_active = bool(is_active) and (expires_at is not None and expires_at >= datetime.now())
+                if isinstance(expires_at, datetime):
+                    days_left = max(0, (expires_at.date() - now_ist.date()).days)
+                elif isinstance(expires_at, date):
+                    days_left = max(0, (expires_at - now_ist.date()).days)
+                else:
+                    days_left = 15
+
+                is_deleted = bool(deleted_val) if deleted_val is not None else False
+                is_currently_active = bool(is_active) and not is_deleted and (expires_at is not None and expires_at >= now_ist)
 
                 if is_currently_active:
                     active_count += 1
@@ -218,12 +269,13 @@ def admin_list_notifications(request):
                     "target_audience": audience or "all",
                     "sender_admin": sender or "Admin",
                     "is_active": is_currently_active,
+                    "deleted": is_deleted,
                     "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                     "created_at_formatted": created_at.strftime("%d %b %Y, %I:%M %p") if isinstance(created_at, datetime) else str(created_at),
                     "expires_at": expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at),
                     "expires_at_formatted": expires_at.strftime("%d %b %Y") if isinstance(expires_at, datetime) else str(expires_at),
                     "days_remaining": days_left,
-                    "time_ago": format_time_ago(created_at) if isinstance(created_at, datetime) else "Recently"
+                    "time_ago": format_time_ago(created_at, now_ist)
                 })
 
             return Response({
@@ -235,7 +287,8 @@ def admin_list_notifications(request):
                     "updates": update_count,
                     "alerts": alert_count,
                     "retention_policy": "15 Days Auto-Purge"
-                }
+                },
+                "server_time_ist": now_ist.strftime("%d %b %Y, %I:%M %p")
             })
     except Exception as e:
         return Response({"error": f"Failed to retrieve notifications: {str(e)}"}, status=500)
@@ -247,7 +300,8 @@ def admin_list_notifications(request):
 def admin_create_notification(request):
     """
     Publish a new broadcast notification to all tenants.
-    Automatically sets 15-day TTL (expires_at = DATEADD(day, 15, GETDATE())).
+    Automatically timestamps created_at and expires_at in exact Indian Standard Time (IST: UTC+5:30).
+    Automatically sets 15-day TTL and deleted = 0.
     Admin token authenticated.
     """
     try:
@@ -279,20 +333,24 @@ def admin_create_notification(request):
     if priority not in ["normal", "urgent"]:
         priority = "normal"
 
+    # Strictly capture Indian Standard Time (IST)
+    now_ist = get_ist_now()
+    expires_at_ist = now_ist + timedelta(days=15)
+
     try:
         with connection.cursor() as cursor:
-            # Insert with exact 15-day future expiration and return generated ID
+            # Insert with explicit IST datetimes, is_active = 1, deleted = 0
             cursor.execute(
                 """
                 INSERT INTO system_notifications (
-                    title, message, category, priority, target_audience, sender_admin, created_at, expires_at, is_active
+                    title, message, category, priority, target_audience, sender_admin, created_at, expires_at, is_active, deleted
                 )
                 OUTPUT INSERTED.id
                 VALUES (
-                    %s, %s, %s, %s, %s, %s, GETDATE(), DATEADD(day, 15, GETDATE()), 1
+                    %s, %s, %s, %s, %s, %s, %s, %s, 1, 0
                 );
                 """,
-                [title, message, category, priority, target_audience, sender]
+                [title, message, category, priority, target_audience, sender, now_ist, expires_at_ist]
             )
             row = cursor.fetchone()
             new_id = row[0] if row else None
@@ -301,6 +359,7 @@ def admin_create_notification(request):
                 "success": True,
                 "message": "Broadcast notification published successfully! It will automatically expire and delete in 15 days.",
                 "id": int(new_id) if new_id else None,
+                "created_at_ist": now_ist.strftime("%d %b %Y, %I:%M %p"),
                 "expires_in_days": 15
             }, status=201)
     except Exception as e:
@@ -312,7 +371,7 @@ def admin_create_notification(request):
 @permission_classes([AllowAny])
 def admin_delete_notification(request, notification_id):
     """
-    Permanently delete or deactivate a broadcast notification.
+    Soft delete a broadcast notification: sets deleted = 1 and is_active = 0.
     Admin token authenticated.
     """
     try:
@@ -324,7 +383,11 @@ def admin_delete_notification(request, notification_id):
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM system_notifications WHERE id = %s",
+                """
+                UPDATE system_notifications 
+                SET deleted = 1, is_active = 0 
+                WHERE id = %s
+                """,
                 [notification_id]
             )
             if cursor.rowcount == 0:
@@ -332,6 +395,7 @@ def admin_delete_notification(request, notification_id):
 
             return Response({
                 "success": True,
+                "deleted": True,
                 "message": f"Broadcast notification #{notification_id} deleted successfully."
             })
     except Exception as e:

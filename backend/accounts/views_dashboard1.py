@@ -199,6 +199,8 @@ def dashboard1_sales_kpi(request):
         # ── Get Previous Month Sales for Delta ──
         prev_month_end = current_month_start - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
+        prev_prev_month_end = prev_month_start - timedelta(days=1)
+        prev_prev_month_start = prev_prev_month_end.replace(day=1)
         
         cursor.execute(f"""
             SELECT SUM(tamt) AS total 
@@ -220,6 +222,7 @@ def dashboard1_sales_kpi(request):
             "day_before_yesterday": fetch_sales_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_sales_analysis_bucket(cursor, current_month_start, current_month_end),
             "prev_month": fetch_sales_analysis_bucket(cursor, prev_month_start, prev_month_end),
+            "prev_prev_month": fetch_sales_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
             "quarter": fetch_sales_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
             "prev_quarter": fetch_sales_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_sales_analysis_bucket(cursor, fy_start_date, fy_end_date),
@@ -438,6 +441,8 @@ def dashboard1_purchase_kpi(request):
 
     prev_month_end = current_month_start - timedelta(days=1)
     prev_month_start = prev_month_end.replace(day=1)
+    prev_prev_month_end = prev_month_start - timedelta(days=1)
+    prev_prev_month_start = prev_prev_month_end.replace(day=1)
 
     try:
         cursor = conn.cursor()
@@ -455,6 +460,7 @@ def dashboard1_purchase_kpi(request):
             "day_before_yesterday": fetch_purchase_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_purchase_analysis_bucket(cursor, current_month_start, current_month_end),
             "prev_month": fetch_purchase_analysis_bucket(cursor, prev_month_start, prev_month_end),
+            "prev_prev_month": fetch_purchase_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
             "quarter": fetch_purchase_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
             "prev_quarter": fetch_purchase_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_purchase_analysis_bucket(cursor, fy_start_date, fy_end_date),
@@ -619,6 +625,8 @@ def dashboard1_production_kpi(request):
 
     prev_month_end = current_month_start - timedelta(days=1)
     prev_month_start = prev_month_end.replace(day=1)
+    prev_prev_month_end = prev_month_start - timedelta(days=1)
+    prev_prev_month_start = prev_prev_month_end.replace(day=1)
 
     try:
         cursor = conn.cursor()
@@ -634,6 +642,7 @@ def dashboard1_production_kpi(request):
             "day_before_yesterday": fetch_production_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_production_analysis_bucket(cursor, current_month_start, current_month_end),
             "prev_month": fetch_production_analysis_bucket(cursor, prev_month_start, prev_month_end),
+            "prev_prev_month": fetch_production_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
             "quarter": fetch_production_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
             "prev_quarter": fetch_production_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_production_analysis_bucket(cursor, fy_start_date, fy_end_date),
@@ -939,7 +948,10 @@ def dashboard1_oa_efficiency_weekly(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date, selected_year, selected_month = parse_dashboard1_period(request)
-    labels = ["W1", "W2", "W3", "W4", "W5"]
+    last_day = end_date.day
+    w5_label = f"29-{last_day}" if last_day > 28 else "29"
+    day_ranges = ["1-7", "8-14", "15-21", "22-28", w5_label]
+    labels = [f"W{i + 1} ({rng})" for i, rng in enumerate(day_ranges)]
     week_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
 
     try:
@@ -954,7 +966,7 @@ def dashboard1_oa_efficiency_weekly(request):
 
     for week_num, avg_eff in rows:
         if week_num in week_map:
-            week_map[int(week_num)] = round(float(avg_eff or 0), 2)
+            week_map[week_num] = round(float(avg_eff or 0), 2)
 
     return Response({
         "success": True,
@@ -1163,7 +1175,10 @@ def dashboard1_quality_rejections_weekly(request):
     else:
         current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
 
-    labels = ["W1", "W2", "W3", "W4", "W5"]
+    last_day = end_date.day
+    w5_label = f"29-{last_day}" if last_day > 28 else "29"
+    day_ranges = ["1-7", "8-14", "15-21", "22-28", w5_label]
+    labels = [f"W{i + 1} ({rng})" for i, rng in enumerate(day_ranges)]
     material_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
     machine_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
 
@@ -1177,6 +1192,8 @@ def dashboard1_quality_rejections_weekly(request):
         prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
         prev_month_end = current_month_start - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
+        prev_prev_month_end = prev_month_start - timedelta(days=1)
+        prev_prev_month_start = prev_prev_month_end.replace(day=1)
 
         analysis = {
             "today": fetch_quality_rejection_period_totals(cursor, today_date, today_date),
@@ -1184,6 +1201,7 @@ def dashboard1_quality_rejections_weekly(request):
             "day_before_yesterday": fetch_quality_rejection_period_totals(cursor, day_before_yesterday_date, day_before_yesterday_date),
             "month": fetch_quality_rejection_period_totals(cursor, current_month_start, current_month_end),
             "prev_month": fetch_quality_rejection_period_totals(cursor, prev_month_start, prev_month_end),
+            "prev_prev_month": fetch_quality_rejection_period_totals(cursor, prev_prev_month_start, prev_prev_month_end),
             "quarter": fetch_quality_rejection_period_totals(cursor, quarter_start_date, quarter_end_date),
             "prev_quarter": fetch_quality_rejection_period_totals(cursor, prev_quarter_start_date, prev_quarter_end_date),
             "financial_year": fetch_quality_rejection_period_totals(cursor, fy_start_date, fy_end_date),

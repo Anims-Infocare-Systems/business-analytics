@@ -401,31 +401,74 @@
     font-weight: 600;
     color: #c7d2fe;
     letter-spacing: -0.01em;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.tips-hero-chip--spotlight {
+    background: rgba(56, 189, 248, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.38);
+    color: #e0f2fe;
+    padding: 4px 11px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.tips-hero-chip--spotlight:hover {
+    background: rgba(56, 189, 248, 0.3);
+    border-color: rgba(125, 211, 252, 0.75);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+    transform: translateY(-1px);
+}
+
+.tips-chip-sparkle {
+    color: #38bdf8;
+    animation: tipsSparkleBreath 3s ease-in-out infinite;
+}
+
+@keyframes tipsSparkleBreath {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+    50% { transform: scale(1.2) rotate(12deg); opacity: 1; filter: drop-shadow(0 0 4px #38bdf8); }
 }
 
 .tips-tour-hero__right {
     position: relative;
     z-index: 2;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
-/* ── Tour Launch Button ── */
+.tips-tour-hero__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* ── Tour & Spotlight Launch Buttons ── */
 .tips-tour-hero__btn {
     position: relative;
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 26px;
+    padding: 13px 22px;
     border-radius: 14px;
     background: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.85);
     color: #1d4ed8;
     font-family: var(--tips-font-heading);
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 750;
     letter-spacing: -0.015em;
     cursor: pointer;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
     transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     white-space: nowrap;
     overflow: hidden;
@@ -440,19 +483,74 @@
     border-radius: 50%;
     background: rgba(37, 99, 235, 0.12);
     color: #1d4ed8;
-    transition: transform 0.25s ease;
+    transition: transform 0.25s ease, background 0.25s ease;
 }
 
-.tips-tour-hero__btn:hover {
+.tips-tour-hero__btn--tour:hover {
     background: #f8fafc;
     transform: translateY(-2px) scale(1.02);
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), 0 0 0 2px rgba(255, 255, 255, 0.6);
     color: #1e40af;
 }
 
-.tips-tour-hero__btn:hover .tips-tour-hero__btn-icon {
+.tips-tour-hero__btn--tour:hover .tips-tour-hero__btn-icon {
     transform: scale(1.12);
     background: rgba(37, 99, 235, 0.18);
+}
+
+/* Modern Luminous Glassmorphic Spotlight Button */
+.tips-tour-hero__btn--spotlight {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    padding: 13px 20px;
+}
+
+.tips-tour-hero__btn-icon--spotlight {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.28) 0%, rgba(99, 102, 241, 0.28) 100%);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+}
+
+.tips-tour-hero__btn-kbd {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 750;
+    color: #bae6fd;
+    letter-spacing: 0.04em;
+    margin-left: 2px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+}
+
+.tips-tour-hero__btn--spotlight:hover {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.85) 0%, rgba(14, 116, 144, 0.85) 100%);
+    border-color: rgba(147, 197, 253, 0.8);
+    color: #ffffff;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(56, 189, 248, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+    transform: translateY(-2px) scale(1.02);
+}
+
+.tips-tour-hero__btn--spotlight:hover .tips-tour-hero__btn-icon--spotlight {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.5) 0%, rgba(99, 102, 241, 0.5) 100%);
+    color: #e0f2fe;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+    transform: scale(1.14) rotate(8deg);
+}
+
+.tips-tour-hero__btn--spotlight:hover .tips-tour-hero__btn-kbd {
+    background: rgba(0, 0, 0, 0.65);
+    border-color: rgba(186, 230, 253, 0.6);
+    color: #ffffff;
 }
 
 .tips-tour-hero__btn:active {
@@ -472,6 +570,40 @@
 
 .tips-tour-hero__btn:hover .tips-tour-hero__btn-shine {
     animation: tipsShimmerSwipe 1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* Browse 100+ Spotlight Targets Sublink */
+.tips-tour-hero__sub-link {
+    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    background: transparent;
+    border: none;
+    color: rgba(224, 231, 255, 0.82);
+    font-family: var(--tips-font-heading);
+    font-size: 11.5px;
+    font-weight: 650;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: all 0.2s ease;
+    text-align: right;
+}
+
+.tips-tour-hero__sub-link:hover {
+    color: #ffffff;
+    transform: translateX(2px);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.tips-tour-hero__sub-link svg {
+    transition: transform 0.2s ease;
+}
+
+.tips-tour-hero__sub-link:hover svg {
+    transform: translateX(3px);
 }
 
 /* ── Filter Bar & Search ── */
@@ -1088,9 +1220,24 @@
         gap: 20px;
     }
 
-    .tips-tour-hero__btn {
+    .tips-tour-hero__right {
         width: 100%;
+        align-items: stretch;
+    }
+
+    .tips-tour-hero__actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .tips-tour-hero__btn {
+        flex: 1 1 200px;
         justify-content: center;
+    }
+
+    .tips-tour-hero__sub-link {
+        justify-content: center;
+        text-align: center;
     }
 
     .tips-tour-hero__left {

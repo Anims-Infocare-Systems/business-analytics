@@ -348,7 +348,14 @@ const formatDate = (val) => {
     return val;
 };
 
+// Module-level client cache for instant (0ms) tab transitions
+let _clientTenantsCache = null;
+let _clientTenantsCacheTime = 0;
+const CLIENT_TENANTS_CACHE_TTL = 30000; // 30 seconds
+
 export default function AdminPanel() {
+    const hasInitialTenantsCache = Boolean(_clientTenantsCache && (Date.now() - _clientTenantsCacheTime < CLIENT_TENANTS_CACHE_TTL));
+
     // Authentication State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -361,9 +368,10 @@ export default function AdminPanel() {
     const [loginBusy, setLoginBusy] = useState(false);
     const [currentAdminUser, setCurrentAdminUser] = useState(() => localStorage.getItem("ap_admin_user") || "");
 
-    // Tenants State
-    const [tenants, setTenants] = useState([]);
-    const [loadingTenants, setLoadingTenants] = useState(false);
+    // Tenants State (initialized from cache for instant 0ms render)
+    const [tenants, setTenants] = useState(() => hasInitialTenantsCache ? _clientTenantsCache : []);
+    const [loadingTenants, setLoadingTenants] = useState(!hasInitialTenantsCache);
+    const [isRefreshingTenants, setIsRefreshingTenants] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
     // Search and Filters
@@ -529,7 +537,11 @@ export default function AdminPanel() {
                         localStorage.removeItem("ap_active_tab");
                     }
                 }
-                fetchTenants();
+                if (hasInitialTenantsCache) {
+                    fetchTenants({ silent: true });
+                } else {
+                    fetchTenants();
+                }
             }
         } catch {
             /* session check fail */
@@ -538,16 +550,25 @@ export default function AdminPanel() {
         }
     };
 
-    const fetchTenants = useCallback(async ({ silent = false } = {}) => {
-        if (!silent) {
+    const fetchTenants = useCallback(async ({ silent = false, force = false } = {}) => {
+        if (!silent && !_clientTenantsCache) {
             setLoadingTenants(true);
             setErrorMsg("");
         }
+        if (force) {
+            setIsRefreshingTenants(true);
+        }
         try {
-            const res = await adminFetch(`${API}/admin/tenants/`);
+            const url = force 
+                ? `${API}/admin/tenants/?force_refresh=true` 
+                : `${API}/admin/tenants/`;
+            const res = await adminFetch(url);
             const data = await res.json();
             if (res.ok) {
-                setTenants(data.tenants || []);
+                const list = data.tenants || [];
+                setTenants(list);
+                _clientTenantsCache = list;
+                _clientTenantsCacheTime = Date.now();
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
             } else if (!silent) {
@@ -556,15 +577,27 @@ export default function AdminPanel() {
                 showAdminToast("error", "Load Failed", msg);
             }
         } catch {
-            if (!silent) {
+            if (!silent && !_clientTenantsCache) {
                 const msg = "Network error. Could not connect to API.";
                 setErrorMsg(msg);
                 showAdminToast("error", "Network Error", msg);
             }
         } finally {
             if (!silent) setLoadingTenants(false);
+            if (force) setIsRefreshingTenants(false);
         }
     }, []);
+
+    // Revalidate tenants whenever navigating to the main admin_pannel tab
+    useEffect(() => {
+        if (isAuthenticated && activeTab === "admin_pannel") {
+            if (_clientTenantsCache) {
+                fetchTenants({ silent: true });
+            } else {
+                fetchTenants();
+            }
+        }
+    }, [isAuthenticated, activeTab, fetchTenants]);
 
     const fetchAdminCredentials = useCallback(async () => {
         setLoadingCredentials(true);
@@ -878,6 +911,13 @@ export default function AdminPanel() {
                     showAdminToast("error", "Update Failed", msg);
                 }
             } else {
+                if (_clientTenantsCache) {
+                    _clientTenantsCache = _clientTenantsCache.map((t) =>
+                        t.tenant_id === tid
+                            ? { ...t, active_status: newVal, tenant_status: newVal }
+                            : t
+                    );
+                }
                 showAdminToast(
                     "success",
                     "Status Updated",
@@ -1013,8 +1053,9 @@ export default function AdminPanel() {
             });
             const data = await res.json();
             if (res.ok) {
+                _clientTenantsCache = null;
                 setShowCreateModal(false);
-                fetchTenants({ silent: true });
+                fetchTenants({ silent: false, force: true });
                 showAdminToast("success", "Organization Created", `${compName} has been added successfully.`);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
@@ -1068,8 +1109,9 @@ export default function AdminPanel() {
             });
             const data = await res.json();
             if (res.ok) {
+                _clientTenantsCache = null;
                 setShowEditModal(false);
-                fetchTenants({ silent: true });
+                fetchTenants({ silent: false, force: true });
                 showAdminToast("success", "Organization Updated", `${compName} settings were saved.`);
             } else if (isAdminAuthFailure(res, data)) {
                 handleAdminSessionLost(data.error);
@@ -1151,6 +1193,7 @@ export default function AdminPanel() {
                     method: "DELETE",
                 });
                 if (res.ok) {
+                    _clientTenantsCache = null;
                     setTenants((prev) => prev.filter((t) => t.tenant_id !== tenant.tenant_id));
                     setDeleteConfirm((prev) => ({ ...prev, show: false }));
                     showAdminToast("success", "Organization Deleted", `"${tenant.company_name}" was permanently removed.`);
@@ -1643,8 +1686,21 @@ export default function AdminPanel() {
                                             ]}
                                             placeholder="All Plans"
                                         />
-                                        <button className="ap-icon-btn" onClick={fetchTenants} title="Refresh Table data">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <button 
+                                            className={`ap-icon-btn ${isRefreshingTenants ? "ap-icon-btn--refreshing" : ""}`} 
+                                            onClick={() => fetchTenants({ force: true })} 
+                                            disabled={isRefreshingTenants}
+                                            title="Refresh Table data from database"
+                                        >
+                                            <svg 
+                                                className={isRefreshingTenants ? "ap-spin" : ""}
+                                                width="16" 
+                                                height="16" 
+                                                viewBox="0 0 24 24" 
+                                                fill="none" 
+                                                stroke="currentColor" 
+                                                strokeWidth="2.5"
+                                            >
                                                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
                                             </svg>
                                         </button>
@@ -1652,7 +1708,10 @@ export default function AdminPanel() {
 
                                     {/* Data Table */}
                                     {loadingTenants ? (
-                                        <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>Querying database rows...</div>
+                                        <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>
+                                            <div className="ap-table-spinner"></div>
+                                            <div>Querying database rows...</div>
+                                        </div>
                                     ) : errorMsg ? (
                                         <div className="ap-error-alert" style={{ marginBottom: 0 }}>{errorMsg}</div>
                                     ) : filteredTenants.length === 0 ? (

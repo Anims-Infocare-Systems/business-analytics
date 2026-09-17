@@ -41,6 +41,7 @@ import {
 import { FaReact } from "react-icons/fa";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
+import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 
 Chart.register(...registerables, ChartDataLabels);
 Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -214,6 +215,40 @@ function formatLabelWithYear(label, map) {
     }
   }
   return labelStr;
+}
+
+function formatWeeklyLabelWithDays(label, monthYearMap) {
+  if (!label) return label;
+  const str = String(label).trim();
+
+  // If already formatted with days like "W1 (1-7) Sep", ensure year is attached
+  if (/\(\d+-\d+\)/.test(str)) {
+    return formatLabelWithYear(str, monthYearMap);
+  }
+
+  // If label is in format "W1 Sep" or "W1 Sep-26" without day range
+  const match = str.match(/^W([1-5])\s+([A-Za-z]+)(?:-(\d{2}))?$/i);
+  if (match) {
+    const wk = parseInt(match[1], 10);
+    const mo = match[2];
+    const yr = match[3] || monthYearMap[mo.toLowerCase()] || "";
+
+    let dayRange = "1-7";
+    if (wk === 2) dayRange = "8-14";
+    else if (wk === 3) dayRange = "15-21";
+    else if (wk === 4) dayRange = "22-28";
+    else if (wk === 5) {
+      const fullYear = yr ? (parseInt(yr, 10) < 50 ? 2000 + parseInt(yr, 10) : 1900 + parseInt(yr, 10)) : new Date().getFullYear();
+      const monthIdx = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(mo.toLowerCase());
+      const lastDay = monthIdx >= 0 ? new Date(fullYear, monthIdx + 1, 0).getDate() : 30;
+      dayRange = lastDay > 28 ? `29-${lastDay}` : "29";
+    }
+
+    const yearSuffix = yr ? `-${yr}` : (monthYearMap[mo.toLowerCase()] ? `-${monthYearMap[mo.toLowerCase()]}` : "");
+    return `W${wk} (${dayRange}) ${mo}${yearSuffix}`;
+  }
+
+  return formatLabelWithYear(str, monthYearMap);
 }
 
 function formatRate(rupees) {
@@ -1435,7 +1470,7 @@ function PartWiseHistorySection({
 
 
 export default function SalesAnalysis() {
-  const _dflt = getTodayMonthRange();
+  const _dflt = getModuleDefaultDateRange("sales_analysis", getTodayMonthRange());
   const [dateRange, setDateRange] = useState({ from: _dflt.from, to: _dflt.to });
   const [filters, setFilters] = useState({
     customer: "All Customers",
@@ -1456,7 +1491,8 @@ export default function SalesAnalysis() {
   const [planVsActual, setPlanVsActual] = useState([]);
   const [poLedger, setPoLedger] = useState([]);
   const [traceability, setTraceability] = useState([]);
-  const [traceCustomerFilter, setTraceCustomerFilter] = useState("");
+  const [traceCustomerFilter, setTraceCustomerFilter] = useState([]);
+  const [traceCustomerSearch, setTraceCustomerSearch] = useState("");
   const [traceCustomerOpen, setTraceCustomerOpen] = useState(false);
   const traceCustomerRef = useRef(null);
   const [traceRcFilter, setTraceRcFilter] = useState("");
@@ -1513,6 +1549,20 @@ export default function SalesAnalysis() {
   const despatchCustRef = useRef(null);
   const despatchPartRef = useRef(null);
   const despatchStatusRef = useRef(null);
+
+  // Invoice Details table filters
+  const [invTableCustFilter, setInvTableCustFilter] = useState([]);
+  const [invTableInvoiceFilter, setInvTableInvoiceFilter] = useState([]);
+  const [invTablePartFilter, setInvTablePartFilter] = useState([]);
+  const [invTableCustDropdownOpen, setInvTableCustDropdownOpen] = useState(false);
+  const [invTableInvoiceDropdownOpen, setInvTableInvoiceDropdownOpen] = useState(false);
+  const [invTablePartDropdownOpen, setInvTablePartDropdownOpen] = useState(false);
+  const [invTableCustSearch, setInvTableCustSearch] = useState("");
+  const [invTableInvoiceSearch, setInvTableInvoiceSearch] = useState("");
+  const [invTablePartSearch, setInvTablePartSearch] = useState("");
+  const invTableCustRef = useRef(null);
+  const invTableInvoiceRef = useRef(null);
+  const invTablePartRef = useRef(null);
 
   const toggleDespatchGroup = useCallback((customerName) => {
     setCollapsedDespatchGroups((prev) => {
@@ -1614,8 +1664,17 @@ export default function SalesAnalysis() {
     return Array.from(set).sort();
   }, [traceability]);
 
+  const traceCustomerCounts = useMemo(() => {
+    const counts = {};
+    traceability.forEach((r) => {
+      if (r.customer && r.customer !== "—") {
+        counts[r.customer] = (counts[r.customer] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [traceability]);
+
   const filteredTraceability = useMemo(() => {
-    const custQ = traceCustomerFilter.trim().toLowerCase();
     const rcQ = traceRcFilter.trim().toLowerCase();
     const poQ = tracePoFilter.trim().toLowerCase();
     const invQ = traceInvFilter.trim().toLowerCase();
@@ -1624,7 +1683,7 @@ export default function SalesAnalysis() {
       if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) {
         return false;
       }
-      if (custQ && !(r.customer || "").toLowerCase().includes(custQ)) {
+      if (traceCustomerFilter.length > 0 && !traceCustomerFilter.includes(r.customer)) {
         return false;
       }
       if (rcQ && !(r.rcNo || "").toLowerCase().includes(rcQ)) {
@@ -1650,15 +1709,31 @@ export default function SalesAnalysis() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const matchingTraceCustomers = useMemo(() => {
-    if (!traceCustomerFilter.trim()) return uniqueTraceCustomers;
-    const q = traceCustomerFilter.trim().toLowerCase();
-    return uniqueTraceCustomers.filter((c) => c.toLowerCase().includes(q));
+  useEffect(() => {
+    if (!traceCustomerOpen) {
+      setTraceCustomerSearch("");
+    }
+  }, [traceCustomerOpen]);
+
+  useEffect(() => {
+    if (traceCustomerFilter.length > 0) {
+      const valid = new Set(uniqueTraceCustomers);
+      const next = traceCustomerFilter.filter((c) => valid.has(c));
+      if (next.length !== traceCustomerFilter.length) {
+        setTraceCustomerFilter(next);
+      }
+    }
   }, [uniqueTraceCustomers, traceCustomerFilter]);
+
+  const matchingTraceCustomers = useMemo(() => {
+    if (!traceCustomerSearch.trim()) return uniqueTraceCustomers;
+    const q = traceCustomerSearch.trim().toLowerCase();
+    return uniqueTraceCustomers.filter((c) => c.toLowerCase().includes(q));
+  }, [uniqueTraceCustomers, traceCustomerSearch]);
 
   const activeTraceFilterCount = useMemo(() => {
     return [
-      traceCustomerFilter.trim(),
+      traceCustomerFilter.length > 0 ? "cust" : "",
       traceRcFilter.trim(),
       tracePoFilter.trim(),
       traceInvFilter.trim()
@@ -1666,11 +1741,12 @@ export default function SalesAnalysis() {
   }, [traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
 
   const hasActiveTraceFilters = Boolean(
-    traceCustomerFilter.trim() || traceRcFilter.trim() || tracePoFilter.trim() || traceInvFilter.trim()
+    traceCustomerFilter.length > 0 || traceRcFilter.trim() || tracePoFilter.trim() || traceInvFilter.trim()
   );
 
   const handleClearTraceFilters = useCallback(() => {
-    setTraceCustomerFilter("");
+    setTraceCustomerFilter([]);
+    setTraceCustomerSearch("");
     setTraceRcFilter("");
     setTracePoFilter("");
     setTraceInvFilter("");
@@ -2245,6 +2321,24 @@ export default function SalesAnalysis() {
   }, [despatchPartDropdownOpen]);
 
   useEffect(() => {
+    if (!invTableCustDropdownOpen) {
+      setInvTableCustSearch("");
+    }
+  }, [invTableCustDropdownOpen]);
+
+  useEffect(() => {
+    if (!invTableInvoiceDropdownOpen) {
+      setInvTableInvoiceSearch("");
+    }
+  }, [invTableInvoiceDropdownOpen]);
+
+  useEffect(() => {
+    if (!invTablePartDropdownOpen) {
+      setInvTablePartSearch("");
+    }
+  }, [invTablePartDropdownOpen]);
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (invoiceDropdownRef.current && !invoiceDropdownRef.current.contains(event.target)) {
         setInvoiceDropdownOpen(false);
@@ -2266,6 +2360,15 @@ export default function SalesAnalysis() {
       }
       if (projMonthRef.current && !projMonthRef.current.contains(event.target)) {
         setProjMonthDropdownOpen(false);
+      }
+      if (invTableCustRef.current && !invTableCustRef.current.contains(event.target)) {
+        setInvTableCustDropdownOpen(false);
+      }
+      if (invTableInvoiceRef.current && !invTableInvoiceRef.current.contains(event.target)) {
+        setInvTableInvoiceDropdownOpen(false);
+      }
+      if (invTablePartRef.current && !invTablePartRef.current.contains(event.target)) {
+        setInvTablePartDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -2600,9 +2703,22 @@ export default function SalesAnalysis() {
     });
 
     filteredInvoices.forEach(r => {
-      const lbl = getInvoiceWeekLabelString(r.date);
-      if (lbl && salesMap[lbl] !== undefined) {
-        salesMap[lbl] += r.amount || 0;
+      if (!r.date) return;
+      const d = new Date(r.date);
+      if (isNaN(d.getTime())) return;
+      const day = d.getDate();
+      let wk = 5;
+      if (day <= 7) wk = 1;
+      else if (day <= 14) wk = 2;
+      else if (day <= 21) wk = 3;
+      else if (day <= 28) wk = 4;
+      const mo = d.toLocaleString("en-US", { month: "short" }).toLowerCase();
+      const matchedLabel = labels.find(lbl => {
+        const lower = lbl.toLowerCase();
+        return lower.startsWith(`w${wk}`) && lower.includes(mo);
+      });
+      if (matchedLabel && salesMap[matchedLabel] !== undefined) {
+        salesMap[matchedLabel] += r.amount || 0;
       }
     });
 
@@ -2926,11 +3042,125 @@ export default function SalesAnalysis() {
     return buildTopProducts(topProductsRaw?.products);
   }, [filteredInvoices, topProductsRaw]);
 
+  const uniqueInvoiceCustomers = useMemo(() => {
+    const set = new Set();
+    filteredInvoices.forEach(r => {
+      if (r.customer) set.add(r.customer);
+    });
+    return Array.from(set).sort();
+  }, [filteredInvoices]);
+
+  const uniqueInvoiceNumbers = useMemo(() => {
+    const set = new Set();
+    filteredInvoices.forEach(r => {
+      if (r.invoice_no) set.add(r.invoice_no);
+    });
+    return Array.from(set).sort();
+  }, [filteredInvoices]);
+
+  const uniqueInvoicePartNumbers = useMemo(() => {
+    const set = new Set();
+    filteredInvoices.forEach(r => {
+      if (r.part_no) set.add(r.part_no);
+    });
+    return Array.from(set).sort();
+  }, [filteredInvoices]);
+
+  const custLineCounts = useMemo(() => {
+    const counts = {};
+    filteredInvoices.forEach(r => {
+      if (r.customer) counts[r.customer] = (counts[r.customer] || 0) + 1;
+    });
+    return counts;
+  }, [filteredInvoices]);
+
+  const invoiceLineCounts = useMemo(() => {
+    const counts = {};
+    filteredInvoices.forEach(r => {
+      if (r.invoice_no) counts[r.invoice_no] = (counts[r.invoice_no] || 0) + 1;
+    });
+    return counts;
+  }, [filteredInvoices]);
+
+  const partLineCounts = useMemo(() => {
+    const counts = {};
+    filteredInvoices.forEach(r => {
+      if (r.part_no) counts[r.part_no] = (counts[r.part_no] || 0) + 1;
+    });
+    return counts;
+  }, [filteredInvoices]);
+
+  const filteredUniqueInvoiceCustomers = useMemo(() => {
+    const q = invTableCustSearch.toLowerCase().trim();
+    if (!q) return uniqueInvoiceCustomers;
+    return uniqueInvoiceCustomers.filter(c => c.toLowerCase().includes(q));
+  }, [uniqueInvoiceCustomers, invTableCustSearch]);
+
+  const filteredUniqueInvoiceNumbers = useMemo(() => {
+    const q = invTableInvoiceSearch.toLowerCase().trim();
+    if (!q) return uniqueInvoiceNumbers;
+    return uniqueInvoiceNumbers.filter(inv => inv.toLowerCase().includes(q));
+  }, [uniqueInvoiceNumbers, invTableInvoiceSearch]);
+
+  const filteredUniqueInvoicePartNumbers = useMemo(() => {
+    const q = invTablePartSearch.toLowerCase().trim();
+    if (!q) return uniqueInvoicePartNumbers;
+    return uniqueInvoicePartNumbers.filter(p => p.toLowerCase().includes(q));
+  }, [uniqueInvoicePartNumbers, invTablePartSearch]);
+
+  useEffect(() => {
+    if (invTableCustFilter.length > 0) {
+      const valid = new Set(uniqueInvoiceCustomers);
+      const next = invTableCustFilter.filter(x => valid.has(x));
+      if (next.length !== invTableCustFilter.length) {
+        setInvTableCustFilter(next);
+      }
+    }
+  }, [uniqueInvoiceCustomers, invTableCustFilter]);
+
+  useEffect(() => {
+    if (invTableInvoiceFilter.length > 0) {
+      const valid = new Set(uniqueInvoiceNumbers);
+      const next = invTableInvoiceFilter.filter(x => valid.has(x));
+      if (next.length !== invTableInvoiceFilter.length) {
+        setInvTableInvoiceFilter(next);
+      }
+    }
+  }, [uniqueInvoiceNumbers, invTableInvoiceFilter]);
+
+  useEffect(() => {
+    if (invTablePartFilter.length > 0) {
+      const valid = new Set(uniqueInvoicePartNumbers);
+      const next = invTablePartFilter.filter(x => valid.has(x));
+      if (next.length !== invTablePartFilter.length) {
+        setInvTablePartFilter(next);
+      }
+    }
+  }, [uniqueInvoicePartNumbers, invTablePartFilter]);
+
+  const displayedInvoices = useMemo(() => {
+    if (invTableCustFilter.length === 0 && invTableInvoiceFilter.length === 0 && invTablePartFilter.length === 0) {
+      return filteredInvoices;
+    }
+    return filteredInvoices.filter(r => {
+      if (invTableCustFilter.length > 0 && !invTableCustFilter.includes(r.customer)) {
+        return false;
+      }
+      if (invTableInvoiceFilter.length > 0 && !invTableInvoiceFilter.includes(r.invoice_no)) {
+        return false;
+      }
+      if (invTablePartFilter.length > 0 && !invTablePartFilter.includes(r.part_no)) {
+        return false;
+      }
+      return true;
+    });
+  }, [filteredInvoices, invTableCustFilter, invTableInvoiceFilter, invTablePartFilter]);
+
   const invoiceStats = useMemo(() => {
     const invSet = new Set();
     let totalQty = 0;
     let totalAmount = 0;
-    filteredInvoices.forEach((r) => {
+    displayedInvoices.forEach((r) => {
       if (r.invoice_no) invSet.add(r.invoice_no);
       const q = Number(r.qty);
       if (Number.isFinite(q)) totalQty += q;
@@ -2938,12 +3168,12 @@ export default function SalesAnalysis() {
       if (Number.isFinite(a)) totalAmount += a;
     });
     return {
-      lines: filteredInvoices.length,
+      lines: displayedInvoices.length,
       invoices: invSet.size,
       totalQty,
       totalAmount,
     };
-  }, [filteredInvoices]);
+  }, [displayedInvoices]);
 
   const dynamicManagementInsights = useMemo(
     () => buildDynamicInsights({
@@ -3188,7 +3418,7 @@ export default function SalesAnalysis() {
 
       const ctx = trendRef.current.getContext("2d");
       const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
-      const labels = (derivedWeeklyTrend?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
+      const labels = (derivedWeeklyTrend?.labels ?? []).map(lbl => formatWeeklyLabelWithDays(lbl, monthYearMap));
       const sales = derivedWeeklyTrend?.sales ?? [];
       const cumulative = derivedWeeklyTrend?.cumulative ?? [];
 
@@ -4722,7 +4952,7 @@ export default function SalesAnalysis() {
 
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
-    setDateRange(getTodayMonthRange());
+    setDateRange(getModuleDefaultDateRange("sales_analysis", getTodayMonthRange()));
     setSearchQuery("");
     setSelectedInvoiceTypes([]);
     setInvoiceTypeSearch("");
@@ -5378,7 +5608,7 @@ export default function SalesAnalysis() {
         <div className="sa-card sa-card--chart sa-card--donut">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Package size={16} style={{ color: "#06b6d4" }} /> Revenue by Product
+              <Package size={16} style={{ color: "#06b6d4" }} /> Most Qty Sold by Product wise
             </span>
           </div>
           {loading ? (
@@ -5479,462 +5709,462 @@ export default function SalesAnalysis() {
             <div className="sa-despatch-filters-pair">
               {/* Customer filter */}
               <div className={`sa-custom-select sa-custom-select--despatch-cust${despatchCustDropdownOpen ? " sa-active" : ""}`} ref={despatchCustRef}>
-              <button
-                type="button"
-                className="sa-custom-select-trigger"
-                onClick={() => {
-                  setDespatchCustDropdownOpen(prev => !prev);
-                  setDespatchPartDropdownOpen(false);
-                  setDespatchStatusDropdownOpen(false);
-                }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {despatchCustFilter.length === 0
-                      ? "All Customers"
-                      : despatchCustFilter.length === 1
-                        ? despatchCustFilter[0]
-                        : `${despatchCustFilter.length} Customers`}
-                  </span>
-                  {despatchCustFilter.length > 1 && (
-                    <span style={{
-                      background: "#2d6de8",
-                      color: "#fff",
-                      borderRadius: "50%",
-                      minWidth: "16px",
-                      height: "16px",
-                      fontSize: "0.62rem",
-                      fontWeight: "700",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginLeft: "6px",
-                      padding: "0 4px",
-                      flexShrink: 0
-                    }}>
-                      {despatchCustFilter.length}
+                <button
+                  type="button"
+                  className="sa-custom-select-trigger"
+                  onClick={() => {
+                    setDespatchCustDropdownOpen(prev => !prev);
+                    setDespatchPartDropdownOpen(false);
+                    setDespatchStatusDropdownOpen(false);
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {despatchCustFilter.length === 0
+                        ? "All Customers"
+                        : despatchCustFilter.length === 1
+                          ? despatchCustFilter[0]
+                          : `${despatchCustFilter.length} Customers`}
                     </span>
-                  )}
-                </span>
-                <span className="sa-custom-select-arrow">
-                  <ChevronDown size={14} />
-                </span>
-              </button>
-              {despatchCustDropdownOpen && (
-                <div className="sa-custom-select-dropdown-container" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  width: '320px',
-                  background: '#fff',
-                  border: '1px solid rgba(45, 109, 232, 0.15)',
-                  borderRadius: '8px',
-                  marginTop: '4px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                  zIndex: 100,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
-                    <div className="sa-dropdown-search-wrapper">
-                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
-                      <input
-                        type="text"
-                        className="sa-dropdown-search-input"
-                        placeholder="Search customer..."
-                        value={despatchCustSearch}
-                        onChange={(e) => setDespatchCustSearch(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {despatchCustSearch && (
-                        <button
-                          type="button"
-                          className="sa-search-clear-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDespatchCustSearch("");
-                          }}
-                          title="Clear search"
-                        >
-                          <X size={10} strokeWidth={2.5} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
-                    <li
-                      className={`sa-custom-select-option${despatchCustFilter.length === 0 ? " sa-multi-selected" : ""}`}
-                      onClick={() => {
-                        setDespatchCustFilter([]);
-                      }}
-                      style={{ display: 'flex', alignItems: 'center' }}
-                    >
-                      <span className={`sa-checkbox-box${despatchCustFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
-                        {despatchCustFilter.length === 0 && (
-                          <Check size={10} strokeWidth={3} />
-                        )}
+                    {despatchCustFilter.length > 1 && (
+                      <span style={{
+                        background: "#2d6de8",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        minWidth: "16px",
+                        height: "16px",
+                        fontSize: "0.62rem",
+                        fontWeight: "700",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: "6px",
+                        padding: "0 4px",
+                        flexShrink: 0
+                      }}>
+                        {despatchCustFilter.length}
                       </span>
-                      All Customers
-                    </li>
-                    {filteredUniqueCustomers.map(cust => {
-                      const isSelected = despatchCustFilter.includes(cust);
-                      return (
-                        <li
-                          key={cust}
-                          className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
-                          onClick={() => {
-                            if (isSelected) {
-                              setDespatchCustFilter(despatchCustFilter.filter(c => c !== cust));
-                            } else {
-                              setDespatchCustFilter([...despatchCustFilter, cust]);
-                            }
-                          }}
-                          style={{ display: 'flex', alignItems: 'center' }}
-                        >
-                          <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
-                            {isSelected && (
-                              <Check size={10} strokeWidth={3} />
-                            )}
-                          </span>
-                          {cust}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            {/* Part No filter */}
-            <div className={`sa-custom-select sa-custom-select--despatch-part${despatchPartDropdownOpen ? " sa-active" : ""}`} ref={despatchPartRef}>
-              <button
-                type="button"
-                className="sa-custom-select-trigger"
-                onClick={() => {
-                  setDespatchPartDropdownOpen(prev => !prev);
-                  setDespatchCustDropdownOpen(false);
-                  setDespatchStatusDropdownOpen(false);
-                }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {despatchPartFilter.length === 0
-                      ? "All Part Numbers"
-                      : despatchPartFilter.length === 1
-                        ? despatchPartFilter[0]
-                        : `${despatchPartFilter.length} Parts`}
-                  </span>
-                  {despatchPartFilter.length > 1 && (
-                    <span style={{
-                      background: "#2d6de8",
-                      color: "#fff",
-                      borderRadius: "50%",
-                      minWidth: "16px",
-                      height: "16px",
-                      fontSize: "0.62rem",
-                      fontWeight: "700",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginLeft: "6px",
-                      padding: "0 4px",
-                      flexShrink: 0
-                    }}>
-                      {despatchPartFilter.length}
-                    </span>
-                  )}
-                </span>
-                <span className="sa-custom-select-arrow">
-                  <ChevronDown size={14} />
-                </span>
-              </button>
-              {despatchPartDropdownOpen && (
-                <div className="sa-custom-select-dropdown-container" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  width: '240px',
-                  background: '#fff',
-                  border: '1px solid rgba(45, 109, 232, 0.15)',
-                  borderRadius: '8px',
-                  marginTop: '4px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                  zIndex: 100,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
-                    <div className="sa-dropdown-search-wrapper">
-                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
-                      <input
-                        type="text"
-                        className="sa-dropdown-search-input"
-                        placeholder="Search part no..."
-                        value={despatchPartSearch}
-                        onChange={(e) => setDespatchPartSearch(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {despatchPartSearch && (
-                        <button
-                          type="button"
-                          className="sa-search-clear-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDespatchPartSearch("");
-                          }}
-                          title="Clear search"
-                        >
-                          <X size={10} strokeWidth={2.5} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
-                    <li
-                      className={`sa-custom-select-option${despatchPartFilter.length === 0 ? " sa-multi-selected" : ""}`}
-                      onClick={() => {
-                        setDespatchPartFilter([]);
-                      }}
-                      style={{ display: 'flex', alignItems: 'center' }}
-                    >
-                      <span className={`sa-checkbox-box${despatchPartFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
-                        {despatchPartFilter.length === 0 && (
-                          <Check size={10} strokeWidth={3} />
-                        )}
-                      </span>
-                      All Part Numbers
-                    </li>
-                    {filteredUniqueParts.map(part => {
-                      const isSelected = despatchPartFilter.includes(part);
-                      return (
-                        <li
-                          key={part}
-                          className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
-                          onClick={() => {
-                            if (isSelected) {
-                              setDespatchPartFilter(despatchPartFilter.filter(p => p !== part));
-                            } else {
-                              setDespatchPartFilter([...despatchPartFilter, part]);
-                            }
-                          }}
-                          style={{ display: 'flex', alignItems: 'center' }}
-                        >
-                          <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
-                            {isSelected && (
-                              <Check size={10} strokeWidth={3} />
-                            )}
-                          </span>
-                          {part}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-            </div>
-
-            {/* Actions & Status group */}
-            <div className="sa-despatch-filters-actions">
-              {/* Status filter */}
-            <div className={`sa-custom-select sa-custom-select--despatch-status${despatchStatusDropdownOpen ? " sa-active" : ""}`} ref={despatchStatusRef}>
-              <button
-                type="button"
-                className="sa-custom-select-trigger"
-                onClick={() => {
-                  setDespatchStatusDropdownOpen(prev => !prev);
-                  setDespatchCustDropdownOpen(false);
-                  setDespatchPartDropdownOpen(false);
-                }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
-                  <span style={{
-                    width: "7px",
-                    height: "7px",
-                    borderRadius: "50%",
-                    marginRight: "6px",
-                    flexShrink: 0,
-                    backgroundColor: despatchStatusFilter.length === 1
-                      ? (DESPATCH_STATUS_OPTIONS.find(o => o.id === despatchStatusFilter[0])?.color || "#2d6de8")
-                      : (despatchStatusFilter.length > 1 ? "#2d6de8" : "#64748b")
-                  }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {despatchStatusFilter.length === 0
-                      ? "All Status"
-                      : despatchStatusFilter.length === 1
-                        ? despatchStatusFilter[0]
-                        : `${despatchStatusFilter.length} Statuses`}
-                  </span>
-                  {despatchStatusFilter.length > 1 && (
-                    <span style={{
-                      background: "#2d6de8",
-                      color: "#fff",
-                      borderRadius: "50%",
-                      minWidth: "16px",
-                      height: "16px",
-                      fontSize: "0.62rem",
-                      fontWeight: "700",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginLeft: "6px",
-                      padding: "0 4px",
-                      flexShrink: 0
-                    }}>
-                      {despatchStatusFilter.length}
-                    </span>
-                  )}
-                </span>
-                <span className="sa-custom-select-arrow">
-                  <ChevronDown size={14} />
-                </span>
-              </button>
-              {despatchStatusDropdownOpen && (
-                <div className="sa-custom-select-dropdown-container" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  width: '240px',
-                  background: '#fff',
-                  border: '1px solid rgba(45, 109, 232, 0.15)',
-                  borderRadius: '8px',
-                  marginTop: '4px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                  zIndex: 100,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8faff' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748b' }}>Filter By Status</span>
-                    {despatchStatusFilter.length > 0 && (
-                      <button
-                        type="button"
-                        className="sa-search-clear-btn"
-                        style={{ fontSize: '0.7rem', color: '#2d6de8', fontWeight: '600', cursor: 'pointer', background: 'none', border: 'none' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDespatchStatusFilter([]);
-                        }}
-                      >
-                        Reset
-                      </button>
                     )}
-                  </div>
-                  <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '240px', overflowY: 'auto' }}>
-                    <li
-                      className={`sa-custom-select-option${despatchStatusFilter.length === 0 ? " sa-multi-selected" : ""}`}
-                      onClick={() => {
-                        setDespatchStatusFilter([]);
-                      }}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span className={`sa-checkbox-box${despatchStatusFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
-                          {despatchStatusFilter.length === 0 && (
+                  </span>
+                  <span className="sa-custom-select-arrow">
+                    <ChevronDown size={14} />
+                  </span>
+                </button>
+                {despatchCustDropdownOpen && (
+                  <div className="sa-custom-select-dropdown-container" style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    width: '320px',
+                    background: '#fff',
+                    border: '1px solid rgba(45, 109, 232, 0.15)',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
+                      <div className="sa-dropdown-search-wrapper">
+                        <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                        <input
+                          type="text"
+                          className="sa-dropdown-search-input"
+                          placeholder="Search customer..."
+                          value={despatchCustSearch}
+                          onChange={(e) => setDespatchCustSearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {despatchCustSearch && (
+                          <button
+                            type="button"
+                            className="sa-search-clear-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDespatchCustSearch("");
+                            }}
+                            title="Clear search"
+                          >
+                            <X size={10} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
+                      <li
+                        className={`sa-custom-select-option${despatchCustFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                        onClick={() => {
+                          setDespatchCustFilter([]);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center' }}
+                      >
+                        <span className={`sa-checkbox-box${despatchCustFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                          {despatchCustFilter.length === 0 && (
                             <Check size={10} strokeWidth={3} />
                           )}
                         </span>
-                        <span>All Status</span>
-                      </div>
-                      <span style={{
-                        fontSize: '0.68rem',
-                        fontWeight: '600',
-                        color: '#64748b',
-                        background: '#f1f5f9',
-                        padding: '1px 7px',
-                        borderRadius: '10px'
-                      }}>
-                        {despatchStatusCounts.all}
-                      </span>
-                    </li>
-                    {DESPATCH_STATUS_OPTIONS.map(opt => {
-                      const isSelected = despatchStatusFilter.includes(opt.id);
-                      const count = despatchStatusCounts[opt.id] || 0;
-                      return (
-                        <li
-                          key={opt.id}
-                          className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
-                          onClick={() => {
-                            if (isSelected) {
-                              setDespatchStatusFilter(despatchStatusFilter.filter(s => s !== opt.id));
-                            } else {
-                              setDespatchStatusFilter([...despatchStatusFilter, opt.id]);
-                            }
-                          }}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        All Customers
+                      </li>
+                      {filteredUniqueCustomers.map(cust => {
+                        const isSelected = despatchCustFilter.includes(cust);
+                        return (
+                          <li
+                            key={cust}
+                            className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setDespatchCustFilter(despatchCustFilter.filter(c => c !== cust));
+                              } else {
+                                setDespatchCustFilter([...despatchCustFilter, cust]);
+                              }
+                            }}
+                            style={{ display: 'flex', alignItems: 'center' }}
+                          >
                             <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
                               {isSelected && (
                                 <Check size={10} strokeWidth={3} />
                               )}
                             </span>
-                            <span style={{
-                              width: '7px',
-                              height: '7px',
-                              borderRadius: '50%',
-                              background: opt.color,
-                              display: 'inline-block',
-                              marginRight: '2px'
-                            }} />
-                            <span>{opt.label}</span>
-                          </div>
-                          <span style={{
-                            fontSize: '0.68rem',
-                            fontWeight: '700',
-                            color: opt.color,
-                            background: opt.bg,
-                            border: `1px solid ${opt.border}`,
-                            padding: '1px 7px',
-                            borderRadius: '10px'
-                          }}>
-                            {count}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
+                            {cust}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Part No filter */}
+              <div className={`sa-custom-select sa-custom-select--despatch-part${despatchPartDropdownOpen ? " sa-active" : ""}`} ref={despatchPartRef}>
+                <button
+                  type="button"
+                  className="sa-custom-select-trigger"
+                  onClick={() => {
+                    setDespatchPartDropdownOpen(prev => !prev);
+                    setDespatchCustDropdownOpen(false);
+                    setDespatchStatusDropdownOpen(false);
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {despatchPartFilter.length === 0
+                        ? "All Part Numbers"
+                        : despatchPartFilter.length === 1
+                          ? despatchPartFilter[0]
+                          : `${despatchPartFilter.length} Parts`}
+                    </span>
+                    {despatchPartFilter.length > 1 && (
+                      <span style={{
+                        background: "#2d6de8",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        minWidth: "16px",
+                        height: "16px",
+                        fontSize: "0.62rem",
+                        fontWeight: "700",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: "6px",
+                        padding: "0 4px",
+                        flexShrink: 0
+                      }}>
+                        {despatchPartFilter.length}
+                      </span>
+                    )}
+                  </span>
+                  <span className="sa-custom-select-arrow">
+                    <ChevronDown size={14} />
+                  </span>
+                </button>
+                {despatchPartDropdownOpen && (
+                  <div className="sa-custom-select-dropdown-container" style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    width: '240px',
+                    background: '#fff',
+                    border: '1px solid rgba(45, 109, 232, 0.15)',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ padding: '8px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)' }}>
+                      <div className="sa-dropdown-search-wrapper">
+                        <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                        <input
+                          type="text"
+                          className="sa-dropdown-search-input"
+                          placeholder="Search part no..."
+                          value={despatchPartSearch}
+                          onChange={(e) => setDespatchPartSearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {despatchPartSearch && (
+                          <button
+                            type="button"
+                            className="sa-search-clear-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDespatchPartSearch("");
+                            }}
+                            title="Clear search"
+                          >
+                            <X size={10} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '220px', overflowY: 'auto' }}>
+                      <li
+                        className={`sa-custom-select-option${despatchPartFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                        onClick={() => {
+                          setDespatchPartFilter([]);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center' }}
+                      >
+                        <span className={`sa-checkbox-box${despatchPartFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                          {despatchPartFilter.length === 0 && (
+                            <Check size={10} strokeWidth={3} />
+                          )}
+                        </span>
+                        All Part Numbers
+                      </li>
+                      {filteredUniqueParts.map(part => {
+                        const isSelected = despatchPartFilter.includes(part);
+                        return (
+                          <li
+                            key={part}
+                            className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setDespatchPartFilter(despatchPartFilter.filter(p => p !== part));
+                              } else {
+                                setDespatchPartFilter([...despatchPartFilter, part]);
+                              }
+                            }}
+                            style={{ display: 'flex', alignItems: 'center' }}
+                          >
+                            <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                              {isSelected && (
+                                <Check size={10} strokeWidth={3} />
+                              )}
+                            </span>
+                            {part}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Collapse / Expand All Toggle */}
-            {Object.keys(groupedDespatchPlan).length > 1 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const keys = Object.keys(groupedDespatchPlan);
-                  const allCollapsed = keys.every(k => collapsedDespatchGroups.has(k));
-                  if (allCollapsed) {
-                    expandAllDespatchGroups();
-                  } else {
-                    collapseAllDespatchGroups(keys);
-                  }
-                }}
-                className="sa-despatch-collapse-all-btn"
-                title={Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k)) ? "Expand All Customer Groups" : "Collapse All Customer Groups"}
-              >
-                <Layers size={13} />
-                <span>
-                  {Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k))
-                    ? "Expand All"
-                    : "Collapse All"}
-                </span>
-              </button>
-            )}
+            {/* Actions & Status group */}
+            <div className="sa-despatch-filters-actions">
+              {/* Status filter */}
+              <div className={`sa-custom-select sa-custom-select--despatch-status${despatchStatusDropdownOpen ? " sa-active" : ""}`} ref={despatchStatusRef}>
+                <button
+                  type="button"
+                  className="sa-custom-select-trigger"
+                  onClick={() => {
+                    setDespatchStatusDropdownOpen(prev => !prev);
+                    setDespatchCustDropdownOpen(false);
+                    setDespatchPartDropdownOpen(false);
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                    <span style={{
+                      width: "7px",
+                      height: "7px",
+                      borderRadius: "50%",
+                      marginRight: "6px",
+                      flexShrink: 0,
+                      backgroundColor: despatchStatusFilter.length === 1
+                        ? (DESPATCH_STATUS_OPTIONS.find(o => o.id === despatchStatusFilter[0])?.color || "#2d6de8")
+                        : (despatchStatusFilter.length > 1 ? "#2d6de8" : "#64748b")
+                    }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {despatchStatusFilter.length === 0
+                        ? "All Status"
+                        : despatchStatusFilter.length === 1
+                          ? despatchStatusFilter[0]
+                          : `${despatchStatusFilter.length} Statuses`}
+                    </span>
+                    {despatchStatusFilter.length > 1 && (
+                      <span style={{
+                        background: "#2d6de8",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        minWidth: "16px",
+                        height: "16px",
+                        fontSize: "0.62rem",
+                        fontWeight: "700",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: "6px",
+                        padding: "0 4px",
+                        flexShrink: 0
+                      }}>
+                        {despatchStatusFilter.length}
+                      </span>
+                    )}
+                  </span>
+                  <span className="sa-custom-select-arrow">
+                    <ChevronDown size={14} />
+                  </span>
+                </button>
+                {despatchStatusDropdownOpen && (
+                  <div className="sa-custom-select-dropdown-container" style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    width: '240px',
+                    background: '#fff',
+                    border: '1px solid rgba(45, 109, 232, 0.15)',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(45, 109, 232, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8faff' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748b' }}>Filter By Status</span>
+                      {despatchStatusFilter.length > 0 && (
+                        <button
+                          type="button"
+                          className="sa-search-clear-btn"
+                          style={{ fontSize: '0.7rem', color: '#2d6de8', fontWeight: '600', cursor: 'pointer', background: 'none', border: 'none' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDespatchStatusFilter([]);
+                          }}
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <ul className="sa-custom-select-options" style={{ position: 'static', boxShadow: 'none', maxHeight: '240px', overflowY: 'auto' }}>
+                      <li
+                        className={`sa-custom-select-option${despatchStatusFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                        onClick={() => {
+                          setDespatchStatusFilter([]);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className={`sa-checkbox-box${despatchStatusFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                            {despatchStatusFilter.length === 0 && (
+                              <Check size={10} strokeWidth={3} />
+                            )}
+                          </span>
+                          <span>All Status</span>
+                        </div>
+                        <span style={{
+                          fontSize: '0.68rem',
+                          fontWeight: '600',
+                          color: '#64748b',
+                          background: '#f1f5f9',
+                          padding: '1px 7px',
+                          borderRadius: '10px'
+                        }}>
+                          {despatchStatusCounts.all}
+                        </span>
+                      </li>
+                      {DESPATCH_STATUS_OPTIONS.map(opt => {
+                        const isSelected = despatchStatusFilter.includes(opt.id);
+                        const count = despatchStatusCounts[opt.id] || 0;
+                        return (
+                          <li
+                            key={opt.id}
+                            className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setDespatchStatusFilter(despatchStatusFilter.filter(s => s !== opt.id));
+                              } else {
+                                setDespatchStatusFilter([...despatchStatusFilter, opt.id]);
+                              }
+                            }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                                {isSelected && (
+                                  <Check size={10} strokeWidth={3} />
+                                )}
+                              </span>
+                              <span style={{
+                                width: '7px',
+                                height: '7px',
+                                borderRadius: '50%',
+                                background: opt.color,
+                                display: 'inline-block',
+                                marginRight: '2px'
+                              }} />
+                              <span>{opt.label}</span>
+                            </div>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: '700',
+                              color: opt.color,
+                              background: opt.bg,
+                              border: `1px solid ${opt.border}`,
+                              padding: '1px 7px',
+                              borderRadius: '10px'
+                            }}>
+                              {count}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
 
-            <button
-              onClick={handleDespatchExport}
-              className="sa-btn sa-btn--primary sa-po-export-btn"
-              title="Export Despatch Plan to CSV"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
-            >
-              <Download size={14} /> Export CSV
-            </button>
-          </div>
+              {/* Collapse / Expand All Toggle */}
+              {Object.keys(groupedDespatchPlan).length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const keys = Object.keys(groupedDespatchPlan);
+                    const allCollapsed = keys.every(k => collapsedDespatchGroups.has(k));
+                    if (allCollapsed) {
+                      expandAllDespatchGroups();
+                    } else {
+                      collapseAllDespatchGroups(keys);
+                    }
+                  }}
+                  className="sa-despatch-collapse-all-btn"
+                  title={Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k)) ? "Expand All Customer Groups" : "Collapse All Customer Groups"}
+                >
+                  <Layers size={13} />
+                  <span>
+                    {Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k))
+                      ? "Expand All"
+                      : "Collapse All"}
+                  </span>
+                </button>
+              )}
+
+              <button
+                onClick={handleDespatchExport}
+                className="sa-btn sa-btn--primary sa-po-export-btn"
+                title="Export Despatch Plan to CSV"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
+              >
+                <Download size={14} /> Export CSV
+              </button>
+            </div>
           </div>
         </div>
         <div className="sa-table-scroll sa-despatch-table-wrap">
@@ -6335,11 +6565,401 @@ export default function SalesAnalysis() {
 
       {/* ── Invoice Table ── */}
       <div className="sa-card sa-card--table" data-spotlight="sa-invoice-details">
-        <div className="sa-card__head">
+        <div className="sa-card__head sa-card__head--inv-details">
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
           </span>
           <div className="sa-inv-head-actions">
+            {!tableLoading && (
+              <div className="sa-inv-filters-pair">
+                {/* Customer Name Filter Dropdown */}
+                <div
+                  className={`sa-custom-select sa-custom-select--inv-cust${invTableCustDropdownOpen ? " sa-active" : ""}`}
+                  ref={invTableCustRef}
+                >
+                  <button
+                    type="button"
+                    className="sa-custom-select-trigger sa-inv-select-trigger"
+                    onClick={() => {
+                      setInvTableCustDropdownOpen(prev => !prev);
+                      setInvTableInvoiceDropdownOpen(false);
+                      setInvTablePartDropdownOpen(false);
+                    }}
+                    title="Filter by Customer Name"
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {invTableCustFilter.length === 0
+                          ? "All Customers"
+                          : invTableCustFilter.length === 1
+                            ? invTableCustFilter[0]
+                            : `${invTableCustFilter.length} Customers`}
+                      </span>
+                      {invTableCustFilter.length > 1 && (
+                        <span className="sa-inv-counter-badge sa-inv-counter-badge--indigo">
+                          {invTableCustFilter.length}
+                        </span>
+                      )}
+                    </span>
+                    <span className="sa-custom-select-arrow">
+                      <ChevronDown size={13} />
+                    </span>
+                  </button>
+
+                  {invTableCustDropdownOpen && (
+                    <div className="sa-custom-select-dropdown-container sa-dropdown-anim-enter sa-inv-dropdown-menu sa-inv-dropdown-menu--cust">
+                      <div className="sa-dropdown-search-header">
+                        <div className="sa-dropdown-search-wrapper">
+                          <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                          <input
+                            type="text"
+                            className="sa-dropdown-search-input"
+                            placeholder="Search customer name..."
+                            value={invTableCustSearch}
+                            onChange={(e) => setInvTableCustSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                          />
+                          {invTableCustSearch && (
+                            <button
+                              type="button"
+                              className="sa-search-clear-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInvTableCustSearch("");
+                              }}
+                              title="Clear search"
+                            >
+                              <X size={10} strokeWidth={2.5} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <ul className="sa-custom-select-options sa-inv-options-list">
+                        <li
+                          className={`sa-custom-select-option${invTableCustFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                          onClick={() => setInvTableCustFilter([])}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <span className={`sa-checkbox-box${invTableCustFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                              {invTableCustFilter.length === 0 && (
+                                <Check size={10} strokeWidth={3} />
+                              )}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>All Customers</span>
+                          </div>
+                          <span className="sa-inv-opt-count-pill">{uniqueInvoiceCustomers.length}</span>
+                        </li>
+                        {filteredUniqueInvoiceCustomers.length === 0 ? (
+                          <li className="sa-custom-select-option sa-opt-empty" style={{ cursor: 'default', color: '#94a3b8', textAlign: 'center', padding: '10px' }}>
+                            No customers found
+                          </li>
+                        ) : (
+                          filteredUniqueInvoiceCustomers.map(cust => {
+                            const isSelected = invTableCustFilter.includes(cust);
+                            return (
+                              <li
+                                key={cust}
+                                className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setInvTableCustFilter(invTableCustFilter.filter(x => x !== cust));
+                                  } else {
+                                    setInvTableCustFilter([...invTableCustFilter, cust]);
+                                  }
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                                  <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                                    {isSelected && (
+                                      <Check size={10} strokeWidth={3} />
+                                    )}
+                                  </span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cust}>
+                                    {cust}
+                                  </span>
+                                </div>
+                                {custLineCounts[cust] && (
+                                  <span className="sa-inv-opt-count-pill">
+                                    {custLineCounts[cust]} {custLineCounts[cust] === 1 ? 'line' : 'lines'}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Invoice Number Filter Dropdown */}
+                <div
+                  className={`sa-custom-select sa-custom-select--inv-invoice${invTableInvoiceDropdownOpen ? " sa-active" : ""}`}
+                  ref={invTableInvoiceRef}
+                >
+                  <button
+                    type="button"
+                    className="sa-custom-select-trigger sa-inv-select-trigger"
+                    onClick={() => {
+                      setInvTableInvoiceDropdownOpen(prev => !prev);
+                      setInvTableCustDropdownOpen(false);
+                      setInvTablePartDropdownOpen(false);
+                    }}
+                    title="Filter by Invoice Number"
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {invTableInvoiceFilter.length === 0
+                          ? "All Invoices"
+                          : invTableInvoiceFilter.length === 1
+                            ? invTableInvoiceFilter[0]
+                            : `${invTableInvoiceFilter.length} Invoices`}
+                      </span>
+                      {invTableInvoiceFilter.length > 1 && (
+                        <span className="sa-inv-counter-badge">
+                          {invTableInvoiceFilter.length}
+                        </span>
+                      )}
+                    </span>
+                    <span className="sa-custom-select-arrow">
+                      <ChevronDown size={13} />
+                    </span>
+                  </button>
+
+                  {invTableInvoiceDropdownOpen && (
+                    <div className="sa-custom-select-dropdown-container sa-dropdown-anim-enter sa-inv-dropdown-menu">
+                      <div className="sa-dropdown-search-header">
+                        <div className="sa-dropdown-search-wrapper">
+                          <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                          <input
+                            type="text"
+                            className="sa-dropdown-search-input"
+                            placeholder="Search invoice no..."
+                            value={invTableInvoiceSearch}
+                            onChange={(e) => setInvTableInvoiceSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                          />
+                          {invTableInvoiceSearch && (
+                            <button
+                              type="button"
+                              className="sa-search-clear-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInvTableInvoiceSearch("");
+                              }}
+                              title="Clear search"
+                            >
+                              <X size={10} strokeWidth={2.5} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <ul className="sa-custom-select-options sa-inv-options-list">
+                        <li
+                          className={`sa-custom-select-option${invTableInvoiceFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                          onClick={() => setInvTableInvoiceFilter([])}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <span className={`sa-checkbox-box${invTableInvoiceFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                              {invTableInvoiceFilter.length === 0 && (
+                                <Check size={10} strokeWidth={3} />
+                              )}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>All Invoices</span>
+                          </div>
+                          <span className="sa-inv-opt-count-pill">{uniqueInvoiceNumbers.length}</span>
+                        </li>
+                        {filteredUniqueInvoiceNumbers.length === 0 ? (
+                          <li className="sa-custom-select-option sa-opt-empty" style={{ cursor: 'default', color: '#94a3b8', textAlign: 'center', padding: '10px' }}>
+                            No invoice numbers found
+                          </li>
+                        ) : (
+                          filteredUniqueInvoiceNumbers.map(inv => {
+                            const isSelected = invTableInvoiceFilter.includes(inv);
+                            return (
+                              <li
+                                key={inv}
+                                className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setInvTableInvoiceFilter(invTableInvoiceFilter.filter(x => x !== inv));
+                                  } else {
+                                    setInvTableInvoiceFilter([...invTableInvoiceFilter, inv]);
+                                  }
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                                  <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                                    {isSelected && (
+                                      <Check size={10} strokeWidth={3} />
+                                    )}
+                                  </span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {inv}
+                                  </span>
+                                </div>
+                                {invoiceLineCounts[inv] && (
+                                  <span className="sa-inv-opt-count-pill">
+                                    {invoiceLineCounts[inv]} {invoiceLineCounts[inv] === 1 ? 'line' : 'lines'}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Part Number Filter Dropdown */}
+                <div
+                  className={`sa-custom-select sa-custom-select--inv-part${invTablePartDropdownOpen ? " sa-active" : ""}`}
+                  ref={invTablePartRef}
+                >
+                  <button
+                    type="button"
+                    className="sa-custom-select-trigger sa-inv-select-trigger"
+                    onClick={() => {
+                      setInvTablePartDropdownOpen(prev => !prev);
+                      setInvTableCustDropdownOpen(false);
+                      setInvTableInvoiceDropdownOpen(false);
+                    }}
+                    title="Filter by Part Number"
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {invTablePartFilter.length === 0
+                          ? "All Parts"
+                          : invTablePartFilter.length === 1
+                            ? invTablePartFilter[0]
+                            : `${invTablePartFilter.length} Parts`}
+                      </span>
+                      {invTablePartFilter.length > 1 && (
+                        <span className="sa-inv-counter-badge sa-inv-counter-badge--cyan">
+                          {invTablePartFilter.length}
+                        </span>
+                      )}
+                    </span>
+                    <span className="sa-custom-select-arrow">
+                      <ChevronDown size={13} />
+                    </span>
+                  </button>
+
+                  {invTablePartDropdownOpen && (
+                    <div className="sa-custom-select-dropdown-container sa-dropdown-anim-enter sa-inv-dropdown-menu sa-inv-dropdown-menu--part">
+                      <div className="sa-dropdown-search-header">
+                        <div className="sa-dropdown-search-wrapper">
+                          <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                          <input
+                            type="text"
+                            className="sa-dropdown-search-input"
+                            placeholder="Search part no..."
+                            value={invTablePartSearch}
+                            onChange={(e) => setInvTablePartSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                          />
+                          {invTablePartSearch && (
+                            <button
+                              type="button"
+                              className="sa-search-clear-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInvTablePartSearch("");
+                              }}
+                              title="Clear search"
+                            >
+                              <X size={10} strokeWidth={2.5} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <ul className="sa-custom-select-options sa-inv-options-list">
+                        <li
+                          className={`sa-custom-select-option${invTablePartFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                          onClick={() => setInvTablePartFilter([])}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <span className={`sa-checkbox-box${invTablePartFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                              {invTablePartFilter.length === 0 && (
+                                <Check size={10} strokeWidth={3} />
+                              )}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>All Parts</span>
+                          </div>
+                          <span className="sa-inv-opt-count-pill">{uniqueInvoicePartNumbers.length}</span>
+                        </li>
+                        {filteredUniqueInvoicePartNumbers.length === 0 ? (
+                          <li className="sa-custom-select-option sa-opt-empty" style={{ cursor: 'default', color: '#94a3b8', textAlign: 'center', padding: '10px' }}>
+                            No part numbers found
+                          </li>
+                        ) : (
+                          filteredUniqueInvoicePartNumbers.map(part => {
+                            const isSelected = invTablePartFilter.includes(part);
+                            return (
+                              <li
+                                key={part}
+                                className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setInvTablePartFilter(invTablePartFilter.filter(x => x !== part));
+                                  } else {
+                                    setInvTablePartFilter([...invTablePartFilter, part]);
+                                  }
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                                  <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                                    {isSelected && (
+                                      <Check size={10} strokeWidth={3} />
+                                    )}
+                                  </span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {part}
+                                  </span>
+                                </div>
+                                {partLineCounts[part] && (
+                                  <span className="sa-inv-opt-count-pill">
+                                    {partLineCounts[part]} {partLineCounts[part] === 1 ? 'line' : 'lines'}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Reset Filters Pill Button */}
+                {(invTableCustFilter.length > 0 || invTableInvoiceFilter.length > 0 || invTablePartFilter.length > 0) && (
+                  <button
+                    type="button"
+                    className="sa-inv-filter-reset-btn sa-fade-in-btn"
+                    onClick={() => {
+                      setInvTableCustFilter([]);
+                      setInvTableInvoiceFilter([]);
+                      setInvTablePartFilter([]);
+                    }}
+                    title="Reset all filters"
+                  >
+                    <RotateCcw size={11} className="sa-spin-hover" />
+                    <span>Reset</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {tableLoading ? (
               <div className="sa-skeleton" style={{ width: '120px', height: '18px', borderRadius: '4px' }} />
             ) : invoiceStats.lines > 0 && (
@@ -6383,8 +7003,8 @@ export default function SalesAnalysis() {
                   </tr>
                 ))
               ) : (
-                (filteredInvoices.length ? filteredInvoices : []).map((r, i) => (
-                  <tr key={`${r.invoice_no}-${i}`} style={{ "--ri": i }}>
+                (displayedInvoices.length ? displayedInvoices : []).map((r, i) => (
+                  <tr key={`${r.invoice_no}-${r.part_no || ''}-${i}`} style={{ "--ri": i }} className="sa-inv-table-row">
                     <td><strong className="sa-inv-no">{r.invoice_no || "—"}</strong></td>
                     <td className="sa-date">{formatInvDate(r.date)}</td>
                     <td>{r.customer || "—"}</td>
@@ -6398,13 +7018,41 @@ export default function SalesAnalysis() {
                   </tr>
                 ))
               )}
-              {!tableLoading && !filteredInvoices.length && (
+              {!tableLoading && !displayedInvoices.length && (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", color: "#94a3b8" }}>—</td>
+                  <td colSpan={10} style={{ textAlign: "center", padding: "36px 16px" }}>
+                    <div className="sa-inv-empty-state">
+                      <div className="sa-inv-empty-icon-wrap">
+                        <FileText size={26} style={{ color: "#2d6de8" }} />
+                      </div>
+                      <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem", marginTop: "10px" }}>
+                        No matching transactions found
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "4px" }}>
+                        {(invTableCustFilter.length > 0 || invTableInvoiceFilter.length > 0 || invTablePartFilter.length > 0)
+                          ? "Try clearing or adjusting the selected Customer, Invoice No, or Part No filters"
+                          : "No transactions available for the selected customer / date criteria"}
+                      </div>
+                      {(invTableCustFilter.length > 0 || invTableInvoiceFilter.length > 0 || invTablePartFilter.length > 0) && (
+                        <button
+                          type="button"
+                          className="sa-inv-empty-reset-btn"
+                          onClick={() => {
+                            setInvTableCustFilter([]);
+                            setInvTableInvoiceFilter([]);
+                            setInvTablePartFilter([]);
+                          }}
+                        >
+                          <RotateCcw size={12} />
+                          <span>Clear Filters</span>
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
-            {!tableLoading && filteredInvoices.length > 0 && (
+            {!tableLoading && displayedInvoices.length > 0 && (
               <tfoot>
                 <tr className="sa-inv-total-row">
                   <td><strong>Total</strong></td>
@@ -6855,59 +7503,146 @@ export default function SalesAnalysis() {
 
         {/* ── Modern Neat Filter Bar ── */}
         <div className="sa-trace-filter-bar">
-          {/* Customer Name Filter */}
+          {/* Customer Name Multi-Select Filter */}
           <div className="sa-trace-filter-field sa-trace-filter-field--cust" ref={traceCustomerRef}>
-            <label className="sa-trace-filter-label" htmlFor="trace-filter-cust">
+            <label className="sa-trace-filter-label">
               <Building2 size={12} className="sa-trace-filter-icon" />
               <span>Customer Name</span>
-            </label>
-            <div className="sa-trace-input-wrap">
-              <Search size={13} className="sa-trace-input-lead-icon" />
-              <input
-                id="trace-filter-cust"
-                type="text"
-                className="sa-trace-filter-input"
-                placeholder="Search Customer..."
-                value={traceCustomerFilter}
-                onChange={(e) => {
-                  setTraceCustomerFilter(e.target.value);
-                  setTraceCustomerOpen(true);
-                }}
-                onFocus={() => setTraceCustomerOpen(true)}
-                autoComplete="off"
-              />
-              {traceCustomerFilter && (
-                <button
-                  type="button"
-                  className="sa-trace-input-clear"
-                  onClick={() => {
-                    setTraceCustomerFilter("");
-                    setTraceCustomerOpen(false);
-                  }}
-                  title="Clear Customer"
-                >
-                  <X size={12} />
-                </button>
+              {traceCustomerFilter.length > 0 && (
+                <span className="sa-trace-cust-active-pill">
+                  {traceCustomerFilter.length} selected
+                </span>
               )}
-              {traceCustomerOpen && matchingTraceCustomers.length > 0 && (
-                <ul className="sa-trace-autocomplete-list">
-                  {matchingTraceCustomers.map((cust) => (
-                    <li
-                      key={cust}
-                      className={`sa-trace-autocomplete-item${traceCustomerFilter.toLowerCase() === cust.toLowerCase() ? " is-selected" : ""}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setTraceCustomerFilter(cust);
-                        setTraceCustomerOpen(false);
+            </label>
+            <div className={`sa-custom-select sa-custom-select--trace-cust${traceCustomerOpen ? " sa-active" : ""}`}>
+              <button
+                type="button"
+                className="sa-custom-select-trigger sa-trace-select-trigger"
+                onClick={() => setTraceCustomerOpen((prev) => !prev)}
+                title="Filter by Customer Name"
+              >
+                <Search size={13} className="sa-trace-input-lead-icon" style={{ position: 'static', marginRight: '6px', color: '#06b6d4', flexShrink: 0 }} />
+                <span style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {traceCustomerFilter.length === 0
+                      ? "All Customers"
+                      : traceCustomerFilter.length === 1
+                        ? traceCustomerFilter[0]
+                        : `${traceCustomerFilter.length} Customers`}
+                  </span>
+                  {traceCustomerFilter.length > 1 && (
+                    <span className="sa-inv-counter-badge sa-inv-counter-badge--cyan">
+                      {traceCustomerFilter.length}
+                    </span>
+                  )}
+                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', flexShrink: 0 }}>
+                  {traceCustomerFilter.length > 0 && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="sa-trace-cust-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTraceCustomerFilter([]);
                       }}
+                      title="Clear Customer Filter"
                     >
-                      <span className="sa-trace-autocomplete-text">{cust}</span>
-                      {traceCustomerFilter.toLowerCase() === cust.toLowerCase() && (
-                        <Check size={12} className="sa-trace-autocomplete-check" />
+                      <X size={11} />
+                    </span>
+                  )}
+                  <span className="sa-custom-select-arrow">
+                    <ChevronDown size={13} />
+                  </span>
+                </div>
+              </button>
+
+              {traceCustomerOpen && (
+                <div className="sa-custom-select-dropdown-container sa-dropdown-anim-enter sa-trace-dropdown-menu">
+                  <div className="sa-dropdown-search-header">
+                    <div className="sa-dropdown-search-wrapper">
+                      <Search size={12} style={{ color: '#64748b', marginRight: '4px', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        className="sa-dropdown-search-input"
+                        placeholder="Search customer..."
+                        value={traceCustomerSearch}
+                        onChange={(e) => setTraceCustomerSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                      {traceCustomerSearch && (
+                        <button
+                          type="button"
+                          className="sa-search-clear-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTraceCustomerSearch("");
+                          }}
+                          title="Clear search"
+                        >
+                          <X size={10} strokeWidth={2.5} />
+                        </button>
                       )}
+                    </div>
+                  </div>
+                  <ul className="sa-custom-select-options sa-trace-options-list">
+                    <li
+                      className={`sa-custom-select-option${traceCustomerFilter.length === 0 ? " sa-multi-selected" : ""}`}
+                      onClick={() => setTraceCustomerFilter([])}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                        <span className={`sa-checkbox-box${traceCustomerFilter.length === 0 ? " sa-checkbox-box--checked" : ""}`}>
+                          {traceCustomerFilter.length === 0 && (
+                            <Check size={10} strokeWidth={3} />
+                          )}
+                        </span>
+                        <span style={{ fontWeight: 600 }}>All Customers</span>
+                      </div>
+                      <span className="sa-inv-opt-count-pill">{uniqueTraceCustomers.length}</span>
                     </li>
-                  ))}
-                </ul>
+                    {matchingTraceCustomers.length === 0 ? (
+                      <li className="sa-custom-select-option sa-opt-empty" style={{ cursor: 'default', color: '#94a3b8', textAlign: 'center', padding: '10px' }}>
+                        No customers found
+                      </li>
+                    ) : (
+                      matchingTraceCustomers.map((cust) => {
+                        const isSelected = traceCustomerFilter.includes(cust);
+                        return (
+                          <li
+                            key={cust}
+                            className={`sa-custom-select-option${isSelected ? " sa-multi-selected" : ""}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setTraceCustomerFilter(traceCustomerFilter.filter((c) => c !== cust));
+                              } else {
+                                setTraceCustomerFilter([...traceCustomerFilter, cust]);
+                              }
+                            }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                              <span className={`sa-checkbox-box${isSelected ? " sa-checkbox-box--checked" : ""}`}>
+                                {isSelected && (
+                                  <Check size={10} strokeWidth={3} />
+                                )}
+                              </span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cust}>
+                                {cust}
+                              </span>
+                            </div>
+                            {traceCustomerCounts[cust] && (
+                              <span className="sa-inv-opt-count-pill">
+                                {traceCustomerCounts[cust]} {traceCustomerCounts[cust] === 1 ? 'order' : 'orders'}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })
+                    )}
+                  </ul>
+                </div>
               )}
             </div>
           </div>

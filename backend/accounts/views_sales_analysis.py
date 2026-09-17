@@ -677,7 +677,7 @@ def _weekly_chart_slots(start_date, end_date):
             w_start, w_end = bounds
             if w_end < start_date or w_start > end_date:
                 continue
-            labels.append(f"W{week_num} {_MONTH_ABB[month - 1]}")
+            labels.append(f"W{week_num} ({w_start.day}-{w_end.day}) {_MONTH_ABB[month - 1]}")
             keys.append((year, month, week_num))
         if month == 12:
             year, month = year + 1, 1

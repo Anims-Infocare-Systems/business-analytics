@@ -5,7 +5,7 @@
  * Micro-animations, Rich Interactive Controls, and Portal Modals.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./UsersSetting.css";
@@ -39,8 +39,71 @@ import {
     Eye,
     EyeOff,
     ArrowLeft,
-    LayoutGrid
+    LayoutGrid,
+    Table,
+    CalendarRange,
+    Calendar,
+    Clock,
+    ShoppingCart,
+    Factory,
+    FileSpreadsheet,
+    Activity,
+    CheckCheck
 } from "lucide-react";
+
+// React Icons integration
+import {
+    FiCalendar,
+    FiClock,
+    FiActivity,
+    FiTrendingUp,
+    FiShoppingCart,
+    FiCheckCircle,
+    FiSliders,
+    FiSearch,
+    FiSave,
+    FiRotateCcw,
+    FiX,
+    FiChevronDown,
+    FiCheck
+} from "react-icons/fi";
+import {
+    HiSparkles,
+    HiCalendarDays,
+    HiCheckBadge,
+    HiOutlineTableCells,
+    HiOutlineSquares2X2
+} from "react-icons/hi2";
+import {
+    MdDateRange,
+    MdFactory,
+    MdPrecisionManufacturing
+} from "react-icons/md";
+import {
+    FaReact,
+    FaStar
+} from "react-icons/fa6";
+
+import {
+    DATE_PRESETS,
+    MODULE_TARGETS,
+    DEFAULT_DATE_SETTINGS,
+    getSavedDateSettings,
+    fetchCompanyDateSettings,
+    saveDateSettings,
+    computeDateRangeFromPreset,
+    formatDateDisplay
+} from "./dateSettingsHelper";
+
+const MODULE_ICONS = {
+    Factory: MdFactory,
+    TrendingUp: FiTrendingUp,
+    ShoppingCart: FiShoppingCart,
+    CheckCircle2: FiCheckCircle,
+    FileSpreadsheet: MdPrecisionManufacturing,
+    Clock: FiClock,
+    Activity: FiActivity
+};
 
 const API = resolveApiBase();
 const STORAGE_KEY = "eapproval_po_user_limits";
@@ -49,6 +112,7 @@ const HIDE_UNDER_1000_KEY = "eapproval_filter_hide_under_1000";
 // Tabs definition
 const TABS = [
     { id: "eapproval", label: "E-Approval PO Limits", icon: FileCheck2 },
+    { id: "datesetting", label: "Date Setting Option", icon: MdDateRange, badge: "NEW" },
     { id: "technical", label: "T & M Approvals", icon: Wrench, disabled: true },
 ];
 
@@ -99,6 +163,201 @@ const DEFAULT_MOCK_USERS = [
     { userId: "5", userName: "Kavitha", designation: "Quality Inspector", isSuperAdmin: false },
 ];
 
+/**
+ * ModernDateDropdown
+ * Ultra-sleek, professional custom dropdown UI replacing native <select>
+ * Features:
+ * - Clean modern trigger with active label, star badge for recommended, and animated chevron
+ * - Floating glassmorphic card menu with shadow and subtle border
+ * - Preset items with calendar icon, label, "Recommended" pill, dynamic calculated date hint (e.g. 17 Jun 2026 – 17 Sep 2026), and active checkmark
+ * - Auto-detects screen position and opens upward if near bottom of screen
+ * - Closes on click outside or Escape key
+ */
+function ModernDateDropdown({ value, onChange, moduleKey }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [coords, setCoords] = useState({ top: 0, left: 0, width: 300, openUpward: false });
+    const dropdownRef = useRef(null);
+    const triggerRef = useRef(null);
+    const menuRef = useRef(null);
+
+    const currentPreset = DATE_PRESETS.find(p => p.id === value) || DATE_PRESETS[0];
+
+    const calculatePosition = () => {
+        if (!triggerRef.current) return null;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUpward = spaceBelow < 320 && rect.top > 320;
+        
+        // Responsive width clamping for mobile devices
+        const maxAvailableWidth = Math.max(260, window.innerWidth - 24);
+        const width = Math.min(Math.max(rect.width, 290), maxAvailableWidth);
+        
+        // Ensure menu never overflows left or right viewport edges
+        let left = rect.left;
+        if (left + width > window.innerWidth - 12) {
+            left = Math.max(12, window.innerWidth - width - 12);
+        }
+        if (left < 12) left = 12;
+
+        return {
+            top: openUpward ? (rect.top - 6) : (rect.bottom + 6),
+            left,
+            width,
+            openUpward,
+        };
+    };
+
+    const handleToggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isOpen) {
+            const pos = calculatePosition();
+            if (pos) setCoords(pos);
+            setIsOpen(true);
+        } else {
+            setIsOpen(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleClickOutside = (e) => {
+            if (triggerRef.current && triggerRef.current.contains(e.target)) return;
+            if (menuRef.current && menuRef.current.contains(e.target)) return;
+            setIsOpen(false);
+        };
+
+        const handleKeyDown = (e) => {
+            if (e.key === "Escape") {
+                setIsOpen(false);
+            }
+        };
+
+        const handleScroll = (e) => {
+            // Ignore scroll events originating from inside the dropdown menu list
+            if (menuRef.current && (menuRef.current === e.target || menuRef.current.contains(e.target))) {
+                return;
+            }
+            // Reposition on page scroll
+            const pos = calculatePosition();
+            if (pos) setCoords(pos);
+        };
+
+        const handleResize = () => {
+            const pos = calculatePosition();
+            if (pos) setCoords(pos);
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", handleScroll, true);
+        window.addEventListener("resize", handleResize);
+
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", handleScroll, true);
+            window.removeEventListener("resize", handleResize);
+        };
+    }, [isOpen]);
+
+    const handleSelect = (presetId, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onChange(presetId);
+        setIsOpen(false);
+    };
+
+    return (
+        <div ref={dropdownRef} className="us-mdd">
+            <button
+                ref={triggerRef}
+                type="button"
+                className={`us-mdd-trigger ${isOpen ? "us-mdd-trigger--open" : ""}`}
+                onClick={handleToggle}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+            >
+                <div className="us-mdd-trigger__content">
+                    <span className="us-mdd-trigger__label">{currentPreset.label}</span>
+                    {currentPreset.isRecommended && (
+                        <span className="us-mdd-trigger__badge">⭐ Default</span>
+                    )}
+                </div>
+                <FiChevronDown className="us-mdd-trigger__chevron" size={15} />
+            </button>
+
+            {isOpen && createPortal(
+                <div
+                    ref={menuRef}
+                    className={`us-mdd-menu us-mdd-portal-menu ${coords.openUpward ? "us-mdd-menu--upward" : ""}`}
+                    style={{
+                        position: "fixed",
+                        top: coords.openUpward ? "auto" : `${coords.top}px`,
+                        bottom: coords.openUpward ? `${window.innerHeight - coords.top}px` : "auto",
+                        left: `${coords.left}px`,
+                        width: `${coords.width}px`,
+                        zIndex: 99999999,
+                    }}
+                    role="listbox"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="us-mdd-menu__header">
+                        <span className="us-mdd-menu__title">Default Date Range Preset</span>
+                        <span className="us-mdd-menu__count">{DATE_PRESETS.length} presets</span>
+                    </div>
+                    <div
+                        className="us-mdd-menu__list"
+                        onWheel={(e) => e.stopPropagation()}
+                        onScroll={(e) => e.stopPropagation()}
+                    >
+                        {DATE_PRESETS.map((p) => {
+                            const isSelected = p.id === value;
+                            const range = computeDateRangeFromPreset(p.id);
+                            return (
+                                <div
+                                    key={p.id}
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    className={`us-mdd-item ${isSelected ? "us-mdd-item--selected" : ""}`}
+                                    onClick={(e) => handleSelect(p.id, e)}
+                                >
+                                    <div className="us-mdd-item__left">
+                                        <div className={`us-mdd-item__icon ${isSelected ? "us-mdd-item__icon--active" : ""}`}>
+                                            <HiCalendarDays size={14} />
+                                        </div>
+                                        <div className="us-mdd-item__info">
+                                            <div className="us-mdd-item__title-row">
+                                                <span className="us-mdd-item__label">{p.label}</span>
+                                                {p.isRecommended && (
+                                                    <span className="us-mdd-item__rec-pill">⭐ Recommended</span>
+                                                )}
+                                            </div>
+                                            <span className="us-mdd-item__date-hint">
+                                                {formatDateDisplay(range.from)} – {formatDateDisplay(range.to)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="us-mdd-item__right">
+                                        {isSelected && (
+                                            <div className="us-mdd-item__check-wrap">
+                                                <FiCheck size={13} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
 export default function UsersSetting() {
     const [activeTab, setActiveTab] = useState(null); // null by default (Overview Hub)
     const [users, setUsers] = useState([]);
@@ -139,16 +398,96 @@ export default function UsersSetting() {
         setTimeout(() => setToastMessage(null), 3500);
     }, []);
 
-    // Auto-open E-Approval limits tab when navigated via Spotlight
+    // ── Date Settings State ──
+    const [dateSettings, setDateSettings] = useState(() => getSavedDateSettings());
+    const [dateCategoryFilter, setDateCategoryFilter] = useState("all"); // 'all' | 'Dashboard' | 'Reports' | 'MIS'
+    const [dateSearchQuery, setDateSearchQuery] = useState("");
+    const [isSavingDates, setIsSavingDates] = useState(false);
+    const [dateViewMode, setDateViewMode] = useState(() => {
+        try {
+            return localStorage.getItem("ba_date_view_mode") || "table";
+        } catch {
+            return "table";
+        }
+    });
+
+    const handleSetViewMode = (mode) => {
+        setDateViewMode(mode);
+        try {
+            localStorage.setItem("ba_date_view_mode", mode);
+        } catch { }
+    };
+
+    // Sync latest date settings from company database on mount
+    useEffect(() => {
+        fetchCompanyDateSettings().then(cloudData => {
+            if (cloudData) setDateSettings(cloudData);
+        });
+    }, []);
+
+    // Auto-open tabs when navigated via Spotlight
     useEffect(() => {
         const handleSpotlight = (e) => {
             if (e.detail && (e.detail.id === "us-po-limits" || e.detail.id === "us-threshold-policy")) {
                 setActiveTab("eapproval");
+            } else if (e.detail && (e.detail.id === "us-date-settings" || e.detail.id === "us-date-presets")) {
+                setActiveTab("datesetting");
             }
         };
         window.addEventListener("spotlight-section-selected", handleSpotlight);
         return () => window.removeEventListener("spotlight-section-selected", handleSpotlight);
     }, []);
+
+    // Handlers for Date Settings
+    const handleModulePresetChange = (moduleKey, presetId) => {
+        setDateSettings(prev => ({
+            ...prev,
+            [moduleKey]: presetId
+        }));
+    };
+
+    const handleApplyBulkPresetToAll = (presetId) => {
+        const next = { ...dateSettings };
+        MODULE_TARGETS.forEach(m => {
+            next[m.key] = presetId;
+        });
+        setDateSettings(next);
+        const presetObj = DATE_PRESETS.find(p => p.id === presetId);
+        showToast(`Preset "${presetObj?.label || presetId}" applied to all 7 modules`, "info");
+    };
+
+    const handleSaveDateSettings = () => {
+        setIsSavingDates(true);
+        try {
+            const ok = saveDateSettings(dateSettings);
+            if (ok) {
+                showToast("Date settings saved! Modules will now open with the selected date presets.", "success");
+            } else {
+                showToast("Failed to save date settings", "error");
+            }
+        } finally {
+            setIsSavingDates(false);
+        }
+    };
+
+    const handleResetDateSettings = () => {
+        setDateSettings({ ...DEFAULT_DATE_SETTINGS });
+        saveDateSettings(DEFAULT_DATE_SETTINGS);
+        showToast("Date settings reset to factory defaults (Last 3 Months)", "info");
+    };
+
+    const filteredModuleTargets = useMemo(() => {
+        return MODULE_TARGETS.filter(m => {
+            const matchesCat = dateCategoryFilter === "all" || m.category === dateCategoryFilter;
+            const q = dateSearchQuery.toLowerCase().trim();
+            const matchesQuery = !q ||
+                m.name.toLowerCase().includes(q) ||
+                m.categoryLabel.toLowerCase().includes(q) ||
+                m.description.toLowerCase().includes(q);
+            return matchesCat && matchesQuery;
+        });
+    }, [dateCategoryFilter, dateSearchQuery]);
+
 
     // Load initial user limits from localStorage
     const loadStoredLimits = useCallback(() => {
@@ -452,20 +791,43 @@ export default function UsersSetting() {
                                 <Sliders size={15} />
                                 <span className="us-btn__label">Bulk Set Limit</span>
                             </button>
+
+                            <button
+                                type="button"
+                                className="us-btn us-btn--primary"
+                                data-spotlight="us-save-reset-bar"
+                                onClick={handleSave}
+                                disabled={isSaving}
+                            >
+                                <Save size={15} />
+                                <span className="us-btn__label">{isSaving ? "Saving…" : "Save Configuration"}</span>
+                            </button>
                         </>
                     )}
 
-                    {activeTab && (
-                        <button
-                            type="button"
-                            className="us-btn us-btn--primary"
-                            data-spotlight="us-save-reset-bar"
-                            onClick={handleSave}
-                            disabled={isSaving}
-                        >
-                            <Save size={15} />
-                            <span className="us-btn__label">{isSaving ? "Saving…" : "Save Configuration"}</span>
-                        </button>
+                    {activeTab === "datesetting" && (
+                        <>
+                            <button
+                                type="button"
+                                className="us-btn us-btn--outline"
+                                onClick={handleResetDateSettings}
+                                title="Reset all modules to default preset (Last 3 Months)"
+                            >
+                                <FiRotateCcw size={15} />
+                                <span className="us-btn__label">Reset Defaults</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                className="us-btn us-btn--primary"
+                                data-spotlight="us-save-reset-bar"
+                                onClick={handleSaveDateSettings}
+                                disabled={isSavingDates}
+                            >
+                                <FiSave size={15} />
+                                <span className="us-btn__label">{isSavingDates ? "Saving…" : "Save Date Settings"}</span>
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -517,7 +879,7 @@ export default function UsersSetting() {
                     </div>
                     <h2 className="us-empty-state__title">Select a Setting Module</h2>
                     <p className="us-empty-state__desc">
-                        Choose a configuration category from the menu above to manage user authorization rules and purchase approval limits.
+                        Choose a configuration category from the menu above to manage user authorization rules, purchase approval limits, or module default date ranges.
                     </p>
 
                     <div className="us-empty-state__quick-pills">
@@ -528,6 +890,17 @@ export default function UsersSetting() {
                         >
                             <FileCheck2 size={16} />
                             <span>E-Approval PO Limits</span>
+                            <span className="us-quick-launch-pill__arrow">→</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className="us-quick-launch-pill us-quick-launch-pill--active us-quick-launch-pill--date"
+                            onClick={() => setActiveTab("datesetting")}
+                        >
+                            <CalendarRange size={16} />
+                            <span>Date Setting Option</span>
+                            <span className="us-quick-launch-pill__badge">NEW</span>
                             <span className="us-quick-launch-pill__arrow">→</span>
                         </button>
 
@@ -807,6 +1180,429 @@ export default function UsersSetting() {
                         </table>
                     </div>
                 </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════ */}
+            {/* TAB: DATE SETTING OPTION (NEAT, MODERN & PROFESSIONAL)      */}
+            {/* ══════════════════════════════════════════════════════════ */}
+            {activeTab === "datesetting" && (
+                <div className="us-datesetting-wrap" data-spotlight="us-date-settings">
+
+                    {/* ── Top Hero Card with Bulk Controls ── */}
+                    <div className="us-ds-hero">
+                        <div className="us-ds-hero__left">
+                            <div className="us-ds-hero__badge">
+                                <FaReact size={14} className="us-ds-react-spin" style={{ color: "#61dafb" }} />
+                                <span>Automation Engine</span>
+                            </div>
+                            <h2 className="us-ds-hero__title">
+                                Default Date Range Settings
+                            </h2>
+                            <p className="us-ds-hero__desc">
+                                Configure the default date window loaded when opening dashboards and analytical reports. Settings apply automatically across all company user logins.
+                            </p>
+                        </div>
+
+                        {/* Bulk Action Controls */}
+                        <div className="us-ds-hero__bulk-box" data-spotlight="us-date-presets">
+                            <div className="us-ds-hero__bulk-label">
+                                <FiSliders size={13} style={{ color: "#6366f1" }} />
+                                <span>Quick Apply All:</span>
+                            </div>
+                            <div className="us-ds-hero__bulk-actions">
+                                <button
+                                    type="button"
+                                    className="us-ds-bulk-btn us-ds-bulk-btn--highlight"
+                                    onClick={() => handleApplyBulkPresetToAll("last_3_months")}
+                                    title="Set all 7 modules to Last 3 Months (Recommended)"
+                                >
+                                    <HiSparkles size={12} />
+                                    <span>Last 3 Months</span>
+                                    <span className="us-ds-bulk-btn__rec">Default</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="us-ds-bulk-btn"
+                                    onClick={() => handleApplyBulkPresetToAll("this_month")}
+                                    title="Set all 7 modules to This Month"
+                                >
+                                    This Month
+                                </button>
+                                <button
+                                    type="button"
+                                    className="us-ds-bulk-btn"
+                                    onClick={() => handleApplyBulkPresetToAll("last_month")}
+                                    title="Set all 7 modules to Last Month"
+                                >
+                                    Last Month
+                                </button>
+                                <button
+                                    type="button"
+                                    className="us-ds-bulk-btn"
+                                    onClick={() => handleApplyBulkPresetToAll("last_30_days")}
+                                    title="Set all 7 modules to Last 30 Days"
+                                >
+                                    Last 30 Days
+                                </button>
+                                <button
+                                    type="button"
+                                    className="us-ds-bulk-btn"
+                                    onClick={() => handleApplyBulkPresetToAll("this_year")}
+                                    title="Set all 7 modules to This Year"
+                                >
+                                    This Year
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Search, Category Filter & View Toggle Bar ── */}
+                    <div className="us-ds-filter-bar">
+                        <div className="us-ds-filter-bar__left">
+                            <div className="us-search-box">
+                                <FiSearch size={15} className="us-search-box__icon" />
+                                <input
+                                    type="text"
+                                    className="us-search-box__input"
+                                    placeholder="Search module (e.g. Sales, Quality, Plant, MIS)…"
+                                    value={dateSearchQuery}
+                                    onChange={e => setDateSearchQuery(e.target.value)}
+                                />
+                                {dateSearchQuery && (
+                                    <button
+                                        type="button"
+                                        className="us-search-box__clear"
+                                        onClick={() => setDateSearchQuery("")}
+                                        aria-label="Clear module search"
+                                    >
+                                        <FiX size={14} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="us-filter-chips">
+                                <button
+                                    type="button"
+                                    className={`us-chip ${dateCategoryFilter === "all" ? "us-chip--active" : ""}`}
+                                    onClick={() => setDateCategoryFilter("all")}
+                                >
+                                    All Modules ({MODULE_TARGETS.length})
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`us-chip ${dateCategoryFilter === "Dashboard" ? "us-chip--active" : ""}`}
+                                    onClick={() => setDateCategoryFilter("Dashboard")}
+                                >
+                                    Plant Performance (1)
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`us-chip ${dateCategoryFilter === "Reports" ? "us-chip--active" : ""}`}
+                                    onClick={() => setDateCategoryFilter("Reports")}
+                                >
+                                    Analytical Reports (4)
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`us-chip ${dateCategoryFilter === "MIS" ? "us-chip--active" : ""}`}
+                                    onClick={() => setDateCategoryFilter("MIS")}
+                                >
+                                    MIS Operational (2)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="us-ds-filter-bar__right">
+                            {/* View Switcher: Table vs Cards */}
+                            <div className="us-ds-view-toggle">
+                                <button
+                                    type="button"
+                                    className={`us-ds-view-btn ${dateViewMode === "table" ? "us-ds-view-btn--active" : ""}`}
+                                    onClick={() => handleSetViewMode("table")}
+                                    title="Switch to Compact Table View"
+                                >
+                                    <HiOutlineTableCells size={15} />
+                                    <span>Table View</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`us-ds-view-btn ${dateViewMode === "grid" ? "us-ds-view-btn--active" : ""}`}
+                                    onClick={() => handleSetViewMode("grid")}
+                                    title="Switch to Card Grid View"
+                                >
+                                    <HiOutlineSquares2X2 size={15} />
+                                    <span>Card Grid</span>
+                                </button>
+                            </div>
+
+                            <span className="us-ds-stat-pill">
+                                <HiCheckBadge size={16} style={{ color: "#10b981" }} />
+                                <span>{filteredModuleTargets.length} of {MODULE_TARGETS.length} Modules</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* ── Content View: Table vs Card Grid ── */}
+                    {dateViewMode === "table" ? (
+                        /* ── Clean Professional Enterprise Table View ── */
+                        <div className="us-table-wrap us-ds-table-wrap" data-spotlight="us-date-table">
+                            <table className="us-table us-ds-table">
+                                <thead>
+                                    <tr>
+                                        <th style={{ minWidth: "260px" }}>Module & Workspace</th>
+                                        <th style={{ width: "160px" }}>Category</th>
+                                        <th style={{ minWidth: "275px" }}>Default Date Preset</th>
+                                        <th style={{ minWidth: "250px" }}>Active Live Period</th>
+                                        <th style={{ width: "200px" }}>Quick Switch</th>
+                                        <th style={{ width: "120px", textAlign: "center" }}>Scope</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredModuleTargets.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} style={{ textAlign: "center", padding: "3.5rem 1rem", color: "#94a3b8" }}>
+                                                No modules matched "{dateSearchQuery}"
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredModuleTargets.map((m, idx) => {
+                                            const currentPresetId = dateSettings[m.key] || m.defaultPreset || "last_3_months";
+                                            const computedRange = computeDateRangeFromPreset(currentPresetId);
+                                            const IconComponent = MODULE_ICONS[m.iconName] || MdDateRange;
+                                            const isRecommended = currentPresetId === "last_3_months";
+
+                                            return (
+                                                <tr
+                                                    key={m.key}
+                                                    className={`us-table-row us-ds-table-row ${isRecommended ? "us-ds-row--recommended" : ""}`}
+                                                    style={{ "--r-idx": idx }}
+                                                >
+                                                    {/* Module Profile */}
+                                                    <td className="us-td us-td--profile">
+                                                        <div className="us-user-cell">
+                                                            <div className="us-ds-mod-icon" style={{ background: m.color }}>
+                                                                <IconComponent size={19} color="#ffffff" />
+                                                            </div>
+                                                            <div className="us-user-info">
+                                                                <div className="us-ds-mod-title-row">
+                                                                    <span className="us-user-name">{m.name}</span>
+                                                                    {isRecommended && (
+                                                                        <span className="us-ds-rec-pill" title="Default recommended setting">
+                                                                            ⭐ Default
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <span className="us-user-role">{m.description}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Category */}
+                                                    <td className="us-td">
+                                                        <span className={`us-ds-cat-tag us-ds-cat-tag--${m.category.toLowerCase()}`}>
+                                                            {m.categoryLabel}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Preset Select */}
+                                                    <td className="us-td">
+                                                        <div className="us-ds-select-wrap">
+                                                            <ModernDateDropdown
+                                                                value={currentPresetId}
+                                                                onChange={newPreset => handleModulePresetChange(m.key, newPreset)}
+                                                                moduleKey={m.key}
+                                                            />
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Calculated Dynamic Period */}
+                                                    <td className="us-td">
+                                                        <div className="us-ds-live-pill" title="Dynamic date range loaded automatically upon opening this module">
+                                                            <HiCalendarDays size={14} className="us-ds-live-pill__icon" />
+                                                            <span className="us-ds-live-pill__text">
+                                                                {formatDateDisplay(computedRange.from)} – {formatDateDisplay(computedRange.to)}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Quick Switch */}
+                                                    <td className="us-td">
+                                                        <div className="us-ds-quick-pills">
+                                                            {[
+                                                                { id: "last_3_months", label: "3 Mo" },
+                                                                { id: "this_month", label: "This Mo" },
+                                                                { id: "last_month", label: "Last Mo" },
+                                                                { id: "last_30_days", label: "30 D" },
+                                                                { id: "this_year", label: "This Year" },
+                                                            ].map(chip => (
+                                                                <button
+                                                                    key={chip.id}
+                                                                    type="button"
+                                                                    className={`us-ds-qp-btn ${currentPresetId === chip.id ? "us-ds-qp-btn--active" : ""}`}
+                                                                    onClick={() => handleModulePresetChange(m.key, chip.id)}
+                                                                    title={`Switch to ${chip.label}`}
+                                                                >
+                                                                    {chip.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Scope */}
+                                                    <td className="us-td" style={{ textAlign: "center" }}>
+                                                        <span className="us-ds-scope-badge" title="Active for all company users">
+                                                            <span className="us-pulse-dot--emerald" />
+                                                            <span>Active</span>
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        /* ── Spacious Clean Card Grid View ── */
+                        <div className="us-ds-grid">
+                            {filteredModuleTargets.length === 0 ? (
+                                <div className="us-ds-grid__empty">
+                                    <FiSearch size={28} style={{ color: "#94a3b8" }} />
+                                    <h3>No modules matched "{dateSearchQuery}"</h3>
+                                    <p>Try clearing your search query or switching the category tab.</p>
+                                </div>
+                            ) : (
+                                filteredModuleTargets.map((m, idx) => {
+                                    const currentPresetId = dateSettings[m.key] || m.defaultPreset || "last_3_months";
+                                    const currentPresetObj = DATE_PRESETS.find(p => p.id === currentPresetId) || DATE_PRESETS[0];
+                                    const computedRange = computeDateRangeFromPreset(currentPresetId);
+                                    const IconComponent = MODULE_ICONS[m.iconName] || MdDateRange;
+                                    const isRecommended = currentPresetId === "last_3_months";
+
+                                    return (
+                                        <div
+                                            key={m.key}
+                                            className={`us-ds-card ${isRecommended ? "us-ds-card--recommended" : ""}`}
+                                            style={{ "--c-idx": idx }}
+                                        >
+                                            {/* Card Top / Header */}
+                                            <div className="us-ds-card__header">
+                                                <div className="us-ds-card__icon-wrap" style={{ background: m.color }}>
+                                                    <IconComponent size={20} color="#ffffff" />
+                                                </div>
+                                                <div className="us-ds-card__title-wrap">
+                                                    <div className="us-ds-card__cat-row">
+                                                        <span className={`us-ds-cat-tag us-ds-cat-tag--${m.category.toLowerCase()}`}>
+                                                            {m.categoryLabel}
+                                                        </span>
+                                                        {isRecommended && (
+                                                            <span className="us-ds-rec-badge">
+                                                                ⭐ Recommended
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <h3 className="us-ds-card__name">{m.name}</h3>
+                                                </div>
+                                            </div>
+
+                                            {/* Preset Dropdown & Fast Chips */}
+                                            <div className="us-ds-card__body">
+                                                <div className="us-ds-form-group">
+                                                    <div className="us-ds-form-header">
+                                                        <label className="us-ds-form-label">
+                                                            <HiCalendarDays size={14} style={{ color: "#6366f1" }} />
+                                                            <span>Default Preset:</span>
+                                                        </label>
+                                                        <span className="us-ds-active-tag">
+                                                            Active: <strong>{currentPresetObj.label}</strong>
+                                                        </span>
+                                                    </div>
+
+                                                    <ModernDateDropdown
+                                                        value={currentPresetId}
+                                                        onChange={newPreset => handleModulePresetChange(m.key, newPreset)}
+                                                        moduleKey={m.key}
+                                                    />
+                                                </div>
+
+                                                {/* Live Dynamic Date Preview Box */}
+                                                <div className="us-ds-preview-box">
+                                                    <div className="us-ds-preview-box__top">
+                                                        <div className="us-ds-preview-box__title">
+                                                            <FiClock size={12} style={{ color: "#0284c7" }} />
+                                                            <span>Live Range Preview:</span>
+                                                        </div>
+                                                        <span className="us-ds-preview-box__badge">Auto-Loads on Open</span>
+                                                    </div>
+                                                    <div className="us-ds-preview-box__dates">
+                                                        <span className="us-ds-preview-date">{formatDateDisplay(computedRange.from)}</span>
+                                                        <span className="us-ds-preview-arrow">➔</span>
+                                                        <span className="us-ds-preview-date">{formatDateDisplay(computedRange.to)}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Fast Selection Chips */}
+                                                <div className="us-ds-fast-chips">
+                                                    <span className="us-ds-fast-chips__label">Quick Switch:</span>
+                                                    {[
+                                                        { id: "last_3_months", label: "3 Mo" },
+                                                        { id: "this_month", label: "This Mo" },
+                                                        { id: "last_month", label: "Last Mo" },
+                                                        { id: "last_30_days", label: "30 Days" },
+                                                        { id: "this_year", label: "This Year" },
+                                                    ].map(chip => (
+                                                        <button
+                                                            key={chip.id}
+                                                            type="button"
+                                                            className={`us-ds-chip-btn ${currentPresetId === chip.id ? "us-ds-chip-btn--active" : ""}`}
+                                                            onClick={() => handleModulePresetChange(m.key, chip.id)}
+                                                            title={`Switch to ${chip.label}`}
+                                                        >
+                                                            {chip.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Bottom Save Sticky Bar ── */}
+                    <div className="us-ds-bottom-bar">
+                        <div className="us-ds-bottom-bar__left">
+                            <span className="us-pulse-dot--emerald" />
+                            <span className="us-ds-bottom-bar__text">
+                                Settings persist in company database and synchronize automatically across all user logins.
+                            </span>
+                        </div>
+
+                        <div className="us-ds-bottom-bar__right">
+                            <button
+                                type="button"
+                                className="us-btn us-btn--outline"
+                                onClick={handleResetDateSettings}
+                                title="Reset all 7 modules back to Last 3 Months"
+                            >
+                                <FiRotateCcw size={14} />
+                                <span className="us-btn__label">Reset Factory Defaults</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                className="us-btn us-btn--primary"
+                                onClick={handleSaveDateSettings}
+                                disabled={isSavingDates}
+                            >
+                                <FiSave size={14} />
+                                <span className="us-btn__label">{isSavingDates ? "Saving Changes…" : "Save Date Settings"}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
             )}
 
             {/* ══════════════════════════════════════════════════════════ */}

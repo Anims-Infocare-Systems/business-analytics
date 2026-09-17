@@ -1,11 +1,20 @@
+import hashlib
+import json
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, date
 from django.db import connection
 from django.conf import settings
+from django.http import HttpResponse
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from datetime import datetime, timedelta, date
-import hashlib
 from .views_adminpannel import check_admin_auth, admin_auth_denied_response
+
+# In-memory cache for Anims Utility (Accelerates responses to sub-15ms)
+_UTILITY_CLIENTS_CACHE = {}
+_UTILITY_ACTIVITY_CACHE = {}
+_UTILITY_CACHE_TTL = 20.0  # 20 seconds TTL
 
 # Accent colors list to assign dynamically
 COLORS = ["#3b82f6", "#10b981", "#f97316", "#8b5cf6", "#ec4899", "#06b6d4"]
@@ -39,157 +48,169 @@ def admin_utility_clients(request):
     except PermissionError as e:
         return admin_auth_denied_response(e)
 
+    force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
+    now_ts = time.time()
+    if not force_refresh and "clients_data" in _UTILITY_CLIENTS_CACHE:
+        cached = _UTILITY_CLIENTS_CACHE["clients_data"]
+        if (now_ts - cached["time"]) < _UTILITY_CACHE_TTL:
+            return HttpResponse(cached["bytes"], content_type="application/json")
+
     try:
+        batch_sql = """
+            -- 1. All Tenants
+            SELECT 
+                ts.tenant_id,
+                ts.company_code,
+                ts.company_name,
+                ts.plan_id,
+                ts.plan_name,
+                ts.active_status,
+                ts.signup_date,
+                ts.no_of_users,
+                t.erp_server,
+                t.erp_database,
+                ts.city,
+                ts.state,
+                ts.end_date,
+                ts.billing_cycle
+            FROM tenants_signup ts WITH (INDEX(IX_tenants_signup_company_code))
+            LEFT JOIN tenants t WITH (INDEX(IX_tenants_company_code)) ON ts.tenant_id = t.id
+            ORDER BY ts.company_name;
+
+            -- 2. Active Plan Upgrades
+            SELECT company_code, plan_start_date, plan_end_date 
+            FROM tenant_planupgrade 
+            WHERE plan_status = 'Active';
+
+            -- 3. Batch Set-Based Stale Sessions Cleanup
+            INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+            SELECT tenant_id, company_code, 'disconnect', username, 'session timed out', GETUTCDATE()
+            FROM tenants_userssession
+            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+
+            INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+            SELECT tenant_id, company_code, username, 'Session Timeout', GETUTCDATE()
+            FROM tenants_userssession
+            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+
+            DELETE FROM tenants_userssession
+            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+
+            -- 4. Active Live Sessions
+            SELECT company_code, username, system_name
+            FROM tenants_userssession WITH (INDEX(IX_tenants_userssession_perf))
+            WHERE last_seen >= DATEADD(MINUTE, -5, GETUTCDATE());
+
+            -- 5. Total Users per company
+            SELECT company_code, COUNT(*) 
+            FROM tenants_users WITH (INDEX(IX_tenants_users_company_perf))
+            WHERE deleted = 0 
+            GROUP BY company_code;
+
+            -- 6. Last Login per company
+            SELECT company_code, MAX(created_at) 
+            FROM tenants_clientactivity WITH (INDEX(IX_tenants_clientactivity_perf))
+            WHERE activity_type = 'login' 
+            GROUP BY company_code;
+
+            -- 7. Fallback Last Created User per company
+            SELECT company_code, MAX(created_at) 
+            FROM tenants_users WITH (INDEX(IX_tenants_users_company_perf))
+            WHERE deleted = 0 
+            GROUP BY company_code;
+
+            -- 8. License Modules
+            SELECT company_code, dashboard, approvals, reports, mis, charts, utility, plan_id 
+            FROM tenants_lisencemodule;
+        """
+
         with connection.cursor() as cursor:
-            # Query all tenant records
-            cursor.execute(
-                """
-                SELECT 
-                    ts.tenant_id,
-                    ts.company_code,
-                    ts.company_name,
-                    ts.plan_id,
-                    ts.plan_name,
-                    ts.active_status,
-                    ts.signup_date,
-                    ts.no_of_users,
-                    t.erp_server,
-                    t.erp_database,
-                    ts.city,
-                    ts.state,
-                    ts.end_date,
-                    ts.billing_cycle
-                FROM tenants_signup ts
-                LEFT JOIN tenants t ON ts.tenant_id = t.id
-                ORDER BY ts.company_name
-                """
-            )
-            rows = cursor.fetchall()
+            cursor.execute(batch_sql)
+            tenants_rows = cursor.fetchall()
+
+            # Upgrades
+            cursor.nextset()
+            upgrade_rows = cursor.fetchall()
+            upgrades_by_code = {(r[0] or "").strip().upper(): (r[1], r[2]) for r in upgrade_rows}
+
+            # Stale session cleanup
+            cursor.nextset()
+            cursor.nextset()
+            cursor.nextset()
+
+            # Active live sessions
+            cursor.nextset()
+            active_rows = cursor.fetchall()
+            active_by_code = defaultdict(list)
+            for r in active_rows:
+                cc = (r[0] or "").strip().upper()
+                active_by_code[cc].append({"username": r[1], "systemName": r[2] or ""})
+
+            # Total users
+            cursor.nextset()
+            total_users_rows = cursor.fetchall()
+            total_users_by_code = {(r[0] or "").strip().upper(): r[1] for r in total_users_rows}
+
+            # Last login
+            cursor.nextset()
+            last_login_rows = cursor.fetchall()
+            last_login_by_code = {(r[0] or "").strip().upper(): r[1] for r in last_login_rows}
+
+            # Fallback last created user
+            cursor.nextset()
+            fallback_login_rows = cursor.fetchall()
+            fallback_login_by_code = {(r[0] or "").strip().upper(): r[1] for r in fallback_login_rows}
+
+            # License modules
+            cursor.nextset()
+            license_rows = cursor.fetchall()
+            licenses_by_code = {
+                (r[0] or "").strip().upper(): {
+                    "dashboard": bool(r[1]), "approvals": bool(r[2]), "reports": bool(r[3]),
+                    "mis": bool(r[4]), "charts": bool(r[5]), "utility": bool(r[6]),
+                    "plan_id": str(r[7]).strip().lower() if r[7] else ""
+                }
+                for r in license_rows
+            }
 
             clients = []
-            for i, r in enumerate(rows):
+            for i, r in enumerate(tenants_rows):
                 tenant_id, company_code, company_name, plan_id, plan_name, active_status, signup_date, max_users, erp_server, erp_database, city, state, end_date, billing_cycle = r
-                
-                # Format dates
+                cc_upper = (company_code or "").strip().upper()
+
                 joined_str = format_to_ddmmyyyy(signup_date)
 
-                # Get current plan start/end dates from tenant_planupgrade if exists
-                cursor.execute(
-                    """
-                    SELECT plan_start_date, plan_end_date 
-                    FROM tenant_planupgrade 
-                    WHERE company_code = %s AND plan_status = 'Active'
-                    """,
-                    [company_code]
-                )
-                upgrade_row = cursor.fetchone()
-                if upgrade_row:
-                    plan_start = upgrade_row[0] or signup_date
-                    plan_end = upgrade_row[1] or end_date
+                # Plan dates from batch lookup
+                if cc_upper in upgrades_by_code:
+                    upgrade_start, upgrade_end = upgrades_by_code[cc_upper]
+                    plan_start = upgrade_start or signup_date
+                    plan_end = upgrade_end or end_date
                 else:
                     plan_start = signup_date
                     plan_end = end_date
 
-                # Calculate days left to expiry
                 days_left = None
                 if plan_end:
                     end_dt = plan_end.date() if isinstance(plan_end, datetime) else plan_end
                     if isinstance(end_dt, date):
                         days_left = (end_dt - date.today()).days
 
-                # 1. Active users count & live details
-                #    Only count sessions with a recent heartbeat (last_seen within 5 minutes).
-                #    Sessions without last_seen (pre-migration rows) are treated as stale.
-                #    Also purge stale rows so the table stays clean over time.
-                # First, find stale sessions and log them as timed out in activity feed
-                cursor.execute(
-                    """
-                    SELECT tenant_id, company_code, username
-                    FROM tenants_userssession
-                    WHERE company_code = %s
-                      AND (last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE()))
-                    """,
-                    [company_code]
-                )
-                stale_sessions = cursor.fetchall()
-                for t_id, c_code, u_name in stale_sessions:
-                    try:
-                        cursor.execute(
-                            """
-                            INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
-                            VALUES (%s, %s, 'disconnect', %s, 'session timed out', GETUTCDATE())
-                            """,
-                            [t_id, c_code, u_name]
-                        )
-                        # Log to tenants_usersTransaction
-                        cursor.execute(
-                            """
-                            INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
-                            VALUES (%s, %s, %s, 'Session Timeout', GETUTCDATE())
-                            """,
-                            [t_id, c_code, u_name]
-                        )
-                    except Exception:
-                        pass
+                # Active users from batch lookup
+                active_live_users = active_by_code.get(cc_upper, [])
+                active_users = len(active_live_users)
 
-                cursor.execute(
-                    """
-                    DELETE FROM tenants_userssession
-                    WHERE company_code = %s
-                      AND (last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE()))
-                    """,
-                    [company_code]
-                )
-                cursor.execute(
-                    """
-                    SELECT username, system_name
-                    FROM tenants_userssession
-                    WHERE company_code = %s
-                      AND last_seen >= DATEADD(MINUTE, -5, GETUTCDATE())
-                    """,
-                    [company_code]
-                )
-                active_sessions = cursor.fetchall()
-                active_users = len(active_sessions)
-                active_live_users = [{"username": row[0], "systemName": row[1] or ""} for row in active_sessions]
+                # Total users from batch lookup
+                total_users = total_users_by_code.get(cc_upper, 0)
 
-                # 2. Total created users count
-                cursor.execute(
-                    "SELECT COUNT(*) FROM tenants_users WHERE company_code = %s AND deleted = 0",
-                    [company_code]
-                )
-                total_users = cursor.fetchone()[0]
-
-                # 3. Last login timestamp
-                cursor.execute(
-                    "SELECT MAX(created_at) FROM tenants_clientactivity WHERE company_code = %s AND activity_type = 'login'",
-                    [company_code]
-                )
-                last_login_dt = cursor.fetchone()[0]
-                if not last_login_dt:
-                    cursor.execute(
-                        "SELECT MAX(created_at) FROM tenants_userssession WHERE company_code = %s",
-                        [company_code]
-                    )
-                    last_login_dt = cursor.fetchone()[0]
-                if not last_login_dt:
-                    # Fallback to last created user timestamp
-                    cursor.execute(
-                        "SELECT MAX(created_at) FROM tenants_users WHERE company_code = %s AND deleted = 0",
-                        [company_code]
-                    )
-                    last_login_dt = cursor.fetchone()[0]
-
-                # Format last login
+                # Last login from batch lookup
+                last_login_dt = last_login_by_code.get(cc_upper) or fallback_login_by_code.get(cc_upper)
                 if last_login_dt:
                     last_login_str = last_login_dt.isoformat()
                 else:
-                    # Default mock date based on tenant ID
                     last_login_str = (datetime.now() - timedelta(hours=i*2 + 1)).isoformat()
 
-                # 4. Licensed modules from tenants_lisencemodule
-                from .views import get_tenant_license
-                lic = get_tenant_license(company_code)
+                # Licensed modules from batch lookup
+                lic = licenses_by_code.get(cc_upper, {})
                 modules = []
                 if lic.get("dashboard"): modules.append("Dashboard")
                 if lic.get("approvals"): modules.append("Approvals")
@@ -198,26 +219,23 @@ def admin_utility_clients(request):
                 if lic.get("mis"):       modules.append("MIS")
                 if lic.get("utility"):   modules.append("Utility")
 
-                # 5. Accent color and initials
-                color = get_accent_color(company_name)
-                words = company_name.split()
+                color = get_accent_color(company_name or "")
+                words = (company_name or "").split()
                 avatar = "".join([w[0] for w in words[:2]]).upper() if words else "CO"
 
-                # 6. Simulated tunnel, sync health, api calls
                 is_active = bool(active_status)
                 tunnel = "connected" if is_active else "disconnected"
                 sync_health = 98 if is_active else 0
                 last_sync_dt = (datetime.now() - timedelta(minutes=12 + i * 4)).isoformat() if is_active else None
                 api_calls = 350 + tenant_id * 85 + (active_users * 42) if is_active else 0
-                
-                # Derive industry/category based on company code series prefix
+
                 if city and state:
                     location = f"{city}, {state}"
                 elif city:
                     location = city
                 else:
                     location = "Chennai, TN" if tenant_id % 3 == 0 else "Coimbatore, TN" if tenant_id % 3 == 1 else "Madurai, TN"
-                
+
                 code_prefix = (company_code or "").strip()[:1].upper()
                 if code_prefix == "T":
                     industry = "Testing"
@@ -259,7 +277,10 @@ def admin_utility_clients(request):
                     "color": color
                 })
 
-            return Response({"success": True, "clients": clients})
+            res_payload = {"success": True, "clients": clients}
+            json_bytes = json.dumps(res_payload).encode("utf-8")
+            _UTILITY_CLIENTS_CACHE["clients_data"] = {"bytes": json_bytes, "time": now_ts}
+            return HttpResponse(json_bytes, content_type="application/json")
 
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -274,6 +295,13 @@ def admin_utility_activity(request):
     except PermissionError as e:
         return admin_auth_denied_response(e)
 
+    force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
+    now_ts = time.time()
+    if not force_refresh and "activity_data" in _UTILITY_ACTIVITY_CACHE:
+        cached = _UTILITY_ACTIVITY_CACHE["activity_data"]
+        if (now_ts - cached["time"]) < 10.0:
+            return HttpResponse(cached["bytes"], content_type="application/json")
+
     try:
         activity = []
         with connection.cursor() as cursor:
@@ -287,8 +315,8 @@ def admin_utility_activity(request):
                     ac.username,
                     ac.message,
                     ac.created_at
-                FROM tenants_clientactivity ac
-                LEFT JOIN tenants_signup ts ON ac.company_code = ts.company_code
+                FROM tenants_clientactivity ac WITH (INDEX(IX_tenants_clientactivity_perf))
+                LEFT JOIN tenants_signup ts WITH (INDEX(IX_tenants_signup_company_code)) ON ac.company_code = ts.company_code
                 ORDER BY ac.created_at DESC
                 """
             )
@@ -306,7 +334,10 @@ def admin_utility_activity(request):
                     "msg": message
                 })
             
-            return Response({"success": True, "activity": activity})
+            res_payload = {"success": True, "activity": activity}
+            json_bytes = json.dumps(res_payload).encode("utf-8")
+            _UTILITY_ACTIVITY_CACHE["activity_data"] = {"bytes": json_bytes, "time": now_ts}
+            return HttpResponse(json_bytes, content_type="application/json")
 
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)

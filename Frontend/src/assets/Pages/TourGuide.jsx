@@ -1,8 +1,39 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import "./TourGuide.css";
 import { getTourStepsForVersion, CURRENT_APP_VERSION } from "./versionToursData";
-import { FiChevronRight, FiChevronLeft, FiCheck, FiArrowRight } from "react-icons/fi";
+import {
+    FiChevronRight,
+    FiChevronLeft,
+    FiCheck,
+    FiArrowRight,
+    FiShield,
+    FiClock,
+    FiZap,
+    FiCheckCircle,
+    FiSettings,
+    FiTrendingUp,
+    FiLayout,
+    FiFileText,
+    FiBarChart2,
+    FiAlertCircle
+} from "react-icons/fi";
 import { HiSparkles } from "react-icons/hi2";
+
+function renderStepIcon(iconName) {
+    const key = (iconName || "").toLowerCase();
+    if (key === "sparkles") return <HiSparkles className="tg-step-icon-svg tg-step-icon-svg--sparkles" />;
+    if (key === "shield") return <FiShield className="tg-step-icon-svg" />;
+    if (key === "clock") return <FiClock className="tg-step-icon-svg" />;
+    if (key === "zap") return <FiZap className="tg-step-icon-svg" />;
+    if (key === "checkcircle" || key === "check") return <FiCheckCircle className="tg-step-icon-svg" />;
+    if (key === "settings") return <FiSettings className="tg-step-icon-svg" />;
+    if (key === "trendingup") return <FiTrendingUp className="tg-step-icon-svg" />;
+    if (key === "layoutdashboard" || key === "layout") return <FiLayout className="tg-step-icon-svg" />;
+    if (key === "filespreadsheet" || key === "file") return <FiFileText className="tg-step-icon-svg" />;
+    if (key === "barchart3" || key === "chart") return <FiBarChart2 className="tg-step-icon-svg" />;
+    if (key === "shieldalert") return <FiAlertCircle className="tg-step-icon-svg" />;
+    return <span className="tg-step-icon-emoji">✨</span>;
+}
 
 export default function TourGuide({
     isOpen,
@@ -349,9 +380,17 @@ export default function TourGuide({
                     </div>
 
                     <div className="tg-popover__header">
-                        <span className="tg-step-badge">
-                            {currentStep.badge || `STEP ${currentStepIndex + 1} OF ${steps.length}`}
-                        </span>
+                        <div className="tg-popover__badge-cluster">
+                            <span className={`tg-step-badge ${currentStep.id === "spotlight-guide" ? "tg-step-badge--spotlight" : ""}`}>
+                                {currentStep.id === "spotlight-guide" && <span className="tg-pulse-dot" />}
+                                {currentStep.badge || `STEP ${currentStepIndex + 1} OF ${steps.length}`}
+                            </span>
+                            {currentStep.kbdShortcut && (
+                                <span className="tg-kbd-pill">
+                                    <kbd>{currentStep.kbdShortcut}</kbd>
+                                </span>
+                            )}
+                        </div>
                         <button
                             type="button"
                             className="tg-skip-btn"
@@ -364,12 +403,19 @@ export default function TourGuide({
 
                     <div className="tg-popover__body">
                         <h3 className="tg-step-title">
-                            <span className="tg-step-icon">✨</span>
-                            {currentStep.title}
+                            <span className="tg-step-icon">{renderStepIcon(currentStep.iconName)}</span>
+                            <span>{currentStep.title}</span>
                         </h3>
                         <p className="tg-step-desc">
                             {currentStep.description}
                         </p>
+
+                        {currentStep.id === "spotlight-guide" && (
+                            <div className="tg-spotlight-tip-banner">
+                                <HiSparkles size={15} className="tg-spotlight-sparkle-anim" />
+                                <span>Shortcut: Press <kbd className="tg-mini-kbd">Ctrl</kbd> + <kbd className="tg-mini-kbd">K</kbd> anywhere across the app to search instantly</span>
+                            </div>
+                        )}
 
                         {currentStep.subItems && currentStep.subItems.length > 0 && (
                             <div className="tg-subitems-grid">

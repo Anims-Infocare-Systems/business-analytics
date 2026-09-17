@@ -449,6 +449,7 @@ def _row_to_payload(rec):
         "balance": balance,
         "plannedValue": round(float(rec.get("PlannedValue") or 0), 2),
         "runningValue": round(float(rec.get("RunningValue") or 0), 2),
+        "productionCost": round(float(rec.get("RunningValue") or 0), 2),
         "loss": loss,
         "lossPct": loss_pct,
     }
@@ -467,6 +468,8 @@ def _aggregate_machine_summary(rows):
                 "productionHours": 0.0,
                 "balance": 0.0,
                 "loss": 0.0,
+                "runningValue": 0.0,
+                "productionCost": 0.0,
             }
         g = by_mac[mac]
         g["planned"] += float(row.get("planned") or 0)
@@ -475,6 +478,9 @@ def _aggregate_machine_summary(rows):
         g["loss"] += float(row.get("loss") or 0)
         g["rateSum"] += float(row.get("rate") or 0)
         g["rateCount"] += 1
+        cost = float(row.get("runningValue") or (float(row.get("productionHours") or 0) * float(row.get("rate") or 0)))
+        g["runningValue"] = g.get("runningValue", 0.0) + cost
+        g["productionCost"] = g.get("productionCost", 0.0) + cost
 
     out = []
     for mac in sorted(by_mac.keys()):
@@ -485,6 +491,8 @@ def _aggregate_machine_summary(rows):
             "rate": rate,
             "planned": round(g["planned"], 2),
             "productionHours": round(g["productionHours"], 2),
+            "productionCost": round(g.get("productionCost", 0.0), 2),
+            "runningValue": round(g.get("runningValue", 0.0), 2),
             "balance": round(g["balance"], 2),
             "loss": round(g["loss"], 2),
         })
