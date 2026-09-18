@@ -18,8 +18,8 @@ def check_mapproval_settings(tenant):
         port = tenant.erp_port or 1433
         company_code = str(getattr(tenant, "company_code", "") or "").strip().upper()
 
-    if company_code:
-        cache_key = f"mapproval_settings:{company_code}"
+    cache_key = f"mapproval_settings:{company_code}" if company_code else None
+    if cache_key:
         try:
             cached = cache.get(cache_key)
             if cached is not None:
@@ -89,8 +89,8 @@ def check_mapproval_settings(tenant):
             
         cursor.close()
         conn.close()
-        result = bool(is_roucard or is_comm or is_vend_mast or is_vend or is_cust_po or is_supp_po_ind)
-        if company_code:
+        result = is_roucard or is_comm or is_vend_mast or is_vend or is_cust_po or is_supp_po_ind
+        if cache_key:
             try:
                 cache.set(cache_key, result, timeout=1800)
             except Exception:
