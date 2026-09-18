@@ -422,9 +422,14 @@
 }
 
 .us-tab-btn:hover {
-    color: #4f46e5;
+    color: #4338ca;
     background: #eef2ff;
-    border-color: #e0e7ff;
+    border-color: #c7d2fe;
+}
+
+.us-tab-btn:hover .us-tab-badge {
+    background: #4338ca;
+    color: #ffffff;
 }
 
 .us-tab-btn--active,
@@ -1591,21 +1596,27 @@
 }
 
 .us-quick-launch-pill--active:hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-    color: #ffffff;
-    border-color: #4f46e5;
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
+    color: #ffffff !important;
+    border-color: #4f46e5 !important;
     transform: translateY(-2px);
     box-shadow: 0 6px 18px rgba(79, 70, 229, 0.32);
+}
+
+.us-quick-launch-pill--active:hover svg,
+.us-quick-launch-pill--active:hover span {
+    color: #ffffff !important;
 }
 
 .us-quick-launch-pill__arrow {
     font-size: 0.95rem;
     font-weight: 800;
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .us-quick-launch-pill--active:hover .us-quick-launch-pill__arrow {
     transform: translateX(3px);
+    color: #ffffff !important;
 }
 
 .us-quick-launch-pill--inactive {
@@ -2126,15 +2137,27 @@
 
 /* Quick launch date pill variant */
 .us-quick-launch-pill--date {
-    background: linear-gradient(135deg, rgba(238, 242, 255, 0.9) 0%, rgba(245, 243, 255, 0.9) 100%);
-    border-color: rgba(99, 102, 241, 0.35);
+    background: #eef2ff;
+    border-color: #c7d2fe;
     color: #4338ca;
 }
 
 .us-quick-launch-pill--date:hover {
-    border-color: #6366f1;
-    background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.16);
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
+    border-color: #4f46e5 !important;
+    color: #ffffff !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.32);
+}
+
+.us-quick-launch-pill--date:hover svg,
+.us-quick-launch-pill--date:hover span {
+    color: #ffffff !important;
+}
+
+.us-quick-launch-pill--date:hover .us-quick-launch-pill__arrow {
+    color: #ffffff !important;
+    transform: translateX(3px);
 }
 
 .us-quick-launch-pill__badge {
@@ -2147,6 +2170,13 @@
     color: #ffffff;
     border-radius: 6px;
     box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+    transition: all 0.2s ease;
+}
+
+.us-quick-launch-pill--date:hover .us-quick-launch-pill__badge {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.45);
 }
 
 /* ══════════════════════════════════════════════════════════════ */
