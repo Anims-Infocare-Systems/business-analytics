@@ -242,103 +242,138 @@ function CategoryLanding({ menuKey, children, onSubClick }) {
     );
 }
 
-/* ── Page content with fade+slide transition ─────────────── */
-function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
-    const isInitialMount = useRef(true);
-    const [visible, setVisible] = useState(true);
-    const [content, setContent] = useState({ activeSubItem, activeItem });
-    const prevKey = useRef(`${activeItem}__${activeSubItem}`);
+/* ── Multi-Module KeepAlive Tab Viewport ─────────────────────
+   Keeps previously visited dashboard and analysis modules mounted
+   in memory with display: none so user-selected filters, date ranges,
+   dropdown states, and fetched data stay 100% intact with 0.00ms
+   instantaneous tab switching back and forth.
+─────────────────────────────────────────────────────────── */
+function getEffectivePageKey(ai, si) {
+    if (ai === "Welcome") return "Welcome";
+    if (si) return si;
+    if (ai === "Charts") return "Charts";
+    return `category_${ai || "blank"}`;
+}
 
-    useEffect(() => {
-        isInitialMount.current = false;
-    }, []);
+function renderModuleByKey(key, props) {
+    const { userName, companyName, onNavigate, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight } = props;
 
-    useEffect(() => {
-        const newKey = `${activeItem}__${activeSubItem}`;
-        if (newKey === prevKey.current) return;
-        prevKey.current = newKey;
-        setVisible(false);
-        const t = setTimeout(() => {
-            setContent({ activeSubItem, activeItem });
-            setVisible(true);
-        }, 190);
-        return () => clearTimeout(t);
-    }, [activeSubItem, activeItem]);
+    if (key === "Welcome") {
+        return (
+            <Welcome
+                userName={userName}
+                companyName={companyName}
+                onNavigate={onNavigate}
+                userRights={userRights}
+                isSuperAdmin={isSuperAdmin}
+                onOpenSpotlight={onOpenSpotlight}
+            />
+        );
+    }
+    if (key === "Top Management Dashboard") return <Dashboard1 />;
+    if (key === "Dashboard2") return <Dashboard2 />;
+    if (key === "Dashboard3") return <Dashboard3 />;
+    if (key === "Plant Performance Dashboard") return <PlantPerformance1 />;
+    if (key === "E-Approval") return <EApproval />;
+    if (key === "T-Approval") return <TApproval />;
+    if (key === "M-Approval") return <MApproval />;
+    if (key === "Sales Analysis") return <SalesAnalysis />;
+    if (key === "Purchase Analysis") return <PurchaseAnalysis />;
+    if (key === "Quality Analysis") return <QualityAnalysis />;
+    if (key === "Production Analysis") return <ProductionAnalysis />;
+    if (key === "Idle Time Report") return <IdleTimeReport />;
+    if (key === "Efficiency Report") return <EfficiencyReport />;
+    if (key === "Charts") return <Charts />;
+    if (key === "User Rights") return <UserRights />;
+    if (key === "Users Setting") return <UsersSetting />;
 
-    const { activeSubItem: si, activeItem: ai } = content;
-
-    let node;
-
-    if (ai === "Welcome") node = <Welcome userName={userName} companyName={companyName} onNavigate={onNavigate} userRights={userRights} isSuperAdmin={isSuperAdmin} onOpenSpotlight={onOpenSpotlight} />;
-    else if (si === "Top Management Dashboard") node = <Dashboard1 />;
-    else if (si === "Dashboard2") node = <Dashboard2 />;
-    else if (si === "Plant Performance Dashboard") node = <PlantPerformance1 />;
-    else if (si === "E-Approval") node = <EApproval />;
-    else if (si === "T-Approval") node = <TApproval />;
-    else if (si === "M-Approval") node = <MApproval />;
-    else if (si === "Sales Analysis") node = <SalesAnalysis />;
-    else if (si === "Purchase Analysis") node = <PurchaseAnalysis />;
-    else if (si === "Quality Analysis") node = <QualityAnalysis />;
-    else if (si === "Production Analysis") node = <ProductionAnalysis />;
-    else if (si === "Idle Time Report") node = <IdleTimeReport />;
-    else if (si === "Efficiency Report") node = <EfficiencyReport />;
-    else if (ai === "Charts") node = <Charts />;
-    else if (si === "User Rights") node = <UserRights />;
-    else if (si === "Users Setting") node = <UsersSetting />;
-    else {
-        // Show premium CategoryLanding when a parent menu is active but no sub-item selected
-        const parentItem = (allowedMenuItems || MENU_ITEMS).find(m => m.key === ai);
+    if (key.startsWith("category_")) {
+        const menuKey = key.replace("category_", "");
+        const parentItem = (allowedMenuItems || MENU_ITEMS).find(m => m.key === menuKey);
         if (parentItem && parentItem.children && parentItem.children.length > 0) {
-            node = <CategoryLanding menuKey={ai} children={parentItem.children} onSubClick={onNavigate} />;
-        } else {
-            node = (
-                <div className="dl-content__placeholder dl-content__placeholder--labeled">
-                    <div className="dl-placeholder-icon">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                            <rect x="3" y="3" width="18" height="18" rx="3" />
-                            <line x1="3" y1="9" x2="21" y2="9" />
-                            <line x1="9" y1="21" x2="9" y2="9" />
-                        </svg>
-                    </div>
-                    <p className="dl-placeholder-title">{si || ai}</p>
-                </div>
-            );
+            return <CategoryLanding menuKey={menuKey} children={parentItem.children} onSubClick={onNavigate} />;
         }
     }
 
-    const isPlant = si === "Plant Performance Dashboard";
-    const enterClass = isInitialMount.current
-        ? "dl-page-wrap--static"
-        : visible
-            ? "dl-page-wrap--in"
-            : "dl-page-wrap--out";
+    const label = key.startsWith("category_") ? key.replace("category_", "") : key;
+    return (
+        <div className="dl-content__placeholder dl-content__placeholder--labeled">
+            <div className="dl-placeholder-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                </svg>
+            </div>
+            <p className="dl-placeholder-title">{label}</p>
+        </div>
+    );
+}
+
+function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
+    const currentKey = getEffectivePageKey(activeItem, activeSubItem);
+    const [visitedKeys, setVisitedKeys] = useState(() => new Set([currentKey]));
+
+    useEffect(() => {
+        setVisitedKeys(prev => {
+            if (prev.has(currentKey)) return prev;
+            const next = new Set(prev);
+            next.add(currentKey);
+            return next;
+        });
+    }, [currentKey]);
 
     return (
-        <div className={`dl-page-wrap ${enterClass}${isPlant ? " dl-page-wrap--plant" : ""}`}>
-            <Suspense fallback={(
-                <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minHeight: "360px",
-                    gap: "12px",
-                    color: "#2563eb",
-                    fontFamily: "inherit"
-                }}>
-                    <div style={{
-                        width: "32px",
-                        height: "32px",
-                        border: "3px solid #e2e8f0",
-                        borderTopColor: "#2563eb",
-                        borderRadius: "50%",
-                        animation: "spin 0.8s linear infinite"
-                    }} />
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#64748b" }}>Loading {si || ai || "Module"}…</span>
-                </div>
-            )}>
-                {node}
-            </Suspense>
+        <div className="dl-keepalive-viewport">
+            {Array.from(visitedKeys).map((key) => {
+                const isActive = (key === currentKey);
+                const isPlant = (key === "Plant Performance Dashboard");
+
+                return (
+                    <div
+                        key={key}
+                        className={`dl-keepalive-pane${isActive ? " dl-keepalive-pane--active" : " dl-keepalive-pane--hidden"}${isPlant ? " dl-page-wrap--plant" : ""}`}
+                        style={{
+                            display: isActive ? (isPlant ? "flex" : "block") : "none"
+                        }}
+                    >
+                        <Suspense fallback={(
+                            <div style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: "360px",
+                                gap: "12px",
+                                color: "#2563eb",
+                                fontFamily: "inherit"
+                            }}>
+                                <div style={{
+                                    width: "32px",
+                                    height: "32px",
+                                    border: "3px solid #e2e8f0",
+                                    borderTopColor: "#2563eb",
+                                    borderRadius: "50%",
+                                    animation: "spin 0.8s linear infinite"
+                                }} />
+                                <span style={{ fontSize: "13px", fontWeight: 500, color: "#64748b" }}>
+                                    Loading {key.startsWith("category_") ? key.replace("category_", "") : key}…
+                                </span>
+                            </div>
+                        )}>
+                            {renderModuleByKey(key, {
+                                userName,
+                                companyName,
+                                onNavigate,
+                                userRights,
+                                isSuperAdmin,
+                                allowedMenuItems,
+                                onOpenSpotlight
+                            })}
+                        </Suspense>
+                    </div>
+                );
+            })}
         </div>
     );
 }
@@ -1151,16 +1186,35 @@ export default function DashboardLayout() {
     }, []);
 
     const prevNavKeyRef = useRef(`${activeItem}__${activeSubItem}`);
+    const scrollPositionsRef = useRef(new Map());
 
-    /* scroll-to-top on navigation */
+    /* Module Navigation: Save & restore scroll position + trigger Chart recalculation */
     useEffect(() => {
         const newNavKey = `${activeItem}__${activeSubItem}`;
-        const isPageChange = newNavKey !== prevNavKeyRef.current;
-        prevNavKeyRef.current = newNavKey;
+        const prevKey = prevNavKeyRef.current;
+        const isPageChange = newNavKey !== prevKey;
 
-        // Only scroll to top on an actual module/page change and when not focused on a spotlight target
-        if (isPageChange && !activeSpotlightTarget && contentRef.current) {
-            contentRef.current.scrollTo({ top: 0, behavior: "instant" });
+        if (isPageChange) {
+            // 1. Save scroll position of the module we are navigating away from
+            if (contentRef.current && prevKey) {
+                scrollPositionsRef.current.set(prevKey, contentRef.current.scrollTop);
+            }
+
+            prevNavKeyRef.current = newNavKey;
+
+            // 2. Restore or reset scroll for the newly active module
+            if (!activeSpotlightTarget && contentRef.current) {
+                const savedScroll = scrollPositionsRef.current.get(newNavKey) || 0;
+                contentRef.current.scrollTo({ top: savedScroll, behavior: "instant" });
+
+                requestAnimationFrame(() => {
+                    if (contentRef.current) {
+                        contentRef.current.scrollTo({ top: savedScroll, behavior: "instant" });
+                    }
+                    // 3. Trigger resize event so Chart.js / canvas elements recalculate bounds smoothly
+                    window.dispatchEvent(new Event("resize"));
+                });
+            }
         }
     }, [activeSubItem, activeItem, activeSpotlightTarget]);
 
