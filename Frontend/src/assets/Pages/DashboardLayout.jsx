@@ -592,19 +592,30 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
 /* ══════════════════════════════════════════════════════════
    DashboardLayout — root component
    ══════════════════════════════════════════════════════════ */
-/* ── sessionStorage + localStorage nav helpers ─────────────────────────── */
+/* ── In-session navigation state helper (survives F5, resets on new login/tab close) ── */
 const NAV_KEY = "ba_nav";
+const NAV_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours max session lifespan
+
 function readNav() {
     try {
-        const raw = sessionStorage.getItem(NAV_KEY) || localStorage.getItem(NAV_KEY);
-        return raw ? JSON.parse(raw) : null;
+        const raw = sessionStorage.getItem(NAV_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Automatically expire navigation if older than 2 hours
+        if (parsed && parsed.timestamp && Date.now() - parsed.timestamp > NAV_MAX_AGE_MS) {
+            sessionStorage.removeItem(NAV_KEY);
+            return null;
+        }
+        return parsed;
     } catch { return null; }
 }
+
 function writeNav(data) {
     try {
-        const str = JSON.stringify(data);
-        sessionStorage.setItem(NAV_KEY, str);
-        localStorage.setItem(NAV_KEY, str);
+        const payload = { ...data, timestamp: Date.now() };
+        sessionStorage.setItem(NAV_KEY, JSON.stringify(payload));
+        // Remove legacy permanent localStorage entry so it never leaks across sessions or days
+        localStorage.removeItem(NAV_KEY);
     } catch { }
 }
 

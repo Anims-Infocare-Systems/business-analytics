@@ -477,6 +477,12 @@ export default function LoginPage() {
                         plan_id: "free"
                     }
                 }));
+                // Reset any previous navigation state so fresh logins ALWAYS start on the Welcome landing page
+                try {
+                    sessionStorage.removeItem("ba_nav");
+                    localStorage.removeItem("ba_nav");
+                } catch { /* ignore */ }
+
                 writeRightsCache(
                     data.company_code,
                     data.username,
