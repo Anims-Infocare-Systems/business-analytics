@@ -1091,6 +1091,28 @@ export default function DashboardLayout() {
         }
     }, [activeSubItem, activeItem, isAuthenticated]);
 
+    const handleLogout = useCallback(() => {
+        try {
+            sessionStorage.clear();
+            localStorage.removeItem("user");
+            localStorage.removeItem("ba_user_rights");
+            localStorage.removeItem("ba_settings_profile");
+            localStorage.removeItem(NAV_KEY);
+            localStorage.removeItem("ba_last_user_id");
+            localStorage.removeItem("ba_last_username");
+            localStorage.removeItem("ba_last_company_name");
+        } catch { /* ignore */ }
+
+        fetch(`${API}/logout/`, {
+            method: "POST",
+            credentials: "include",
+            keepalive: true,
+        }).catch(err => console.error("Error logging out from backend:", err));
+
+        // Full page unload — releases the large dashboard bundle from memory.
+        window.location.replace("/");
+    }, []);
+
     /* ── Presence heartbeat ────────────────────────────────────────────────
        Sends GET /heartbeat/ every 5 minutes to refresh live presence.
        Debounced on tab visibility change to eliminate rapid tab-switch storms.
@@ -1322,27 +1344,7 @@ export default function DashboardLayout() {
         handleSubClick(target);
     };
 
-    const handleLogout = () => {
-        try {
-            sessionStorage.clear();
-            localStorage.removeItem("user");
-            localStorage.removeItem("ba_user_rights");
-            localStorage.removeItem("ba_settings_profile");
-            localStorage.removeItem(NAV_KEY);
-            localStorage.removeItem("ba_last_user_id");
-            localStorage.removeItem("ba_last_username");
-            localStorage.removeItem("ba_last_company_name");
-        } catch { /* ignore */ }
 
-        fetch(`${API}/logout/`, {
-            method: "POST",
-            credentials: "include",
-            keepalive: true,
-        }).catch(err => console.error("Error logging out from backend:", err));
-
-        // Full page unload — releases the large dashboard bundle from memory.
-        window.location.replace("/");
-    };
     const showExpanded = isMobile ? true : expanded;
     const topbarHeading = activeSubItem
         ? (HEADING_MAP[activeSubItem] || activeSubItem)
