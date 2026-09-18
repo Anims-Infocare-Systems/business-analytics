@@ -1197,32 +1197,25 @@ export default function DashboardLayout() {
     }, []);
 
     const prevNavKeyRef = useRef(`${activeItem}__${activeSubItem}`);
-    const scrollPositionsRef = useRef(new Map());
 
-    /* Module Navigation: Save & restore scroll position + trigger Chart recalculation */
+    /* Module Navigation: Always scroll to top (top: 0) + trigger Chart recalculation */
     useEffect(() => {
         const newNavKey = `${activeItem}__${activeSubItem}`;
         const prevKey = prevNavKeyRef.current;
         const isPageChange = newNavKey !== prevKey;
 
         if (isPageChange) {
-            // 1. Save scroll position of the module we are navigating away from
-            if (contentRef.current && prevKey) {
-                scrollPositionsRef.current.set(prevKey, contentRef.current.scrollTop);
-            }
-
             prevNavKeyRef.current = newNavKey;
 
-            // 2. Restore or reset scroll for the newly active module
+            // Always scroll to the top of the active module
             if (!activeSpotlightTarget && contentRef.current) {
-                const savedScroll = scrollPositionsRef.current.get(newNavKey) || 0;
-                contentRef.current.scrollTo({ top: savedScroll, behavior: "instant" });
+                contentRef.current.scrollTo({ top: 0, behavior: "instant" });
 
                 requestAnimationFrame(() => {
                     if (contentRef.current) {
-                        contentRef.current.scrollTo({ top: savedScroll, behavior: "instant" });
+                        contentRef.current.scrollTo({ top: 0, behavior: "instant" });
                     }
-                    // 3. Trigger resize event so Chart.js / canvas elements recalculate bounds smoothly
+                    // Trigger resize event so Chart.js / canvas elements recalculate bounds smoothly
                     window.dispatchEvent(new Event("resize"));
                 });
             }
