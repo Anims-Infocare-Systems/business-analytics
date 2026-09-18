@@ -1,5 +1,9 @@
 import pyodbc
 
+# ✅ Enable ODBC Driver connection pooling across worker requests
+# Reuses existing TCP/TLS physical connections to avoid handshake latency
+pyodbc.pooling = True
+
 ERP_LOGIN_TIMEOUT = 5
 LOGIN_ERP_TIMEOUT = 2
 ERP_UNAVAILABLE_MSG = (

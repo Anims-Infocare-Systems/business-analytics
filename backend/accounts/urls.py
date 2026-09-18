@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     # Health & Authentication
-    health_check, login_view, logout_view, heartbeat_view, log_transaction, get_company,
+    health_check, login_view, logout_view, heartbeat_view, log_transaction, get_company, public_companies_list,
     forgot_password_verify, forgot_password_reset,
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise, mac_rejection_ppm, otd_report,
@@ -87,6 +87,7 @@ urlpatterns = [
     path('log-transaction/', log_transaction, name='log_transaction'),
 
     path('company/<str:code>/', get_company, name='get_company'),
+    path('companies/public/', public_companies_list, name='public_companies_list'),
     path('signup/', signup_view, name='signup'),
     path('forgot-password/verify/', forgot_password_verify, name='forgot_password_verify'),
     path('forgot-password/reset/', forgot_password_reset, name='forgot_password_reset'),

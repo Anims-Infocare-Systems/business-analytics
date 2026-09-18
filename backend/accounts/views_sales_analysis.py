@@ -12,6 +12,7 @@ from datetime import date
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .utils.cache import cache_analytics_response
 from .views import get_tenant_connection, parse_date_range, table_exists, find_column_ci
 
 def _build_search_sql(cursor, search_q, table_name, alias=""):
@@ -385,6 +386,7 @@ def _fetch_top_customer(cursor, start_date, end_date, use_alias, search_q=None, 
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_gt")
 def sales_analysis_grand_total(request):
     """
     Dedicated view for Grand Total card value:
@@ -453,6 +455,7 @@ def sales_analysis_grand_total(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_summary")
 def sales_analysis_summary_strip(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -687,6 +690,7 @@ def _weekly_chart_slots(start_date, end_date):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_weekly")
 def sales_analysis_weekly_trend(request):
     """Weekly sales (SUM tamt) per month-week bucket for the selected date range."""
     try:
@@ -854,6 +858,7 @@ def _pie_slices(rows, total, label_key=0, value_key=1, top_n=None, others_label=
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_revenue_charts")
 def sales_analysis_revenue_charts(request):
     """
     Donut data for Sales Analysis:
@@ -2812,6 +2817,7 @@ def sales_analysis_traceability(request):
 # ════════════════════════════════════════════
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_avg_rates")
 def sales_analysis_avg_rate_cards(request):
     """
     Returns the 4 AVG Selling Rate KPI cards:

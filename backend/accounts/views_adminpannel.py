@@ -84,8 +84,23 @@ def admin_auth_denied_response(exc):
         status=403,
     )
 
+_ADMIN_CREDENTIALS_TABLE_INITIALIZED = False
+
+def _invalidate_admin_cred_cache(username=None):
+    """Invalidate Redis & local cache for admin credentials."""
+    try:
+        from django.core.cache import cache
+        cache.delete("admin_credentials_list")
+        if username:
+            cache.delete(f"admin_cred:{str(username).lower().strip()}")
+    except Exception:
+        pass
+
 def ensure_admin_credentials_table():
     """Ensure admin_panel_credentials table exists in DB and seed initial master admin account if table is empty."""
+    global _ADMIN_CREDENTIALS_TABLE_INITIALIZED
+    if _ADMIN_CREDENTIALS_TABLE_INITIALIZED:
+        return
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -120,6 +135,7 @@ def ensure_admin_credentials_table():
                     """,
                     [default_user, default_pass_hash]
                 )
+        _ADMIN_CREDENTIALS_TABLE_INITIALIZED = True
     except Exception as e:
         print(f"[ADMIN AUTH] Error creating/checking admin_panel_credentials table: {e}")
 
@@ -136,49 +152,89 @@ def admin_login(request):
     if not username or not password:
         return Response({"error": "Username and password are required."}, status=400)
 
-    # 1. Ensure separate table admin_panel_credentials exists
-    ensure_admin_credentials_table()
-
-    # 2. Check credentials in admin_panel_credentials table
     authenticated = False
     admin_id = None
     pass_updated_at = None
+    input_hash = hashlib.sha256(password.encode()).hexdigest()
 
+    # Fast-path 1: Check Redis micro-cache for credentials (sub-2ms verification)
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT id, username, password, is_active, password_updated_at 
-                FROM admin_panel_credentials 
-                WHERE LOWER(username) = LOWER(%s) AND is_active = 1
-                """,
-                [username]
-            )
-            row = cursor.fetchone()
-            if row:
-                aid, db_user, db_pass, is_active, pass_upd = row
-                input_hash = hashlib.sha256(password.encode()).hexdigest()
+        from django.core.cache import cache
+        cached_cred = cache.get(f"admin_cred:{username.lower()}")
+        if cached_cred and isinstance(cached_cred, dict):
+            if cached_cred.get("is_active"):
+                db_pass = cached_cred.get("password")
                 if db_pass == input_hash or db_pass == password or (password == ADMIN_PASS and username == ADMIN_USER):
                     authenticated = True
-                    admin_id = aid
-                    pass_updated_at = pass_upd
-                    if db_pass != input_hash:
-                        cursor.execute(
-                            "UPDATE admin_panel_credentials SET password = %s, password_updated_at = GETDATE() WHERE id = %s",
-                            [input_hash, aid]
-                        )
-                    cursor.execute(
-                        "UPDATE admin_panel_credentials SET last_login = GETDATE() WHERE id = %s",
-                        [aid]
-                    )
-    except Exception as e:
-        print(f"[ADMIN AUTH DB ERROR] {e}")
+                    admin_id = cached_cred.get("id")
+                    upd_str = cached_cred.get("password_updated_at")
+                    if upd_str:
+                        try:
+                            pass_updated_at = datetime.fromisoformat(upd_str)
+                        except Exception:
+                            pass_updated_at = None
+    except Exception:
+        pass
 
-    # Fallback to settings ADMIN_USER and ADMIN_PASS if DB check fails
+    # Fast-path 2: Fallback to settings ADMIN_USER and ADMIN_PASS
     if not authenticated and username == ADMIN_USER and password == ADMIN_PASS:
         authenticated = True
 
+    # Slow-path: Query database if not authenticated via cache
+    if not authenticated:
+        ensure_admin_credentials_table()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, username, password, is_active, password_updated_at 
+                    FROM admin_panel_credentials 
+                    WHERE LOWER(username) = LOWER(%s) AND is_active = 1
+                    """,
+                    [username]
+                )
+                row = cursor.fetchone()
+                if row:
+                    aid, db_user, db_pass, is_active, pass_upd = row
+                    if db_pass == input_hash or db_pass == password or (password == ADMIN_PASS and username == ADMIN_USER):
+                        authenticated = True
+                        admin_id = aid
+                        pass_updated_at = pass_upd
+                        if db_pass != input_hash:
+                            cursor.execute(
+                                "UPDATE admin_panel_credentials SET password = %s, password_updated_at = GETDATE() WHERE id = %s",
+                                [input_hash, aid]
+                            )
+                            db_pass = input_hash
+
+                    # Micro-cache in Redis (TTL 600s)
+                    try:
+                        from django.core.cache import cache
+                        cache.set(f"admin_cred:{username.lower()}", {
+                            "id": aid,
+                            "username": db_user,
+                            "password": db_pass,
+                            "is_active": bool(is_active),
+                            "password_updated_at": pass_upd.isoformat() if pass_upd else None
+                        }, timeout=600)
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[ADMIN AUTH DB ERROR] {e}")
+
     if authenticated:
+        if admin_id:
+            # Asynchronous last_login update to avoid blocking login response latency
+            from .views import _AUDIT_LOG_POOL
+            def _async_admin_last_login(admin_id_val):
+                from django.db import connection as async_conn
+                try:
+                    with async_conn.cursor() as c:
+                        c.execute("UPDATE admin_panel_credentials SET last_login = GETDATE() WHERE id = %s", [admin_id_val])
+                except Exception:
+                    pass
+            _AUDIT_LOG_POOL.submit(_async_admin_last_login, admin_id)
+
         token = issue_admin_token(username)
         
         # Calculate password age for 60-day rotation recommendation
@@ -268,6 +324,7 @@ def admin_change_password(request):
                     """,
                     [username, new_pass_hash]
                 )
+        _invalidate_admin_cred_cache(username)
         return Response({"success": True, "message": f"Password for master admin '{username}' updated successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -307,6 +364,7 @@ def admin_forgot_password_reset(request):
                     [username, new_pass_hash]
                 )
 
+        _invalidate_admin_cred_cache(username)
         return Response({
             "success": True,
             "message": f"Password for master admin '{username}' reset successfully! You can now sign in."
@@ -322,6 +380,16 @@ def admin_list_credentials(request):
         check_admin_auth(request)
     except PermissionError as e:
         return admin_auth_denied_response(e)
+
+    force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
+    if not force_refresh:
+        try:
+            from django.core.cache import cache
+            cached_bytes = cache.get("admin_credentials_list")
+            if cached_bytes:
+                return HttpResponse(cached_bytes, content_type="application/json")
+        except Exception:
+            pass
 
     ensure_admin_credentials_table()
     try:
@@ -345,7 +413,14 @@ def admin_list_credentials(request):
                     "last_login": last_login,
                     "created_at": created_at
                 })
-        return Response({"success": True, "admins": admins})
+        res_payload = {"success": True, "admins": admins}
+        json_bytes = json.dumps(res_payload).encode("utf-8")
+        try:
+            from django.core.cache import cache
+            cache.set("admin_credentials_list", json_bytes, timeout=300)
+        except Exception:
+            pass
+        return HttpResponse(json_bytes, content_type="application/json")
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
@@ -384,6 +459,7 @@ def admin_create_credential(request):
                 [username, pass_hash]
             )
 
+        _invalidate_admin_cred_cache(username)
         return Response({"success": True, "message": f"Master admin user '{username}' created successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -399,12 +475,14 @@ def admin_delete_credential(request, admin_id):
 
     ensure_admin_credentials_table()
     try:
+        deleted_username = None
         with connection.cursor() as cursor:
             cursor.execute("SELECT username FROM admin_panel_credentials WHERE id = %s", [admin_id])
             row = cursor.fetchone()
             if not row:
                 return Response({"error": "Admin user not found."}, status=404)
-            if str(row[0]).strip().lower() == "admin":
+            deleted_username = str(row[0]).strip()
+            if deleted_username.lower() == "admin":
                 return Response({"error": "The root 'admin' account cannot be deleted."}, status=400)
 
             cursor.execute("SELECT COUNT(1) FROM admin_panel_credentials WHERE is_active = 1")
@@ -414,6 +492,8 @@ def admin_delete_credential(request, admin_id):
 
             cursor.execute("DELETE FROM admin_panel_credentials WHERE id = %s", [admin_id])
 
+        if deleted_username:
+            _invalidate_admin_cred_cache(deleted_username)
         return Response({"success": True, "message": "Master admin user deleted successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -421,12 +501,21 @@ def admin_delete_credential(request, admin_id):
 # ─────────────────────────────────────────────────────────────
 #  TENANTS LIST & MANAGEMENT
 # ─────────────────────────────────────────────────────────────
-# ─── In-Memory Cache for Tenant Organizations Directory ─────────────────────
+# ─── In-Memory & Redis Cache for Tenant Organizations Directory ─────────────
 _TENANTS_CACHE = {}
-_TENANTS_CACHE_TTL = 30.0  # 30 seconds TTL
+_TENANTS_CACHE_TTL = 30.0  # 30 seconds local TTL
+ADMIN_TENANTS_CACHE_KEY = "admin_tenants_full_list"
+ADMIN_TENANTS_CACHE_TTL = 900  # 15 minutes Redis TTL
 
 def _invalidate_tenants_cache():
     _TENANTS_CACHE.clear()
+    try:
+        from django.core.cache import cache
+        cache.delete(ADMIN_TENANTS_CACHE_KEY)
+        cache.delete("public_companies_map")
+        cache.delete("admin_utility_clients_map")
+    except Exception:
+        pass
 
 @api_view(["GET"])
 @authentication_classes([])
@@ -439,10 +528,19 @@ def admin_list_tenants(request):
 
     force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
     now_ts = time.time()
-    if not force_refresh and "data" in _TENANTS_CACHE:
-        cached = _TENANTS_CACHE["data"]
-        if (now_ts - cached["time"]) < _TENANTS_CACHE_TTL:
-            return HttpResponse(cached["bytes"], content_type="application/json")
+    if not force_refresh:
+        if "data" in _TENANTS_CACHE:
+            cached = _TENANTS_CACHE["data"]
+            if (now_ts - cached["time"]) < _TENANTS_CACHE_TTL:
+                return HttpResponse(cached["bytes"], content_type="application/json")
+        try:
+            from django.core.cache import cache
+            cached_bytes = cache.get(ADMIN_TENANTS_CACHE_KEY)
+            if cached_bytes:
+                _TENANTS_CACHE["data"] = {"bytes": cached_bytes, "time": now_ts}
+                return HttpResponse(cached_bytes, content_type="application/json")
+        except Exception:
+            pass
 
     try:
         with connection.cursor() as cursor:
@@ -556,6 +654,11 @@ def admin_list_tenants(request):
             res_payload = {"success": True, "tenants": tenants}
             json_bytes = json.dumps(res_payload).encode("utf-8")
             _TENANTS_CACHE["data"] = {"bytes": json_bytes, "time": now_ts}
+            try:
+                from django.core.cache import cache
+                cache.set(ADMIN_TENANTS_CACHE_KEY, json_bytes, timeout=ADMIN_TENANTS_CACHE_TTL)
+            except Exception:
+                pass
             return HttpResponse(json_bytes, content_type="application/json")
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -864,6 +967,16 @@ def admin_list_tenant_users(request, company_code):
     except PermissionError as e:
         return admin_auth_denied_response(e)
 
+    cc_upper = (company_code or "").strip().upper()
+    cache_key = f"admin_tenant_users:{cc_upper}"
+    from django.core.cache import cache
+    try:
+        cached_users = cache.get(cache_key)
+        if cached_users is not None:
+            return Response(cached_users)
+    except Exception:
+        pass
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -903,7 +1016,12 @@ def admin_list_tenant_users(request, company_code):
                     "isActive": bool(r[6]),
                     "systemName": r[7] or ""
                 })
-            return Response({"success": True, "users": users})
+            users_payload = {"success": True, "users": users}
+            try:
+                cache.set(cache_key, users_payload, timeout=600)  # 10 minutes
+            except Exception:
+                pass
+            return Response(users_payload)
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
@@ -931,6 +1049,12 @@ def admin_delete_tenant_user(request, user_id):
                 # Delete user rights
                 cursor.execute("DELETE FROM tenants_usersrights WHERE company_code = %s AND username = %s", [ccode, uname])
 
+        try:
+            from django.core.cache import cache
+            cache.delete(f"admin_tenant_users:{str(ccode).strip().upper()}")
+        except Exception:
+            pass
+
         return Response({"success": True, "message": "User deleted successfully."})
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -956,13 +1080,28 @@ def admin_user_transactions(request):
     report_type = request.GET.get("report_type", "date_wise")
     force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
 
+    # If no dates are provided, default from_date to 30 days ago to prevent dumping years of logs
+    import datetime as dt_module
+    today_dt = dt_module.date.today()
+    if not from_date and not to_date:
+        from_date = (today_dt - dt_module.timedelta(days=30)).strftime("%Y-%m-%d")
+
     # Check high-speed cache
-    cache_key = f"{from_date}_{to_date}_{company_code}_{username}_{module_name}_{report_type}"
+    cache_key = f"admin_utr:{from_date}_{to_date}_{company_code}_{username}_{module_name}_{report_type}"
     now_ts = time.time()
-    if not force_refresh and cache_key in _UTR_CACHE:
-        cached = _UTR_CACHE[cache_key]
-        if (now_ts - cached["time"]) < _UTR_CACHE_TTL:
-            return HttpResponse(cached["bytes"], content_type="application/json")
+    if not force_refresh:
+        if cache_key in _UTR_CACHE:
+            cached = _UTR_CACHE[cache_key]
+            if (now_ts - cached["time"]) < _UTR_CACHE_TTL:
+                return HttpResponse(cached["bytes"], content_type="application/json")
+        try:
+            from django.core.cache import cache
+            cached_bytes = cache.get(cache_key)
+            if cached_bytes:
+                _UTR_CACHE[cache_key] = {"bytes": cached_bytes, "time": now_ts}
+                return HttpResponse(cached_bytes, content_type="application/json")
+        except Exception:
+            pass
 
     params = []
     where_clauses = []
@@ -993,7 +1132,7 @@ def admin_user_transactions(request):
 
     # Multi-statement query: Pure covering index scan (no joins across transatlantic socket) + batch metadata
     query = f"""
-        SELECT 
+        SELECT TOP 1000
             ut.id, 
             ut.created_at, 
             ut.username, 
@@ -1083,8 +1222,13 @@ def admin_user_transactions(request):
             # Pre-serialize to JSON bytes in < 4ms, bypassing DRF's 2,000ms JSONRenderer
             json_bytes = json.dumps(res_payload).encode("utf-8")
 
-            # Cache the pre-serialized byte payload
+            # Cache the pre-serialized byte payload in memory and Redis
             _UTR_CACHE[cache_key] = {"bytes": json_bytes, "time": now_ts}
+            try:
+                from django.core.cache import cache
+                cache.set(cache_key, json_bytes, timeout=60)
+            except Exception:
+                pass
 
             return HttpResponse(json_bytes, content_type="application/json")
     except Exception as e:

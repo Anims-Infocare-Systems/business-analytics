@@ -12,6 +12,7 @@ from typing import Any, List
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .utils.cache import cache_analytics_response
 
 logger = logging.getLogger(__name__)
 
@@ -476,6 +477,7 @@ def _get_seeded_value(seed_str, min_val, max_val, decimals=0):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_summary(request):
     """
     Returns aggregate KPIs for the Quality Analysis summary strip and cards:
@@ -927,6 +929,7 @@ def quality_analysis_summary(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_settings(request):
     """
     Returns CompanySetting values relevant to Quality Analysis:
@@ -971,6 +974,7 @@ def quality_analysis_settings(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_charts(request):
     """
     Returns chart data for Quality Analysis:
@@ -1921,6 +1925,7 @@ def quality_analysis_charts(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_product_performance(request):
     """
     Returns inspected items quality matrix.
@@ -2149,6 +2154,7 @@ def quality_analysis_product_performance(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_defect_causes(request):
     """
     Returns defect causes statistics and breakdown classes.
@@ -2545,6 +2551,7 @@ def quality_analysis_defect_causes(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_records(request):
     """
     Returns transaction logs for all quality aspects:
@@ -3436,6 +3443,7 @@ def quality_analysis_records(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_calibration(request):
     """
     Returns calibration checklist of active gauges from Ins_Mas.
@@ -3554,6 +3562,7 @@ def quality_analysis_calibration(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_insights(request):
     """
     Generates fully dynamic management insights from live DB data
@@ -3900,6 +3909,7 @@ def quality_analysis_insights(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_search(request):
     """
     Live search across InJob_Det (d.partno / d.description),
@@ -4126,6 +4136,7 @@ def quality_analysis_search(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa")
 def quality_analysis_supplier_rejections(request):
     """
     Returns Supplier Wise Rejections using GRN and Inspection tables:

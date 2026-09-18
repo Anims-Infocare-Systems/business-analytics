@@ -12,6 +12,8 @@ from django.db import close_old_connections
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .utils.cache import cache_analytics_response
+
 from .views_dashboard2 import (
     dashboard2_kpis,
     dashboard2_production_by_shift,
@@ -4853,6 +4855,7 @@ def _bundle_fetch_one(key, view_fn, django_request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="plant_perf_bundle")
 def plant_performance_bundle(request):
     """
     Single request for Dashboard3 — all panels in one response (queries run in parallel).

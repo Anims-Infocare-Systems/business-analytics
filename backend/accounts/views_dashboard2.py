@@ -14,6 +14,7 @@ from .views import (
     find_column_ci,
     month_key_from_db,
 )
+from .utils.cache import cache_analytics_response
 
 def inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_date):
     company_candidates = ["company_code", "CompanyCode", "compcode", "CompCode", "ccode", "CCode"]
@@ -97,6 +98,7 @@ def inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_dat
     return grand_rej, grand_rwk
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_kpis(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -152,6 +154,7 @@ def dashboard2_kpis(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"production_output": round(production_output, 2), "rejection_qty": round(rejection_qty, 2), "rework_grand_total": round(rework_grand_total, 2), "oa_efficiency": round(oa_efficiency, 2)}})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_production_by_shift(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -191,6 +194,7 @@ def dashboard2_production_by_shift(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "shifts": shifts_out})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_idle_hours(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -208,6 +212,7 @@ def dashboard2_idle_hours(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": company_code or "", "from": str(start_date), "to": str(end_date), "summary": {"accepted_hours": round(acc_h, 2), "non_accepted_hours": round(na_h, 2), "total_idle_hours": round(tot_h, 2), "other_hours": round(other_h, 2)}, "accepted": [], "non_accepted": []})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_downtime_by_reason(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -227,6 +232,7 @@ def dashboard2_downtime_by_reason(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "reasons": reasons_out})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_customer_complaints(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -291,6 +297,7 @@ def dashboard2_customer_complaints(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "complaints": complaints})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_po_pipeline(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -388,6 +395,7 @@ def dashboard2_po_pipeline(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_inspection_pending_snapshot(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -435,6 +443,7 @@ def dashboard2_inspection_pending_snapshot(request):
         return Response({"error": f"Database error: {str(e)}", "intermediate_pending_qty": None, "final_pending_qty": None, "joborder_pending_qty": None}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_grn_pending_pipeline(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -500,6 +509,7 @@ def dashboard2_grn_pending_pipeline(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_iqc_rejections(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -573,6 +583,7 @@ def dashboard2_iqc_rejections(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_otd(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -661,6 +672,7 @@ def dashboard2_otd(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"on_time_delivery_pct": otd_pct, "rating_weighted_pct": rating_weighted_pct, "schedule_adherence_pct": schedule_adherence_pct, "delayed_lines": delayed_lines, "on_time_qty": round(on_time_qty, 2), "total_del_qty": round(total_qty, 2)}, "trend": trend})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_final_inspection_kpi(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -688,6 +700,7 @@ def dashboard2_final_inspection_kpi(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_ok_qty": round(total_ok_qty, 2), "total_rej_qty": round(total_rej_qty, 2), "total_mat_rej_qty": round(total_mat_rej_qty, 2), "total_qty": round(total_qty, 2), "first_pass_yield": first_pass_yield, "inspection_count": inspection_count})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_injob_inspection(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -739,6 +752,7 @@ def dashboard2_injob_inspection(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_rejection": round(total_rejection, 2), "total_rework": round(total_rework, 2), "total_qty_basis": round(total_qty_basis, 2), "inspection_master_count": inspection_master_count, "rejection_pct": rej_pct, "rework_pct": rwk_pct})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_inter_inspection(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -785,6 +799,7 @@ def dashboard2_inter_inspection(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_rejection": round(total_rejection, 2), "total_rework": round(total_rework, 2), "total_qty_basis": round(total_qty_basis, 2), "row_count": row_count, "rejection_pct": rej_pct, "rework_pct": rwk_pct})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_final_inspection_org_rej_rwk(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -847,6 +862,7 @@ def dashboard2_final_inspection_org_rej_rwk(request):
     return Response(resp)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash2")
 def dashboard2_top_defect_categories(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)

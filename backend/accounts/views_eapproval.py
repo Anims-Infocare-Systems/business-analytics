@@ -50,6 +50,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .views import get_tenant_connection, parse_date_range
+from .utils.cache import cache_analytics_response, invalidate_approval_cache
 
 _DTYPE_KEYS = (
     ("raw", "Raw Material"),
@@ -540,6 +541,7 @@ def eapproval_list(request):
 #  GET  eapproval/stats/
 # ═══════════════════════════════════════════════════════════════
 @api_view(["GET"])
+@cache_analytics_response(timeout=60, key_prefix="eapproval")
 def eapproval_stats(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1250,6 +1252,8 @@ def eapproval_approve(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
+    invalidate_approval_cache("eapproval", tenant.get("company_code"))
+
     return Response({
         "success": True,
         "pono": pono,
@@ -1341,6 +1345,8 @@ def eapproval_modify(request):
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    invalidate_approval_cache("eapproval", tenant.get("company_code"))
 
     return Response({"success": True, "pono": pono, "modified_in_erp": modified_in_erp, "message": message})
 

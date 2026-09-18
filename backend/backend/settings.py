@@ -83,6 +83,7 @@ DATABASES = {
         'PASSWORD': os.environ.get("DB_PASSWORD", "Anims!@#2026"),
         'HOST':     os.environ.get("DB_HOST",     "P3NWPLSK12SQL-v02.shr.prod.phx3.secureserver.net"),
         'PORT':     os.environ.get("DB_PORT",     "1433"),
+        'CONN_MAX_AGE': int(os.environ.get("DB_CONN_MAX_AGE", 600)),
         'OPTIONS': {
             'driver':               'ODBC Driver 17 for SQL Server',
             'encrypt':              True,
@@ -137,13 +138,34 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
 ]
 
 
+# ─── Caching (Redis) ──────────────────────────────────────────
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {"max_connections": 100},
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+            "IGNORE_EXCEPTIONS": True,
+        },
+        "KEY_PREFIX": "anims_ba",
+    }
+}
+
+
 # ─── Session ──────────────────────────────────────────────────
-SESSION_ENGINE                  = "django.contrib.sessions.backends.db"
+# ✅ Using Redis cache backend for fast in-memory sessions (0 disk writes to remote SQL)
+SESSION_ENGINE                  = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS             = "default"
 SESSION_COOKIE_SAMESITE         = "Lax"   # ✅ allows cookie across ports on localhost
 SESSION_COOKIE_SECURE           = not DEBUG
 SESSION_COOKIE_HTTPONLY         = True
 SESSION_COOKIE_AGE              = 86400   # ✅ session lives 24 hours (in seconds)
-SESSION_SAVE_EVERY_REQUEST      = True    # ✅ Refresh cookie expiry on every request
+SESSION_SAVE_EVERY_REQUEST      = True    # ✅ Refresh cookie expiry on every request in Redis (memory fast)
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False   # ✅ Persist cookie across mobile browser process/tab switches
 SESSION_COOKIE_PATH             = "/"     # ✅ Cookie applies across whole domain
 # Cross-subdomain login (e.g. anims.* frontend + api-businessanalytics.* API): set DJANGO_SESSION_COOKIE_DOMAIN=.animserp.com

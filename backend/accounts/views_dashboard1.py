@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .utils.cache import cache_analytics_response
 from .views import get_tenant_connection, month_key_from_db
 from .views_qualityanalysis import QUALITY_VALUE_BASE_CTE as _QV_BASE_CTE
 
@@ -123,6 +124,7 @@ def fetch_sales_analysis_bucket(cursor, start_date, end_date):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_sales")
 def dashboard1_sales_kpi(request):
     """
     Dashboard1 - Sales Value KPI
@@ -414,6 +416,7 @@ def fetch_purchase_analysis_bucket(cursor, start_date, end_date):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_purchase")
 def dashboard1_purchase_kpi(request):
     """Dashboard1 - Purchase Value KPI using GRN value (same logic as purchase projections)."""
     try:
@@ -598,6 +601,7 @@ def fetch_production_analysis_bucket(cursor, start_date, end_date):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_prod")
 def dashboard1_production_kpi(request):
     """Dashboard1 - Production Value KPI using production value monthwise logic."""
     try:
@@ -702,6 +706,7 @@ WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_qv")
 def dashboard1_quality_value_kpi(request):
     """Dashboard1 - Quality Value KPI using rejection cost logic."""
     try:
@@ -819,6 +824,7 @@ PURCHASE_PROJECTIONS_SQL = """
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_sales_proj")
 def dashboard1_sales_projections(request):
     """Dashboard1 - Sales vs PO for the selected month (same logic as po_vs_sales)."""
     try:
@@ -853,6 +859,7 @@ def dashboard1_sales_projections(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_purch_proj")
 def dashboard1_purchase_projections(request):
     """Dashboard1 - Purchase PO vs GRN for the selected month using the provided SQL logic."""
     try:
@@ -940,6 +947,7 @@ OA_EFFICIENCY_WEEKLY_SQL = """
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_oa_eff")
 def dashboard1_oa_efficiency_weekly(request):
     """Dashboard1 - OA Efficiency grouped week-wise inside the selected month."""
     try:
@@ -1150,6 +1158,7 @@ def fetch_quality_rejection_period_totals(cursor, start_date, end_date):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_qual_rej")
 def dashboard1_quality_rejections_weekly(request):
     """Dashboard1 — week-wise rejection chart for selected month + analysis buckets for the Quality Analysis table."""
     try:

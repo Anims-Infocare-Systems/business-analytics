@@ -249,7 +249,7 @@ def settings_profile(request):
             if end_dt:
                 renewal_str = f"Next renewal: {end_dt.strftime('%B %d, %Y')}"
 
-    if company and str(company).strip().upper().startswith(('T', 'P', 'D')):
+    if company and company.strip().upper().startswith(('T', 'P', 'D')):
         renewal_str = "Lifetime (Free Forever)"
 
     plan_start_str = act_start.strftime("%Y-%m-%d") if isinstance(act_start, (datetime, date)) else str(act_start or "")
@@ -436,6 +436,10 @@ def settings_upgrade_plan(request):
 
                 # 4. Update/insert license mapping in tenants_lisencemodule
                 update_tenant_license(tenant_id, company, plan_id_val)
+
+                # 5. Invalidate cached subscription status in Redis
+                from .views import invalidate_plan_expired_cache
+                invalidate_plan_expired_cache(company)
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 

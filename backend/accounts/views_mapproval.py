@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .views import get_tenant_connection
+from .utils.cache import cache_analytics_response, invalidate_approval_cache
 
 def _log_approval_bg(tenant_id, company_code, form_name, transaction_no, doc_date, doc_type, approved_by):
     try:
@@ -1978,6 +1979,7 @@ def mapproval_list(request):
 
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=60, key_prefix="mapproval")
 @authentication_classes([])
 @permission_classes([AllowAny])
 def mapproval_stats(request):
@@ -2378,6 +2380,7 @@ def mapproval_approve(request):
         part_no = parts[2]
         proc_code = parts[3]
 
+    tenant = None
     tenant_id = None
     company_code = None
     user_name = "Manager"
@@ -2734,6 +2737,11 @@ def mapproval_approve(request):
         from django.utils import timezone
         now_dt_str = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %I:%M %p")
 
+    if tenant and isinstance(tenant, dict):
+        invalidate_approval_cache("mapproval", tenant.get("company_code"))
+    elif company_code:
+        invalidate_approval_cache("mapproval", company_code)
+
     return Response({
         "success": True,
         "message": f"{rc_type} {clean_rc} approved (IsApproved = True) successfully",
@@ -2777,6 +2785,7 @@ def mapproval_modify(request):
 
     rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
 
+    tenant = None
     tenant_id = None
     company_code = None
     rc_date = None
@@ -3043,5 +3052,10 @@ def mapproval_modify(request):
             rc_date,
             rc_type
         )
+
+    if tenant and isinstance(tenant, dict):
+        invalidate_approval_cache("mapproval", tenant.get("company_code"))
+    elif company_code:
+        invalidate_approval_cache("mapproval", company_code)
 
     return Response({"success": True, "message": f"{rc_type} {clean_rc} moved to pending (IsApproved = False) successfully"})

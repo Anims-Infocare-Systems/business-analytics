@@ -60,6 +60,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .views import get_tenant_connection, parse_date_range
+from .utils.cache import cache_analytics_response, invalidate_approval_cache
 
 def _canonical_invoice_type(btype_raw: str) -> Optional[str]:
     """Map Bill_Mas.btype → canonical invoice bucket; None if not an invoice type."""
@@ -585,6 +586,7 @@ def tapproval_list(request):
 #  GET  tapproval/stats/
 # ═══════════════════════════════════════════════════════════════
 @api_view(["GET"])
+@cache_analytics_response(timeout=60, key_prefix="tapproval")
 def tapproval_stats(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1279,6 +1281,8 @@ def tapproval_approve(request):
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
+    invalidate_approval_cache("tapproval", tenant.get("company_code"))
+
     return Response({
         "success": True,
         "jbno": doc_no,
@@ -1360,6 +1364,8 @@ def tapproval_modify(request):
         conn.close()
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    invalidate_approval_cache("tapproval", tenant.get("company_code"))
 
     return Response({
         "success": True,

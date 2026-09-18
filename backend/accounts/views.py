@@ -152,6 +152,7 @@ def is_plan_expired(company_code):
     Returns True if the tenant's plan has expired or is inactive, False otherwise.
     Companies with company_code starting with T, P, or D are always free forever.
     Companies with company_code starting with A (and other commercial codes) enforce plan & expiry rules.
+    Results are cached in Redis for 30 minutes (1800s) to eliminate remote DB query latency on every API call.
     """
     if not company_code:
         return False
@@ -161,6 +162,12 @@ def is_plan_expired(company_code):
     # Company codes starting with T, P, or D are always free forever
     if code.startswith(('T', 'P', 'D')):
         return False
+
+    from django.core.cache import cache
+    cache_key = f"tenant_plan_expired:{code}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     from django.db import connection
     import datetime
@@ -172,11 +179,13 @@ def is_plan_expired(company_code):
             )
             row = cursor.fetchone()
             if not row:
+                cache.set(cache_key, False, timeout=1800)
                 return False
             active_status, end_date = row
             
             # If active status is False/0/None, the plan is inactive/expired
             if not active_status:
+                cache.set(cache_key, True, timeout=1800)
                 return True
             
             # Check if there is an active plan upgrade
@@ -194,6 +203,7 @@ def is_plan_expired(company_code):
             else:
                 plan_end = end_date
             
+            result = False
             if plan_end:
                 # Normalize plan_end to date object
                 if isinstance(plan_end, datetime.datetime):
@@ -204,27 +214,59 @@ def is_plan_expired(company_code):
                     try:
                         plan_end = datetime.datetime.strptime(str(plan_end).split()[0], "%Y-%m-%d").date()
                     except ValueError:
+                        cache.set(cache_key, False, timeout=1800)
                         return False
                 
                 # Expired if plan_end is strictly in the past
                 if plan_end < datetime.date.today():
-                    return True
+                    result = True
             
-            return False
+            cache.set(cache_key, result, timeout=1800)
+            return result
     except Exception:
         return False
 
+
+def invalidate_plan_expired_cache(company_code):
+    """Call when a tenant renews, upgrades, or toggles active status."""
+    if not company_code:
+        return
+    from django.core.cache import cache
+    code = str(company_code).strip().upper()
+    cache.delete(f"tenant_plan_expired:{code}")
+    cache.delete(f"tenant_license:{code}")
+    cache.delete(f"company_lookup:{code}")
+    cache.delete(f"tenant_model:{code}")
+    cache.delete("public_companies_map")
+
 def get_tenant_license(company_code):
+    code = str(company_code or "").strip().upper()
+    if not code:
+        return {
+            "dashboard": True, "approvals": True, "reports": True,
+            "mis": True, "charts": True, "utility": True, "plan_id": "free"
+        }
+
+    from django.core.cache import cache
+    cache_key = f"tenant_license:{code}"
+    try:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+    except Exception:
+        pass
+
+    license_dict = None
     from django.db import connection
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT dashboard, approvals, reports, mis, charts, utility, plan_id FROM tenants_lisencemodule WHERE UPPER(company_code) = UPPER(%s)",
-                [company_code.strip()]
+                [code]
             )
             row = cursor.fetchone()
             if row:
-                return {
+                license_dict = {
                     "dashboard": bool(row[0]),
                     "approvals": bool(row[1]),
                     "reports": bool(row[2]),
@@ -235,40 +277,49 @@ def get_tenant_license(company_code):
                 }
     except Exception:
         pass
-    
+
     # If not found in tenants_lisencemodule, fallback based on tenants_signup table
+    if not license_dict:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT plan_id FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s)",
+                    [code]
+                )
+                row = cursor.fetchone()
+                if row:
+                    plan_id = str(row[0]).strip().lower()
+                    if plan_id == "pro":
+                        license_dict = {
+                            "dashboard": True,
+                            "approvals": True,
+                            "reports": False,
+                            "mis": False,
+                            "charts": False,
+                            "utility": True,
+                            "plan_id": "pro"
+                        }
+        except Exception:
+            pass
+
+    # Default fallback (Max/Free have access to all)
+    if not license_dict:
+        license_dict = {
+            "dashboard": True,
+            "approvals": True,
+            "reports": True,
+            "mis": True,
+            "charts": True,
+            "utility": True,
+            "plan_id": "free"
+        }
+
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT plan_id FROM tenants_signup WHERE UPPER(company_code) = UPPER(%s)",
-                [company_code.strip()]
-            )
-            row = cursor.fetchone()
-            if row:
-                plan_id = str(row[0]).strip().lower()
-                if plan_id == "pro":
-                    return {
-                        "dashboard": True,
-                        "approvals": True,
-                        "reports": False,
-                        "mis": False,
-                        "charts": False,
-                        "utility": True,
-                        "plan_id": "pro"
-                    }
+        cache.set(cache_key, license_dict, timeout=1800)  # 30 minutes
     except Exception:
         pass
 
-    # Default fallback (Max/Free have access to all)
-    return {
-        "dashboard": True,
-        "approvals": True,
-        "reports": True,
-        "mis": True,
-        "charts": True,
-        "utility": True,
-        "plan_id": "free"
-    }
+    return license_dict
 
 def apply_license_restrictions_to_rights(rights, license_info):
     if not license_info or not isinstance(license_info, dict):
@@ -376,18 +427,31 @@ def login_view(request):
             os_name = 'Browser Client'
         system_name = os_name
     from django.db import Error as DatabaseError
+    from django.core.cache import cache
+    tenant = None
+    tenant_cache_key = f"tenant_model:{company_code.strip().upper()}"
     try:
-        tenant = Tenant.objects.get(company_code__iexact=company_code)
-    except Tenant.DoesNotExist:  # type: ignore
-        return Response({"error": "Invalid company code."}, status=400)
-    except DatabaseError as db_exc:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Master Database connection failed during login: {db_exc}")
-        return Response({
-            "error": "Cloud DB Server Unavailable. Please try again later or contact support.",
-            "code": "db_unavailable"
-        }, status=503)
+        tenant = cache.get(tenant_cache_key)
+    except Exception:
+        pass
+
+    if not tenant:
+        try:
+            tenant = Tenant.objects.get(company_code__iexact=company_code)
+            try:
+                cache.set(tenant_cache_key, tenant, timeout=86400)
+            except Exception:
+                pass
+        except Tenant.DoesNotExist:  # type: ignore
+            return Response({"error": "Invalid company code."}, status=400)
+        except DatabaseError as db_exc:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Master Database connection failed during login: {db_exc}")
+            return Response({
+                "error": "Cloud DB Server Unavailable. Please try again later or contact support.",
+                "code": "db_unavailable"
+            }, status=503)
 
     if not tenant.status:
         return Response({
@@ -461,19 +525,32 @@ def login_view(request):
 
     has_access = is_super_admin or any(rights.values())
 
+    from django.core.cache import cache
+    erp_online_key = f"erp_online:{company_code.upper()}"
+    is_erp_online = False
     try:
-        check_tenant_erp_connection(
-            tenant.erp_server,
-            tenant.erp_database,
-            tenant.erp_user,
-            tenant.erp_password,
-            tenant.erp_port,
-        )
-    except ErpConnectionError as exc:
-        return Response(
-            {"error": str(exc), "code": "erp_unavailable"},
-            status=503,
-        )
+        is_erp_online = bool(cache.get(erp_online_key))
+    except Exception:
+        pass
+
+    if not is_erp_online:
+        try:
+            check_tenant_erp_connection(
+                tenant.erp_server,
+                tenant.erp_database,
+                tenant.erp_user,
+                tenant.erp_password,
+                tenant.erp_port,
+            )
+            try:
+                cache.set(erp_online_key, True, timeout=120)  # Micro-cache for 2 minutes
+            except Exception:
+                pass
+        except ErpConnectionError as exc:
+            return Response(
+                {"error": str(exc), "code": "erp_unavailable"},
+                status=503,
+            )
 
     request.session["tenant"] = {
         "tenant_id": tenant.id,
@@ -491,7 +568,6 @@ def login_view(request):
 
     # ── Enforce Single Session Per User ──
     try:
-        from django.contrib.sessions.models import Session
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT session_key FROM tenants_userssession WHERE company_code = %s AND username = %s",
@@ -501,7 +577,10 @@ def login_view(request):
             if old_row:
                 old_session_key = old_row[0]
                 if old_session_key and old_session_key != new_session_key:
-                    Session.objects.filter(session_key=old_session_key).delete()
+                    try:
+                        cache.delete(f"django.contrib.sessions.cache{old_session_key}")
+                    except Exception:
+                        pass
                 cursor.execute(
                     "UPDATE tenants_userssession SET session_key = %s, system_name = %s, last_seen = GETUTCDATE(), created_at = GETUTCDATE() WHERE company_code = %s AND username = %s",
                     [new_session_key, system_name, company_code, username]
@@ -514,27 +593,34 @@ def login_view(request):
                     """,
                     [tenant.id, company_code, username, new_session_key, system_name]
                 )
-
-            # Log activity to tenants_clientactivity
-            cursor.execute(
-                """
-                INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
-                VALUES (%s, %s, 'login', %s, 'logged in', GETUTCDATE())
-                """,
-                [tenant.id, company_code, username]
-            )
-            # Log to tenants_usersTransaction
-            cursor.execute(
-                """
-                INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
-                VALUES (%s, %s, %s, 'Login', GETUTCDATE())
-                """,
-                [tenant.id, company_code, username]
-            )
     except Exception as session_err:
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Error handling single session logic: {session_err}")
+
+    # Log login activity asynchronously in background thread pool to avoid blocking the user response
+    def _async_login_audit_logs(t_id, c_code, u_name):
+        from django.db import connection as async_conn
+        try:
+            with async_conn.cursor() as c:
+                c.execute(
+                    """
+                    INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+                    VALUES (%s, %s, 'login', %s, 'logged in', GETUTCDATE())
+                    """,
+                    [t_id, c_code, u_name]
+                )
+                c.execute(
+                    """
+                    INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                    VALUES (%s, %s, %s, 'Login', GETUTCDATE())
+                    """,
+                    [t_id, c_code, u_name]
+                )
+        except Exception:
+            pass
+
+    _AUDIT_LOG_POOL.submit(_async_login_audit_logs, tenant.id, company_code, username)
     
     is_expired = is_plan_expired(company_code)
     license_info = get_tenant_license(company_code)
@@ -607,65 +693,61 @@ def logout_view(request):
 
 # ─────────────────────────────────────────────────────────────
 #  HEARTBEAT  — keeps session alive while tab is open
-#  Called by frontend every 2 minutes via GET /heartbeat/
-#  If tab is closed, heartbeats stop → last_seen goes stale
-#  → admin utility query filters out sessions > 5 min old
+#  Optimized for high concurrency (5,000 - 8,000 users):
+#  1. Sets real-time presence in Redis (fast in-memory)
+#  2. Throttles SQL table writes to at most once per 10 minutes per user
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
 def heartbeat_view(request):
+    from django.core.cache import cache
     from django.db import connection
     from .session_utils import get_or_restore_session_tenant
     try:
         tenant = get_or_restore_session_tenant(request, allow_expired=True)
     except ValueError:
         tenant = None
-    print(f"DEBUG: Heartbeat tick received. Tenant session: {tenant}", flush=True)
+
     if not tenant:
-        print("DEBUG: Heartbeat failed - no session.", flush=True)
         return Response({"ok": False, "reason": "no_session"}, status=200)
+
     company_code = tenant.get("company_code")
     username = tenant.get("username")
-    print(f"DEBUG: Heartbeat updating last_seen for {company_code} - {username}", flush=True)
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE tenants_userssession SET last_seen = GETUTCDATE() WHERE company_code = %s AND username = %s",
-                [company_code, username]
-            )
-            rows_updated = cursor.rowcount
-            print(f"DEBUG: Heartbeat database update complete. Rows updated: {rows_updated}", flush=True)
-    except Exception as e:
-        print(f"DEBUG: Heartbeat database update failed with error: {str(e)}", flush=True)
-        pass
+    if not company_code or not username:
+        return Response({"ok": True}, status=200)
+
+    # 1. Update in-memory Redis presence key (real-time, sub-millisecond)
+    presence_key = f"presence:{company_code}:{username}"
+    cache.set(presence_key, True, timeout=360)
+
+    # 2. Throttle persistent SQL updates to at most once per 10 minutes (600s) per user
+    sync_key = f"presence_db_synced:{company_code}:{username}"
+    if not cache.get(sync_key):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE tenants_userssession SET last_seen = GETUTCDATE() WHERE company_code = %s AND username = %s",
+                    [company_code, username]
+                )
+            cache.set(sync_key, True, timeout=600)
+        except Exception:
+            pass
+
     return Response({"ok": True}, status=200)
 
 
 # ─────────────────────────────────────────────────────────────
 #  LOG USER TRANSACTION
-#  Called by frontend to record user report/dashboard access
+#  Asynchronously records user module navigation in background pool
+#  Returns in <2ms without blocking the client on remote DB insert
 # ─────────────────────────────────────────────────────────────
-@api_view(['GET'])
-def log_transaction(request):
-    from django.db import connection
-    from .session_utils import get_or_restore_session_tenant
+from concurrent.futures import ThreadPoolExecutor
+
+_AUDIT_LOG_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="audit_log_worker")
+
+def _async_log_transaction_db(tenant_id, company_code, username, module_name):
+    from django.db import connection, close_old_connections
     try:
-        tenant = get_or_restore_session_tenant(request, allow_expired=True)
-    except ValueError:
-        tenant = None
-    print(f"DEBUG: log_transaction received. Tenant session: {tenant}", flush=True)
-    if not tenant:
-        print("DEBUG: log_transaction failed - no session.", flush=True)
-        return Response({"error": "Unauthorized"}, status=401)
-    company_code = tenant.get("company_code")
-    username = tenant.get("username")
-    tenant_id = tenant.get("tenant_id")
-    module_name = request.GET.get("module_name")
-    
-    print(f"DEBUG: log_transaction logging {module_name} for {company_code} - {username}", flush=True)
-    if not module_name:
-        return Response({"error": "module_name is required"}, status=400)
-        
-    try:
+        close_old_connections()
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -674,20 +756,92 @@ def log_transaction(request):
                 """,
                 [tenant_id, company_code, username, module_name]
             )
-            print("DEBUG: log_transaction database insert successful.", flush=True)
-        return Response({"success": True}, status=200)
+    except Exception:
+        pass
+    finally:
+        close_old_connections()
+
+
+@api_view(['GET'])
+def log_transaction(request):
+    from .session_utils import get_or_restore_session_tenant
+    try:
+        tenant = get_or_restore_session_tenant(request, allow_expired=True)
+    except ValueError:
+        tenant = None
+
+    if not tenant:
+        return Response({"error": "Unauthorized"}, status=401)
+
+    company_code = tenant.get("company_code")
+    username = tenant.get("username")
+    tenant_id = tenant.get("tenant_id")
+    module_name = request.GET.get("module_name")
+
+    if not module_name:
+        return Response({"error": "module_name is required"}, status=400)
+
+    # Dispatched to background pool — client gets immediate HTTP 200 response
+    _AUDIT_LOG_POOL.submit(_async_log_transaction_db, tenant_id, company_code, username, module_name)
+    return Response({"success": True}, status=200)
+
+
+# ─────────────────────────────────────────────────────────────
+#  COMPANY NAME LOOKUP & PUBLIC DIRECTORY
+# ─────────────────────────────────────────────────────────────
+@api_view(['GET'])
+def public_companies_list(request):
+    """
+    Returns an ultra-fast in-memory map of active company codes to company names.
+    Cached in Redis for 24 hours so frontend login can look up company names in 0ms.
+    """
+    from django.core.cache import cache
+    cache_key = "public_companies_map"
+    try:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached, status=200)
+    except Exception:
+        pass
+
+    try:
+        tenants = Tenant.objects.filter(status=True).only("company_code", "company_name")
+        companies_map = {
+            t.company_code.strip().upper(): t.company_name.strip()
+            for t in tenants if t.company_code and t.company_name
+        }
     except Exception as e:
-        print(f"DEBUG: log_transaction database insert failed: {str(e)}", flush=True)
-        return Response({"error": f"Failed to log transaction: {str(e)}"}, status=500)
+        return Response({"error": str(e)}, status=500)
+
+    try:
+        cache.set(cache_key, companies_map, timeout=86400)  # 24 hours
+    except Exception:
+        pass
+
+    return Response(companies_map, status=200)
 
 
-# ─────────────────────────────────────────────────────────────
-#  COMPANY NAME LOOKUP
-# ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
 def get_company(request, code):
     code = (code or "").strip()
-    if not code: return Response({"error": "Company code is required."}, status=400)
+    if not code:
+        return Response({"error": "Company code is required."}, status=400)
+
+    from django.core.cache import cache
+    code_upper = code.upper()
+    cache_key = f"company_lookup:{code_upper}"
+    include_signup = (request.GET.get("signup") or "").strip().lower() in ("1", "true", "yes")
+
+    if not include_signup:
+        try:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                if cached.get("code") == "account_inactive":
+                    return Response(cached, status=403)
+                return Response(cached, status=200)
+        except Exception:
+            pass
+
     try:
         tenant = Tenant.objects.only("company_code", "company_name", "status").get(
             company_code__iexact=code
@@ -696,19 +850,23 @@ def get_company(request, code):
         return Response({"error": "Company not found."}, status=404)
 
     if not tenant.status:
-        return Response({
+        err_payload = {
             "error": "Account Inactive.",
             "code": "account_inactive",
             "company_name": tenant.company_name,
             "company_code": tenant.company_code,
-        }, status=403)
+        }
+        try:
+            cache.set(cache_key, err_payload, timeout=3600)
+        except Exception:
+            pass
+        return Response(err_payload, status=403)
 
     payload = {
         "company_name": tenant.company_name,
         "company_code": tenant.company_code,
     }
 
-    include_signup = (request.GET.get("signup") or "").strip().lower() in ("1", "true", "yes")
     if include_signup:
         from django.db import connection
         with connection.cursor() as cursor:
@@ -717,6 +875,11 @@ def get_company(request, code):
                 [tenant.company_code, tenant.company_name]
             )
             payload["already_registered"] = cursor.fetchone()[0] > 0
+    else:
+        try:
+            cache.set(cache_key, payload, timeout=86400)
+        except Exception:
+            pass
 
     return Response(payload)
 

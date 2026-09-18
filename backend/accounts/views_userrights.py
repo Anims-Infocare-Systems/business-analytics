@@ -11,6 +11,8 @@ from rest_framework.response import Response
 
 from .models import Tenant
 from .views import encrypt_password
+from django.core.cache import cache
+from .utils.cache import invalidate_user_rights_cache
 
 FORM_RIGHTS_KEYS = (
     "Dashboard",
@@ -264,6 +266,15 @@ def user_rights_me(request):
         )
 
     company = _company_code(tenant)
+    cache_key = f"user_rights_me:{company.upper()}:{username.upper()}"
+    if request.GET.get("nocache") != "1":
+        try:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                return Response(cached_data, status=200)
+        except Exception:
+            pass
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -340,7 +351,7 @@ def user_rights_me(request):
         except Exception as e:
             print("[USER-RIGHTS] Warning checking M-Approval settings:", e)
 
-    return Response({
+    resp_data = {
         "success": True,
         "company": tenant.get("company_name", ""),
         "companyCode": company,
@@ -353,7 +364,13 @@ def user_rights_me(request):
         "hasAccess": is_super_admin or any(rights.values()),
         "isExpired": is_expired,
         "license": license_info,
-    })
+    }
+    try:
+        cache.set(cache_key, resp_data, timeout=300)
+    except Exception:
+        pass
+
+    return Response(resp_data)
 
 
 @api_view(["PUT", "PATCH"])
@@ -404,6 +421,7 @@ def user_rights_update(request):
         return Response({"error": f"Database error: {str(e)}"}, status=500)
 
     rights = _rights_from_input(rights_in)
+    invalidate_user_rights_cache(company, username)
 
     return Response({
         "success": True,
@@ -547,6 +565,8 @@ def user_rights_delete(request, user_id):
                     [user_id]
                 )
 
+        invalidate_user_rights_cache(db_company, username)
+
         return Response({
             "success": True,
             "message": f"User '{username}' deleted successfully."
@@ -640,6 +660,8 @@ def user_rights_bulk_save(request):
                     writes = 0
     except Exception as e:
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    invalidate_user_rights_cache(company)
 
     return Response({
         "success": len(errors) == 0,

@@ -30,8 +30,13 @@ def get_ist_now():
         return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
 
 
+_NOTIFICATIONS_TABLE_INITIALIZED = False
+
 def ensure_notifications_table():
     """Ensure system_notifications table exists in master database and has 'deleted' column."""
+    global _NOTIFICATIONS_TABLE_INITIALIZED
+    if _NOTIFICATIONS_TABLE_INITIALIZED:
+        return
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -62,6 +67,7 @@ def ensure_notifications_table():
                 END
                 """
             )
+        _NOTIFICATIONS_TABLE_INITIALIZED = True
     except Exception as e:
         print(f"[Notifications] ensure_notifications_table error: {e}")
 
@@ -124,6 +130,14 @@ def active_notifications(request):
     Timestamps strictly calculated in Indian Standard Time (IST).
     """
     ensure_notifications_table()
+    from django.core.cache import cache
+    try:
+        cached_active = cache.get("system_active_notifications")
+        if cached_active is not None:
+            return Response(cached_active)
+    except Exception:
+        pass
+
     try:
         now_ist = get_ist_now()
         with connection.cursor() as cursor:
@@ -180,12 +194,17 @@ def active_notifications(request):
                     "expiry_label": f"Auto-deletes in {days_left}d" if days_left > 1 else ("Expires today" if days_left == 1 else "Expiring soon"),
                 })
 
-            return Response({
+            res_payload = {
                 "count": len(notifications),
                 "notifications": notifications,
                 "server_time": now_ist.isoformat(),
                 "server_time_ist": now_ist.strftime("%d %b %Y, %I:%M %p")
-            })
+            }
+            try:
+                cache.set("system_active_notifications", res_payload, timeout=300)
+            except Exception:
+                pass
+            return Response(res_payload)
     except Exception as e:
         return Response({"error": f"Failed to fetch notifications: {str(e)}", "notifications": []}, status=500)
 
@@ -206,6 +225,14 @@ def admin_list_notifications(request):
         return admin_auth_denied_response(e)
 
     ensure_notifications_table()
+    from django.core.cache import cache
+    try:
+        cached_admin = cache.get("admin_notifications_all")
+        if cached_admin is not None:
+            return Response(cached_admin)
+    except Exception:
+        pass
+
     try:
         now_ist = get_ist_now()
         with connection.cursor() as cursor:
@@ -278,8 +305,10 @@ def admin_list_notifications(request):
                     "time_ago": format_time_ago(created_at, now_ist)
                 })
 
-            return Response({
+            res_payload = {
+                "success": True,
                 "items": items,
+                "notifications": items,
                 "stats": {
                     "total": len(items),
                     "active": active_count,
@@ -288,10 +317,21 @@ def admin_list_notifications(request):
                     "alerts": alert_count,
                     "retention_policy": "15 Days Auto-Purge"
                 },
-                "server_time_ist": now_ist.strftime("%d %b %Y, %I:%M %p")
-            })
+                "count": len(items),
+                "active_count": active_count,
+                "maintenance_count": maint_count,
+                "update_count": update_count,
+                "alert_count": alert_count,
+                "server_time_ist": now_ist.strftime("%d %b %Y, %I:%M %p"),
+                "ttl_days": 15
+            }
+            try:
+                cache.set("admin_notifications_all", res_payload, timeout=300)
+            except Exception:
+                pass
+            return Response(res_payload)
     except Exception as e:
-        return Response({"error": f"Failed to retrieve notifications: {str(e)}"}, status=500)
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
 
 
 @api_view(["POST"])
@@ -355,6 +395,13 @@ def admin_create_notification(request):
             row = cursor.fetchone()
             new_id = row[0] if row else None
 
+            try:
+                from django.core.cache import cache
+                cache.delete("admin_notifications_all")
+                cache.delete("system_active_notifications")
+            except Exception:
+                pass
+
             return Response({
                 "success": True,
                 "message": "Broadcast notification published successfully! It will automatically expire and delete in 15 days.",
@@ -392,6 +439,13 @@ def admin_delete_notification(request, notification_id):
             )
             if cursor.rowcount == 0:
                 return Response({"error": "Notification not found."}, status=404)
+
+            try:
+                from django.core.cache import cache
+                cache.delete("admin_notifications_all")
+                cache.delete("system_active_notifications")
+            except Exception:
+                pass
 
             return Response({
                 "success": True,

@@ -353,8 +353,13 @@ let _clientTenantsCache = null;
 let _clientTenantsCacheTime = 0;
 const CLIENT_TENANTS_CACHE_TTL = 30000; // 30 seconds
 
+let _clientAdminCredsCache = null;
+let _clientAdminCredsCacheTime = 0;
+const CLIENT_ADMIN_CREDS_CACHE_TTL = 30000; // 30 seconds
+
 export default function AdminPanel() {
     const hasInitialTenantsCache = Boolean(_clientTenantsCache && (Date.now() - _clientTenantsCacheTime < CLIENT_TENANTS_CACHE_TTL));
+    const hasInitialCredsCache = Boolean(_clientAdminCredsCache && (Date.now() - _clientAdminCredsCacheTime < CLIENT_ADMIN_CREDS_CACHE_TTL));
 
     // Authentication State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -462,8 +467,8 @@ export default function AdminPanel() {
     const [showChangePassEye, setShowChangePassEye] = useState(false);
 
     // Master Admin Controller Users State (Settings)
-    const [adminCredentials, setAdminCredentials] = useState([]);
-    const [loadingCredentials, setLoadingCredentials] = useState(false);
+    const [adminCredentials, setAdminCredentials] = useState(() => hasInitialCredsCache ? _clientAdminCredsCache : []);
+    const [loadingCredentials, setLoadingCredentials] = useState(!hasInitialCredsCache);
     const [showAddAdminModal, setShowAddAdminModal] = useState(false);
     const [newAdminUser, setNewAdminUser] = useState("");
     const [newAdminPass, setNewAdminPass] = useState("");
@@ -599,13 +604,18 @@ export default function AdminPanel() {
         }
     }, [isAuthenticated, activeTab, fetchTenants]);
 
-    const fetchAdminCredentials = useCallback(async () => {
-        setLoadingCredentials(true);
+    const fetchAdminCredentials = useCallback(async (silent = false) => {
+        if (!silent && !_clientAdminCredsCache) {
+            setLoadingCredentials(true);
+        }
         try {
             const res = await adminFetch(`${API}/admin/credentials/`);
             const data = await res.json();
             if (res.ok && data.success) {
-                setAdminCredentials(data.admins || []);
+                const list = data.admins || [];
+                setAdminCredentials(list);
+                _clientAdminCredsCache = list;
+                _clientAdminCredsCacheTime = Date.now();
             }
         } catch {
             /* ignore */
@@ -616,9 +626,38 @@ export default function AdminPanel() {
 
     useEffect(() => {
         if (isAuthenticated && activeTab === "settings_users") {
-            fetchAdminCredentials();
+            if (_clientAdminCredsCache) {
+                fetchAdminCredentials(true);
+            } else {
+                fetchAdminCredentials(false);
+            }
         }
     }, [isAuthenticated, activeTab, fetchAdminCredentials]);
+
+    // Idle background prefetch of all admin sub-tab endpoints for instant 0ms switching
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const timer = setTimeout(() => {
+            if ("requestIdleCallback" in window) {
+                window.requestIdleCallback(() => {
+                    adminFetch(`${API}/admin/utility/clients/`).catch(() => {});
+                    adminFetch(`${API}/admin/utility/activity/`).catch(() => {});
+                    adminFetch(`${API}/admin/notifications/`).catch(() => {});
+                    if (String(currentAdminUser || "").trim().toLowerCase() === "admin") {
+                        fetchAdminCredentials(true);
+                    }
+                });
+            } else {
+                adminFetch(`${API}/admin/utility/clients/`).catch(() => {});
+                adminFetch(`${API}/admin/utility/activity/`).catch(() => {});
+                adminFetch(`${API}/admin/notifications/`).catch(() => {});
+                if (String(currentAdminUser || "").trim().toLowerCase() === "admin") {
+                    fetchAdminCredentials(true);
+                }
+            }
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [isAuthenticated, currentAdminUser, fetchAdminCredentials]);
 
     // Authenticate Admin
     const handleLogin = async (e) => {
@@ -822,6 +861,7 @@ export default function AdminPanel() {
                 setNewAdminUser("");
                 setNewAdminPass("");
                 setNewAdminConfirmPass("");
+                _clientAdminCredsCache = null;
                 fetchAdminCredentials();
             } else {
                 const msg = data.error || "Failed to create admin user.";
@@ -1231,6 +1271,7 @@ export default function AdminPanel() {
                 if (res.ok && data.success) {
                     showAdminToast("success", "User Deleted", data.message);
                     setDeleteConfirm((prev) => ({ ...prev, show: false }));
+                    _clientAdminCredsCache = null;
                     fetchAdminCredentials();
                 } else {
                     if (isAdminAuthFailure(res, data)) {

@@ -27,13 +27,23 @@ import "./adminnotification.css";
 
 const API = resolveApiBase();
 
+// Module-level client cache for instant (0ms) tab transitions
+let _clientNotificationsCache = null;
+let _clientNotificationsCacheTime = 0;
+const CLIENT_NOTIFICATIONS_CACHE_TTL = 30000; // 30 seconds
+
 export default function AdminNotification({ onAuthLost }) {
-    const [loading, setLoading] = useState(false);
+    const hasInitialCache = Boolean(
+        _clientNotificationsCache &&
+        (Date.now() - _clientNotificationsCacheTime < CLIENT_NOTIFICATIONS_CACHE_TTL)
+    );
+
+    const [loading, setLoading] = useState(!hasInitialCache);
     const [submitting, setSubmitting] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const [notifications, setNotifications] = useState([]);
-    const [stats, setStats] = useState({
+    const [notifications, setNotifications] = useState(() => hasInitialCache ? _clientNotificationsCache.notifications : []);
+    const [stats, setStats] = useState(() => hasInitialCache ? _clientNotificationsCache.stats : {
         total: 0,
         active: 0,
         maintenance: 0,
@@ -53,9 +63,11 @@ export default function AdminNotification({ onAuthLost }) {
     const [filterCategory, setFilterCategory] = useState("all");
     const [searchTerm, setSearchTerm] = useState("");
 
-    // Fetch Notifications
-    const fetchNotifications = useCallback(async () => {
-        setLoading(true);
+    // Fetch Notifications (SWR pattern: instant cache + background revalidation)
+    const fetchNotifications = useCallback(async (isSilent = false) => {
+        if (!isSilent && !_clientNotificationsCache) {
+            setLoading(true);
+        }
         try {
             const res = await adminFetch(`${API}/admin/notifications/`);
             if (res.status === 401 || res.status === 403) {
@@ -66,21 +78,39 @@ export default function AdminNotification({ onAuthLost }) {
                 throw new Error(`Server returned ${res.status}`);
             }
             const data = await res.json();
-            setNotifications(data.items || []);
-            if (data.stats) {
-                setStats(data.stats);
-            }
+            const items = data.items || [];
+            const newStats = data.stats || {
+                total: 0,
+                active: 0,
+                maintenance: 0,
+                updates: 0,
+                alerts: 0,
+                retention_policy: "15 Days Auto-Purge"
+            };
+            setNotifications(items);
+            setStats(newStats);
+            _clientNotificationsCache = {
+                notifications: items,
+                stats: newStats
+            };
+            _clientNotificationsCacheTime = Date.now();
         } catch (err) {
             console.error("Failed to load notifications:", err);
-            toast.error("Failed to load broadcast notifications.");
+            if (!isSilent && !_clientNotificationsCache) {
+                toast.error("Failed to load broadcast notifications.");
+            }
         } finally {
             setLoading(false);
         }
     }, [onAuthLost]);
 
     useEffect(() => {
-        fetchNotifications();
-    }, [fetchNotifications]);
+        if (hasInitialCache) {
+            fetchNotifications(true);
+        } else {
+            fetchNotifications(false);
+        }
+    }, [fetchNotifications, hasInitialCache]);
 
     // Handle Publish
     const handleSubmit = async (e) => {

@@ -10,6 +10,7 @@ from datetime import date
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .utils.cache import cache_analytics_response
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +319,7 @@ def _build_po_search_sql(request, cursor, po_alias="m"):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_summary(request):
     """
     Returns KPI values for the Purchase Analysis page:
@@ -521,6 +523,7 @@ def purchase_analysis_summary(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_weekly_trend(request):
     """
     Returns week-by-week PO value and GRN received for Chart.js mixed bar+line.
@@ -676,6 +679,7 @@ def purchase_analysis_weekly_trend(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_charts(request):
     """
     Returns donut chart data:
@@ -817,6 +821,7 @@ def purchase_analysis_charts(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_pipeline(request):
     """
     Returns PO pipeline counts and values:
@@ -951,6 +956,7 @@ def purchase_analysis_pipeline(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_po_details(request):
     """
     Returns paginated PO line-item detail table rows.
@@ -1108,6 +1114,7 @@ def purchase_analysis_po_details(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_grn_aging(request):
     """
     Returns GRN aging list: open PO lines with their overdue days.
@@ -1223,6 +1230,7 @@ def purchase_analysis_grn_aging(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_month_summary(request):
     """
     Month-wise PO value and GRN received for the selected date range.
@@ -1328,6 +1336,7 @@ def purchase_analysis_month_summary(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_po_types(request):
     """
     Returns all distinct PO types (dtype) from POMas for the filter dropdown.
@@ -1378,6 +1387,7 @@ def purchase_analysis_po_types(request):
 # ────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_po_table(request):
     """
     Returns PO rows in the same structure as dashboard2_po_pipeline:
@@ -1927,6 +1937,7 @@ def purchase_analysis_po_table(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_amended_po_table(request):
     """
     Returns actual amended PO rows matching the specified SQL query logic.
@@ -2152,6 +2163,7 @@ def purchase_analysis_amended_po_table(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_short_close_table(request):
     """
     Returns actual Short Close PO Details matching the ShotClsReason / ShotClsUser filters.
@@ -2316,6 +2328,7 @@ def purchase_analysis_short_close_table(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_price_trend_table(request):
     """
     Calculates Price Trend details based on Commer_BaseRateDet (BReffdt rate changes),
@@ -2474,6 +2487,7 @@ def purchase_analysis_price_trend_table(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_management_alerts(request):
     """
     Dynamically generates management alerts and prioritized actions from ERP database.
@@ -2674,6 +2688,7 @@ def _fmt_rupees(val):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_traceability_table(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2926,6 +2941,7 @@ def purchase_analysis_traceability_table(request):
 # ─────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_supplier_rating(request):
     """
     Purchase Analysis — Supplier Rating score calculation per supplier
@@ -2942,6 +2958,7 @@ def purchase_analysis_supplier_rating(request):
 # ────────────────────────────────────────────────────────────
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_fulfillment_schedule(request):
     """
     Returns PO Fulfillment Schedule rows as per the exact PO_DATA + SCH_DATA + GRN_DATA CTE query.
@@ -3465,6 +3482,7 @@ def purchase_analysis_fulfillment_schedule(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_average_purchase_value(request):
     """
     Returns Average Purchase Value (APV) and line-item material classification data
@@ -3803,6 +3821,7 @@ def purchase_analysis_average_purchase_value(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_advanced_purchase_analytics(request):
     """
     Advanced Purchase Analytics:

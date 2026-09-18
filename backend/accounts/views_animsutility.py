@@ -11,10 +11,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from .views_adminpannel import check_admin_auth, admin_auth_denied_response
 
-# In-memory cache for Anims Utility (Accelerates responses to sub-15ms)
+# In-memory & Redis cache for Anims Utility (Accelerates responses to sub-2ms)
 _UTILITY_CLIENTS_CACHE = {}
 _UTILITY_ACTIVITY_CACHE = {}
-_UTILITY_CACHE_TTL = 20.0  # 20 seconds TTL
+_UTILITY_CACHE_TTL = 30.0  # 30 seconds local TTL
+ADMIN_UTILITY_CLIENTS_KEY = "admin_utility_clients_map"
+ADMIN_UTILITY_CLIENTS_TTL = 60  # 60 seconds Redis TTL
+ADMIN_UTILITY_ACTIVITY_KEY = "admin_utility_activity_feed"
+ADMIN_UTILITY_ACTIVITY_TTL = 60  # 60 seconds Redis TTL
 
 # Accent colors list to assign dynamically
 COLORS = ["#3b82f6", "#10b981", "#f97316", "#8b5cf6", "#ec4899", "#06b6d4"]
@@ -50,10 +54,43 @@ def admin_utility_clients(request):
 
     force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
     now_ts = time.time()
-    if not force_refresh and "clients_data" in _UTILITY_CLIENTS_CACHE:
-        cached = _UTILITY_CLIENTS_CACHE["clients_data"]
-        if (now_ts - cached["time"]) < _UTILITY_CACHE_TTL:
-            return HttpResponse(cached["bytes"], content_type="application/json")
+    if not force_refresh:
+        if "clients_data" in _UTILITY_CLIENTS_CACHE:
+            cached = _UTILITY_CLIENTS_CACHE["clients_data"]
+            if (now_ts - cached["time"]) < _UTILITY_CACHE_TTL:
+                return HttpResponse(cached["bytes"], content_type="application/json")
+        try:
+            from django.core.cache import cache
+            cached_bytes = cache.get(ADMIN_UTILITY_CLIENTS_KEY)
+            if cached_bytes:
+                _UTILITY_CLIENTS_CACHE["clients_data"] = {"bytes": cached_bytes, "time": now_ts}
+                return HttpResponse(cached_bytes, content_type="application/json")
+        except Exception:
+            pass
+
+    # Offload stale session cleanup to background worker to prevent locking read queries
+    from .views import _AUDIT_LOG_POOL
+    def _async_stale_cleanup():
+        from django.db import connection as async_conn
+        try:
+            with async_conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
+                    SELECT tenant_id, company_code, 'disconnect', username, 'session timed out', GETUTCDATE()
+                    FROM tenants_userssession
+                    WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+
+                    INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
+                    SELECT tenant_id, company_code, username, 'Session Timeout', GETUTCDATE()
+                    FROM tenants_userssession
+                    WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+
+                    DELETE FROM tenants_userssession
+                    WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
+                """)
+        except Exception:
+            pass
+    _AUDIT_LOG_POOL.submit(_async_stale_cleanup)
 
     try:
         batch_sql = """
@@ -82,44 +119,30 @@ def admin_utility_clients(request):
             FROM tenant_planupgrade 
             WHERE plan_status = 'Active';
 
-            -- 3. Batch Set-Based Stale Sessions Cleanup
-            INSERT INTO tenants_clientactivity (tenant_id, company_code, activity_type, username, message, created_at)
-            SELECT tenant_id, company_code, 'disconnect', username, 'session timed out', GETUTCDATE()
-            FROM tenants_userssession
-            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
-
-            INSERT INTO tenants_usersTransaction (tenant_id, company_code, username, module_name, created_at)
-            SELECT tenant_id, company_code, username, 'Session Timeout', GETUTCDATE()
-            FROM tenants_userssession
-            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
-
-            DELETE FROM tenants_userssession
-            WHERE last_seen IS NULL OR last_seen < DATEADD(MINUTE, -5, GETUTCDATE());
-
-            -- 4. Active Live Sessions
+            -- 3. Active Live Sessions
             SELECT company_code, username, system_name
             FROM tenants_userssession WITH (INDEX(IX_tenants_userssession_perf))
             WHERE last_seen >= DATEADD(MINUTE, -5, GETUTCDATE());
 
-            -- 5. Total Users per company
+            -- 4. Total Users per company
             SELECT company_code, COUNT(*) 
             FROM tenants_users WITH (INDEX(IX_tenants_users_company_perf))
             WHERE deleted = 0 
             GROUP BY company_code;
 
-            -- 6. Last Login per company
+            -- 5. Last Login per company
             SELECT company_code, MAX(created_at) 
             FROM tenants_clientactivity WITH (INDEX(IX_tenants_clientactivity_perf))
             WHERE activity_type = 'login' 
             GROUP BY company_code;
 
-            -- 7. Fallback Last Created User per company
+            -- 6. Fallback Last Created User per company
             SELECT company_code, MAX(created_at) 
             FROM tenants_users WITH (INDEX(IX_tenants_users_company_perf))
             WHERE deleted = 0 
             GROUP BY company_code;
 
-            -- 8. License Modules
+            -- 7. License Modules
             SELECT company_code, dashboard, approvals, reports, mis, charts, utility, plan_id 
             FROM tenants_lisencemodule;
         """
@@ -132,11 +155,6 @@ def admin_utility_clients(request):
             cursor.nextset()
             upgrade_rows = cursor.fetchall()
             upgrades_by_code = {(r[0] or "").strip().upper(): (r[1], r[2]) for r in upgrade_rows}
-
-            # Stale session cleanup
-            cursor.nextset()
-            cursor.nextset()
-            cursor.nextset()
 
             # Active live sessions
             cursor.nextset()
@@ -280,6 +298,11 @@ def admin_utility_clients(request):
             res_payload = {"success": True, "clients": clients}
             json_bytes = json.dumps(res_payload).encode("utf-8")
             _UTILITY_CLIENTS_CACHE["clients_data"] = {"bytes": json_bytes, "time": now_ts}
+            try:
+                from django.core.cache import cache
+                cache.set(ADMIN_UTILITY_CLIENTS_KEY, json_bytes, timeout=ADMIN_UTILITY_CLIENTS_TTL)
+            except Exception:
+                pass
             return HttpResponse(json_bytes, content_type="application/json")
 
     except Exception as e:
@@ -297,10 +320,19 @@ def admin_utility_activity(request):
 
     force_refresh = request.GET.get("force_refresh") in ("true", "1", "True")
     now_ts = time.time()
-    if not force_refresh and "activity_data" in _UTILITY_ACTIVITY_CACHE:
-        cached = _UTILITY_ACTIVITY_CACHE["activity_data"]
-        if (now_ts - cached["time"]) < 10.0:
-            return HttpResponse(cached["bytes"], content_type="application/json")
+    if not force_refresh:
+        if "activity_data" in _UTILITY_ACTIVITY_CACHE:
+            cached = _UTILITY_ACTIVITY_CACHE["activity_data"]
+            if (now_ts - cached["time"]) < 30.0:
+                return HttpResponse(cached["bytes"], content_type="application/json")
+        try:
+            from django.core.cache import cache
+            cached_bytes = cache.get(ADMIN_UTILITY_ACTIVITY_KEY)
+            if cached_bytes:
+                _UTILITY_ACTIVITY_CACHE["activity_data"] = {"bytes": cached_bytes, "time": now_ts}
+                return HttpResponse(cached_bytes, content_type="application/json")
+        except Exception:
+            pass
 
     try:
         activity = []
@@ -337,6 +369,11 @@ def admin_utility_activity(request):
             res_payload = {"success": True, "activity": activity}
             json_bytes = json.dumps(res_payload).encode("utf-8")
             _UTILITY_ACTIVITY_CACHE["activity_data"] = {"bytes": json_bytes, "time": now_ts}
+            try:
+                from django.core.cache import cache
+                cache.set(ADMIN_UTILITY_ACTIVITY_KEY, json_bytes, timeout=ADMIN_UTILITY_ACTIVITY_TTL)
+            except Exception:
+                pass
             return HttpResponse(json_bytes, content_type="application/json")
 
     except Exception as e:

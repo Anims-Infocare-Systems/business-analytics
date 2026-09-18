@@ -7,10 +7,46 @@ import "./Login.css";
 
 const API = resolveApiBase();
 const RIGHTS_CACHE_KEY = "ba_user_rights";
-const COMPANY_DEBOUNCE_MS = 200;
+const COMPANY_DEBOUNCE_MS = 250;
 const COMPANY_MIN_LEN = 2;
-const COMPANY_CACHE_MS = 5 * 60 * 1000;
+const COMPANY_CACHE_MS = 30 * 60 * 1000;
+const COMPANY_MAP_KEY = "ba_company_map";
+const COMPANY_MAP_TS_KEY = "ba_company_map_ts";
+const COMPANY_MAP_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const companyLookupCache = new Map();
+
+// In-memory directory of company codes -> company names, loaded from localStorage immediately
+let localCompanyMap = {};
+try {
+    const raw = localStorage.getItem(COMPANY_MAP_KEY);
+    if (raw) {
+        localCompanyMap = JSON.parse(raw) || {};
+    }
+} catch {
+    localCompanyMap = {};
+}
+
+// Background sync function to fetch the public directory of companies
+async function syncPublicCompaniesMap() {
+    try {
+        const lastTs = Number(localStorage.getItem(COMPANY_MAP_TS_KEY) || 0);
+        if (Object.keys(localCompanyMap).length > 0 && Date.now() - lastTs < COMPANY_MAP_TTL) {
+            return;
+        }
+        const res = await fetch(`${API}/companies/public/`, { credentials: "include" });
+        if (res.ok) {
+            const data = await res.json();
+            const map = data.companies || data;
+            if (map && typeof map === "object") {
+                localCompanyMap = map;
+                localStorage.setItem(COMPANY_MAP_KEY, JSON.stringify(map));
+                localStorage.setItem(COMPANY_MAP_TS_KEY, String(Date.now()));
+            }
+        }
+    } catch {
+        /* background sync fail tolerated */
+    }
+}
 
 function writeRightsCache(companyCode, username, rights, isSuperAdmin) {
     try {
@@ -199,6 +235,29 @@ export default function LoginPage() {
         }
     }, [navigate]);
 
+    // Sync public companies directory on mount + prefetch dashboard chunk
+    useEffect(() => {
+        syncPublicCompaniesMap();
+        try {
+            localStorage.removeItem("ba_last_user_id");
+            localStorage.removeItem("ba_last_username");
+            localStorage.removeItem("ba_last_company_name");
+        } catch { /* ignore */ }
+        const timer = setTimeout(() => {
+            import("./DashboardLayout").catch(() => {});
+        }, 1200);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const prefetchDashboard = () => {
+        try {
+            import("./DashboardLayout").catch(() => {});
+        } catch {
+            /* ignore */
+        }
+    };
+
+    // Fields always start empty so user types them fresh
     const [userId, setUserId] = useState("");
     const [companyName, setCompanyName] = useState("");
     const [companyState, setCompanyState] = useState("idle"); // idle | loading | found | error | inactive | network
@@ -223,6 +282,10 @@ export default function LoginPage() {
         if (res.ok && data.company_name) {
             setCompanyName(data.company_name);
             setCompanyState("found");
+            localCompanyMap[trimmed.toUpperCase()] = data.company_name;
+            try {
+                localStorage.setItem(COMPANY_MAP_KEY, JSON.stringify(localCompanyMap));
+            } catch {}
             return;
         }
         if (res.status === 403 && data.code === "account_inactive") {
@@ -240,6 +303,13 @@ export default function LoginPage() {
     };
 
     const runCompanyLookup = async (trimmed) => {
+        const upper = trimmed.toUpperCase();
+        if (localCompanyMap[upper]) {
+            setCompanyName(localCompanyMap[upper]);
+            setCompanyState("found");
+            return;
+        }
+
         const cached = getCachedCompanyLookup(trimmed);
         if (cached) {
             applyCompanyLookup(cached, trimmed);
@@ -267,9 +337,19 @@ export default function LoginPage() {
         clearTimeout(companyFetchRef.current.timer);
         companyFetchRef.current.controller?.abort();
 
-        if (trimmed.length < COMPANY_MIN_LEN) {
+        if (!trimmed || trimmed.length < COMPANY_MIN_LEN) {
             setCompanyName("");
             setCompanyState("idle");
+            inactiveToastKeyRef.current = "";
+            return;
+        }
+
+        const upper = trimmed.toUpperCase();
+
+        // ⚡ INSTANT 0ms resolution from local memory map
+        if (localCompanyMap[upper]) {
+            setCompanyName(localCompanyMap[upper]);
+            setCompanyState("found");
             inactiveToastKeyRef.current = "";
             return;
         }
@@ -280,7 +360,14 @@ export default function LoginPage() {
             return;
         }
 
-        setCompanyState("loading");
+        // Keep idle while typing short codes, preventing premature "fetching..." flicker
+        if (trimmed.length < 4) {
+            setCompanyName("");
+            setCompanyState("idle");
+            return;
+        }
+
+        // Only start spinner and fetch if user pauses typing and code is >= 4 chars
         companyFetchRef.current.timer = setTimeout(() => {
             runCompanyLookup(trimmed);
         }, COMPANY_DEBOUNCE_MS);
@@ -466,15 +553,19 @@ export default function LoginPage() {
                         Business Analytics Platform
                     </h2>
 
-                    <div className="lp__illus anim-fade-in" style={{ animationDelay: "0.4s" }}>
-                        <img
-                            src="/Images/LOGIN FINAL imag eand curve.png"
-                            alt="Business analytics dashboard illustration"
-                            className="lp__illus-img float-slow"
-                            loading="lazy"
-                            decoding="async"
-                            fetchPriority="low"
-                        />
+                    <div className="lp__illus anim-fade-in" style={{ animationDelay: "0.05s" }}>
+                        <picture>
+                            <source srcSet="/Images/login_hero_1200.webp" media="(max-width: 1200px)" type="image/webp" />
+                            <source srcSet="/Images/login_hero.webp" type="image/webp" />
+                            <img
+                                src="/Images/login_hero.webp"
+                                alt="Business analytics dashboard illustration"
+                                className="lp__illus-img float-slow"
+                                loading="eager"
+                                decoding="sync"
+                                fetchPriority="high"
+                            />
+                        </picture>
                     </div>
 
                     <p className="lp__desc anim-fade-up" style={{ animationDelay: "0.3s" }}>
@@ -489,7 +580,10 @@ export default function LoginPage() {
                     <div className="lp__card">
                         <div className="lp__card-head anim-fade-up" style={{ animationDelay: "0.1s" }}>
                             <div className="lp__logo anim-fade-in" style={{ animationDelay: "0.05s" }}>
-                                <img src="/Images/logo.png" alt="Anims" className="lp__logo-img" />
+                                <picture>
+                                    <source srcSet="/Images/logo.webp" type="image/webp" />
+                                    <img src="/Images/logo.png" alt="Anims" className="lp__logo-img" loading="eager" decoding="async" />
+                                </picture>
                             </div>
                             <h1 className="lp__title">Welcome back</h1>
                             <p className="lp__subtitle">
@@ -591,6 +685,7 @@ export default function LoginPage() {
                                             setPassword(e.target.value);
                                             setLoginError("");
                                         }}
+                                        onFocus={prefetchDashboard}
                                         autoComplete="off"
                                     />
                                     <button
