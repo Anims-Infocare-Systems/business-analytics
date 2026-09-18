@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     # Health & Authentication
-    health_check, login_view, logout_view, heartbeat_view, log_transaction, get_company, public_companies_list,
+    health_check, prewarm_connection, login_view, logout_view, heartbeat_view, log_transaction, get_company, public_companies_list,
     forgot_password_verify, forgot_password_reset,
     # Charts - Sabarish (Monthwise)
     po_vs_sales, customer_complaints, rejection_monthwise, rework_monthwise, mac_rejection_ppm, otd_report,
@@ -81,6 +81,7 @@ from .views_notifications import (
 urlpatterns = [
     # ── Health & Authentication ────────────────────────────────────────
     path('health/', health_check, name='health_check'),
+    path('prewarm/', prewarm_connection, name='prewarm_connection'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
     path('heartbeat/', heartbeat_view, name='heartbeat'),

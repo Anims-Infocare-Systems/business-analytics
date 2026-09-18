@@ -1,18 +1,31 @@
 def check_mapproval_settings(tenant):
     from accounts.views import get_connection
-    # Extract connection credentials depending on type
+    from django.core.cache import cache
+
+    # Extract connection credentials and company code depending on type
     if isinstance(tenant, dict):
         server = tenant.get("erp_server")
         database = tenant.get("erp_database")
         username = tenant.get("erp_user")
         password = tenant.get("erp_password")
         port = tenant.get("erp_port") or 1433
+        company_code = str(tenant.get("company_code") or "").strip().upper()
     else:
         server = tenant.erp_server
         database = tenant.erp_database
         username = tenant.erp_user
         password = tenant.erp_password
         port = tenant.erp_port or 1433
+        company_code = str(getattr(tenant, "company_code", "") or "").strip().upper()
+
+    if company_code:
+        cache_key = f"mapproval_settings:{company_code}"
+        try:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return bool(cached)
+        except Exception:
+            pass
 
     if not server or not database:
         return True
@@ -76,7 +89,13 @@ def check_mapproval_settings(tenant):
             
         cursor.close()
         conn.close()
-        return (is_roucard or is_comm or is_vend_mast or is_vend or is_cust_po or is_supp_po_ind)
+        result = bool(is_roucard or is_comm or is_vend_mast or is_vend or is_cust_po or is_supp_po_ind)
+        if company_code:
+            try:
+                cache.set(cache_key, result, timeout=1800)
+            except Exception:
+                pass
+        return result
     except Exception as e:
         print("[M-APPROVAL-SETTINGS] Error checking settings:", e)
         # In case of DB query error/unavailable, default to True so we don't break menu

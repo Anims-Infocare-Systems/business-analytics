@@ -136,7 +136,7 @@ def invalidate_tenant_analytics_cache(company_code):
 
 def invalidate_user_rights_cache(company_code, username=None):
     """
-    Invalidates cached user rights for a specific user or all users in a tenant company.
+    Invalidates cached user rights and user auth records for a specific user or all users in a tenant company.
     """
     if not company_code:
         return
@@ -145,9 +145,11 @@ def invalidate_user_rights_cache(company_code, username=None):
         if username:
             u = str(username).strip().upper()
             cache.delete(f"user_rights_me:{code}:{u}")
+            cache.delete(f"user_auth:{code}:{u}")
         else:
             if hasattr(cache, "delete_pattern"):
                 cache.delete_pattern(f"*user_rights_me:{code}:*")
+                cache.delete_pattern(f"*user_auth:{code}:*")
     except Exception as e:
         logger.warning(f"Failed to invalidate user rights cache: {e}")
 

@@ -249,8 +249,9 @@ export default function LoginPage() {
         return () => clearTimeout(timer);
     }, []);
 
-    const prefetchDashboard = () => {
+    const prewarmBackend = () => {
         try {
+            fetch(`${API}/prewarm/`, { credentials: "include" }).catch(() => {});
             import("./DashboardLayout").catch(() => {});
         } catch {
             /* ignore */
@@ -286,6 +287,7 @@ export default function LoginPage() {
             try {
                 localStorage.setItem(COMPANY_MAP_KEY, JSON.stringify(localCompanyMap));
             } catch {}
+            prewarmBackend();
             return;
         }
         if (res.status === 403 && data.code === "account_inactive") {
@@ -307,6 +309,7 @@ export default function LoginPage() {
         if (localCompanyMap[upper]) {
             setCompanyName(localCompanyMap[upper]);
             setCompanyState("found");
+            prewarmBackend();
             return;
         }
 
@@ -480,9 +483,8 @@ export default function LoginPage() {
                     data.rights || {},
                     !!data.isSuperAdmin,
                 );
-                // Full navigation so PWA + all dashboard CSS load cleanly (client-side
-                // navigate can leave enter animations stuck at opacity 0).
-                window.location.replace("/AnimsBusinessAnalytics");
+                // ⚡ Fast SPA Navigation: Instant transition without browser reloads or blank screens
+                navigate("/AnimsBusinessAnalytics", { replace: true });
             } else if (res.status === 403 && data.code === "account_inactive") {
                 showAccountInactiveToast();
             } else if (res.status === 503 && data.code === "db_unavailable") {
@@ -665,6 +667,7 @@ export default function LoginPage() {
                                             setUsername(e.target.value);
                                             setLoginError("");
                                         }}
+                                        onFocus={prewarmBackend}
                                         autoComplete="off"
                                     />
                                 </div>
@@ -685,7 +688,7 @@ export default function LoginPage() {
                                             setPassword(e.target.value);
                                             setLoginError("");
                                         }}
-                                        onFocus={prefetchDashboard}
+                                        onFocus={prewarmBackend}
                                         autoComplete="off"
                                     />
                                     <button
