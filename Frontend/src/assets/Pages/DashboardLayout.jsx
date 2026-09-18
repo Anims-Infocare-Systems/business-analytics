@@ -1100,26 +1100,31 @@ export default function DashboardLayout() {
         let lastSent = 0;
         const sendHeartbeat = (force = false) => {
             const now = Date.now();
-            // Don't send if tab is hidden unless forced, and debounce by at least 60 seconds
+            // Don't send if tab is hidden unless forced
             if (!force && document.visibilityState === "hidden") return;
-            if (!force && now - lastSent < 60000) return;
+            if (!force && now - lastSent < 20000) return;
 
             lastSent = now;
             fetch(`${API}/heartbeat/`, {
                 method: "GET",
                 credentials: "include",
-            }).catch(() => { }); // Non-critical — never show errors to user
+            }).then(res => {
+                if (res.status === 401) {
+                    try { sessionStorage.setItem("ba_logout_reason", "concurrent_login"); } catch {}
+                    handleLogout();
+                }
+            }).catch(() => { });
         };
 
         // Fire immediately so login registers at once
         sendHeartbeat(true);
 
-        // Repeat every 5 minutes (300 000 ms) instead of 2 minutes
-        const interval = setInterval(() => sendHeartbeat(false), 300000);
+        // Check session validity every 25 seconds (in-memory Redis, 0 SQL load)
+        const interval = setInterval(() => sendHeartbeat(false), 25000);
 
-        // Refresh on tab focus restore (debounced to once per minute max)
+        // Refresh immediately on tab focus restore
         const onVisible = () => {
-            if (document.visibilityState === "visible") sendHeartbeat(false);
+            if (document.visibilityState === "visible") sendHeartbeat(true);
         };
         document.addEventListener("visibilitychange", onVisible);
 
@@ -1127,7 +1132,7 @@ export default function DashboardLayout() {
             clearInterval(interval);
             document.removeEventListener("visibilitychange", onVisible);
         };
-    }, []);
+    }, [handleLogout]);
 
     /* ── Idle auto-logout — 15-minute inactivity timer ────────────────────
        Activity events: mousemove, mousedown, keydown, scroll, touchstart

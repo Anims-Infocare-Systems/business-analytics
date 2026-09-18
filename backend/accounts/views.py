@@ -757,11 +757,11 @@ def heartbeat_view(request):
     from .session_utils import get_or_restore_session_tenant
     try:
         tenant = get_or_restore_session_tenant(request, allow_expired=True)
-    except ValueError:
-        tenant = None
+    except ValueError as e:
+        return Response({"ok": False, "code": "session_terminated", "error": str(e)}, status=401)
 
     if not tenant:
-        return Response({"ok": False, "reason": "no_session"}, status=200)
+        return Response({"ok": False, "code": "no_session", "reason": "no_session"}, status=401)
 
     company_code = tenant.get("company_code")
     username = tenant.get("username")

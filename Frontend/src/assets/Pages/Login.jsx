@@ -246,6 +246,13 @@ export default function LoginPage() {
         const timer = setTimeout(() => {
             import("./DashboardLayout").catch(() => {});
         }, 1200);
+        try {
+            const reason = sessionStorage.getItem("ba_logout_reason");
+            if (reason === "concurrent_login") {
+                sessionStorage.removeItem("ba_logout_reason");
+                setLoginError("You have been logged out because this account was logged in from another device or browser.");
+            }
+        } catch { /* ignore */ }
         return () => clearTimeout(timer);
     }, []);
 

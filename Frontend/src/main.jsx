@@ -347,7 +347,7 @@ window.fetch = async (...args) => {
   if (res.status === 401 && !_redirecting401) {
     const isAdminApi = url.includes("/admin/");
     const isUserLoginApi = url.includes("/login/") || url.includes("/forgot-password/") || url.includes("/logout/");
-    const isBackgroundApi = url.includes("/heartbeat/") || url.includes("/log-transaction/");
+    const isBackgroundApi = url.includes("/log-transaction/");
     if (!isUserLoginApi && !isAdminApi && !isBackgroundApi && !isAuthPage()) {
       _redirecting401 = true;
       try {
@@ -356,6 +356,7 @@ window.fetch = async (...args) => {
         localStorage.removeItem("ba_settings_profile");
         localStorage.removeItem("ba_nav");
         sessionStorage.clear();
+        sessionStorage.setItem("ba_logout_reason", "concurrent_login");
       } catch (e) {
         console.error("Storage clear failed:", e);
       }
