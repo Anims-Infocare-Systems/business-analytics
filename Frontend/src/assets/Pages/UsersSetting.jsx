@@ -112,7 +112,7 @@ const HIDE_UNDER_1000_KEY = "eapproval_filter_hide_under_1000";
 // Tabs definition
 const TABS = [
     { id: "eapproval", label: "E-Approval PO Limits", icon: FileCheck2 },
-    { id: "datesetting", label: "Date Setting Option", icon: MdDateRange, badge: "NEW" },
+    { id: "datesetting", label: "Date Setting Option", icon: MdDateRange, badge: "" },
     { id: "technical", label: "T & M Approvals", icon: Wrench, disabled: true },
 ];
 
@@ -187,11 +187,11 @@ function ModernDateDropdown({ value, onChange, moduleKey }) {
         const rect = triggerRef.current.getBoundingClientRect();
         const spaceBelow = window.innerHeight - rect.bottom;
         const openUpward = spaceBelow < 320 && rect.top > 320;
-        
+
         // Responsive width clamping for mobile devices
         const maxAvailableWidth = Math.max(260, window.innerWidth - 24);
         const width = Math.min(Math.max(rect.width, 290), maxAvailableWidth);
-        
+
         // Ensure menu never overflows left or right viewport edges
         let left = rect.left;
         if (left + width > window.innerWidth - 12) {
@@ -900,7 +900,7 @@ export default function UsersSetting() {
                         >
                             <CalendarRange size={16} />
                             <span>Date Setting Option</span>
-                            <span className="us-quick-launch-pill__badge">NEW</span>
+                            {/* <span className="us-quick-launch-pill__badge"></span> */}
                             <span className="us-quick-launch-pill__arrow">→</span>
                         </button>
 
@@ -1570,37 +1570,6 @@ export default function UsersSetting() {
                         </div>
                     )}
 
-                    {/* ── Bottom Save Sticky Bar ── */}
-                    <div className="us-ds-bottom-bar">
-                        <div className="us-ds-bottom-bar__left">
-                            <span className="us-pulse-dot--emerald" />
-                            <span className="us-ds-bottom-bar__text">
-                                Settings persist in company database and synchronize automatically across all user logins.
-                            </span>
-                        </div>
-
-                        <div className="us-ds-bottom-bar__right">
-                            <button
-                                type="button"
-                                className="us-btn us-btn--outline"
-                                onClick={handleResetDateSettings}
-                                title="Reset all 7 modules back to Last 3 Months"
-                            >
-                                <FiRotateCcw size={14} />
-                                <span className="us-btn__label">Reset Factory Defaults</span>
-                            </button>
-
-                            <button
-                                type="button"
-                                className="us-btn us-btn--primary"
-                                onClick={handleSaveDateSettings}
-                                disabled={isSavingDates}
-                            >
-                                <FiSave size={14} />
-                                <span className="us-btn__label">{isSavingDates ? "Saving Changes…" : "Save Date Settings"}</span>
-                            </button>
-                        </div>
-                    </div>
 
                 </div>
             )}

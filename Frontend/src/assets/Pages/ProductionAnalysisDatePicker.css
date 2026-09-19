@@ -29,6 +29,49 @@
     color: var(--padp-text);
 }
 
+/* Modern Scrollbar for Production DatePicker */
+.padp-wrap *::-webkit-scrollbar,
+.padp-portal-wrap *::-webkit-scrollbar,
+.padp-popup::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.padp-wrap *::-webkit-scrollbar-track,
+.padp-portal-wrap *::-webkit-scrollbar-track,
+.padp-popup::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.padp-wrap *::-webkit-scrollbar-thumb,
+.padp-portal-wrap *::-webkit-scrollbar-thumb,
+.padp-popup::-webkit-scrollbar-thumb {
+    background: rgba(249, 115, 22, 0.3);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.padp-wrap *::-webkit-scrollbar-thumb:hover,
+.padp-portal-wrap *::-webkit-scrollbar-thumb:hover,
+.padp-popup::-webkit-scrollbar-thumb:hover {
+    background: #ea6c0a;
+}
+
+.padp-wrap *::-webkit-scrollbar-corner,
+.padp-portal-wrap *::-webkit-scrollbar-corner,
+.padp-popup::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.padp-wrap,
+.padp-wrap *,
+.padp-portal-wrap,
+.padp-portal-wrap *,
+.padp-popup {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(249, 115, 22, 0.3) transparent;
+}
+
 /* ── Root wrapper ─────────────────────────────────────────── */
 .padp-wrap {
     position: relative;
@@ -321,8 +364,8 @@
     color: var(--padp-muted);
     flex: 1;
 }
-.padp-footer__field {
-    display: flex;
+.padp-footer__input-wrap {
+    display: inline-flex;
     align-items: center;
     gap: .35rem;
     padding: .35rem .7rem;
@@ -331,7 +374,66 @@
     border-radius: 7px;
     font-size: .78rem;
     font-weight: 600;
-    color: var(--padp-sub);
+    transition: border-color var(--padp-tr), box-shadow var(--padp-tr);
+}
+
+.padp-footer__input-wrap:focus-within {
+    border-color: var(--padp-accent);
+    box-shadow: 0 0 0 2.5px var(--padp-focus-ring);
+}
+
+.padp-footer__input-ico {
+    color: var(--padp-accent);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.padp-footer__input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--padp-text);
+    width: 78px;
+    min-width: 0;
+    line-height: 1.3;
+    padding: 0;
+}
+
+.padp-footer__input::placeholder {
+    color: var(--padp-muted);
+    font-weight: 500;
+}
+
+.padp-footer__input--set {
+    color: var(--padp-accent-txt);
+    font-weight: 700;
+}
+
+.padp-footer__input--err {
+    color: #ef4444;
+}
+
+.padp-footer__input-wrap:has(.padp-footer__input--err) {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.12);
+}
+
+.padp-footer__days {
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--padp-accent-txt);
+    background: var(--padp-accent-lt);
+    padding: .2rem .5rem;
+    border-radius: 4px;
+}
+
+.padp-footer__err {
+    font-size: 10px;
+    color: #ef4444;
+    font-weight: 600;
     white-space: nowrap;
 }
 .padp-footer__btns { display: flex; gap: .55rem; }

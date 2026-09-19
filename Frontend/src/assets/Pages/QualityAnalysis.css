@@ -11,6 +11,76 @@
     --qa-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
 }
 
+/* ──────────────────────────────────────────
+   MODERN UI SCROLLBAR BASE FOR QUALITY ANALYSIS
+   Replaces OS default dark/black scrollbars
+   with sleek, modern 6px floating pill scrollbars.
+   Visible ONLY when width/height exceeds container boundaries.
+────────────────────────────────────────── */
+.qa2-root *::-webkit-scrollbar,
+.qa2-timeline-modal-overlay *::-webkit-scrollbar,
+.qa2-cust-dropdown-panel *::-webkit-scrollbar,
+.qa2-reason-dropdown-panel *::-webkit-scrollbar,
+.qa2-trend-dropdown-panel *::-webkit-scrollbar,
+.qa2-card *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.qa2-root *::-webkit-scrollbar-track,
+.qa2-timeline-modal-overlay *::-webkit-scrollbar-track,
+.qa2-cust-dropdown-panel *::-webkit-scrollbar-track,
+.qa2-reason-dropdown-panel *::-webkit-scrollbar-track,
+.qa2-trend-dropdown-panel *::-webkit-scrollbar-track,
+.qa2-card *::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-root *::-webkit-scrollbar-thumb,
+.qa2-timeline-modal-overlay *::-webkit-scrollbar-thumb,
+.qa2-cust-dropdown-panel *::-webkit-scrollbar-thumb,
+.qa2-reason-dropdown-panel *::-webkit-scrollbar-thumb,
+.qa2-trend-dropdown-panel *::-webkit-scrollbar-thumb,
+.qa2-card *::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.qa2-root *::-webkit-scrollbar-thumb:hover,
+.qa2-timeline-modal-overlay *::-webkit-scrollbar-thumb:hover,
+.qa2-cust-dropdown-panel *::-webkit-scrollbar-thumb:hover,
+.qa2-reason-dropdown-panel *::-webkit-scrollbar-thumb:hover,
+.qa2-trend-dropdown-panel *::-webkit-scrollbar-thumb:hover,
+.qa2-card *::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.qa2-root *::-webkit-scrollbar-corner,
+.qa2-timeline-modal-overlay *::-webkit-scrollbar-corner,
+.qa2-cust-dropdown-panel *::-webkit-scrollbar-corner,
+.qa2-reason-dropdown-panel *::-webkit-scrollbar-corner,
+.qa2-trend-dropdown-panel *::-webkit-scrollbar-corner,
+.qa2-card *::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.qa2-root,
+.qa2-root *,
+.qa2-timeline-modal-overlay,
+.qa2-timeline-modal-overlay *,
+.qa2-cust-dropdown-panel,
+.qa2-cust-dropdown-panel *,
+.qa2-reason-dropdown-panel,
+.qa2-reason-dropdown-panel *,
+.qa2-trend-dropdown-panel,
+.qa2-trend-dropdown-panel *,
+.qa2-card,
+.qa2-card * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
 /* ── Root ─────────────────────────────────────────────────── */
 .qa2-root {
     font-family: var(--qa-font-body);
@@ -873,21 +943,31 @@
     max-height: 320px;
     overflow-y: auto;
     border-top: 1px solid rgba(26, 84, 212, 0.08);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .qa2-table-scroll::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
+}
+
+.qa2-table-scroll::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .qa2-table-scroll::-webkit-scrollbar-thumb {
-    background: rgba(26, 84, 212, 0.15);
+    background: rgba(45, 109, 232, 0.25);
     border-radius: 99px;
-    transition: background 0.2s;
+    transition: background 0.2s ease;
 }
 
 .qa2-table-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(26, 84, 212, 0.3);
+    background: #2563eb;
+}
+
+.qa2-table-scroll::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-table {
@@ -1097,12 +1177,15 @@
 .qa2-pq-scroll-container {
     max-height: 270px;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 /* Custom scrollbar for product list */
 .qa2-pq-scroll-container::-webkit-scrollbar {
     width: 5px;
+    height: 5px;
 }
 
 .qa2-pq-scroll-container::-webkit-scrollbar-track {
@@ -1110,12 +1193,17 @@
 }
 
 .qa2-pq-scroll-container::-webkit-scrollbar-thumb {
-    background: rgba(26, 84, 212, 0.12);
+    background: rgba(45, 109, 232, 0.25);
     border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .qa2-pq-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(26, 84, 212, 0.25);
+    background: #2563eb;
+}
+
+.qa2-pq-scroll-container::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-pq-row {
@@ -1382,15 +1470,16 @@
 .qa2-cal-scroll {
     max-height: 272px;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     position: relative;
     /* slim custom scrollbar */
     scrollbar-width: thin;
-    scrollbar-color: rgba(99, 132, 255, 0.35) transparent;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .qa2-cal-scroll::-webkit-scrollbar {
-    width: 4px;
+    width: 5px;
+    height: 5px;
 }
 
 .qa2-cal-scroll::-webkit-scrollbar-track {
@@ -1398,12 +1487,17 @@
 }
 
 .qa2-cal-scroll::-webkit-scrollbar-thumb {
-    background: rgba(99, 132, 255, 0.35);
+    background: rgba(45, 109, 232, 0.25);
     border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .qa2-cal-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(99, 132, 255, 0.6);
+    background: #2563eb;
+}
+
+.qa2-cal-scroll::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* fade-out shadow at bottom to hint at more content */
@@ -2161,10 +2255,36 @@
 .qa2-cust-list-scroll {
     max-height: 220px;
     overflow-y: auto;
+    overflow-x: auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding-right: 2px;
+    padding-right: 3px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.qa2-cust-list-scroll::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.qa2-cust-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-cust-list-scroll::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.qa2-cust-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.qa2-cust-list-scroll::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-cust-item {
@@ -2854,19 +2974,36 @@
 .qa2-timeline-dropdown-popover-list {
     max-height: 330px;
     overflow-y: auto;
+    overflow-x: auto;
     padding: 8px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .qa2-timeline-dropdown-popover-list::-webkit-scrollbar {
     width: 5px;
+    height: 5px;
+}
+
+.qa2-timeline-dropdown-popover-list::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .qa2-timeline-dropdown-popover-list::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.qa2-timeline-dropdown-popover-list::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.qa2-timeline-dropdown-popover-list::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-timeline-dropdown-item {
@@ -3261,6 +3398,8 @@
     padding-left: 4px;
     padding-right: 4px;
     margin-top: -8px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 /* Custom sleek scrollbar for pipeline */
@@ -3269,17 +3408,21 @@
 }
 
 .qa2-timeline-single-row-pipeline::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 999px;
+    background: transparent;
 }
 
 .qa2-timeline-single-row-pipeline::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 999px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .qa2-timeline-single-row-pipeline::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #2563eb;
+}
+
+.qa2-timeline-single-row-pipeline::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-timeline-pipe-step-wrapper {
@@ -3722,6 +3865,7 @@
 .qa2-timeline-modal-body {
     padding: 22px 26px;
     overflow-y: auto;
+    overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     flex: 1 1 auto;
     min-height: 0 !important;
@@ -3729,6 +3873,8 @@
     flex-direction: column;
     gap: 20px;
     background: #f8fafc;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .qa2-timeline-modal-body::-webkit-scrollbar {
@@ -3741,12 +3887,17 @@
 }
 
 .qa2-timeline-modal-body::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .qa2-timeline-modal-body::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #2563eb;
+}
+
+.qa2-timeline-modal-body::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-timeline-modal-metrics-section {
@@ -3960,6 +4111,31 @@
     border-radius: 10px;
     border: 1px solid #e2e8f0;
     background: #ffffff;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.qa2-timeline-table-wrapper::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.qa2-timeline-table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-timeline-table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.qa2-timeline-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.qa2-timeline-table-wrapper::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .qa2-timeline-dim-table {
@@ -5848,6 +6024,31 @@
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         width: 100%;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+    }
+
+    .qa2-table-wrapper::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .qa2-table-wrapper::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .qa2-table-wrapper::-webkit-scrollbar-thumb {
+        background: rgba(45, 109, 232, 0.25);
+        border-radius: 99px;
+        transition: background 0.2s ease;
+    }
+
+    .qa2-table-wrapper::-webkit-scrollbar-thumb:hover {
+        background: #2563eb;
+    }
+
+    .qa2-table-wrapper::-webkit-scrollbar-corner {
+        background: transparent;
     }
 
     .qa2-table {

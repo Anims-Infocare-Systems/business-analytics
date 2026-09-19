@@ -2877,6 +2877,17 @@
 .pp1-bottom__table-scroll {
     max-height: 128px;
     overflow-y: auto;
+    overflow-x: auto;
+    border-radius: 9px;
+    border: 1px solid rgba(226, 232, 240, .8);
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.pp1-bottom__table-scroll::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .pp1-bottom__section-lbl {
@@ -2886,13 +2897,6 @@
     text-transform: uppercase;
     letter-spacing: .65px;
     margin-bottom: 8px;
-}
-
-/* TABLE */
-.pp1-bottom__table-scroll {
-    overflow-x: auto;
-    border-radius: 9px;
-    border: 1px solid rgba(226, 232, 240, .8);
 }
 
 .pp1-table {
@@ -3237,6 +3241,14 @@
     box-shadow:
         0 0 0 1px rgba(15, 23, 42, 0.04),
         0 4px 20px rgba(15, 23, 42, 0.07);
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.pp1-cc-tbl-wrap::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .pp1-cc-tbl {

@@ -507,7 +507,7 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
               )}
             </div>
 
-            <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div className="pa2-ps-scroll-list">
               {!search && (
                 <button
                   type="button"
@@ -3257,7 +3257,7 @@ export default function ProductionAnalysis() {
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
-                  <div style={{ maxHeight: "200px", overflowY: "auto", padding: "2px" }}>
+                  <div className="pa2-ps-scroll-list" style={{ maxHeight: "200px", padding: "2px" }}>
                     {(() => {
                       const query = mhrSearchQuery.trim().toLowerCase();
                       const allMacs = macOptions.length > 1

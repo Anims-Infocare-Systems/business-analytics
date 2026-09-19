@@ -5,6 +5,85 @@
    Matches DashboardLayout color theme: #2d6de8 / #1a54d4 / #1448b8
    ============================================================ */
 
+/* ──────────────────────────────────────────
+   MODERN UI SCROLLBAR BASE FOR PRODUCTION ANALYSIS
+   Replaces OS default dark/black scrollbars
+   with sleek, modern 6px floating pill scrollbars.
+   Visible ONLY when width/height exceeds container boundaries.
+────────────────────────────────────────── */
+.pa2-wrap *::-webkit-scrollbar,
+.pa2-modal-overlay *::-webkit-scrollbar,
+.pa2-ps-menu::-webkit-scrollbar,
+.pa2-ps-menu *::-webkit-scrollbar,
+.pa2-ps-scroll-list::-webkit-scrollbar,
+.pa2-ps-scroll-list *::-webkit-scrollbar,
+.pa2-table-wrap::-webkit-scrollbar,
+.pa2-card *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.pa2-wrap *::-webkit-scrollbar-track,
+.pa2-modal-overlay *::-webkit-scrollbar-track,
+.pa2-ps-menu::-webkit-scrollbar-track,
+.pa2-ps-menu *::-webkit-scrollbar-track,
+.pa2-ps-scroll-list::-webkit-scrollbar-track,
+.pa2-ps-scroll-list *::-webkit-scrollbar-track,
+.pa2-table-wrap::-webkit-scrollbar-track,
+.pa2-card *::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-wrap *::-webkit-scrollbar-thumb,
+.pa2-modal-overlay *::-webkit-scrollbar-thumb,
+.pa2-ps-menu::-webkit-scrollbar-thumb,
+.pa2-ps-menu *::-webkit-scrollbar-thumb,
+.pa2-ps-scroll-list::-webkit-scrollbar-thumb,
+.pa2-ps-scroll-list *::-webkit-scrollbar-thumb,
+.pa2-table-wrap::-webkit-scrollbar-thumb,
+.pa2-card *::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-wrap *::-webkit-scrollbar-thumb:hover,
+.pa2-modal-overlay *::-webkit-scrollbar-thumb:hover,
+.pa2-ps-menu::-webkit-scrollbar-thumb:hover,
+.pa2-ps-menu *::-webkit-scrollbar-thumb:hover,
+.pa2-ps-scroll-list::-webkit-scrollbar-thumb:hover,
+.pa2-ps-scroll-list *::-webkit-scrollbar-thumb:hover,
+.pa2-table-wrap::-webkit-scrollbar-thumb:hover,
+.pa2-card *::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-wrap *::-webkit-scrollbar-corner,
+.pa2-modal-overlay *::-webkit-scrollbar-corner,
+.pa2-ps-menu::-webkit-scrollbar-corner,
+.pa2-ps-menu *::-webkit-scrollbar-corner,
+.pa2-ps-scroll-list::-webkit-scrollbar-corner,
+.pa2-ps-scroll-list *::-webkit-scrollbar-corner,
+.pa2-table-wrap::-webkit-scrollbar-corner,
+.pa2-card *::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.pa2-wrap,
+.pa2-wrap *,
+.pa2-modal-overlay,
+.pa2-modal-overlay *,
+.pa2-ps-menu,
+.pa2-ps-menu *,
+.pa2-ps-scroll-list,
+.pa2-ps-scroll-list *,
+.pa2-table-wrap,
+.pa2-card,
+.pa2-card * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
 /* ── Keyframes ───────────────────────────────────────────── */
 @keyframes pa2-fade-up {
     from {
@@ -396,6 +475,68 @@
     gap: 2px;
     max-height: 240px;
     overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.pa2-ps-menu::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.pa2-ps-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-ps-menu::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-ps-menu::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-ps-menu::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Inner scroll list for multi-select dropdowns */
+.pa2-ps-scroll-list {
+    max-height: 180px;
+    overflow-y: auto;
+    overflow-x: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.pa2-ps-scroll-list::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.pa2-ps-scroll-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-ps-scroll-list::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-ps-scroll-list::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-ps-scroll-list::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-ps-item {
@@ -1070,11 +1211,15 @@
 .pa2-macdetails-scroll-container {
     max-height: 290px;
     overflow-y: auto;
+    overflow-x: auto;
     padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .pa2-macdetails-scroll-container::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
 }
 
 .pa2-macdetails-scroll-container::-webkit-scrollbar-track {
@@ -1082,12 +1227,17 @@
 }
 
 .pa2-macdetails-scroll-container::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .pa2-macdetails-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #2563eb;
+}
+
+.pa2-macdetails-scroll-container::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* Empty State Styles */
@@ -1508,14 +1658,18 @@
     border-radius: 12px;
     max-height: 175px;
     overflow-y: auto;
+    overflow-x: auto;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     opacity: 0;
     animation: pa2-modal-cascade 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
     animation-delay: calc(var(--di, 0) * 50ms + 250ms);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .pa2-modal-table-wrapper::-webkit-scrollbar {
     width: 5px;
+    height: 5px;
 }
 
 .pa2-modal-table-wrapper::-webkit-scrollbar-track {
@@ -1523,12 +1677,17 @@
 }
 
 .pa2-modal-table-wrapper::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .pa2-modal-table-wrapper::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #2563eb;
+}
+
+.pa2-modal-table-wrapper::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-modal-table {
@@ -2181,6 +2340,31 @@
 
 .pa2-loss-table-wrap {
     overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.pa2-loss-table-wrap::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.pa2-loss-table-wrap::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pa2-loss-table-wrap::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-loss-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-loss-table-wrap::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-loss-table {
@@ -2470,6 +2654,8 @@
     -webkit-overflow-scrolling: touch;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .pa2-table-wrap::-webkit-scrollbar {
@@ -2482,12 +2668,17 @@
 }
 
 .pa2-table-wrap::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
 }
 
 .pa2-table-wrap::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #2563eb;
+}
+
+.pa2-table-wrap::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-table {
@@ -2496,18 +2687,24 @@
     font-size: 13px;
 }
 
+.pa2-table thead {
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+}
+
 .pa2-table th {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    color: #ffffff;
-    box-shadow: inset 0 -2px 0 rgba(59, 130, 246, 0.4);
-    padding: 14px 16px;
-    font-size: 11.5px;
+    background: #f8fafc;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+    box-shadow: inset 0 -1px 0 #e2e8f0;
+    padding: 12px 16px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .8px;
+    letter-spacing: .7px;
     white-space: nowrap;
 }
 
@@ -2933,11 +3130,15 @@
 .pa2-mhr-scroll-inputs {
     max-height: 460px;
     overflow-y: auto;
+    overflow-x: auto;
     padding-right: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .pa2-mhr-scroll-inputs::-webkit-scrollbar {
-    width: 4px;
+    width: 5px;
+    height: 5px;
 }
 
 .pa2-mhr-scroll-inputs::-webkit-scrollbar-track {
@@ -2945,8 +3146,17 @@
 }
 
 .pa2-mhr-scroll-inputs::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 2px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-mhr-scroll-inputs::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-mhr-scroll-inputs::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-mhr-input-group-box {
@@ -3455,18 +3665,36 @@
 .pa2-daily-list-scroll {
     max-height: 220px;
     overflow-y: auto;
+    overflow-x: auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
     padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
 }
 
 .pa2-daily-list-scroll::-webkit-scrollbar {
     width: 5px;
+    height: 5px;
 }
+
+.pa2-daily-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
 .pa2-daily-list-scroll::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pa2-daily-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pa2-daily-list-scroll::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .pa2-daily-item {

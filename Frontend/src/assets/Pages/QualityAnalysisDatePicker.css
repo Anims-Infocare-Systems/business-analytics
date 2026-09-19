@@ -29,6 +29,49 @@
     color: var(--qadp-text);
 }
 
+/* Modern Scrollbar for Quality DatePicker */
+.qadp-wrap *::-webkit-scrollbar,
+.qadp-portal-wrap *::-webkit-scrollbar,
+.qadp-dropdown::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.qadp-wrap *::-webkit-scrollbar-track,
+.qadp-portal-wrap *::-webkit-scrollbar-track,
+.qadp-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qadp-wrap *::-webkit-scrollbar-thumb,
+.qadp-portal-wrap *::-webkit-scrollbar-thumb,
+.qadp-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.28);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.qadp-wrap *::-webkit-scrollbar-thumb:hover,
+.qadp-portal-wrap *::-webkit-scrollbar-thumb:hover,
+.qadp-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #8b5cf6;
+}
+
+.qadp-wrap *::-webkit-scrollbar-corner,
+.qadp-portal-wrap *::-webkit-scrollbar-corner,
+.qadp-dropdown::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.qadp-wrap,
+.qadp-wrap *,
+.qadp-portal-wrap,
+.qadp-portal-wrap *,
+.qadp-dropdown {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.28) transparent;
+}
+
 /* ── Root wrapper ─────────────────────────────────────────── */
 .qadp-wrap {
     position: relative;

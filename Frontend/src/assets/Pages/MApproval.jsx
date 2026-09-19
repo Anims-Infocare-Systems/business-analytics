@@ -1602,7 +1602,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         {altItems.length} {altItems.length === 1 ? "Item" : "Items"}
                                     </span>
                                 </div>
-                                <div style={{ overflowX: "auto", width: "100%" }}>
+                                <div className="map-alt-table-scroll">
                                     <table className="map-alt-table">
                                         <thead>
                                             {/* Tier-1 Group Header */}

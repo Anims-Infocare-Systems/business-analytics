@@ -508,7 +508,7 @@ function MultiSelectFilterDropdown({ title, options, selectedValues, onChange, a
 
                     <div style={{ height: "1px", background: "#f1f5f9", margin: "2px 0" }} />
 
-                    <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <div className="qa2-cust-list-scroll" style={{ maxHeight: "200px" }}>
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map((opt) => {
                                 const checked = currentSelected.includes(opt);
@@ -6499,7 +6499,7 @@ export default function QualityAnalysis() {
                                             </div>
                                         </div>
 
-                                        <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px", marginTop: '4px' }}>
+                                        <div className="qa2-cust-list-scroll" style={{ maxHeight: "200px", marginTop: '4px' }}>
                                             <div
                                                 className={`qa2-cust-item qa2-reason-item${selectedRejectionReasons.length === 0 ? " is-active" : ""}`}
                                                 onClick={(e) => { e.stopPropagation(); setSelectedRejectionReasons([]); }}
