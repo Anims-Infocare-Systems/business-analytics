@@ -44,21 +44,15 @@ def parse_dashboard1_period(request):
     return start, end, today.year, today.month
 
 
-def dashboard1_analysis_today_yesterday(selected_year, selected_month):
+def dashboard1_analysis_today_yesterday(selected_year=None, selected_month=None):
     """
-    Today / YDA for Sales & Purchase analysis tables: same day-of-month as the
-    real calendar today, but in the selected month (e.g. select Jan → 15 Jan / 14 Jan
-    when today is 15 May). Short months clamp (e.g. 31 → last day of Feb).
+    Today / YDA for Analysis tables: always returns the actual current calendar
+    today and yesterday (e.g. Sep 19 and Sep 18 even if viewing June), ensuring
+    Today and YDA reflect real current data regardless of the selected month filter.
     """
     actual_today = date.today()
-    if selected_month == 12:
-        last_day_of_month = date(selected_year, 12, 31).day
-    else:
-        last_day_of_month = (date(selected_year, selected_month + 1, 1) - timedelta(days=1)).day
-    day = min(actual_today.day, last_day_of_month)
-    today_date = date(selected_year, selected_month, day)
-    yesterday_date = today_date - timedelta(days=1)
-    return today_date, yesterday_date
+    yesterday_date = actual_today - timedelta(days=1)
+    return actual_today, yesterday_date
 
 
 def get_prev_quarter_dates(quarter_start_date):

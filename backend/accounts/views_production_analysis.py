@@ -1,7 +1,9 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from datetime import datetime
-from .views import get_tenant_connection, table_exists
+from typing import Any
+from .views import get_tenant_connection, table_exists, find_first_column
+from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
 
 def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
@@ -96,6 +98,213 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     return idle_union_sql, idle_outer_sql, idle_params
 
 
+def _get_quality_rejection_and_rework(cursor, from_date, to_date, machine=None, shift=None, operator=None, mac_type=None, mac_group=None, search=None):
+    """
+    Calculates Material Rejection Qty, Machine Rejection Qty, and Rework Qty
+    using the exact Quality Report logic, taking active filters into account.
+    """
+    union_queries = []
+    union_params = []
+
+    has_machine_filters = bool(machine or shift or operator or mac_type or mac_group)
+
+    # 1. InJob (only include if no machine/shift/operator specific filter is applied)
+    if not has_machine_filters and table_exists(cursor, "InJob_Mas") and table_exists(cursor, "InJob_Det"):
+        inspdate_col = find_first_column(cursor, "InJob_Mas", ["inspdate", "InspDate", "INSPDATE"])
+        matrej_col   = find_first_column(cursor, "InJob_Det", ["matrej", "MatRej", "mat_rej"])
+        macrej_col   = find_first_column(cursor, "InJob_Det", ["macrej", "MacRej", "mac_rej"])
+        rwqty_col    = find_first_column(cursor, "InJob_Det", ["rwqty", "RwQty", "rw_qty"])
+        deleted_mas  = find_first_column(cursor, "InJob_Mas", ["deleted", "Deleted"])
+        deleted_det  = find_first_column(cursor, "InJob_Det", ["deleted", "Deleted"])
+
+        if inspdate_col:
+            mat_expr = f"CAST(ISNULL(d.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
+            mac_expr = f"CAST(ISNULL(d.[{macrej_col}], 0) AS INT)" if macrej_col else "0"
+            rwk_expr = f"CAST(ISNULL(d.[{rwqty_col}], 0) AS INT)" if rwqty_col else "0"
+
+            where_injob = [f"CAST(m.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+            params_injob = [from_date, to_date]
+            if deleted_mas:
+                where_injob.append(f"ISNULL(m.[{deleted_mas}], 0) = 0")
+            if deleted_det:
+                where_injob.append(f"ISNULL(d.[{deleted_det}], 0) = 0")
+            if search:
+                where_injob.append("(d.partno LIKE ? OR d.description LIKE ? OR d.process LIKE ? OR m.inspno LIKE ?)")
+                s_pat = f"%{search}%"
+                params_injob.extend([s_pat, s_pat, s_pat, s_pat])
+
+            union_queries.append(f"""
+                SELECT
+                    {mat_expr} AS MatRejQty,
+                    {mac_expr} AS MacRejQty,
+                    {rwk_expr} AS ReworkQty
+                FROM InJob_Mas m
+                INNER JOIN InJob_Det d ON m.inspno = d.inspno
+                WHERE {" AND ".join(where_injob)}
+            """)
+            union_params.extend(params_injob)
+
+    # 2. InterInspectionEntry
+    if table_exists(cursor, "InterInspectionEntry"):
+        inspdate_col = find_first_column(cursor, "InterInspectionEntry", ["inter_inspdate", "interinspdate", "inspdate", "InspDate"])
+        matrej_col   = find_first_column(cursor, "InterInspectionEntry", ["matrejqty", "MatRejQty"])
+        rej_col      = find_first_column(cursor, "InterInspectionEntry", ["rejqty", "RejQty"])
+        rwk_col      = find_first_column(cursor, "InterInspectionEntry", ["rwqty", "RwQty"])
+        deleted_col  = find_first_column(cursor, "InterInspectionEntry", ["deleted", "Deleted"])
+
+        if inspdate_col:
+            if table_exists(cursor, "Insp_RejectionEntry") and table_exists(cursor, "Rejection"):
+                mat_expr = """CAST(CASE 
+                    WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+                    THEN ISNULL((
+                        SELECT SUM(ISNULL(r.qty, 0))
+                        FROM Insp_RejectionEntry r
+                        LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                        WHERE r.inter_inspno = i.inter_inspno
+                          AND ISNULL(r.deleted, 0) = 0
+                          AND ISNULL(rej.matrej, 0) = 1
+                    ), 0)
+                    ELSE ISNULL(i.matrejqty, 0)
+                END AS INT)"""
+                mac_expr = """CAST(CASE 
+                    WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+                    THEN ISNULL((
+                        SELECT SUM(ISNULL(r.qty, 0))
+                        FROM Insp_RejectionEntry r
+                        LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                        WHERE r.inter_inspno = i.inter_inspno
+                          AND ISNULL(r.deleted, 0) = 0
+                          AND ISNULL(rej.matrej, 0) = 0
+                    ), 0)
+                    ELSE ISNULL(i.rejqty, 0)
+                END AS INT)"""
+            else:
+                mat_expr = f"CAST(ISNULL(i.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
+                mac_expr = f"CAST(ISNULL(i.[{rej_col}], 0) AS INT)" if rej_col else "0"
+
+            rwk_expr = f"CAST(ISNULL(i.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
+
+            where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+            params_inter = [from_date, to_date]
+            if deleted_col:
+                where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
+
+            inter_join = ""
+            if mac_type or mac_group:
+                inter_join = "LEFT JOIN MacMaster MM ON i.macno = MM.macno AND MM.deleted = 0"
+
+            if machine:
+                placeholders = ",".join(["?"] * len(machine))
+                where_inter.append(f"LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) IN ({placeholders})")
+                params_inter.extend(machine)
+            if shift:
+                where_inter.append("LTRIM(RTRIM(CAST(i.shift AS NVARCHAR(128)))) = ?")
+                params_inter.append(shift)
+            if operator:
+                placeholders = ",".join(["?"] * len(operator))
+                where_inter.append(f"LTRIM(RTRIM(CAST(i.oprname AS NVARCHAR(512)))) IN ({placeholders})")
+                params_inter.extend(operator)
+            if mac_type:
+                if mac_type == "CNC":
+                    where_inter.append("MM.cnc = 1")
+                elif mac_type == "CON":
+                    where_inter.append("(MM.cnc = 0 OR MM.cnc IS NULL)")
+            if mac_group:
+                where_inter.append("MM.MacGroup = ?")
+                params_inter.append(mac_group)
+            if search:
+                where_inter.append("(i.partno LIKE ? OR i.description LIKE ? OR i.process LIKE ? OR i.oprname LIKE ? OR i.macno LIKE ? OR i.inter_inspno LIKE ?)")
+                s_pat = f"%{search}%"
+                params_inter.extend([s_pat] * 6)
+
+            union_queries.append(f"""
+                SELECT
+                    {mat_expr} AS MatRejQty,
+                    {mac_expr} AS MacRejQty,
+                    {rwk_expr} AS ReworkQty
+                FROM InterInspectionEntry i
+                {inter_join}
+                WHERE {" AND ".join(where_inter)}
+            """)
+            union_params.extend(params_inter)
+
+    # 3. FinalInspectionEntry (only include if no machine/shift/operator specific filter is applied)
+    if not has_machine_filters and table_exists(cursor, "FinalInspectionEntry"):
+        finspdate_col = find_first_column(cursor, "FinalInspectionEntry", ["finspdate", "FinSpDate"])
+        deleted_col   = find_first_column(cursor, "FinalInspectionEntry", ["deleted", "Deleted"])
+        matrej_col    = find_first_column(cursor, "FinalInspectionEntry", ["matrejqty", "MatRejQty"])
+        rej_col       = find_first_column(cursor, "FinalInspectionEntry", ["rejqty", "RejQty"])
+        rwk_col       = find_first_column(cursor, "FinalInspectionEntry", ["rwqty", "RwQty"])
+
+        if finspdate_col:
+            if table_exists(cursor, "FinalInspRejectionEntryOrg") and table_exists(cursor, "Rejection"):
+                mat_expr = """CAST(ISNULL((
+                    SELECT SUM(ISNULL(fr.qty, 0))
+                    FROM FinalInspRejectionEntryOrg fr
+                    LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
+                    WHERE fr.finspno = f.finspno
+                      AND ISNULL(fr.deleted, 0) = 0
+                      AND ISNULL(rej.matrej, 0) = 1
+                ), 0) AS INT)"""
+                mac_expr = """CAST(ISNULL((
+                    SELECT SUM(ISNULL(fr.qty, 0))
+                    FROM FinalInspRejectionEntryOrg fr
+                    LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
+                    WHERE fr.finspno = f.finspno
+                      AND ISNULL(fr.deleted, 0) = 0
+                      AND ISNULL(rej.matrej, 0) = 0
+                ), 0) AS INT)"""
+            else:
+                mat_expr = f"CAST(ISNULL(f.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
+                mac_expr = f"CAST(ISNULL(f.[{rej_col}], 0) AS INT)" if rej_col else "0"
+
+            if table_exists(cursor, "FinalInspReworkEntryOrg"):
+                rwk_expr = """CAST(ISNULL((
+                    SELECT SUM(ISNULL(frw.qty, 0))
+                    FROM FinalInspReworkEntryOrg frw
+                    WHERE frw.finspno = f.finspno
+                      AND frw.partno = f.partno
+                      AND ISNULL(frw.deleted, 0) = 0
+                ), 0) AS INT)"""
+            else:
+                rwk_expr = f"CAST(ISNULL(f.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
+
+            where_final = [f"CAST(f.[{finspdate_col}] AS DATE) BETWEEN ? AND ?"]
+            params_final = [from_date, to_date]
+            if deleted_col:
+                where_final.append(f"ISNULL(f.[{deleted_col}], 0) = 0")
+            if search:
+                where_final.append("(f.partno LIKE ? OR f.description LIKE ? OR f.process LIKE ? OR f.finspno LIKE ?)")
+                s_pat = f"%{search}%"
+                params_final.extend([s_pat] * 4)
+
+            union_queries.append(f"""
+                SELECT
+                    {mat_expr} AS MatRejQty,
+                    {mac_expr} AS MacRejQty,
+                    {rwk_expr} AS ReworkQty
+                FROM FinalInspectionEntry f
+                WHERE {" AND ".join(where_final)}
+            """)
+            union_params.extend(params_final)
+
+    if not union_queries:
+        return 0, 0, 0
+
+    sql = f"""
+        SELECT
+            ISNULL(SUM(MatRejQty), 0) AS tot_mat_rej,
+            ISNULL(SUM(MacRejQty), 0) AS tot_mac_rej,
+            ISNULL(SUM(ReworkQty), 0) AS tot_rework
+        FROM (
+            {" UNION ALL ".join(union_queries)}
+        ) AS Combined
+    """
+    cursor.execute(sql, union_params)
+    row = cursor.fetchone()
+    return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
+
+
 @api_view(["GET"])
 def production_analysis_report(request):
     """
@@ -135,7 +344,7 @@ def production_analysis_report(request):
             }, status=400)
 
         # Initialize result dictionary
-        result = {
+        result: dict[str, Any] = {
             "totalProductionQty": 0,
             "okAcceptedQty": 0,
             "rejectionQty": 0,
@@ -172,6 +381,26 @@ def production_analysis_report(request):
         # Prepare filters and temp tables
         cursor = conn.cursor()
         try:
+            machine_raw = request.query_params.get("machine", "")
+            shift_raw = request.query_params.get("shift", "")
+            operator_raw = request.query_params.get("operator", "")
+            mac_type = request.query_params.get("mac_type", "")
+            mac_group = request.query_params.get("mac_group", "")
+            search = request.query_params.get("search", "")
+
+            machine = _parse_machine(machine_raw)
+            shift_parsed = _parse_shift(shift_raw)
+            shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
+
+            operator = None
+            if operator_raw:
+                op_val = operator_raw.strip()
+                if op_val and op_val.lower() != "all operators":
+                    if "," in op_val:
+                        operator = [item.strip() for item in op_val.split(",") if item.strip()]
+                    else:
+                        operator = [op_val]
+
             _prepare_filtered_temp_tables(cursor, request, from_date, to_date)
             mac_filter_sql, mac_filter_params, shift_filter_sql, shift_filter_params = _get_mac_filter_sql(request, cursor)
             mac_filter_sql_alias, _, _, _ = _get_mac_filter_sql(request, cursor, table_alias="M")
@@ -210,7 +439,7 @@ def production_analysis_report(request):
         ok_qty_query = """
         SELECT COALESCE(SUM(InspOkQty), 0) AS TotalInspectionOkQty
         FROM (
-            SELECT COALESCE((SELECT SUM(COALESCE(I.okqty, 0)) FROM InterInspectionEntry I WHERE I.prodid = P.prodid AND I.deleted = 0), 0) AS InspOkQty
+            SELECT COALESCE((SELECT SUM(COALESCE(I.okqty, 0)) FROM InterInspectionEntry I WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0), 0) AS InspOkQty
             FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
             UNION ALL SELECT COALESCE(C.qty, 0) AS InspOkQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
             UNION ALL SELECT COALESCE(R.qty, 0) AS InspOkQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
@@ -223,7 +452,7 @@ def production_analysis_report(request):
         rej_qty_query = """
         SELECT COALESCE(SUM(RejQty), 0) AS TotalRejectionQty
         FROM (
-            SELECT COALESCE((SELECT SUM(COALESCE(RJ.qty, 0)) FROM InterInspectionEntry I INNER JOIN Insp_RejectionEntry RJ ON I.inter_inspno = RJ.inter_inspno WHERE I.prodid = P.prodid AND I.deleted = 0 AND RJ.deleted = 0), 0) AS RejQty
+            SELECT COALESCE((SELECT SUM(COALESCE(RJ.qty, 0)) FROM InterInspectionEntry I INNER JOIN Insp_RejectionEntry RJ ON I.inter_inspno = RJ.inter_inspno WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0 AND RJ.deleted = 0), 0) AS RejQty
             FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
             UNION ALL SELECT 0 AS RejQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
             UNION ALL SELECT ISNULL(R.ScrapQty, 0) AS RejQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
@@ -447,7 +676,7 @@ def production_analysis_report(request):
                 SELECT PE.macno, ISNULL(RW.qty, 0) AS RwkQty
                 FROM Insp_ReworkEntry RW
                 INNER JOIN InterInspectionEntry I ON RW.inter_inspno = I.inter_inspno
-                INNER JOIN ProductionEntry PE ON I.prodid = PE.prodid
+                INNER JOIN ProductionEntry PE ON TRY_CAST(I.prodid AS INT) = PE.prodid
                 WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) AND I.deleted = 0 AND RW.deleted = 0 AND PE.macno IS NOT NULL
                 
                 UNION ALL
@@ -571,47 +800,29 @@ def production_analysis_report(request):
         if result["totalProductionQty"] > 0:
             result["qualityRate"] = round((result["okAcceptedQty"] / result["totalProductionQty"]) * 100, 2)
 
-        rej_breakdown_query = """
-        SELECT
-            CAST(ISNULL(SUM(CASE WHEN ISNULL(RJ.matrej,0) = 1 THEN ISNULL(RJ.qty,0) ELSE 0 END),0) AS DECIMAL(18,2)) AS MatRejQty,
-            CAST(ISNULL(SUM(CASE WHEN ISNULL(RJ.matrej,0) = 0 THEN ISNULL(RJ.qty,0) ELSE 0 END),0) AS DECIMAL(18,2)) AS MacRejQty
-        FROM Insp_RejectionEntry RJ
-        INNER JOIN InterInspectionEntry I ON RJ.inter_inspno = I.inter_inspno
-        INNER JOIN ProductionEntry P ON I.prodid = P.prodid
-        WHERE P.prodid IN (SELECT prodid FROM #FilteredPE) AND I.deleted = 0 AND RJ.deleted = 0
-        """
-        row = run_query(rej_breakdown_query)
-        tot_mat_rej = int(row[0] or 0) if row else 0
-        tot_mac_rej = int(row[1] or 0) if row else 0
-
-        rod_scrap_query = """
-        SELECT ISNULL(SUM(ISNULL(ScrapQty, 0)), 0) FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
-        """
-        row = run_query(rod_scrap_query)
-        if row and row[0] is not None: tot_mat_rej += int(row[0] or 0)
+        # ── Rejection Breakdown (Mat Rej, Mac Rej) & Total Rework Qty (Quality Report Logic) ──
+        cur_qr = conn.cursor()
+        try:
+            tot_mat_rej, tot_mac_rej, tot_rework = _get_quality_rejection_and_rework(
+                cur_qr, from_date, to_date,
+                machine=machine, shift=shift, operator=operator,
+                mac_type=mac_type, mac_group=mac_group, search=search
+            )
+        finally:
+            cur_qr.close()
 
         result["totMatRejQty"] = tot_mat_rej
         result["totMacRejQty"] = tot_mac_rej
+        result["totReworkQty"] = tot_rework
+        result["rejectionQty"] = tot_mat_rej + tot_mac_rej
 
-        # Calculate Total Rework Qty
-        rework_qty_query = """
-        SELECT COALESCE(SUM(RwkQty), 0) FROM (
-            SELECT ISNULL(RW.qty, 0) AS RwkQty FROM Insp_ReworkEntry RW INNER JOIN InterInspectionEntry I ON RW.inter_inspno = I.inter_inspno WHERE I.prodid IN (SELECT prodid FROM #FilteredPE) AND I.deleted = 0 AND RW.deleted = 0
-            UNION ALL SELECT ISNULL(C.Rework, 0) AS RwkQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
-        ) A
-        """
-        row = run_query(rework_qty_query)
-        if row and row[0] is not None: result["totReworkQty"] = int(row[0] or 0)
-
-        total_rej = result["rejectionQty"]
-        if total_rej > 0:
-            sum_breakdown = tot_mat_rej + tot_mac_rej
-            if sum_breakdown > 0:
-                result["materialRejection"] = round((tot_mat_rej / sum_breakdown) * 100.0, 2)
-                result["machineRejection"] = round((tot_mac_rej / sum_breakdown) * 100.0, 2)
-            else:
-                result["materialRejection"] = 0.0
-                result["machineRejection"] = 0.0
+        sum_breakdown = tot_mat_rej + tot_mac_rej
+        if sum_breakdown > 0:
+            result["materialRejection"] = round((tot_mat_rej / sum_breakdown) * 100.0, 2)
+            result["machineRejection"] = round((tot_mac_rej / sum_breakdown) * 100.0, 2)
+        else:
+            result["materialRejection"] = 0.0
+            result["machineRejection"] = 0.0
 
         # ── Query 12: Month Wise OEE Trend ───────────────────────────
         oee_trend_query = """
@@ -1718,7 +1929,17 @@ def machine_card_data(request, macno):
                 card["machine_run_pct"] = float(first_row[7] or 0.0)
 
                 for r in rows:
+                    entry_date = r[10]
+                    date_str = ""
+                    if entry_date:
+                        if hasattr(entry_date, "strftime"):
+                            date_str = entry_date.strftime("%Y-%m-%d")
+                        else:
+                            date_str = str(entry_date)[:10]
+
                     shift_logs.append({
+                        "date": date_str,
+                        "entry_date": date_str,
                         "operator": r[15] if r[15] is not None else "",
                         "part_no": r[13] if r[13] is not None else "",
                         "process": r[14] if r[14] is not None else "",

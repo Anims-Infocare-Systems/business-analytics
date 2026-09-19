@@ -19,8 +19,6 @@ const API = resolveApiBase();
 
 // ✅ Fast Code-Splitting: Lazy load heavy modules on-demand (reduces bundle size by ~85%)
 const Dashboard1 = lazy(() => import("./Dashboard1"));
-const Dashboard2 = lazy(() => import("./Dashboard2"));
-const Dashboard3 = lazy(() => import("./Dashboard3"));
 const PlantPerformance1 = lazy(() => import("./plantperformance1"));
 const Charts = lazy(() => import("./Charts"));
 const EApproval = lazy(() => import("./EApproval"));
@@ -140,7 +138,6 @@ const SETTINGS_SIDEBAR_ITEM = {
 /* ── Topbar heading map ───────────────────────────────────── */
 const HEADING_MAP = {
     "Top Management Dashboard": "Top Management Dashboard",
-    "Dashboard2": "Plant Performance Dashboard",
     "Plant Performance Dashboard": "Plant Performance Dashboard",
     "E-Approval": "E-Approval Workflow",
     "T-Approval": "T-Approval Workflow",
@@ -271,8 +268,6 @@ function renderModuleByKey(key, props) {
         );
     }
     if (key === "Top Management Dashboard") return <Dashboard1 />;
-    if (key === "Dashboard2") return <Dashboard2 />;
-    if (key === "Dashboard3") return <Dashboard3 />;
     if (key === "Plant Performance Dashboard") return <PlantPerformance1 />;
     if (key === "E-Approval") return <EApproval />;
     if (key === "T-Approval") return <TApproval />;

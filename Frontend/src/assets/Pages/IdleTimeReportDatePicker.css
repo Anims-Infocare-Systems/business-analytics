@@ -24,7 +24,7 @@
     --itdp-radius:     12px;
     --itdp-tr:         .22s cubic-bezier(.23,1,.32,1);
 
-    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
     color: var(--itdp-text);
 }
@@ -59,8 +59,9 @@
     border-radius: 9px;
     cursor: pointer;
     font-family: inherit;
-    font-size: .86rem;
-    font-weight: 500;
+    font-size: .84rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     color: var(--itdp-sub);
     transition: border-color var(--itdp-tr), box-shadow var(--itdp-tr), background var(--itdp-tr);
     text-align: left;

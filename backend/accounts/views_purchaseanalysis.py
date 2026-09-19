@@ -383,84 +383,54 @@ def purchase_analysis_summary(request):
             total_pos        = int(row[1] or 0)
             active_suppliers = int(row[2] or 0)
 
-        # ── GRN received value ───────────────────────────────────────
+        # ── GRN received value against POs in the selected period ─────
         join_flt_grn, where_flt_grn, params_flt_grn = _supplier_filter_sql(request, cursor, "m", join_if_needed=True)
         srch_sql_m, srch_params_m = _build_po_search_sql(request, cursor, "m")
-        has_extra_filters = apply_dtype or where_flt_grn or srch_sql_m
         try:
-            if has_extra_filters:
+            cursor.execute(
+                f"""
+                SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
+                FROM Grn_RateDet rd
+                INNER JOIN grninsubdet gs ON rd.grnno = gs.grnno
+                INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
+                INNER JOIN POMas m ON gs.pono = m.pono
+                {join_flt_grn}
+                WHERE ISNULL(rd.deleted, 0) = 0
+                  AND ISNULL(gs.deleted, 0) = 0
+                  AND ISNULL(gm.deleted, 0) = 0
+                  AND ISNULL(m.deleted, 0) = 0
+                  {dtype_clause_po.replace("dtype", "m.dtype")}
+                  {where_flt_grn}
+                  {srch_sql_m}
+                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                """,
+                tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
+            )
+            grn_row = cursor.fetchone()
+            grn_received = float(grn_row[0] or 0) if grn_row else 0.0
+        except Exception:
+            # Fall back to grn_mas namt if Grn_RateDet not available
+            try:
                 cursor.execute(
                     f"""
-                    SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
-                    FROM Grn_RateDet rd
-                    WHERE ISNULL(rd.deleted, 0) = 0
-                      AND rd.grnno IN (
-                          SELECT DISTINCT gm.grnno
-                          FROM grn_mas gm
-                          INNER JOIN grninsubdet gs ON gm.grnno = gs.grnno
+                    SELECT ISNULL(SUM(CAST(gm.namt AS FLOAT)), 0)
+                    FROM grn_mas gm
+                    WHERE ISNULL(gm.deleted, 0) = 0
+                      AND gm.grnno IN (
+                          SELECT DISTINCT gs.grnno
+                          FROM grninsubdet gs
                           INNER JOIN POMas m ON gs.pono = m.pono
                           {join_flt_grn}
-                          WHERE ISNULL(gm.deleted, 0) = 0
-                            AND ISNULL(gs.deleted, 0) = 0
+                          WHERE ISNULL(gs.deleted, 0) = 0
                             AND ISNULL(m.deleted, 0) = 0
                             {dtype_clause_po.replace("dtype", "m.dtype")}
                             {where_flt_grn}
                             {srch_sql_m}
-                            AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                            AND CAST(m.podate AS DATE) BETWEEN ? AND ?
                       )
                     """,
                     tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
                 )
-            else:
-                cursor.execute(
-                    """
-                    SELECT ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0)
-                    FROM Grn_RateDet rd
-                    WHERE ISNULL(rd.deleted, 0) = 0
-                      AND rd.grnno IN (
-                          SELECT gm.grnno
-                          FROM grn_mas gm
-                          WHERE ISNULL(gm.deleted, 0) = 0
-                            AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                      )
-                    """,
-                    (start_date, end_date),
-                )
-            grn_row = cursor.fetchone()
-            grn_received = float(grn_row[0] or 0) if grn_row else 0.0
-        except Exception:
-            # Fall back to grninsubdet if Grn_RateDet not available
-            try:
-                if has_extra_filters:
-                    cursor.execute(
-                        f"""
-                        SELECT ISNULL(SUM(CAST(gs.amount AS FLOAT)), 0)
-                        FROM grninsubdet gs
-                        INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
-                        INNER JOIN POMas m ON gs.pono = m.pono
-                        {join_flt_grn}
-                        WHERE ISNULL(gm.deleted, 0) = 0
-                          AND ISNULL(gs.deleted, 0) = 0
-                          AND ISNULL(m.deleted, 0) = 0
-                          {dtype_clause_po.replace("dtype", "m.dtype")}
-                          {where_flt_grn}
-                          {srch_sql_m}
-                          AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                        """,
-                        tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        SELECT ISNULL(SUM(CAST(gs.amount AS FLOAT)), 0)
-                        FROM grninsubdet gs
-                        INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
-                        WHERE ISNULL(gm.deleted, 0) = 0
-                          AND ISNULL(gs.deleted, 0) = 0
-                          AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
-                        """,
-                        (start_date, end_date),
-                    )
                 grn_row = cursor.fetchone()
                 grn_received = float(grn_row[0] or 0) if grn_row else 0.0
             except Exception:
@@ -1248,24 +1218,41 @@ def purchase_analysis_month_summary(request):
     try:
         cursor = conn.cursor()
 
+        # ── Filters ──────────────────────────────────────────────────
+        dtype_param = (request.GET.get("dtype") or "").strip()
+        apply_dtype = dtype_param and dtype_param.lower() != "all types"
+        dtype_clause_po = ""
+        dtype_params_po = []
+        if apply_dtype:
+            dtype_clause_po = " AND LTRIM(RTRIM(ISNULL(m.dtype, ''))) = ?"
+            dtype_params_po.append(dtype_param)
+        else:
+            dtype_clause_po = " AND UPPER(LTRIM(RTRIM(ISNULL(m.dtype, '')))) <> 'JOB ORDER'"
+
+        join_flt, where_flt, params_flt = _supplier_filter_sql(request, cursor, "m", join_if_needed=True)
+        srch_sql, srch_params = _build_po_search_sql(request, cursor, "m")
+
         # ── Monthly PO value ─────────────────────────────────────────
         cursor.execute(
-            """
+            f"""
             SELECT
-                YEAR(CAST(podate AS DATE)) AS yr,
-                MONTH(CAST(podate AS DATE)) AS mo,
-                ISNULL(SUM(CAST(totamt AS FLOAT)), 0) AS po_val,
-                COUNT(DISTINCT pono) AS po_count
-            FROM POMas
-            WHERE ISNULL(deleted, 0) = 0
-              AND ISNULL(dtype, '') <> 'Job Order'
-              AND CAST(podate AS DATE) BETWEEN ? AND ?
+                YEAR(CAST(m.podate AS DATE)) AS yr,
+                MONTH(CAST(m.podate AS DATE)) AS mo,
+                ISNULL(SUM(CAST(m.totamt AS FLOAT)), 0) AS po_val,
+                COUNT(DISTINCT m.pono) AS po_count
+            FROM POMas m
+            {join_flt}
+            WHERE ISNULL(m.deleted, 0) = 0
+              {dtype_clause_po}
+              {where_flt}
+              {srch_sql}
+              AND CAST(m.podate AS DATE) BETWEEN ? AND ?
             GROUP BY
-                YEAR(CAST(podate AS DATE)),
-                MONTH(CAST(podate AS DATE))
+                YEAR(CAST(m.podate AS DATE)),
+                MONTH(CAST(m.podate AS DATE))
             ORDER BY yr, mo
             """,
-            (start_date, end_date),
+            tuple(dtype_params_po + params_flt + srch_params + [start_date, end_date]),
         )
         for yr, mo, po_val, po_cnt in cursor.fetchall():
             k = (int(yr), int(mo))
@@ -1273,25 +1260,33 @@ def purchase_analysis_month_summary(request):
             month_data[k]["po_value"]  = float(po_val or 0)
             month_data[k]["po_count"]  = int(po_cnt or 0)
 
-        # ── Monthly GRN received ─────────────────────────────────────
+        # ── Monthly GRN received against those POs ───────────────────
         try:
             cursor.execute(
-                """
+                f"""
                 SELECT
-                    YEAR(CAST(gm.grndate AS DATE)) AS yr,
-                    MONTH(CAST(gm.grndate AS DATE)) AS mo,
+                    YEAR(CAST(m.podate AS DATE)) AS yr,
+                    MONTH(CAST(m.podate AS DATE)) AS mo,
                     ISNULL(SUM(CAST(rd.Amount AS FLOAT)), 0) AS grn_val
                 FROM Grn_RateDet rd
-                INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
+                INNER JOIN grninsubdet gs ON rd.grnno = gs.grnno
+                INNER JOIN grn_mas gm ON gs.grnno = gm.grnno
+                INNER JOIN POMas m ON gs.pono = m.pono
+                {join_flt}
                 WHERE ISNULL(gm.deleted, 0) = 0
                   AND ISNULL(rd.deleted, 0) = 0
-                  AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                  AND ISNULL(gs.deleted, 0) = 0
+                  AND ISNULL(m.deleted, 0) = 0
+                  {dtype_clause_po}
+                  {where_flt}
+                  {srch_sql}
+                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
                 GROUP BY
-                    YEAR(CAST(gm.grndate AS DATE)),
-                    MONTH(CAST(gm.grndate AS DATE))
+                    YEAR(CAST(m.podate AS DATE)),
+                    MONTH(CAST(m.podate AS DATE))
                 ORDER BY yr, mo
                 """,
-                (start_date, end_date),
+                tuple(dtype_params_po + params_flt + srch_params + [start_date, end_date]),
             )
             for yr, mo, grn_val in cursor.fetchall():
                 k = (int(yr), int(mo))

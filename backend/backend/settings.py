@@ -138,23 +138,51 @@ CORS_ALLOW_HEADERS = [            # ✅ allow Content-Type for JSON POST
 ]
 
 
-# ─── Caching (Redis) ──────────────────────────────────────────
+# ─── Caching (Redis with automatic fallback to LocMemCache) ───
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
 
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "CONNECTION_POOL_KWARGS": {"max_connections": 100},
-            "SOCKET_CONNECT_TIMEOUT": 5,
-            "SOCKET_TIMEOUT": 5,
-            "IGNORE_EXCEPTIONS": True,
-        },
-        "KEY_PREFIX": "anims_ba",
+def _check_redis_connectivity(url):
+    import socket
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 6379
+        with socket.create_connection((host, port), timeout=0.3):
+            return True
+    except (OSError, socket.timeout, Exception):
+        return False
+
+_REDIS_ACTIVE = _check_redis_connectivity(REDIS_URL)
+
+if _REDIS_ACTIVE:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "CONNECTION_POOL_KWARGS": {"max_connections": 100},
+                "SOCKET_CONNECT_TIMEOUT": 5,
+                "SOCKET_TIMEOUT": 5,
+                "IGNORE_EXCEPTIONS": True,
+            },
+            "KEY_PREFIX": "anims_ba",
+        }
     }
-}
+else:
+    # ⚡ In-memory LocMemCache fallback when Redis is not running (e.g. local Windows dev).
+    # Provides 0ms instant caching and session storage without remote DB lag or infinite loops.
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "anims_ba_locmem",
+            "TIMEOUT": 86400,
+            "OPTIONS": {
+                "MAX_ENTRIES": 10000,
+            },
+        }
+    }
 
 
 # ─── Session ──────────────────────────────────────────────────

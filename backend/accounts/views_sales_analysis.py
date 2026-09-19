@@ -1109,12 +1109,21 @@ def sales_analysis_month_summary(request):
     btype_filter = (request.GET.get("btype") or "").strip()
     btype_p = _btype_param(btype_filter)
 
-    mas_filters = _bill_mas_filters(btype_filter=btype_filter)
+    # Use all invoice records (matching Invoice Status counts) for Month-wise Sales Summary
     inv_status_filters = _bill_mas_filters_invoice_status()
+    inv_status_filters_m = _bill_mas_filters_invoice_status("m")
     if btype_p:
         inv_status_filters += " AND LTRIM(RTRIM(ISNULL(btype, N''))) = ?"
+        inv_status_filters_m += " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?"
 
-    det_filters = _bill_det_join_filters(btype_filter=btype_filter)
+    det_status_filters = (
+        "ISNULL(d.deleted, 0) = 0 "
+        "AND ISNULL(m.deleted, 0) = 0 "
+        "AND CAST(m.invdt AS DATE) BETWEEN ? AND ?"
+    )
+    if btype_p:
+        det_status_filters += " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?"
+
     month_slots = _months_in_range(start_date, end_date)
 
     mas_by_month = {}
@@ -1136,7 +1145,7 @@ def sales_analysis_month_summary(request):
                     ISNULL(SUM(CAST(d.amt AS FLOAT)), 0) AS amount
                 FROM Bill_Det d
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
-                WHERE {det_filters} {search_sql}
+                WHERE {det_status_filters} {search_sql}
                 GROUP BY YEAR(CAST(m.invdt AS DATE)), MONTH(CAST(m.invdt AS DATE))
                 """,
                 (start_date, end_date) + btype_p + tuple(search_params),
@@ -1150,7 +1159,7 @@ def sales_analysis_month_summary(request):
                     COUNT(DISTINCT invno) AS invoices,
                     ISNULL(SUM(CAST(tamt AS FLOAT)), 0) AS amount
                 FROM Bill_Mas
-                WHERE {mas_filters}
+                WHERE {inv_status_filters}
                 GROUP BY YEAR(CAST(invdt AS DATE)), MONTH(CAST(invdt AS DATE))
                 """,
                 (start_date, end_date) + btype_p,
@@ -1169,17 +1178,13 @@ def sales_analysis_month_summary(request):
                 ISNULL(SUM(CAST(d.qty AS FLOAT)), 0) AS qty
             FROM Bill_Det d
             INNER JOIN Bill_Mas m ON d.invno = m.invno
-            WHERE {det_filters} {search_sql}
+            WHERE {det_status_filters} {search_sql}
             GROUP BY YEAR(CAST(m.invdt AS DATE)), MONTH(CAST(m.invdt AS DATE))
             """,
             (start_date, end_date) + btype_p + tuple(search_params),
         )
         for yr, mo, qty in cursor.fetchall():
             qty_by_month[(int(yr), int(mo))] = float(qty or 0)
-
-        inv_status_filters_m = _bill_mas_filters_invoice_status("m")
-        if btype_p:
-            inv_status_filters_m += " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?"
 
         if search_q:
             cursor.execute(
@@ -1339,13 +1344,17 @@ def sales_analysis_invoice_details(request):
         base_where = (
             "ISNULL(BM.deleted, 0) = 0 "
             "AND ISNULL(BD.deleted, 0) = 0 "
-            f"AND ISNULL(BM.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL}) "
             "AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?"
         )
         params: list = [start_date, end_date]
-        if btype_filter and btype_filter.lower() not in ("all", ""):
+        btype_items = _parse_btype_list(btype_filter)
+        if len(btype_items) == 1:
             base_where += " AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?"
-            params.append(btype_filter)
+            params.append(btype_items[0])
+        elif len(btype_items) > 1:
+            placeholders = ", ".join(["?"] * len(btype_items))
+            base_where += f" AND LTRIM(RTRIM(ISNULL(BM.btype, N''))) IN ({placeholders})"
+            params.extend(btype_items)
 
         if search_q:
             base_where += search_sql_det
@@ -1363,7 +1372,6 @@ def sales_analysis_invoice_details(request):
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
-                  AND ISNULL(m.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL})
                   AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
                   AND LTRIM(RTRIM(ISNULL(m.btype, N''))) <> N''
                   {search_sql_d}
@@ -1373,11 +1381,10 @@ def sales_analysis_invoice_details(request):
             )
         else:
             cursor.execute(
-                f"""
+                """
                 SELECT DISTINCT LTRIM(RTRIM(ISNULL(btype, N''))) AS btype
                 FROM Bill_Mas
                 WHERE ISNULL(deleted, 0) = 0
-                  AND ISNULL(btype, '') NOT IN ({EXCLUDED_BTYPES_SQL})
                   AND CAST(invdt AS DATE) BETWEEN ? AND ?
                   AND LTRIM(RTRIM(ISNULL(btype, N''))) <> N''
                 ORDER BY btype
@@ -2879,9 +2886,16 @@ def sales_analysis_avg_rate_cards(request):
     delta = (end_date - start_date).days + 1
     calendar_days = max(1, delta)
 
+    import calendar
+    total_months = max(1, (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1)
+    days_in_month = calendar.monthrange(start_date.year, start_date.month)[1]
+
     per_day   = round(grand_total / calendar_days, 2)
     per_week  = round(per_day * 7, 2)
-    per_month = round(per_day * 30, 2)
+    if total_months > 1:
+        per_month = round(grand_total / total_months, 2)
+    else:
+        per_month = round(per_day * days_in_month, 2)
     per_year  = round(per_day * 365, 2)
 
     return Response({
@@ -2891,7 +2905,9 @@ def sales_analysis_avg_rate_cards(request):
         "grand_total":   grand_total,
         "calendar_days": calendar_days,
         "weeks":         round(calendar_days / 7, 1),
-        "months":        round(calendar_days / 30, 1),
+        "months":        total_months,
+        "total_months":  total_months,
+        "days_in_month": days_in_month,
         "years":         round(calendar_days / 365, 2),
         "per_day":       per_day,
         "per_week":      per_week,

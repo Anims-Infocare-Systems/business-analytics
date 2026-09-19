@@ -213,7 +213,7 @@ def _parse_reason(value):
     return [v]
 
 
-def _build_outer_filters(machine, shift, reason):
+def _build_outer_filters(machine, shift, reason, mac_type=None):
     clauses = []
     params = []
     if machine:
@@ -224,6 +224,19 @@ def _build_outer_filters(machine, shift, reason):
         else:
             clauses.append("AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = ?")
             params.append(machine)
+    if mac_type:
+        if mac_type == "CNC":
+            clauses.append("""AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1
+            )""")
+        elif mac_type == "CONV":
+            clauses.append("""AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL)
+            )""")
     if shift:
         clauses.append("AND LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))) = ?")
         params.append(shift)
@@ -347,7 +360,7 @@ def _filtered_cte_sql(outer_filters):
     """
 
 
-def _compute_kpis(cursor, start_date, end_date, date_params, outer_sql, outer_params, data_rows, machine, shift):
+def _compute_kpis(cursor, start_date, end_date, date_params, outer_sql, outer_params, data_rows, machine, shift, mac_type=None):
     """KPI strip from filtered idle union + MacMaster + shift master."""
     base = _filtered_cte_sql(outer_sql)
 
@@ -421,14 +434,20 @@ def _compute_kpis(cursor, start_date, end_date, date_params, outer_sql, outer_pa
     avg_hours = (total_secs / 3600.0 / machine_count) if machine_count > 0 else 0.0
 
     # ── Idle not entered (regular shifts × MacMaster × dates − Machine_IdleEntry) ──
-    idle_not_entered = _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift)
+    idle_not_entered = _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift, mac_type=mac_type)
 
+    total_idle_mins = round(total_secs / 60) if total_secs else 0
+    avg_cost_per_minute = round(total_cost / total_idle_mins, 2) if total_idle_mins > 0 else 0.0
     return {
         "total_idle_seconds": total_secs,
+        "total_idle_minutes": total_idle_mins,
+        "total_idle_minutes_display": f"{total_idle_mins:,} Mins",
         "total_idle_hours_display": _fmt_hms(total_secs),
         "total_idle_hours_decimal": round(total_secs / 3600.0, 2),
         "total_idle_cost": round(total_cost, 2),
         "total_idle_cost_display": _fmt_rupees(total_cost),
+        "avg_cost_per_minute": avg_cost_per_minute,
+        "avg_cost_per_minute_display": f"₹ {avg_cost_per_minute:,.2f}",
         "avg_idle_hours_decimal": round(avg_hours, 2),
         "avg_idle_display": _fmt_hms_decimal(avg_hours),
         "machine_count": machine_count,
@@ -464,11 +483,6 @@ def _fetch_top_idle_reasons(cursor, date_params, outer_sql, outer_params, limit=
         _TOP_REASON_CHART_COLORS[i % len(_TOP_REASON_CHART_COLORS)]
         for i in range(len(labels))
     ]
-    labels = labels[::-1]
-    data = data[::-1]
-    seconds = seconds[::-1]
-    hours_display = hours_display[::-1]
-    colors = colors[::-1]
     return {
         "labels": labels,
         "data": data,
@@ -504,7 +518,8 @@ def _fetch_monthwise_idle_cost(cursor, date_params, outer_sql, outer_params):
             YEAR(F.EntryDate) AS Yr,
             MONTH(F.EntryDate) AS Mo,
             CAST(SUM(F.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
-            {cost_sum} AS CostLakhs
+            {cost_sum} AS CostLakhs,
+            ISNULL(SUM(F.IdleSeconds), 0) AS TotalIdleSeconds
         FROM FilteredIdle F
         {mac_join}
         GROUP BY YEAR(F.EntryDate), MONTH(F.EntryDate)
@@ -513,12 +528,17 @@ def _fetch_monthwise_idle_cost(cursor, date_params, outer_sql, outer_params):
         date_params + outer_params,
     )
     rows = cursor.fetchall() or []
-    labels, hours, cost_lakhs = [], [], []
-    for yr, mo, hrs, cost in rows:
+    labels, hours, cost_lakhs, hours_display = [], [], [], []
+    for row in rows:
+        yr, mo, hrs, cost = row[0], row[1], row[2], row[3]
+        total_sec = int(row[4] or 0) if len(row) > 4 else round(float(hrs or 0) * 3600)
+        h = total_sec // 3600
+        m = (total_sec % 3600) // 60
         labels.append(_month_chart_label(yr, mo))
         hours.append(float(hrs or 0))
         cost_lakhs.append(round(float(cost or 0), 2))
-    return {"labels": labels, "hours": hours, "cost_lakhs": cost_lakhs}
+        hours_display.append(f"{h} Hrs {m} Mins")
+    return {"labels": labels, "hours": hours, "cost_lakhs": cost_lakhs, "hours_display": hours_display}
 
 
 def _fetch_top_machines_idle_cost(cursor, date_params, outer_sql, outer_params, kpis=None, limit=15):
@@ -876,7 +896,8 @@ def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_s
         + """
         SELECT
             CAST(F.EntryDate AS DATE) AS EntryDate,
-            CAST(SUM(F.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours
+            CAST(SUM(F.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            ISNULL(SUM(F.IdleSeconds), 0) AS TotalIdleSeconds
         FROM FilteredIdle F
         GROUP BY CAST(F.EntryDate AS DATE)
         ORDER BY CAST(F.EntryDate AS DATE)
@@ -884,20 +905,26 @@ def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_s
         date_params + outer_params,
     )
     daily = {}
+    daily_sec = {}
     for row in cursor.fetchall() or []:
         entry = row[0]
         key = entry.date() if hasattr(entry, "date") and callable(getattr(entry, "date", None)) else entry
         daily[key] = float(row[1] or 0)
+        daily_sec[key] = int(row[2] or 0) if len(row) > 2 else round(float(row[1] or 0) * 3600)
 
-    labels, hours, is_sunday = [], [], []
+    labels, hours, is_sunday, hours_display = [], [], [], []
     single_month = (
         start_date.year == end_date.year and start_date.month == end_date.month
     )
     d = start_date
     while d <= end_date:
         hrs = round(daily.get(d, 0.0), 2)
+        sec = daily_sec.get(d, 0)
+        h = sec // 3600
+        m = (sec % 3600) // 60
         labels.append(str(d.day) if single_month else f"{d.day} {month_abbr[d.month]}")
         hours.append(hrs)
+        hours_display.append(f"{h} Hrs {m} Mins")
         is_sunday.append(d.weekday() == 6)
         d += timedelta(days=1)
 
@@ -905,6 +932,7 @@ def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_s
         "labels": labels,
         "hours": hours,
         "is_sunday": is_sunday,
+        "hours_display": hours_display,
         "day_count": len(labels),
     }
 
@@ -1044,7 +1072,7 @@ def _productive_date_params(start_date, end_date):
     return [start_date, end_date] * 3
 
 
-def _build_utilization_filters(machine, shift):
+def _build_utilization_filters(machine, shift, mac_type=None):
     clauses = []
     params = []
     if machine:
@@ -1055,6 +1083,19 @@ def _build_utilization_filters(machine, shift):
         else:
             clauses.append("AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) = ?")
             params.append(machine)
+    if mac_type:
+        if mac_type == "CNC":
+            clauses.append("""AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1
+            )""")
+        elif mac_type == "CONV":
+            clauses.append("""AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL)
+            )""")
     if shift:
         clauses.append(
             "AND LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128)))) = ?"
@@ -1063,14 +1104,14 @@ def _build_utilization_filters(machine, shift):
     return "\n".join(clauses), params
 
 
-def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift):
+def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_type=None):
     """
     Machine utilization totals (ERP query): available / idle / productive hours
     and overall idle % for the filtered date range (optional machine & shift).
     """
     date_params = _union_date_params(start_date, end_date)
     prod_params = _productive_date_params(start_date, end_date)
-    util_filters, util_params = _build_utilization_filters(machine, shift)
+    util_filters, util_params = _build_utilization_filters(machine, shift, mac_type=mac_type)
 
     if not table_exists(cursor, "shift"):
         return {
@@ -1190,7 +1231,7 @@ def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift):
     }
 
 
-def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
+def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift, mac_type=None):
     if not table_exists(cursor, "shift") or not table_exists(cursor, "MacMaster"):
         return 0
 
@@ -1198,6 +1239,15 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
     shift_clause_rec = ""
     machine_clause_exp = ""
     machine_clause_rec = ""
+    mac_type_clause_exp = ""
+    mac_type_clause_rec = ""
+
+    if mac_type == "CNC":
+        mac_type_clause_exp = "AND ISNULL(cnc, 0) = 1 AND ISNULL(IsNonActive, 0) = 0"
+        mac_type_clause_rec = "AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1)"
+    elif mac_type == "CONV":
+        mac_type_clause_exp = "AND (cnc = 0 OR cnc IS NULL) AND ISNULL(IsNonActive, 0) = 0"
+        mac_type_clause_rec = "AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL))"
 
     if shift:
         shift_clause_exp = "AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) = ?"
@@ -1231,6 +1281,7 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
         WHERE ISNULL(deleted, 0) = 0
           AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) <> N''
           {machine_clause_exp}
+          {mac_type_clause_exp}
     ),
     Expected AS (
         SELECT d.EntryDate, rs.ShiftName, am.MacNo
@@ -1250,6 +1301,7 @@ def _fetch_idle_not_entered_count(cursor, start_date, end_date, machine, shift):
           AND D.deleted = 0
           {shift_clause_rec}
           {machine_clause_rec}
+          {mac_type_clause_rec}
     )
     SELECT COUNT(*) FROM Expected e
     LEFT JOIN Recorded r
@@ -1301,7 +1353,7 @@ def _shift_label_for_ui(shift_name):
     return _SHIFT_UI_LABELS.get(name, name)
 
 
-def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift"):
+def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift", mac_type=None):
     clauses = []
     params = []
     if machine:
@@ -1316,6 +1368,19 @@ def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift
                 f"AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) = ?"
             )
             params.append(machine)
+    if mac_type:
+        if mac_type == "CNC":
+            clauses.append(f"""AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1
+            )""")
+        elif mac_type == "CONV":
+            clauses.append(f"""AND LTRIM(RTRIM(CAST({mac_col} AS NVARCHAR(512)))) IN (
+                SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                FROM MacMaster
+                WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL)
+            )""")
     if shift:
         clauses.append(
             f"AND LTRIM(RTRIM(CAST({shift_col} AS NVARCHAR(128)))) = ?"
@@ -1324,7 +1389,7 @@ def _build_slot_filter_clauses(machine, shift, mac_col="MacNo", shift_col="Shift
     return "\n".join(clauses), params
 
 
-def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
+def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, mac_type=None):
     """
     Per machine / shift / date: shift hours − (production run time + idle time)
     = balance (idle time not entered). Uses shift master, idle union, production union.
@@ -1356,14 +1421,21 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift):
             machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
             machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
 
+    if mac_type == "CNC":
+        machine_clause_exp += " AND ISNULL(cnc, 0) = 1 AND ISNULL(IsNonActive, 0) = 0"
+        machine_clause_rec += " AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1)"
+    elif mac_type == "CONV":
+        machine_clause_exp += " AND (cnc = 0 OR cnc IS NULL) AND ISNULL(IsNonActive, 0) = 0"
+        machine_clause_rec += " AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL))"
+
     idle_slot_sql, idle_slot_params = _build_slot_filter_clauses(
-        machine, shift, mac_col="A.MacNo", shift_col="A.Shift",
+        machine, shift, mac_col="A.MacNo", shift_col="A.Shift", mac_type=mac_type,
     )
     prod_slot_sql, prod_slot_params = _build_slot_filter_clauses(
-        machine, shift, mac_col="P.macno", shift_col="P.shift",
+        machine, shift, mac_col="P.macno", shift_col="P.shift", mac_type=mac_type,
     )
     opr_slot_sql, opr_slot_params = _build_slot_filter_clauses(
-        machine, shift, mac_col="macno", shift_col="shift",
+        machine, shift, mac_col="macno", shift_col="shift", mac_type=mac_type,
     )
 
     sql = f"""
@@ -1673,6 +1745,14 @@ def idle_time_report(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
+    mac_type_raw = (request.GET.get("mac_type") or request.GET.get("macType") or "").strip()
+    mac_type = None
+    if mac_type_raw and mac_type_raw.lower() not in ("all types", "all", "all mac types", ""):
+        if mac_type_raw.upper() in ("CNC",):
+            mac_type = "CNC"
+        elif mac_type_raw.upper() in ("CONV", "CONVENTIONAL"):
+            mac_type = "CONV"
+
     machine = _parse_machine(request.GET.get("machine", ""))
     shift_parsed = _parse_shift(request.GET.get("shift", ""))
     reason = _parse_reason(request.GET.get("reason", ""))
@@ -1683,7 +1763,7 @@ def idle_time_report(request):
     try:
         cursor = conn.cursor()
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
-        outer_sql, outer_params = _build_outer_filters(machine, shift, reason)
+        outer_sql, outer_params = _build_outer_filters(machine, shift, reason, mac_type=mac_type)
 
         cursor.execute(_FILTER_OPTIONS_SQL, date_params)
         opt_rows = cursor.fetchall() or []
@@ -1695,6 +1775,23 @@ def idle_time_report(request):
                 shift_set.append(sh)
             if rs is not None:
                 reason_set.append(rs)
+
+        cnc_map = {}
+        if table_exists(cursor, "MacMaster"):
+            try:
+                cursor.execute(
+                    """
+                    SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))), ISNULL(cnc, 0)
+                    FROM MacMaster
+                    WHERE ISNULL(deleted, 0) = 0
+                    """
+                )
+                for m_no, is_cnc in cursor.fetchall() or []:
+                    m_clean = (m_no or "").strip()
+                    if m_clean:
+                        cnc_map[m_clean] = "CNC" if is_cnc == 1 else "CONV"
+            except Exception:
+                pass
 
         mac_join = ""
         rate_select = "CAST(0 AS FLOAT) AS RatePerHr"
@@ -1753,7 +1850,7 @@ def idle_time_report(request):
 
         kpis = _compute_kpis(
             cursor, start_date, end_date, date_params, outer_sql, outer_params,
-            data_rows, machine, shift,
+            data_rows, machine, shift, mac_type=mac_type,
         )
         top_idle_reasons = _fetch_top_idle_reasons(
             cursor, date_params, outer_sql, outer_params, limit=10,
@@ -1781,7 +1878,7 @@ def idle_time_report(request):
         
         try:
             utilization_totals = _fetch_utilization_totals(
-                cursor, start_date, end_date, machine, shift,
+                cursor, start_date, end_date, machine, shift, mac_type=mac_type,
             )
         except Exception:
             pass
@@ -1803,7 +1900,7 @@ def idle_time_report(request):
             cursor, date_params, outer_sql, outer_params,
         )
         idle_time_not_entered = _fetch_idle_time_not_entered(
-            cursor, start_date, end_date, machine, shift,
+            cursor, start_date, end_date, machine, shift, mac_type=mac_type,
         )
         reason_machine_detail = _fetch_reason_machine_detail(
             cursor, date_params, outer_sql, outer_params,
@@ -1830,12 +1927,17 @@ def idle_time_report(request):
         "from": str(start_date),
         "to": str(end_date),
         "filters": {
+            "mac_type": mac_type or "All Types",
             "machine": machine or "All Machines",
             "shift": request.GET.get("shift", "").strip() or "All Shifts",
             "reason": reason or "All Reasons",
         },
         "filter_options": {
+            "mac_types": ["All Types", "CNC", "CONV"],
             "machines": _machine_options(mac_set),
+            "machines_cnc": ["All Machines"] + sorted([m for m in mac_set if cnc_map.get(m) == "CNC"], key=str.lower),
+            "machines_conv": ["All Machines"] + sorted([m for m in mac_set if cnc_map.get(m) != "CNC"], key=str.lower),
+            "machine_types_map": cnc_map,
             "shifts": _shift_options(shift_set),
             "reasons": _reason_options(reason_set),
             "operators": operators_list,

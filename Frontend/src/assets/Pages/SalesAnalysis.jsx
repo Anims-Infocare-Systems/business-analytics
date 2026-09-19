@@ -2523,15 +2523,32 @@ export default function SalesAnalysis() {
     }
 
     // Calendar metadata always comes from the backend (date-range based)
-    const { calendar_days, months, years } = avgRateData;
+    const { calendar_days, months, total_months, days_in_month, from: fromStr, to: toStr } = avgRateData;
 
     // Revenue: use customer-filtered derivedSummary when a customer filter is active,
     // otherwise fall back to the backend grand_total (same value when no filter)
     const grandTotal = derivedSummary ? (derivedSummary.grand_total ?? 0) : (avgRateData.grand_total ?? 0);
 
+    let numMonths = Number(total_months || months || 0);
+    let daysInMonth = Number(days_in_month || 0);
+
+    if (!numMonths || !daysInMonth) {
+      if (fromStr && toStr) {
+        const d1 = new Date(fromStr);
+        const d2 = new Date(toStr);
+        numMonths = Math.max(1, (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth()) + 1);
+        daysInMonth = new Date(d1.getFullYear(), d1.getMonth() + 1, 0).getDate();
+      } else {
+        numMonths = Math.max(1, Math.round(Number(months || 1)));
+        daysInMonth = 30;
+      }
+    }
+
     const per_day = Math.round(grandTotal / Math.max(1, calendar_days));
     const per_week = per_day * 7;
-    const per_month = per_day * 30;
+    const per_month = numMonths > 1
+      ? Math.round(grandTotal / numMonths)
+      : Math.round(per_day * daysInMonth);
     const per_year = per_day * 365;
 
     const totalDays = Math.max(0, Number(calendar_days || 0));
@@ -2568,8 +2585,8 @@ export default function SalesAnalysis() {
       {
         label: "AVG SELLING RATE (Per Month)",
         value: `₹${formatRupees(per_month)}`,
-        sub: "Per calendar month (30d)",
-        trend: `${months} months total`,
+        sub: numMonths > 1 ? "Per calendar month" : `Per calendar month (${daysInMonth}d)`,
+        trend: `${numMonths} month${numMonths !== 1 ? "s" : ""} total`,
         icon: Scale,
         iconColor: "#f97316",
         type: "neutral"

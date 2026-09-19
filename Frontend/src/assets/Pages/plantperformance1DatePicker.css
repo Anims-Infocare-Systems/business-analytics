@@ -29,6 +29,49 @@
     color: var(--pp1dp-text);
 }
 
+/* Modern Scrollbar for Plant Performance DatePicker */
+.pp1dp-wrap *::-webkit-scrollbar,
+.pp1dp-portal-wrap *::-webkit-scrollbar,
+.pp1dp-popup::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.pp1dp-wrap *::-webkit-scrollbar-track,
+.pp1dp-portal-wrap *::-webkit-scrollbar-track,
+.pp1dp-popup::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pp1dp-wrap *::-webkit-scrollbar-thumb,
+.pp1dp-portal-wrap *::-webkit-scrollbar-thumb,
+.pp1dp-popup::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.3);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pp1dp-wrap *::-webkit-scrollbar-thumb:hover,
+.pp1dp-portal-wrap *::-webkit-scrollbar-thumb:hover,
+.pp1dp-popup::-webkit-scrollbar-thumb:hover {
+    background: #1a56cc;
+}
+
+.pp1dp-wrap *::-webkit-scrollbar-corner,
+.pp1dp-portal-wrap *::-webkit-scrollbar-corner,
+.pp1dp-popup::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.pp1dp-wrap,
+.pp1dp-wrap *,
+.pp1dp-portal-wrap,
+.pp1dp-portal-wrap *,
+.pp1dp-popup {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.3) transparent;
+}
+
 /* ── Root wrapper ─────────────────────────────────────────── */
 .pp1dp-wrap {
     position: relative;

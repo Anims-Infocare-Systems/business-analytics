@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
@@ -67,11 +67,20 @@ function decimalHoursToHms(hours) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** X-axis tick: show HH:MM:SS for hour-scale values. */
-function formatTopReasonAxisTick(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return "";
-  return decimalHoursToHms(n);
+/** Decimal hours → 'X Hrs Y Mins' */
+function formatIdleHrsMins(hours) {
+  const totalMins = Math.max(0, Math.round(Number(hours || 0) * 60));
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return `${h} Hrs ${m} Mins`;
+}
+
+/** Decimal hours → 'Xh Ym' for compact datalabels */
+function formatCompactHrsMins(hours) {
+  const totalMins = Math.max(0, Math.round(Number(hours || 0) * 60));
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 /* ════════════════════════════════════════════════
@@ -259,19 +268,81 @@ function buildTotalStats(u) {
   ];
 }
 
+function formatTotalIdleMinutes(k) {
+  if (!k) return "0 Mins";
+  if (k.total_idle_minutes_display) return k.total_idle_minutes_display;
+  if (k.total_idle_minutes != null) {
+    return `${Number(k.total_idle_minutes).toLocaleString()} Mins`;
+  }
+  if (k.total_idle_seconds != null) {
+    const mins = Math.round(Number(k.total_idle_seconds) / 60);
+    return `${mins.toLocaleString()} Mins`;
+  }
+  if (k.total_idle_hours_decimal != null) {
+    const mins = Math.round(Number(k.total_idle_hours_decimal) * 60);
+    return `${mins.toLocaleString()} Mins`;
+  }
+  if (k.total_idle_hours_display) {
+    const parts = String(k.total_idle_hours_display).replace(/,/g, "").split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const s = parts[2] ? parseInt(parts[2], 10) || 0 : 0;
+      const mins = Math.round(h * 60 + m + s / 60);
+      return `${mins.toLocaleString()} Mins`;
+    }
+  }
+  return "0 Mins";
+}
+
+function formatAvgCostPerMinute(k) {
+  if (!k) return "₹ 0";
+  if (k.avg_cost_per_minute_display) return k.avg_cost_per_minute_display;
+  if (k.avg_cost_per_minute != null) {
+    return `₹ ${Number(k.avg_cost_per_minute).toFixed(2)}`;
+  }
+
+  const totalCost = Number(k.total_idle_cost ?? 0);
+  let totalMins = 0;
+  if (k.total_idle_minutes != null && Number(k.total_idle_minutes) > 0) {
+    totalMins = Number(k.total_idle_minutes);
+  } else if (k.total_idle_seconds != null && Number(k.total_idle_seconds) > 0) {
+    totalMins = Math.round(Number(k.total_idle_seconds) / 60);
+  } else if (k.total_idle_hours_decimal != null && Number(k.total_idle_hours_decimal) > 0) {
+    totalMins = Math.round(Number(k.total_idle_hours_decimal) * 60);
+  } else if (k.total_idle_hours_display) {
+    const parts = String(k.total_idle_hours_display).replace(/,/g, "").split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const s = parts[2] ? parseInt(parts[2], 10) || 0 : 0;
+      totalMins = Math.round(h * 60 + m + s / 60);
+    }
+  }
+
+  if (totalCost > 0 && totalMins > 0) {
+    const avgCost = totalCost / totalMins;
+    return `₹ ${avgCost.toFixed(2)}`;
+  }
+  return "₹ 0";
+}
+
 function buildFooterStats(kpis) {
   const k = kpis || {};
   return [
-    { label: "Total Idle Hours", value: k.total_idle_hours_display ?? "0:00:00" },
-    { label: "Total Idle Cost", value: k.total_idle_cost_display ?? "₹ 0" },
-    { label: "Avg Cost / Hour", value: k.avg_cost_per_hour != null ? `₹ ${k.avg_cost_per_hour}` : "₹ 0" },
-    { label: "Machines Monitored", value: k.machine_count != null ? String(k.machine_count) : "0" },
-    { label: "Data Coverage", value: k.data_coverage != null ? `${k.data_coverage}%` : "0%" },
+    { label: "Total Idle Minutes", value: formatTotalIdleMinutes(k), icon: FiClock },
+    { label: "Total Idle Cost", value: k.total_idle_cost_display ?? "₹ 0", icon: FiDollarSign },
+    { label: "Avg Cost / Minute", value: formatAvgCostPerMinute(k), icon: FiTrendingUp },
+    { label: "Machines Monitored", value: k.machine_count != null ? String(k.machine_count) : "0", icon: FiCpu },
   ];
 }
 
 const DEFAULT_FILTER_OPTIONS = {
+  mac_types: ["All Types", "CNC", "CONV"],
   machines: ["All Machines", "BROACHING-1", "BROACHING-2", "TC-01", "TC-02", "VMC-01", "VTL-03"],
+  machines_cnc: [],
+  machines_conv: [],
+  machine_types_map: {},
   shifts: ["All Shifts", "Shift 1 (6AM-2PM)", "Shift 2 (2PM-10PM)", "Shift 3 (10PM-6AM)"],
   reasons: [
     "All Reasons", "MACHINE BREAKDOWN", "INSERT CHANGE", "MACHINE CLEANING", "NMP",
@@ -513,7 +584,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
 
   const allLabel = options[0] || "All Machines";
   const isAllSelected = !value || value === allLabel || value === "";
-  
+
   const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
 
   const toggleOption = (opt) => {
@@ -521,7 +592,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
       onChange(allLabel);
       return;
     }
-    
+
     let nextList;
     const idx = selectedList.indexOf(opt);
     if (idx >= 0) {
@@ -529,7 +600,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
     } else {
       nextList = [...selectedList, opt];
     }
-    
+
     if (nextList.length === 0) {
       onChange(allLabel);
     } else {
@@ -558,16 +629,16 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
         type="button"
         className={`itr-custom-select-trigger ${isOpen ? "itr-custom-select-trigger--open" : ""} ${!isDefault ? "itr-custom-select-trigger--active" : ""}`}
         onClick={() => setIsOpen(!isOpen)}
-        style={{ fontFamily: 'Poppins' }}
+        style={{ fontFamily: 'var(--itr-sans)' }}
       >
-        <span className="itr-custom-select-trigger-text" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+        <span className="itr-custom-select-trigger-text" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '140px', fontFamily: 'var(--itr-sans)', fontWeight: 600 }}>
           {triggerText}
         </span>
         <span className="itr-custom-select-trigger-arrow" />
       </button>
 
       {isOpen && (
-        <div className="itr-custom-select-dropdown" style={{ width: '220px', padding: '8px', zIndex: 999, boxSizing: 'border-box' }}>
+        <div className="itr-custom-select-dropdown" style={{ width: '220px', padding: '8px', zIndex: 999, boxSizing: 'border-box', fontFamily: 'var(--itr-sans)' }}>
           <div style={{ position: 'relative', marginBottom: '8px' }}>
             <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -588,7 +659,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
                 background: '#f8fafc',
                 outline: 'none',
                 boxSizing: 'border-box',
-                fontFamily: 'Poppins',
+                fontFamily: 'var(--itr-sans)',
                 transition: 'all 0.2s ease'
               }}
               onFocus={(e) => {
@@ -646,8 +717,8 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
                   borderRadius: '6px',
                   fontSize: '0.78rem',
                   color: isDefault ? '#2d6de8' : '#475569',
-                  fontWeight: isDefault ? 700 : 500,
-                  fontFamily: 'Poppins',
+                  fontWeight: isDefault ? 700 : 600,
+                  fontFamily: 'var(--itr-sans)',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -671,7 +742,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
                     </svg>
                   )}
                 </div>
-                <span>{allLabel}</span>
+                <span style={{ fontFamily: 'var(--itr-sans)' }}>{allLabel}</span>
               </button>
             )}
 
@@ -696,8 +767,8 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
                     borderRadius: '6px',
                     fontSize: '0.78rem',
                     color: selected ? '#2d6de8' : '#475569',
-                    fontWeight: selected ? 700 : 500,
-                    fontFamily: 'Poppins',
+                    fontWeight: selected ? 700 : 600,
+                    fontFamily: 'var(--itr-sans)',
                     transition: 'all 0.15s ease'
                   }}
                 >
@@ -721,13 +792,13 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
                       </svg>
                     )}
                   </div>
-                  <span>{opt}</span>
+                  <span style={{ fontFamily: 'var(--itr-sans)' }}>{opt}</span>
                 </button>
               );
             })}
 
             {filteredOptions.length === 0 && search && (
-              <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: 'Poppins' }}>
+              <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: 'var(--itr-sans)' }}>
                 No matches found
               </div>
             )}
@@ -763,15 +834,17 @@ export default function IdleTimeReport() {
   const _saved = readFilterSession("ba_filter_idletime", _dflt);
   const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
   const [filters, setFilters] = useState({
-    machine: "All Machines", shift: "All Shifts",
+    mac_type: "All Types",
+    machine: "All Machines",
+    shift: "All Shifts",
     reason: "All Reasons",
   });
   const [filterOptions, setFilterOptions] = useState(DEFAULT_FILTER_OPTIONS);
   const [kpiCards, setKpiCards] = useState(() => buildKpiCards({}, "This Period"));
   const [topReasonsChart, setTopReasonsChart] = useState({ labels: [], data: [], hours_display: [], colors: [] });
   const [acceptedIdle, setAcceptedIdle] = useState({ chart: [0, 0], hours_display: ["0:00:00", "0:00:00"], tiles: [] });
-  const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [] });
-  const [daywiseChart, setDaywiseChart] = useState({ labels: [], data: [], isSunday: [] });
+  const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [], hours_display: [] });
+  const [daywiseChart, setDaywiseChart] = useState({ labels: [], data: [], isSunday: [], hours_display: [] });
   const [idleChartType, setIdleChartType] = useState("daily");
   const [totalStats, setTotalStats] = useState(() => buildTotalStats({}));
   const [shiftTiles, setShiftTiles] = useState([]);
@@ -808,6 +881,7 @@ export default function IdleTimeReport() {
     const params = new URLSearchParams({
       from: toIsoDate(dateRange.from),
       to: toIsoDate(dateRange.to),
+      mac_type: filters.mac_type,
       machine: filters.machine,
       shift: filters.shift,
       reason: filters.reason,
@@ -817,9 +891,15 @@ export default function IdleTimeReport() {
       .then(data => {
         if (data?.filter_options) {
           setFilterOptions({
+            mac_types: data.filter_options.mac_types?.length
+              ? data.filter_options.mac_types
+              : DEFAULT_FILTER_OPTIONS.mac_types,
             machines: data.filter_options.machines?.length
               ? data.filter_options.machines
               : DEFAULT_FILTER_OPTIONS.machines,
+            machines_cnc: data.filter_options.machines_cnc || [],
+            machines_conv: data.filter_options.machines_conv || [],
+            machine_types_map: data.filter_options.machine_types_map || {},
             shifts: data.filter_options.shifts?.length
               ? data.filter_options.shifts
               : DEFAULT_FILTER_OPTIONS.shifts,
@@ -858,18 +938,20 @@ export default function IdleTimeReport() {
             labels: data.monthwise.labels,
             hours: data.monthwise.hours ?? [],
             cost: data.monthwise.cost_lakhs ?? [],
+            hours_display: data.monthwise.hours_display ?? [],
           });
         } else {
-          setMonthwiseChart({ labels: [], hours: [], cost: [] });
+          setMonthwiseChart({ labels: [], hours: [], cost: [], hours_display: [] });
         }
         if (data?.daywise?.labels) {
           setDaywiseChart({
             labels: data.daywise.labels,
             data: data.daywise.hours ?? [],
             isSunday: data.daywise.is_sunday ?? [],
+            hours_display: data.daywise.hours_display ?? [],
           });
         } else {
-          setDaywiseChart({ labels: [], data: [], isSunday: [] });
+          setDaywiseChart({ labels: [], data: [], isSunday: [], hours_display: [] });
         }
         if (data?.utilization_totals) {
           setTotalStats(buildTotalStats(data.utilization_totals));
@@ -935,7 +1017,7 @@ export default function IdleTimeReport() {
       })
       .catch((err) => console.error("idle-time-report:", err))
       .finally(() => setIsLoading(false));
-  }, [dateRange.from, dateRange.to, filters.machine, filters.shift, filters.reason]);
+  }, [dateRange.from, dateRange.to, filters.mac_type, filters.machine, filters.shift, filters.reason]);
 
   useEffect(() => {
     const kill = () => {
@@ -946,10 +1028,12 @@ export default function IdleTimeReport() {
     if (!canvas) return kill;
 
     kill();
-    const rawData = topReasonsChart.data.map(v => Number(v) || 0);
+    const chartLabels = topReasonsChart.labels.slice(0, 5);
+    const rawData = topReasonsChart.data.slice(0, 5).map(v => Number(v) || 0);
+    const chartHoursDisplay = (topReasonsChart.hours_display ?? []).slice(0, 5);
     const maxVal = Math.max(...rawData, 0.001);
 
-    const barColors = topReasonsChart.labels.map((_, i) =>
+    const barColors = chartLabels.map((_, i) =>
       topReasonsChart.colors[i % topReasonsChart.colors.length]
     );
 
@@ -962,9 +1046,9 @@ export default function IdleTimeReport() {
     };
 
     charts.current.topReasons = new Chart(canvas, {
-      type: "bar", indexAxis: "y",
+      type: "bar",
       data: {
-        labels: topReasonsChart.labels,
+        labels: chartLabels,
         datasets: [{
           data: rawData,
           backgroundColor: barColors.map(c => c + "cc"),
@@ -981,7 +1065,7 @@ export default function IdleTimeReport() {
         clip: false,                    /* ← allow labels outside canvas */
         animation: { duration: 900, easing: "easeOutQuart" },
         layout: {
-          padding: { right: 90, top: 6, bottom: 4 }, /* ← space for end labels */
+          padding: { top: 24, right: 16, bottom: 8, left: 8 },
         },
         plugins: {
           legend: { display: false },
@@ -991,62 +1075,71 @@ export default function IdleTimeReport() {
               title: items => items[0]?.label ?? "",
               label: ctx => {
                 const idx = ctx.dataIndex;
-                const hms = topReasonsChart.hours_display?.[idx]
-                  ?? decimalHoursToHms(ctx.raw ?? ctx.parsed?.x);
-                const dec = Number(ctx.raw ?? ctx.parsed?.x ?? 0).toFixed(1);
+                const hms = chartHoursDisplay?.[idx]
+                  ?? decimalHoursToHms(ctx.raw ?? ctx.parsed?.y);
+                const dec = Number(ctx.raw ?? ctx.parsed?.y ?? 0).toFixed(1);
                 return `  ${hms}  (${dec} hrs)`;
               },
             },
           },
           datalabels: {
             display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
-            /* Inside bar for wide bars (>35% of max), outside for narrow */
-            anchor: ctx => {
+            anchor: "end",
+            align: ctx => {
               const ratio = rawData[ctx.dataIndex] / maxVal;
-              return ratio > 0.35 ? "end" : "end";
+              return ratio > 0.35 ? "start" : "end";
             },
-            align: "end",
-            /* White text inside wide bars, colored text outside narrow bars */
             color: ctx => {
               const ratio = rawData[ctx.dataIndex] / maxVal;
               return ratio > 0.35 ? "#ffffff" : (barColors[ctx.dataIndex] ?? "#2563eb");
             },
-            /* For wide bars, place label inside by overriding offset */
             offset: ctx => {
               const ratio = rawData[ctx.dataIndex] / maxVal;
-              return ratio > 0.35 ? -68 : 4;
+              return ratio > 0.35 ? 8 : 4;
             },
             font: { size: 10, weight: "800", family: CHART_FONT },
             formatter: (val, ctx) => {
-              const hms = topReasonsChart.hours_display?.[ctx.dataIndex];
+              const hms = chartHoursDisplay?.[ctx.dataIndex];
               return compactHms(hms) || (val > 0 ? `${val.toFixed(0)}h` : "");
             },
             textStrokeColor: ctx => {
               const ratio = rawData[ctx.dataIndex] / maxVal;
-              return ratio > 0.35 ? "rgba(0,0,0,0.3)" : "transparent";
+              return ratio > 0.35 ? "rgba(0,0,0,0.35)" : "transparent";
             },
             textStrokeWidth: 2,
           },
         },
         scales: {
           x: {
-            beginAtZero: true,
-            title: { display: true, text: "Idle Hours", font: { size: 10, weight: "700", family: CHART_FONT }, color: "#64748b" },
-            ticks: { ...TICK_STYLE, callback: v => formatTopReasonAxisTick(v), maxRotation: 0 },
-            grid: { color: GRID_COLOR, drawBorder: false },
-          },
-          y: {
+            grid: { display: false },
             ticks: {
               ...TICK_STYLE,
               font: { size: 10, family: CHART_FONT, weight: "700" },
               autoSkip: false,
-              /* Truncate long reason labels */
-              callback: function(val) {
+              maxRotation: 0,
+              callback: function (val) {
                 const label = this.getLabelForValue(val);
-                return label && label.length > 22 ? label.slice(0, 20) + "…" : label;
+                if (!label) return "";
+                if (label.length > 15) {
+                  const words = label.split(" ");
+                  if (words.length > 1) {
+                    const mid = Math.ceil(words.length / 2);
+                    return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
+                  }
+                  return label.slice(0, 14) + "…";
+                }
+                return label;
               },
             },
-            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              ...TICK_STYLE,
+              font: { size: 10, family: CHART_FONT, weight: "600" },
+              callback: v => `${Number(v).toLocaleString()}h`,
+            },
+            grid: { color: GRID_COLOR, drawBorder: false },
           },
         },
       },
@@ -1171,7 +1264,8 @@ export default function IdleTimeReport() {
               label: ctx => {
                 const v = Number(ctx.raw ?? 0);
                 if (ctx.dataset.yAxisID === "y1") return `  ${ctx.dataset.label}: ₹${v.toFixed(2)} L`;
-                return `  ${ctx.dataset.label}: ${v.toFixed(1)} hrs`;
+                const disp = monthwiseChart.hours_display?.[ctx.dataIndex] || formatIdleHrsMins(v);
+                return `  ${ctx.dataset.label}: ${disp}`;
               },
             },
           },
@@ -1181,7 +1275,7 @@ export default function IdleTimeReport() {
             align: "end",
             color: "#2563eb",
             font: { size: 9, weight: "800", family: CHART_FONT },
-            formatter: v => v > 0 ? `${Number(v).toFixed(0)}h` : "",
+            formatter: v => v > 0 ? formatCompactHrsMins(v) : "",
           },
         },
         scales: {
@@ -1203,10 +1297,10 @@ export default function IdleTimeReport() {
     if (!canvas) return kill;
 
     const ctx2d = canvas.getContext("2d");
-    const activeColor = 
+    const activeColor =
       idleChartType === "daily" ? "#2563eb" :
-      idleChartType === "weekly" ? "#4f46e5" : "#0891b2";
-      
+        idleChartType === "weekly" ? "#4f46e5" : "#0891b2";
+
     const areaGrad = ctx2d.createLinearGradient(0, 0, 0, 260);
     if (idleChartType === "daily") {
       areaGrad.addColorStop(0, "rgba(37,99,235,0.25)");
@@ -1225,7 +1319,7 @@ export default function IdleTimeReport() {
     let labelCallback = () => "";
     let pointBgColor = "#fff";
     let pointBorderColor = activeColor;
-    
+
     if (idleChartType === "daily") {
       labels = daywiseChart.labels;
       dataPoints = daywiseChart.data.map(v => Number(v) || 0);
@@ -1238,7 +1332,8 @@ export default function IdleTimeReport() {
       labelCallback = ctx => {
         const idx = ctx.dataIndex;
         const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
-        return daywiseChart.isSunday[idx] ? "  Sunday / Holiday" : `  ${v.toFixed(2)} hrs idle`;
+        const disp = daywiseChart.hours_display?.[idx] || formatIdleHrsMins(v);
+        return daywiseChart.isSunday[idx] ? "  Sunday / Holiday" : `  ${disp} idle`;
       };
     } else if (idleChartType === "weekly") {
       const getWeeklyData = () => {
@@ -1246,7 +1341,7 @@ export default function IdleTimeReport() {
         const dailyData = daywiseChart.data;
         const wLabels = [];
         const wData = [];
-        
+
         for (let i = 0; i < dailyLabels.length; i += 7) {
           const sliceLabels = dailyLabels.slice(i, i + 7);
           const sliceData = dailyData.slice(i, i + 7);
@@ -1268,7 +1363,7 @@ export default function IdleTimeReport() {
       };
       labelCallback = ctx => {
         const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
-        return `  Weekly Idle: ${v.toFixed(2)} hrs`;
+        return `  Weekly Idle: ${formatIdleHrsMins(v)}`;
       };
     } else {
       labels = monthwiseChart.labels;
@@ -1278,8 +1373,10 @@ export default function IdleTimeReport() {
         return `Month: ${labels[idx] ?? ""}`;
       };
       labelCallback = ctx => {
+        const idx = ctx.dataIndex;
         const v = Number(ctx.parsed.y ?? ctx.raw ?? 0);
-        return `  Monthly Idle: ${v.toFixed(2)} hrs`;
+        const disp = monthwiseChart.hours_display?.[idx] || formatIdleHrsMins(v);
+        return `  Monthly Idle: ${disp}`;
       };
     }
 
@@ -1329,7 +1426,7 @@ export default function IdleTimeReport() {
             align: "top",
             color: activeColor,
             font: { size: 9, weight: "800", family: CHART_FONT },
-            formatter: v => `${Number(v).toFixed(0)}h`,
+            formatter: v => formatCompactHrsMins(v),
           },
         },
         scales: {
@@ -1553,9 +1650,58 @@ export default function IdleTimeReport() {
 
   const hc = (f, v) => setFilters(p => ({ ...p, [f]: v }));
 
+  const handleMacTypeChange = (newType) => {
+    setFilters(p => ({
+      ...p,
+      mac_type: newType,
+      machine: "All Machines",
+    }));
+  };
+
+  const visibleMachines = useMemo(() => {
+    if (filters.mac_type === "CNC") {
+      if (filterOptions.machines_cnc?.length) return filterOptions.machines_cnc;
+      if (filterOptions.machine_types_map && Object.keys(filterOptions.machine_types_map).length > 0) {
+        return ["All Machines", ...filterOptions.machines.filter(m => m !== "All Machines" && filterOptions.machine_types_map[m] === "CNC")];
+      }
+    } else if (filters.mac_type === "CONV") {
+      if (filterOptions.machines_conv?.length) return filterOptions.machines_conv;
+      if (filterOptions.machine_types_map && Object.keys(filterOptions.machine_types_map).length > 0) {
+        return ["All Machines", ...filterOptions.machines.filter(m => m !== "All Machines" && filterOptions.machine_types_map[m] === "CONV")];
+      }
+    }
+    return filterOptions.machines || ["All Machines"];
+  }, [filters.mac_type, filterOptions]);
+
+  // ── Calculate Total Idle Hrs for Daily / Period Breakdown ──
+  const totalDailyIdleParts = useMemo(() => {
+    // 1. Check exact precision from totalStats or kpiCards
+    const rawHms = totalStats[1]?.value || kpiCards[0]?.value || "";
+    if (rawHms && rawHms !== "0:00" && rawHms !== "0:00:00") {
+      const cleaned = String(rawHms).replace(/,/g, "").trim();
+      const parts = cleaned.split(":");
+      if (parts.length >= 2) {
+        const h = parseInt(parts[0], 10) || 0;
+        const m = parseInt(parts[1], 10) || 0;
+        return { hours: h.toLocaleString(), mins: m };
+      }
+    }
+    // 2. Sum based on active view if available
+    const sum = (idleChartType === "monthly" ? monthwiseChart.hours : daywiseChart.data)
+      .reduce((acc, v) => acc + (Number(v) || 0), 0);
+    if (sum > 0) {
+      const totalMins = Math.round(sum * 60);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return { hours: h.toLocaleString(), mins: m };
+    }
+    return { hours: "0", mins: 0 };
+  }, [totalStats, kpiCards, idleChartType, monthwiseChart.hours, daywiseChart.data]);
+
   const handleResetFilters = () => {
     setDateRange({ from: new Date(2026, 2, 1), to: new Date(2026, 2, 27) });
     setFilters({
+      mac_type: "All Types",
       machine: "All Machines",
       shift: "All Shifts",
       reason: "All Reasons",
@@ -1818,30 +1964,45 @@ export default function IdleTimeReport() {
               />
             </div>
 
-            {[
-              ["Machine No", "machine", filterOptions.machines],
-              ["Shift", "shift", filterOptions.shifts],
-              ["Reason", "reason", filterOptions.reasons],
-            ].map(([label, field, opts]) => (
-              <div key={field} className="itr-filter-group" style={field === "machine" ? { minWidth: '190px' } : {}}>
-                <label className="itr-filter-label">{label}</label>
-                {field === "machine" ? (
-                  <SearchableMultiSelect
-                    value={filters[field]}
-                    options={opts}
-                    onChange={val => hc(field, val)}
-                    placeholder={`Search ${label.toLowerCase()}...`}
-                  />
-                ) : (
-                  <SearchableSelect
-                    value={filters[field]}
-                    options={opts}
-                    onChange={val => hc(field, val)}
-                    placeholder={`Search ${label.toLowerCase()}...`}
-                  />
-                )}
-              </div>
-            ))}
+            <div className="itr-filter-group itr-filter-group--mactype" style={{ minWidth: '115px' }}>
+              <label className="itr-filter-label">Mac Type</label>
+              <SearchableSelect
+                value={filters.mac_type}
+                options={filterOptions.mac_types || ["All Types", "CNC", "CONV"]}
+                onChange={handleMacTypeChange}
+                placeholder="Select type..."
+              />
+            </div>
+
+            <div className="itr-filter-group" style={{ minWidth: '175px' }}>
+              <label className="itr-filter-label">Machine No</label>
+              <SearchableMultiSelect
+                value={filters.machine}
+                options={visibleMachines}
+                onChange={val => hc("machine", val)}
+                placeholder="Search machine..."
+              />
+            </div>
+
+            <div className="itr-filter-group" style={{ minWidth: '130px' }}>
+              <label className="itr-filter-label">Shift</label>
+              <SearchableSelect
+                value={filters.shift}
+                options={filterOptions.shifts}
+                onChange={val => hc("shift", val)}
+                placeholder="Search shift..."
+              />
+            </div>
+
+            <div className="itr-filter-group" style={{ minWidth: '140px' }}>
+              <label className="itr-filter-label">Reason</label>
+              <SearchableSelect
+                value={filters.reason}
+                options={filterOptions.reasons}
+                onChange={val => hc("reason", val)}
+                placeholder="Search reason..."
+              />
+            </div>
 
             <div className="itr-filter-group" data-spotlight="itr-export-controls">
               <label className="itr-filter-label">&nbsp;</label>
@@ -1882,12 +2043,22 @@ export default function IdleTimeReport() {
         {/* Footer */}
         <div className="itr-footer">
           <div className="itr-footer-stats">
-            {footerStats.map((s, i) => (
-              <div key={i} className="itr-footer-stat">
-                <div className="itr-footer-stat-label">{s.label}</div>
-                <div className="itr-footer-stat-val">{s.value}</div>
-              </div>
-            ))}
+            {footerStats.map((s, i) => {
+              const IconComp = s.icon;
+              return (
+                <div key={i} className="itr-footer-stat">
+                  <div className="itr-footer-stat-top">
+                    <span className="itr-footer-stat-label">{s.label}</span>
+                    {IconComp && (
+                      <div className="itr-footer-stat-icon">
+                        <IconComp size={14} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="itr-footer-stat-val">{s.value}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1990,41 +2161,70 @@ export default function IdleTimeReport() {
         </div>
 
         {/* ── Daily / Weekly / Monthly Idle Hours — Full Width ── */}
-        <Card 
+        <Card
           title={
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <FiCalendar size={16} /> 
+              <FiCalendar size={16} />
               {idleChartType === "daily" ? "Daily Idle Hours" : idleChartType === "weekly" ? "Weekly Idle Hours" : "Monthly Idle Hours"}
             </span>
-          } 
+          }
           badge={
             idleChartType === "daily" ? `${daywiseChart.labels.length} Days` :
-            idleChartType === "weekly" ? `${Math.ceil(daywiseChart.labels.length / 7)} Weeks` :
-            `${monthwiseChart.labels.length} Months`
-          } 
-          badgeBg="#ecfeff" 
-          badgeColor="#0891b2" 
+              idleChartType === "weekly" ? `${Math.ceil(daywiseChart.labels.length / 7)} Weeks` :
+                `${monthwiseChart.labels.length} Months`
+          }
+          badgeBg="#ecfeff"
+          badgeColor="#0891b2"
           accentColor={
             idleChartType === "daily" ? "#2563eb" :
-            idleChartType === "weekly" ? "#4f46e5" : "#0891b2"
+              idleChartType === "weekly" ? "#4f46e5" : "#0891b2"
           }
           extra={
-            <div className="itr-chart-type-toggle">
-              {[
-                { key: "daily", label: "Daily View" },
-                { key: "weekly", label: "Weekly View" },
-                { key: "monthly", label: "Monthly View" },
-              ].map(item => (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={`itr-toggle-btn ${idleChartType === item.key ? "itr-toggle-btn--active" : ""}`}
-                  style={idleChartType === item.key ? { color: idleChartType === "weekly" ? "#4f46e5" : idleChartType === "monthly" ? "#0891b2" : "#2563eb" } : {}}
-                  onClick={() => setIdleChartType(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
+            <div className="itr-daily-header-actions">
+              <div
+                className="itr-daily-total-card"
+                title="Total Idle Hours for this selection"
+                style={{
+                  "--total-accent": idleChartType === "daily" ? "#2563eb" : idleChartType === "weekly" ? "#4f46e5" : "#0891b2",
+                  "--total-accent-border": idleChartType === "daily" ? "rgba(37, 99, 235, 0.25)" : idleChartType === "weekly" ? "rgba(79, 70, 229, 0.25)" : "rgba(8, 145, 178, 0.25)",
+                }}
+              >
+                <div className="itr-daily-total-icon-wrap">
+                  <FiClock size={13} className="itr-daily-total-icon" />
+                  <span className="itr-daily-total-radar" />
+                </div>
+                <div className="itr-daily-total-content">
+                  <span className="itr-daily-total-label">Total Idle Hrs</span>
+                  <div className="itr-daily-total-val">
+                    <span className="itr-daily-total-num">{totalDailyIdleParts.hours}</span>
+                    <span className="itr-daily-total-unit">Hrs</span>
+                    {totalDailyIdleParts.mins > 0 && (
+                      <>
+                        <span className="itr-daily-total-num" style={{ marginLeft: 3 }}>{totalDailyIdleParts.mins}</span>
+                        <span className="itr-daily-total-unit">Mins</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="itr-chart-type-toggle">
+                {[
+                  { key: "daily", label: "Daily View" },
+                  { key: "weekly", label: "Weekly View" },
+                  { key: "monthly", label: "Monthly View" },
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`itr-toggle-btn ${idleChartType === item.key ? "itr-toggle-btn--active" : ""}`}
+                    style={idleChartType === item.key ? { color: idleChartType === "weekly" ? "#4f46e5" : idleChartType === "monthly" ? "#0891b2" : "#2563eb" } : {}}
+                    onClick={() => setIdleChartType(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           }
         >
@@ -2084,7 +2284,7 @@ export default function IdleTimeReport() {
                 <div className="itr-cost-mini-grid">
                   {[
                     { lbl: "Total Cost", val: footerStats[1]?.value ?? "₹ 0", c: "#dc2626", bg: "rgba(220,38,38,0.06)", bc: "rgba(220,38,38,0.2)" },
-                    { lbl: "Avg Cost/Hr", val: footerStats[2]?.value ?? "₹ 0", c: "#f97316", bg: "rgba(249,115,22,0.06)", bc: "rgba(249,115,22,0.2)" },
+                    { lbl: footerStats[2]?.label || "Avg Cost/Min", val: footerStats[2]?.value ?? "₹ 0", c: "#f97316", bg: "rgba(249,115,22,0.06)", bc: "rgba(249,115,22,0.2)" },
                     { lbl: "Highest M/c", val: costMachineData.labels[0] || "—", c: "#2563eb", bg: "rgba(37,99,235,0.06)", bc: "rgba(37,99,235,0.2)" },
                   ].map((s, i) => (
                     <div key={i} className="itr-cost-mini-tile" style={{ background: s.bg, border: `1px solid ${s.bc}` }}>
@@ -2192,23 +2392,23 @@ export default function IdleTimeReport() {
           {/* ── Machine % Wise Idle ── */}
           <Card
             data-spotlight="itr-machine-percent"
-            title={<span style={{ display:"flex", alignItems:"center", gap:"6px" }}><FiBarChart2 size={16}/> Machine % Wise Idle</span>}
+            title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiBarChart2 size={16} /> Machine % Wise Idle</span>}
             badge="All Machines" badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626"
           >
             {(() => {
               const machineData = [
-                { name:"MANUAL 1", pct:79.9 }, { name:"VMC-3", pct:65.4 },
-                { name:"VMC 1", pct:64.4 },    { name:"VMC 2", pct:60.6 },
-                { name:"HTC 1", pct:60.5 },    { name:"HTC 3", pct:56.6 },
-                { name:"HTC 2", pct:54.5 },    { name:"VTL 4", pct:52.1 },
-                { name:"VTL 3", pct:52.0 },    { name:"VTL 2", pct:48.3 },
-                { name:"VTL 1", pct:43.2 },
+                { name: "MANUAL 1", pct: 79.9 }, { name: "VMC-3", pct: 65.4 },
+                { name: "VMC 1", pct: 64.4 }, { name: "VMC 2", pct: 60.6 },
+                { name: "HTC 1", pct: 60.5 }, { name: "HTC 3", pct: 56.6 },
+                { name: "HTC 2", pct: 54.5 }, { name: "VTL 4", pct: 52.1 },
+                { name: "VTL 3", pct: 52.0 }, { name: "VTL 2", pct: 48.3 },
+                { name: "VTL 1", pct: 43.2 },
               ];
               const tc = (p) =>
-                p >= 75 ? { bg:"#fef2f2", stroke:"#dc2626", text:"#dc2626" }
-                : p >= 50 ? { bg:"#fff7ed", stroke:"#f97316", text:"#f97316" }
-                : p >= 25 ? { bg:"#fffbeb", stroke:"#d97706", text:"#d97706" }
-                : { bg:"#f0fdf4", stroke:"#16a34a", text:"#16a34a" };
+                p >= 75 ? { bg: "#fef2f2", stroke: "#dc2626", text: "#dc2626" }
+                  : p >= 50 ? { bg: "#fff7ed", stroke: "#f97316", text: "#f97316" }
+                    : p >= 25 ? { bg: "#fffbeb", stroke: "#d97706", text: "#d97706" }
+                      : { bg: "#f0fdf4", stroke: "#16a34a", text: "#16a34a" };
               const R = 22, CIRC = 2 * Math.PI * R;
               return (
                 <>
@@ -2217,26 +2417,26 @@ export default function IdleTimeReport() {
                       const c = tc(m.pct);
                       const offset = CIRC - (m.pct / 100) * CIRC;
                       return (
-                        <div key={i} className="itr-mpct-card" style={{ background: c.bg, animationDelay:`${i*55}ms` }}>
+                        <div key={i} className="itr-mpct-card" style={{ background: c.bg, animationDelay: `${i * 55}ms` }}>
                           <div className="itr-mpct-gauge">
                             <svg width="56" height="56" viewBox="0 0 56 56">
-                              <circle cx="28" cy="28" r={R} fill="none" stroke="#e2e8f0" strokeWidth="5"/>
+                              <circle cx="28" cy="28" r={R} fill="none" stroke="#e2e8f0" strokeWidth="5" />
                               <circle cx="28" cy="28" r={R} fill="none"
                                 stroke={c.stroke} strokeWidth="5" strokeLinecap="round"
                                 strokeDasharray={CIRC} strokeDashoffset={offset}
                                 transform="rotate(-90 28 28)" className="itr-mpct-arc"
                               />
                             </svg>
-                            <span className="itr-mpct-pct-text" style={{ color:c.text }}>{m.pct}%</span>
+                            <span className="itr-mpct-pct-text" style={{ color: c.text }}>{m.pct}%</span>
                           </div>
                           <div className="itr-mpct-name">{m.name}</div>
                         </div>
                       );
                     })}
                   </div>
-                  <div className="itr-legend-row" style={{ marginTop:14 }}>
-                    {[["\u226575%","Critical","#dc2626","#fef2f2"],["\u226550%","High","#f97316","#fff7ed"],["\u226525%","Medium","#d97706","#fffbeb"],["<25%","Low","#16a34a","#f0fdf4"]].map(([r,l,c,bg]) => (
-                      <span key={l} className="itr-legend-pill" style={{ background:bg, color:c }}>{r} {l}</span>
+                  <div className="itr-legend-row" style={{ marginTop: 14 }}>
+                    {[["\u226575%", "Critical", "#dc2626", "#fef2f2"], ["\u226550%", "High", "#f97316", "#fff7ed"], ["\u226525%", "Medium", "#d97706", "#fffbeb"], ["<25%", "Low", "#16a34a", "#f0fdf4"]].map(([r, l, c, bg]) => (
+                      <span key={l} className="itr-legend-pill" style={{ background: bg, color: c }}>{r} {l}</span>
                     ))}
                   </div>
                 </>
@@ -2247,45 +2447,45 @@ export default function IdleTimeReport() {
           {/* ── Operator Wise Idle Hours ── */}
           <Card
             data-spotlight="itr-operator-wise"
-            title={<span style={{ display:"flex", alignItems:"center", gap:"6px" }}><FiUser size={16}/> Operator Wise Idle Hours</span>}
+            title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiUser size={16} /> Operator Wise Idle Hours</span>}
             badge="With %" badgeBg="#f0fdf4" badgeColor="#16a34a" accentColor="#16a34a"
           >
             {(() => {
               const opData = [
-                { name:"Rajesh Kumar", hours:"1446:08", pct:72.6 },
-                { name:"Suresh M.",    hours:"1142:34", pct:57.4 },
-                { name:"Amit P.",      hours:"1023:21", pct:51.3 },
-                { name:"Pradeep S.",   hours:"934:25",  pct:46.9 },
-                { name:"Vijay R.",     hours:"853:31",  pct:42.8 },
-                { name:"Mohan K.",     hours:"721:10",  pct:36.2 },
-                { name:"Ravi T.",      hours:"640:45",  pct:32.1 },
-                { name:"Sanjay G.",    hours:"512:00",  pct:25.7 },
-                { name:"Ramesh B.",    hours:"430:18",  pct:21.6 },
-                { name:"Santosh D.",   hours:"318:50",  pct:16.0 },
+                { name: "Rajesh Kumar", hours: "1446:08", pct: 72.6 },
+                { name: "Suresh M.", hours: "1142:34", pct: 57.4 },
+                { name: "Amit P.", hours: "1023:21", pct: 51.3 },
+                { name: "Pradeep S.", hours: "934:25", pct: 46.9 },
+                { name: "Vijay R.", hours: "853:31", pct: 42.8 },
+                { name: "Mohan K.", hours: "721:10", pct: 36.2 },
+                { name: "Ravi T.", hours: "640:45", pct: 32.1 },
+                { name: "Sanjay G.", hours: "512:00", pct: 25.7 },
+                { name: "Ramesh B.", hours: "430:18", pct: 21.6 },
+                { name: "Santosh D.", hours: "318:50", pct: 16.0 },
               ];
               const mx = Math.max(...opData.map(o => o.pct));
-              const bc = (p) => p>=60?"#dc2626":p>=40?"#f97316":p>=25?"#d97706":"#16a34a";
-              const aBg = ["#dbeafe","#fce7f3","#dcfce7","#fef3c7","#ede9fe","#fff7ed","#ecfeff","#fdf4ff","#f0fdf4","#fff1f2"];
-              const aCl = ["#2563eb","#db2777","#16a34a","#d97706","#7c3aed","#f97316","#0891b2","#9333ea","#15803d","#e11d48"];
+              const bc = (p) => p >= 60 ? "#dc2626" : p >= 40 ? "#f97316" : p >= 25 ? "#d97706" : "#16a34a";
+              const aBg = ["#dbeafe", "#fce7f3", "#dcfce7", "#fef3c7", "#ede9fe", "#fff7ed", "#ecfeff", "#fdf4ff", "#f0fdf4", "#fff1f2"];
+              const aCl = ["#2563eb", "#db2777", "#16a34a", "#d97706", "#7c3aed", "#f97316", "#0891b2", "#9333ea", "#15803d", "#e11d48"];
               return (
                 <div className="itr-op-list">
                   {opData.map((op, i) => {
-                    const ini = op.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+                    const ini = op.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                     const col = bc(op.pct);
                     return (
-                      <div key={i} className="itr-op-row" style={{ animationDelay:`${i*60}ms` }}>
-                        <div className="itr-op-avatar" style={{ background:aBg[i%10], color:aCl[i%10] }}>{ini}</div>
+                      <div key={i} className="itr-op-row" style={{ animationDelay: `${i * 60}ms` }}>
+                        <div className="itr-op-avatar" style={{ background: aBg[i % 10], color: aCl[i % 10] }}>{ini}</div>
                         <div className="itr-op-body">
                           <div className="itr-op-top-row">
                             <span className="itr-op-name">{op.name}</span>
                             <div className="itr-op-meta">
-                              <span className="itr-op-hours" style={{ color:col }}>{op.hours}</span>
-                              <span className="itr-op-pct-badge" style={{ background:`${col}18`, color:col, border:`1px solid ${col}30` }}>{op.pct}%</span>
+                              <span className="itr-op-hours" style={{ color: col }}>{op.hours}</span>
+                              <span className="itr-op-pct-badge" style={{ background: `${col}18`, color: col, border: `1px solid ${col}30` }}>{op.pct}%</span>
                             </div>
                           </div>
-                           of {mx}
+                          of {mx}
                           <div className="itr-op-track">
-                            <div className="itr-op-fill" style={{ width:`${(op.pct/mx)*100}%`, background:`linear-gradient(90deg,${col}99,${col})`, animationDelay:`${i*60+150}ms` }}/>
+                            <div className="itr-op-fill" style={{ width: `${(op.pct / mx) * 100}%`, background: `linear-gradient(90deg,${col}99,${col})`, animationDelay: `${i * 60 + 150}ms` }} />
                           </div>
                         </div>
                       </div>

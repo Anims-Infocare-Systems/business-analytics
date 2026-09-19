@@ -765,6 +765,27 @@ ORDER BY
                 "dispatchPercentage": dispatch_pct,
                 "dispatchStatus": dispatch_status
             })
+        # Query distinct customers from CustMast for full customer filter options
+        all_customers = []
+        try:
+            cursor.execute("""
+                SELECT DISTINCT LTRIM(RTRIM(CName)) AS CustomerName
+                FROM CustMast
+                WHERE Deleted = 0 AND CName IS NOT NULL AND LTRIM(RTRIM(CName)) <> '' AND LTRIM(RTRIM(CName)) <> '—' AND LTRIM(RTRIM(CName)) <> '-'
+                ORDER BY CustomerName ASC
+            """)
+            for r in cursor.fetchall() or []:
+                if r[0] and str(r[0]).strip() and str(r[0]).strip() not in ("—", "-"):
+                    all_customers.append(str(r[0]).strip())
+        except Exception:
+            pass
+
+        if not all_customers:
+            all_customers = sorted(list({
+                r["customerName"]
+                for r in rows
+                if r.get("customerName") and r["customerName"] not in ("—", "-")
+            }))
     except Exception as e:
         if cursor: cursor.close()
         conn.close()
@@ -774,7 +795,10 @@ ORDER BY
     conn.close()
 
     return Response({
-        "rows": rows
+        "rows": rows,
+        "filterOptions": {
+            "customers": all_customers
+        }
     })
 
 
@@ -2706,8 +2730,11 @@ def _otd_filter_clause(customer="", part=""):
             sql += f" AND ISNULL(NULLIF(LTRIM(RTRIM(cm.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(ca.CName)), N''), N'')) IN ({placeholders})"
             params.extend(cust_list)
     if part:
-        sql += " AND s.itcode LIKE ?"
-        params.append(f"%{part}%")
+        part_list = [p.strip() for p in part.split(",") if p.strip()]
+        if part_list:
+            placeholders = ",".join(["?"] * len(part_list))
+            sql += f" AND LTRIM(RTRIM(s.itcode)) IN ({placeholders})"
+            params.extend(part_list)
     return sql, params
 
 
@@ -3630,51 +3657,72 @@ def get_kpi_data(conn, start_date, end_date, supplier_param):
     }
 
 def get_chart_data(conn, start_date, end_date, supplier_param):
+    import calendar
     cursor = conn.cursor()
-    params = [start_date, end_date, start_date, end_date]
-    if supplier_param:
-        suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()]
-        if suppliers:
-            placeholders = ",".join(["?"] * len(suppliers))
-            extra_where = f" AND ss.SupplierName IN ({placeholders})"
-            params.extend(suppliers)
-            sql = f"""
-            {get_supplier_rating_base_cte()}
-            SELECT
-                ss.SupplierName,
-                ROUND(CAST(ss.TotalSupplierRating AS FLOAT), 2) AS AvgFinalRating
-            FROM SupplierSummary ss
-            WHERE 1=1 {extra_where}
-            ORDER BY AvgFinalRating DESC;
-            """
-            cursor.execute(sql, params)
-            rows = cursor.fetchall() or []
-            cursor.close()
-            labels = []
-            data = []
-            for row in rows:
-                labels.append(str(row[0]).strip() if row[0] else "")
-                data.append(round(float(row[1] or 0), 2))
-            return {
-                "labels": labels,
-                "data": data
-            }
+    suppliers = [s.strip() for s in supplier_param.split(",") if s.strip()] if supplier_param else []
+    if suppliers:
+        placeholders = ",".join(["?"] * len(suppliers))
+        extra_where = f" AND ss.SupplierName IN ({placeholders})"
+    else:
+        extra_where = ""
 
-    # If no supplier selected in filter, show single overall rating score for all suppliers combined
-    sql = f"""
-    {get_supplier_rating_base_cte()}
-    SELECT
-        'Overall Suppliers' AS SupplierName,
-        ROUND(AVG(CAST(ss.TotalSupplierRating AS FLOAT)), 2) AS AvgFinalRating
-    FROM SupplierSummary ss;
-    """
-    cursor.execute(sql, params)
-    row = cursor.fetchone()
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    monthly_labels = []
+    monthly_data = []
+
+    for yr, mo in _iter_calendar_months(start_date, end_date):
+        _, last_day = calendar.monthrange(yr, mo)
+        m_start = max(start_date, date(yr, mo, 1))
+        m_end = min(end_date, date(yr, mo, last_day))
+
+        lbl = f"{month_names[mo - 1]}-{str(yr)[2:]}"
+        monthly_labels.append(lbl)
+
+        params = [m_start, m_end, m_start, m_end] + suppliers
+        sql = f"""
+        {get_supplier_rating_base_cte()}
+        SELECT
+            ROUND(AVG(CAST(ss.TotalSupplierRating AS FLOAT)), 2) AS AvgFinalRating
+        FROM SupplierSummary ss
+        WHERE 1=1 {extra_where};
+        """
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+        val = round(float(row[0] or 0), 2) if row and row[0] is not None else 0.0
+        monthly_data.append(val)
+
+    supplier_labels = []
+    supplier_data = []
+    if suppliers:
+        full_params = [start_date, end_date, start_date, end_date] + suppliers
+        supp_sql = f"""
+        {get_supplier_rating_base_cte()}
+        SELECT
+            ss.SupplierName,
+            ROUND(CAST(ss.TotalSupplierRating AS FLOAT), 2) AS AvgFinalRating
+        FROM SupplierSummary ss
+        WHERE 1=1 {extra_where}
+        ORDER BY AvgFinalRating DESC;
+        """
+        cursor.execute(supp_sql, full_params)
+        rows = cursor.fetchall() or []
+        for r in rows:
+            supplier_labels.append(str(r[0]).strip() if r[0] else "")
+            supplier_data.append(round(float(r[1] or 0), 2))
+
     cursor.close()
-    val = round(float(row[1] or 0), 2) if row and row[1] is not None else 0.0
+
     return {
-        "labels": ["Overall Suppliers"],
-        "data": [val]
+        "labels": monthly_labels,
+        "data": monthly_data,
+        "monthWise": {
+            "labels": monthly_labels,
+            "data": monthly_data,
+        },
+        "supplierWise": {
+            "labels": supplier_labels,
+            "data": supplier_data,
+        }
     }
 
 def get_registry_data(conn, start_date, end_date, supplier_param):
@@ -3894,6 +3942,8 @@ def dashboard2_supplier_rating(request):
             "to": str(end_date),
             "labels": chart["labels"],
             "data": chart["data"],
+            "monthWise": chart.get("monthWise", {"labels": chart["labels"], "data": chart["data"]}),
+            "supplierWise": chart.get("supplierWise", {"labels": [], "data": []}),
             "rows": registry_rows,
             "kpis": kpis,
             "actions": actions,
@@ -3928,8 +3978,17 @@ def plant_performance_vendor_rating(request):
 
     start_date, end_date = parse_date_range(request)
     name_filter = (request.GET.get("name") or "").strip()
+    vendor_filter_list = [v.strip() for v in name_filter.split(",") if v.strip()] if name_filter else []
 
-    sql = """
+    if vendor_filter_list:
+        placeholders = ",".join(["?"] * len(vendor_filter_list))
+        vendor_where = f"WHERE cm.CName IN ({placeholders})"
+        vendor_params = vendor_filter_list
+    else:
+        vendor_where = "WHERE 1=1"
+        vendor_params = []
+
+    sql = f"""
 DECLARE @FromDate DATE = ?;
 DECLARE @ToDate   DATE = ?;
 
@@ -4004,14 +4063,22 @@ VendorGraded AS (
         dr.RatingStatus AS DeliveryStatus,
         ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
     FROM VendorScored vs
-    LEFT JOIN QualityRating qr
-           ON qr.dtype = 'Vendor'
+    OUTER APPLY (
+        SELECT TOP 1 RatingFor, RatingStatus
+        FROM QualityRating
+        WHERE dtype = 'Vendor'
           AND vs.AcceptancePct IS NOT NULL
-          AND vs.AcceptancePct BETWEEN qr.RatingFrom AND qr.RatingTo
-    LEFT JOIN DeliveryRating dr
-           ON dr.dtype = 'Vendor'
+          AND vs.AcceptancePct BETWEEN RatingFrom AND RatingTo
+        ORDER BY RatingFor DESC
+    ) qr
+    OUTER APPLY (
+        SELECT TOP 1 RatingFor, RatingStatus
+        FROM DeliveryRating
+        WHERE dtype = 'Vendor'
           AND vs.OnTimeDeliveryPct IS NOT NULL
-          AND vs.OnTimeDeliveryPct BETWEEN dr.RatingFrom AND dr.RatingTo
+          AND vs.OnTimeDeliveryPct BETWEEN RatingFrom AND RatingTo
+        ORDER BY RatingFor DESC
+    ) dr
 )
 SELECT
     vg.cid                                  AS [CID],
@@ -4037,7 +4104,7 @@ INNER JOIN CustMast cm ON cm.Id = vg.cid
 LEFT JOIN OverAllRating oar
        ON oar.dtype = 'Vendor'
       AND vg.TotalRating BETWEEN oar.RatingFrom AND oar.RatingTo
-WHERE (? = '' OR cm.CName LIKE '%' + ? + '%')
+{vendor_where}
 ORDER BY cm.CName;
 """
 
@@ -4053,7 +4120,7 @@ ORDER BY cm.CName;
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, [start_date, end_date, name_filter, name_filter])
+        cursor.execute(sql, [start_date, end_date] + vendor_params)
         db_rows = cursor.fetchall() or []
 
         for idx, row in enumerate(db_rows):
@@ -4124,6 +4191,122 @@ ORDER BY cm.CName;
             total_acceptance_sum += acceptance_pct
             count += 1
 
+        # Month-wise rating score aggregation for chart
+        month_sql = f"""
+        DECLARE @FromDate DATE = ?;
+        DECLARE @ToDate   DATE = ?;
+
+        ;WITH JobQuality AS (
+            SELECT
+                jm.jbno,
+                jm.cid,
+                jm.expdate,
+                YEAR(jm.jbdate) AS JobYear,
+                MONTH(jm.jbdate) AS JobMonth,
+                SUM(ji.Qty)                                                    AS ReceivedQty,
+                SUM(ji.Qty - ISNULL(ji.RejQty,0) - ISNULL(ji.RwQty,0))       AS AcceptedQty,
+                SUM(ISNULL(ji.RejQty,0))                                       AS RejectedQty
+            FROM Job_mas jm
+            INNER JOIN JobIncomeDetInsp ji ON ji.JbNo = jm.jbno
+            WHERE jm.deleted = 0
+              AND jm.cid LIKE 'V%'
+              AND jm.jbdate BETWEEN @FromDate AND @ToDate
+            GROUP BY jm.jbno, jm.cid, jm.expdate, YEAR(jm.jbdate), MONTH(jm.jbdate)
+        ),
+        JobDelivery AS (
+            SELECT
+                jq.jbno,
+                jq.cid,
+                jq.expdate,
+                jq.JobYear,
+                jq.JobMonth,
+                jq.ReceivedQty,
+                jq.AcceptedQty,
+                jq.RejectedQty,
+                jd_dc.LastDcDate,
+                CASE
+                    WHEN jd_dc.LastDcDate IS NOT NULL
+                         AND jd_dc.LastDcDate <= jq.expdate THEN 'ONTIME'
+                    WHEN jq.expdate < CAST(GETDATE() AS DATE)  THEN 'DELAY'
+                    ELSE 'PENDING'
+                END AS DeliveryBucket
+            FROM JobQuality jq
+            OUTER APPLY (
+                SELECT MAX(im.dcdate) AS LastDcDate
+                FROM JobIncomeDetInsp ji
+                INNER JOIN InJob_Mas im ON im.jino = ji.JiNo
+                WHERE ji.JbNo = jq.jbno
+            ) jd_dc
+        ),
+        VendorMonthAgg AS (
+            SELECT
+                jd.cid,
+                jd.JobYear,
+                jd.JobMonth,
+                SUM(jd.ReceivedQty)                                                AS TotalReceived,
+                SUM(jd.AcceptedQty)                                                AS TotalAccepted,
+                COUNT(*)                                                            AS JobOrdersProduced,
+                SUM(CASE WHEN jd.DeliveryBucket = 'ONTIME'  THEN 1 ELSE 0 END)    AS OnTimeJobs,
+                SUM(CASE WHEN jd.DeliveryBucket = 'PENDING' THEN 1 ELSE 0 END)    AS PendingJobs
+            FROM JobDelivery jd
+            INNER JOIN CustMast cm ON cm.Id = jd.cid
+            {vendor_where}
+            GROUP BY jd.cid, jd.JobYear, jd.JobMonth
+        ),
+        VendorMonthScored AS (
+            SELECT
+                vma.*,
+                CASE WHEN vma.TotalReceived = 0 THEN NULL
+                     ELSE (vma.TotalAccepted * 100.0) / vma.TotalReceived
+                END AS AcceptancePct,
+                CASE WHEN (vma.JobOrdersProduced - vma.PendingJobs) = 0 THEN NULL
+                     ELSE (vma.OnTimeJobs * 100.0) / (vma.JobOrdersProduced - vma.PendingJobs)
+                END AS OnTimeDeliveryPct
+            FROM VendorMonthAgg vma
+        ),
+        VendorMonthGraded AS (
+            SELECT
+                vms.cid,
+                vms.JobYear,
+                vms.JobMonth,
+                ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
+            FROM VendorMonthScored vms
+            OUTER APPLY (
+                SELECT TOP 1 RatingFor 
+                FROM QualityRating 
+                WHERE dtype = 'Vendor'
+                  AND vms.AcceptancePct IS NOT NULL
+                  AND vms.AcceptancePct BETWEEN RatingFrom AND RatingTo
+                ORDER BY RatingFor DESC
+            ) qr
+            OUTER APPLY (
+                SELECT TOP 1 RatingFor 
+                FROM DeliveryRating 
+                WHERE dtype = 'Vendor'
+                  AND vms.OnTimeDeliveryPct IS NOT NULL
+                  AND vms.OnTimeDeliveryPct BETWEEN RatingFrom AND RatingTo
+                ORDER BY RatingFor DESC
+            ) dr
+        )
+        SELECT 
+            JobYear, 
+            JobMonth, 
+            ROUND(AVG(TotalRating), 2) AS AvgVendorRating
+        FROM VendorMonthGraded
+        GROUP BY JobYear, JobMonth
+        ORDER BY JobYear, JobMonth;
+        """
+        cursor.execute(month_sql, [start_date, end_date] + vendor_params)
+        monthly_db = { (int(r[0]), int(r[1])): float(r[2] or 0.0) for r in cursor.fetchall() or [] }
+
+        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        monthly_labels = []
+        monthly_data = []
+        for yr, mo in _iter_calendar_months(start_date, end_date):
+            lbl = f"{month_names[mo - 1]}-{str(yr)[2:]}"
+            monthly_labels.append(lbl)
+            monthly_data.append(monthly_db.get((yr, mo), 0.0))
+
         # KPI aggregates
         avg_rating   = round(total_ratings_sum / count, 2) if count else 0.0
         avg_on_time  = round(total_on_time_sum / count, 2) if count else 0.0
@@ -4144,8 +4327,16 @@ ORDER BY cm.CName;
             "fy":      fy_label,
             "from":    str(start_date),
             "to":      str(end_date),
-            "labels":  labels,
-            "data":    chart_data,
+            "labels":  monthly_labels,
+            "data":    monthly_data,
+            "monthWise": {
+                "labels": monthly_labels,
+                "data":   monthly_data,
+            },
+            "vendorWise": {
+                "labels": labels,
+                "data":   chart_data,
+            },
             "rows":    rows_out,
             "kpis": {
                 "avg_rating":         avg_rating,

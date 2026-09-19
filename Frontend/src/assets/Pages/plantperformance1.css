@@ -54,6 +54,128 @@
     --pp1-radius-xl: 20px;
 }
 
+/* ════════════════════════════════════════════════════════════
+   MODERN UI SCROLLBAR BASE FOR PLANT PERFORMANCE DASHBOARD
+   Replaces OS default dark/black scrollbars
+   with sleek, modern 6px floating pill scrollbars.
+   Visible ONLY when width/height exceeds container boundaries.
+   ════════════════════════════════════════════════════════════ */
+.pp1-root *::-webkit-scrollbar,
+.pp1-root::-webkit-scrollbar,
+.pp1-target-modal-overlay *::-webkit-scrollbar,
+.pp1-custom-select-options *::-webkit-scrollbar,
+.pp1-custom-select-options::-webkit-scrollbar,
+.pp1-custom-select-list::-webkit-scrollbar,
+.pp1-part-suggestions::-webkit-scrollbar,
+.pp1-multiselect-menu::-webkit-scrollbar,
+.pp1-cc-tbl-wrap::-webkit-scrollbar,
+.pp1-bottom__table-scroll::-webkit-scrollbar,
+.pp1-kpi-list::-webkit-scrollbar,
+.pp1-action-list::-webkit-scrollbar,
+.pp1-center__scroll::-webkit-scrollbar,
+.pp1-target-modal__cards-list::-webkit-scrollbar,
+.pp1-target-modal__right::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.pp1-root *::-webkit-scrollbar-track,
+.pp1-root::-webkit-scrollbar-track,
+.pp1-target-modal-overlay *::-webkit-scrollbar-track,
+.pp1-custom-select-options *::-webkit-scrollbar-track,
+.pp1-custom-select-options::-webkit-scrollbar-track,
+.pp1-custom-select-list::-webkit-scrollbar-track,
+.pp1-part-suggestions::-webkit-scrollbar-track,
+.pp1-multiselect-menu::-webkit-scrollbar-track,
+.pp1-cc-tbl-wrap::-webkit-scrollbar-track,
+.pp1-bottom__table-scroll::-webkit-scrollbar-track,
+.pp1-kpi-list::-webkit-scrollbar-track,
+.pp1-action-list::-webkit-scrollbar-track,
+.pp1-center__scroll::-webkit-scrollbar-track,
+.pp1-target-modal__cards-list::-webkit-scrollbar-track,
+.pp1-target-modal__right::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pp1-root *::-webkit-scrollbar-thumb,
+.pp1-root::-webkit-scrollbar-thumb,
+.pp1-target-modal-overlay *::-webkit-scrollbar-thumb,
+.pp1-custom-select-options *::-webkit-scrollbar-thumb,
+.pp1-custom-select-options::-webkit-scrollbar-thumb,
+.pp1-custom-select-list::-webkit-scrollbar-thumb,
+.pp1-part-suggestions::-webkit-scrollbar-thumb,
+.pp1-multiselect-menu::-webkit-scrollbar-thumb,
+.pp1-cc-tbl-wrap::-webkit-scrollbar-thumb,
+.pp1-bottom__table-scroll::-webkit-scrollbar-thumb,
+.pp1-kpi-list::-webkit-scrollbar-thumb,
+.pp1-action-list::-webkit-scrollbar-thumb,
+.pp1-center__scroll::-webkit-scrollbar-thumb,
+.pp1-target-modal__cards-list::-webkit-scrollbar-thumb,
+.pp1-target-modal__right::-webkit-scrollbar-thumb {
+    background: rgba(37, 99, 235, 0.25);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+}
+
+.pp1-root *::-webkit-scrollbar-thumb:hover,
+.pp1-root::-webkit-scrollbar-thumb:hover,
+.pp1-target-modal-overlay *::-webkit-scrollbar-thumb:hover,
+.pp1-custom-select-options *::-webkit-scrollbar-thumb:hover,
+.pp1-custom-select-options::-webkit-scrollbar-thumb:hover,
+.pp1-custom-select-list::-webkit-scrollbar-thumb:hover,
+.pp1-part-suggestions::-webkit-scrollbar-thumb:hover,
+.pp1-multiselect-menu::-webkit-scrollbar-thumb:hover,
+.pp1-cc-tbl-wrap::-webkit-scrollbar-thumb:hover,
+.pp1-bottom__table-scroll::-webkit-scrollbar-thumb:hover,
+.pp1-kpi-list::-webkit-scrollbar-thumb:hover,
+.pp1-action-list::-webkit-scrollbar-thumb:hover,
+.pp1-center__scroll::-webkit-scrollbar-thumb:hover,
+.pp1-target-modal__cards-list::-webkit-scrollbar-thumb:hover,
+.pp1-target-modal__right::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.pp1-root *::-webkit-scrollbar-corner,
+.pp1-root::-webkit-scrollbar-corner,
+.pp1-target-modal-overlay *::-webkit-scrollbar-corner,
+.pp1-custom-select-options *::-webkit-scrollbar-corner,
+.pp1-custom-select-options::-webkit-scrollbar-corner,
+.pp1-custom-select-list::-webkit-scrollbar-corner,
+.pp1-part-suggestions::-webkit-scrollbar-corner,
+.pp1-multiselect-menu::-webkit-scrollbar-corner,
+.pp1-cc-tbl-wrap::-webkit-scrollbar-corner,
+.pp1-bottom__table-scroll::-webkit-scrollbar-corner,
+.pp1-kpi-list::-webkit-scrollbar-corner,
+.pp1-action-list::-webkit-scrollbar-corner,
+.pp1-center__scroll::-webkit-scrollbar-corner,
+.pp1-target-modal__cards-list::-webkit-scrollbar-corner,
+.pp1-target-modal__right::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.pp1-root,
+.pp1-root *,
+.pp1-target-modal-overlay,
+.pp1-target-modal-overlay *,
+.pp1-custom-select-options,
+.pp1-custom-select-options *,
+.pp1-custom-select-list,
+.pp1-custom-select-list *,
+.pp1-part-suggestions,
+.pp1-part-suggestions *,
+.pp1-multiselect-menu,
+.pp1-multiselect-menu *,
+.pp1-cc-tbl-wrap,
+.pp1-bottom__table-scroll,
+.pp1-kpi-list,
+.pp1-action-list,
+.pp1-center__scroll,
+.pp1-target-modal__cards-list,
+.pp1-target-modal__right {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(37, 99, 235, 0.28) transparent;
+}
+
 /* ── Keyframes ───────────────────────────────────────────────── */
 @keyframes pp1-root-in {
     from {
@@ -1786,6 +1908,7 @@
     padding: 1px;
     background: linear-gradient(135deg, var(--kc), transparent 55%, rgba(255, 255, 255, .4));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     opacity: 0;
@@ -2880,14 +3003,6 @@
     overflow-x: auto;
     border-radius: 9px;
     border: 1px solid rgba(226, 232, 240, .8);
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-}
-
-.pp1-bottom__table-scroll::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
 }
 
 .pp1-bottom__section-lbl {
@@ -3241,14 +3356,6 @@
     box-shadow:
         0 0 0 1px rgba(15, 23, 42, 0.04),
         0 4px 20px rgba(15, 23, 42, 0.07);
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-}
-
-.pp1-cc-tbl-wrap::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
 }
 
 .pp1-cc-tbl {
@@ -6375,6 +6482,7 @@
 
 .pp1-filter-input[type="number"] {
     -moz-appearance: textfield !important;
+    appearance: textfield !important;
 }
 
 /* Custom icon integration inside filters to match modern UI design system */

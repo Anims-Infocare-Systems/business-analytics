@@ -649,6 +649,10 @@ const formatDateToYYYYMMDD = (d) => {
 const formatShiftLogDate = (val) => {
   if (!val || val === "—") return "—";
   try {
+    if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+      const parts = val.slice(0, 10).split("-");
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
     const d = new Date(val);
     if (isNaN(d.getTime())) return String(val);
     const day = String(d.getDate()).padStart(2, "0");
@@ -3016,12 +3020,12 @@ export default function ProductionAnalysis() {
                     <table className="pa2-modal-table">
                       <thead>
                         <tr>
-                          <th>Date</th>
-                          <th>Operator</th>
-                          <th>Part No.</th>
-                          <th>Process</th>
-                          <th style={{ textAlign: "right" }}>Hrs</th>
-                          <th style={{ textAlign: "right" }}>OK Qty</th>
+                          <th style={{ width: "115px" }}>Date</th>
+                          <th style={{ minWidth: "170px" }}>Operator</th>
+                          <th style={{ minWidth: "150px" }}>Part No.</th>
+                          <th style={{ minWidth: "170px" }}>Process</th>
+                          <th style={{ width: "130px", textAlign: "right" }}>Hrs</th>
+                          <th style={{ width: "90px", textAlign: "right" }}>OK Qty</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3031,18 +3035,20 @@ export default function ProductionAnalysis() {
                               <span>{formatShiftLogDate(r.date || r.entry_date || r.EntryDate || r.shift_date)}</span>
                             </td>
                             <td className="pa2-modal-td-operator">
-                              <div className="pa2-modal-op-avatar" style={{ background: selectedMachine.color }}>{(r.operator || "").charAt(0)}</div>
-                              <span>{r.operator}</span>
+                              <div className="pa2-modal-op-inner">
+                                <div className="pa2-modal-op-avatar" style={{ background: selectedMachine.color }}>{(r.operator || "").charAt(0)}</div>
+                                <span>{r.operator || "—"}</span>
+                              </div>
                             </td>
-                            <td><span className="pa2-modal-badge-part">{r.part_no}</span></td>
-                            <td><span className="pa2-modal-text-process">{r.process}</span></td>
-                            <td style={{ textAlign: "right", fontWeight: 600, color: "#475569" }}>{formatHoursMins(r.hrs)}</td>
-                            <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>{r.ok_qty}</td>
+                            <td><span className="pa2-modal-badge-part">{r.part_no || "—"}</span></td>
+                            <td><span className="pa2-modal-text-process">{r.process || "—"}</span></td>
+                            <td className="pa2-modal-td-hrs">{formatHoursMins(r.hrs)}</td>
+                            <td className="pa2-modal-td-qty">{r.ok_qty ?? 0}</td>
                           </tr>
                         ))}
                         {shiftLogs.length === 0 && (
                           <tr>
-                            <td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: "16px" }}>No shift logs found for this machine</td>
+                            <td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: "20px" }}>No shift logs found for this machine</td>
                           </tr>
                         )}
                       </tbody>

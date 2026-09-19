@@ -438,17 +438,22 @@ export default function LoginPage() {
 
         setLoginBusy(true);
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
         try {
             const res = await fetch(`${API}/login/`, {
                 method: "POST",
                 credentials: "include",       // ✅ session cookie saved by browser
                 headers: { "Content-Type": "application/json" },
+                signal: controller.signal,
                 body: JSON.stringify({
                     company_code: userId.trim(),
                     username: username.trim(),
                     password,
                 }),
             });
+            clearTimeout(timeoutId);
 
             const data = await res.json();
 
@@ -520,11 +525,15 @@ export default function LoginPage() {
                 );
             }
         } catch (err) {
+            clearTimeout(timeoutId);
             console.error("Login error:", err);
+            const msg = err.name === "AbortError"
+                ? "Login timed out. The server took too long to respond. Please try again."
+                : "Unable to reach the server. Please check your connection and try again.";
             showLoginToast(
                 "error",
                 "Connection error",
-                "Unable to reach the server. Please check your connection and try again.",
+                msg,
             );
         } finally {
             setLoginBusy(false);

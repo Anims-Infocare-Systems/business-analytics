@@ -85,7 +85,8 @@ function Pp1SearchableMultiSelect({
   allLabel = "All Customers",
   searchPlaceholder = "Search customer...",
   accentColor = "#2d6de8",
-  minWidth = "100%"
+  minWidth = "100%",
+  listMaxHeight = "160px"
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -104,7 +105,7 @@ function Pp1SearchableMultiSelect({
 
   const isAllSelected = !value || value === allLabel || value === "";
 
-  const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
+  const selectedList = isAllSelected ? [] : (Array.isArray(value) ? value : String(value).split(",").map(v => v.trim()).filter(Boolean));
 
   const toggleOption = (opt) => {
     if (opt === allLabel) {
@@ -179,7 +180,9 @@ function Pp1SearchableMultiSelect({
             position: 'absolute',
             top: 'calc(100% + 6px)',
             left: 0,
-            width: '240px',
+            width: '100%',
+            minWidth: '220px',
+            maxWidth: '340px',
             padding: '8px',
             background: '#ffffff',
             border: '1.5px solid #e2e8f0',
@@ -254,7 +257,7 @@ function Pp1SearchableMultiSelect({
             )}
           </div>
 
-          <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div className="pp1-custom-select-list" style={{ maxHeight: listMaxHeight || '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(37, 99, 235, 0.25) transparent' }}>
             {!search && (
               <button
                 type="button"
@@ -298,7 +301,7 @@ function Pp1SearchableMultiSelect({
                     </svg>
                   )}
                 </div>
-                <span>{allLabel}</span>
+                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{allLabel}</span>
               </button>
             )}
 
@@ -348,7 +351,7 @@ function Pp1SearchableMultiSelect({
                       </svg>
                     )}
                   </div>
-                  <span>{opt}</span>
+                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={opt}>{opt}</span>
                 </button>
               );
             })}
@@ -2603,8 +2606,6 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
   const [debouncedCustomer, setDebouncedCustomer] = useState("");
   const [debouncedPart, setDebouncedPart] = useState("");
 
-  const [partOpen, setPartOpen] = useState(false);
-  const partRef = useRef(null);
   const [chartType, setChartType] = useState("line");
   const [chartTypeOpen, setChartTypeOpen] = useState(false);
   const chartTypeRef = useRef(null);
@@ -2644,16 +2645,8 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
     return fromRows.sort((a, b) => a.localeCompare(b));
   }, [filterOptionsCache.parts, otdSource?.filterOptions?.parts, otdSource?.rows]);
 
-  const partSuggestions = useMemo(() => {
-    if (!filters.partNumber) return allParts;
-    return allParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber, allParts]);
-
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (partRef.current && !partRef.current.contains(event.target)) {
-        setPartOpen(false);
-      }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
       }
@@ -3010,7 +3003,7 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
         </div>
 
         {/* Customer Name Filter */}
-        <div className="pp1-filter-group" style={{ minWidth: '180px' }}>
+        <div className="pp1-filter-group" style={{ minWidth: "160px", flex: "1 1 160px" }}>
           <label className="pp1-filter-label">Customer Name</label>
           <Pp1SearchableMultiSelect
             value={filters?.customer}
@@ -3022,47 +3015,17 @@ function OtdTrendView({ data, loading, uid, filters, onFilterChange, from, to, o
           />
         </div>
 
-        {/* Part Number Autocomplete */}
-        <div className="pp1-filter-group" ref={partRef} style={{ maxWidth: "150px" }}>
+        {/* Part Number Multi-Select */}
+        <div className="pp1-filter-group" style={{ minWidth: "160px", flex: "1 1 160px" }}>
           <label className="pp1-filter-label">Part Number</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Part No..."
-              value={filters.partNumber}
-              onChange={e => {
-                handleInputChange("partNumber", e.target.value);
-                setPartOpen(true);
-              }}
-              onFocus={() => setPartOpen(true)}
-            />
-            {partOpen && partSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.partNumber ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("partNumber", "");
-                    setPartOpen(false);
-                  }}
-                >
-                  All Parts
-                </div>
-                {partSuggestions.map(p => (
-                  <div
-                    key={p}
-                    className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("partNumber", p);
-                      setPartOpen(false);
-                    }}
-                  >
-                    {p}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.partNumber}
+            options={allParts}
+            onChange={val => handleInputChange("partNumber", val)}
+            placeholder="Search part..."
+            allLabel="All Parts"
+            searchPlaceholder="Search part number..."
+          />
         </div>
 
         {/* Chart Type Dropdown */}
@@ -5814,8 +5777,11 @@ function filterGrnRows(rows, filters, defaultFrom, defaultTo) {
       }
     }
     if (filters.partNumber) {
-      const pno = String(r.partNo || "").toLowerCase();
-      if (!pno.includes(String(filters.partNumber).toLowerCase())) return false;
+      const selectedParts = filters.partNumber.split(",").map(p => p.trim()).filter(Boolean);
+      const rowPart = String(r.partNo || r.partNumber || "").trim();
+      if (selectedParts.length > 0 && !selectedParts.includes(rowPart)) {
+        return false;
+      }
     }
     if (filters.category && (r.dtype || "") !== filters.category) return false;
     return true;
@@ -5863,8 +5829,6 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
   const suppRef = React.useRef(null);
   const [catOpen, setCatOpen] = React.useState(false);
   const catRef = React.useRef(null);
-  const [partOpen, setPartOpen] = React.useState(false);
-  const partRef = React.useRef(null);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const chartTypeRef = React.useRef(null);
@@ -5913,12 +5877,22 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
     return Array.from(new Set(names)).sort();
   }, [grnRows]);
 
-  const partSuggestions = React.useMemo(() => {
-    if (!filters.partNumber) return [];
-    const parts = grnRows.map(r => r.partNo).filter(Boolean);
-    const uniqueParts = Array.from(new Set(parts));
-    return uniqueParts.filter(p => p.toLowerCase().includes(filters.partNumber.toLowerCase()));
-  }, [filters.partNumber, grnRows]);
+  const partsList = React.useMemo(() => {
+    let source = grnRows;
+    if (filters.supplier) {
+      const selectedSupps = filters.supplier.split(",").map(s => s.trim()).filter(Boolean);
+      if (selectedSupps.length > 0) {
+        const filtered = source.filter(r => selectedSupps.includes(r.supplierName));
+        if (filtered.length > 0) source = filtered;
+      }
+    }
+    if (filters.category) {
+      const filtered = source.filter(r => (r.dtype || "") === filters.category);
+      if (filtered.length > 0) source = filtered;
+    }
+    const parts = source.map(r => r.partNo || r.partNumber).filter(Boolean);
+    return Array.from(new Set(parts)).sort();
+  }, [grnRows, filters.supplier, filters.category]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -5927,9 +5901,6 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
       }
       if (catRef.current && !catRef.current.contains(event.target)) {
         setCatOpen(false);
-      }
-      if (partRef.current && !partRef.current.contains(event.target)) {
-        setPartOpen(false);
       }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
@@ -6253,7 +6224,6 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
     });
     setSuppOpen(false);
     setCatOpen(false);
-    setPartOpen(false);
     setChartType("bar");
     setChartTypeOpen(false);
   };
@@ -6347,37 +6317,17 @@ function PurchaseReportDashboardView({ data, loading, filters, onFilterChange, o
           </div>
         </div>
 
-        {/* Part Number Autocomplete */}
-        <div className="pp1-filter-group" ref={partRef}>
+        {/* Part Number Multi-Select */}
+        <div className="pp1-filter-group" style={{ minWidth: "130px", flex: "1 1 130px" }}>
           <label className="pp1-filter-label">Part Number</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Part No..."
-              value={filters.partNumber || ""}
-              onChange={e => {
-                handleInputChange("partNumber", e.target.value);
-                setPartOpen(true);
-              }}
-            />
-            {partOpen && partSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                {partSuggestions.map(p => (
-                  <div
-                    key={p}
-                    className={`pp1-part-suggestion-item ${filters.partNumber === p ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("partNumber", p);
-                      setPartOpen(false);
-                    }}
-                  >
-                    {p}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters.partNumber}
+            options={partsList}
+            onChange={val => handleInputChange("partNumber", val)}
+            placeholder="Search part..."
+            allLabel="All Parts"
+            searchPlaceholder="Search part number..."
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
@@ -6688,7 +6638,11 @@ function filterPurchaseRows(rows, filters, defaultFrom, defaultTo) {
         return false;
       }
     }
-    if (filters.category && (r.category || "") !== filters.category) return false;
+    if (filters.category) {
+      const targetCat = String(filters.category).trim().toLowerCase();
+      const rowCat = String(r.category || "").trim().toLowerCase();
+      if (rowCat !== targetCat) return false;
+    }
     return true;
   });
 }
@@ -6724,6 +6678,7 @@ function formatPurchaseCurrency(valueRaw, amountL) {
 /* ── Purchase Value View (UI Alone) ─────────────────────────────────────── */
 function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, targetConfig }) {
   const [catOpen, setCatOpen] = React.useState(false);
+  const [catSearch, setCatSearch] = React.useState("");
   const catRef = React.useRef(null);
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
@@ -6733,6 +6688,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
     const handleClickOutside = (event) => {
       if (catRef.current && !catRef.current.contains(event.target)) {
         setCatOpen(false);
+        setCatSearch("");
       }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
@@ -6758,6 +6714,8 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
     });
     setChartType("bar");
     setChartTypeOpen(false);
+    setCatOpen(false);
+    setCatSearch("");
   };
 
   const pickerFrom = React.useMemo(() => {
@@ -7125,7 +7083,8 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
       }
     }
     if (filters.category) {
-      const filtered = source.filter(r => r.category === filters.category);
+      const targetCat = String(filters.category).trim().toLowerCase();
+      const filtered = source.filter(r => String(r.category || "").trim().toLowerCase() === targetCat);
       if (filtered.length > 0) source = filtered;
     }
     const parts = source.map(r => r.partNo || r.partNumber).filter(Boolean);
@@ -7133,9 +7092,10 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
   }, [purchaseRows, filters.supplier, filters.category]);
 
   const filteredCategories = React.useMemo(() => {
-    if (!filters.category) return categoriesList;
-    return categoriesList.filter(c => c.toLowerCase().includes(filters.category.toLowerCase()));
-  }, [filters.category, categoriesList]);
+    const q = (catSearch || "").trim().toLowerCase();
+    if (!q) return categoriesList;
+    return categoriesList.filter(c => c.toLowerCase().includes(q));
+  }, [catSearch, categoriesList]);
 
   const chartRebuildToken = React.useMemo(
     () => `purchase-value|${chartType}|${chartData.length}|${JSON.stringify(chartData)}|${JSON.stringify(filters)}|${targetConfig?.purchase_value?.minPurchaseValueL ?? 100}`,
@@ -7156,8 +7116,8 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
       noData={filteredRows.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
-        {/* Date Range Picker - exactly like Customer PO vs Sales Value */}
-        <div className="pp1-filter-group pp1-filter-group--date-range">
+        {/* Date Range Picker */}
+        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ minWidth: "210px", flex: "1 1 210px", maxWidth: "250px" }}>
           <label className="pp1-filter-label">Date Range</label>
           <PlantPerformance1DatePicker
             from={pickerFrom}
@@ -7167,7 +7127,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         </div>
 
         {/* Supplier Dropdown */}
-        <div className="pp1-filter-group" style={{ minWidth: "130px", flex: "1 1 130px" }}>
+        <div className="pp1-filter-group" style={{ minWidth: "140px", flex: "1 1 140px", maxWidth: "200px" }}>
           <label className="pp1-filter-label">Supplier</label>
           <Pp1SearchableMultiSelect
             value={filters.supplier}
@@ -7180,35 +7140,156 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         </div>
 
         {/* Material Category Dropdown with modern UI */}
-        <div className="pp1-filter-group" ref={catRef} style={{ maxWidth: "160px" }}>
+        <div className="pp1-filter-group" ref={catRef} style={{ minWidth: "140px", flex: "1 1 140px", maxWidth: "190px" }}>
           <label className="pp1-filter-label">Material Category</label>
-          <div className="pp1-part-autocomplete-wrap" style={{ position: "relative" }}>
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="All Categories"
-              value={filters.category || ""}
-              onChange={e => {
-                handleInputChange("category", e.target.value);
-                setCatOpen(true);
+          <div className="pp1-custom-select-wrap" style={{ position: "relative", width: "100%" }}>
+            <button
+              type="button"
+              className={`pp1-custom-select-trigger ${catOpen ? "open" : ""} ${filters.category ? "active" : ""}`}
+              onClick={() => {
+                setCatOpen(prev => !prev);
+                if (catOpen) setCatSearch("");
               }}
-              onFocus={() => setCatOpen(true)}
-              style={{ paddingRight: "24px" }}
-            />
-            <ChevronDown size={12} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }} />
-            {catOpen && filteredCategories.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div className="pp1-part-suggestion-item" onClick={() => { handleInputChange("category", ""); setCatOpen(false); }}>All Categories</div>
-                {filteredCategories.map(c => (
-                  <div key={c} className={`pp1-part-suggestion-item ${filters.category === c ? "selected" : ""}`} onClick={() => { handleInputChange("category", c); setCatOpen(false); }}>{c}</div>
-                ))}
+              style={{
+                width: "100%",
+                height: "28px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "0 10px",
+                background: "#ffffff",
+                border: catOpen
+                  ? "1px solid #2563eb"
+                  : filters.category
+                  ? "1px solid #2563eb"
+                  : "1px solid rgba(226, 232, 240, 0.9)",
+                borderRadius: "6px",
+                fontFamily: PP1_FONT,
+                fontSize: "11px",
+                fontWeight: 500,
+                color: "#334155",
+                cursor: "pointer",
+                boxSizing: "border-box"
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: filters.category ? "#2563eb" : "inherit" }}>
+                {filters.category || "All Categories"}
+              </span>
+              <ChevronDown
+                size={12}
+                className="pp1-custom-select-caret"
+                style={{
+                  color: filters.category ? "#2563eb" : "#94a3b8",
+                  transition: "transform 0.15s ease",
+                  transform: catOpen ? "rotate(180deg)" : "none",
+                  flexShrink: 0
+                }}
+              />
+            </button>
+
+            {catOpen && (
+              <div
+                className="pp1-custom-select-options pp1-ct-reveal pp1-ct-reveal--in"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  width: "100%",
+                  minWidth: "160px",
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                  zIndex: 1050,
+                  background: "#ffffff",
+                  border: "1px solid rgba(226, 232, 240, 0.95)",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)",
+                  padding: "4px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px"
+                }}
+              >
+                {/* Search Bar if more than 5 categories */}
+                {categoriesList.length > 5 && (
+                  <div style={{ padding: "2px 4px 4px 4px" }}>
+                    <input
+                      type="text"
+                      className="pp1-filter-input"
+                      placeholder="Search category..."
+                      value={catSearch}
+                      onChange={e => setCatSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        width: "100%",
+                        height: "24px",
+                        padding: "2px 8px",
+                        fontSize: "10.5px",
+                        borderRadius: "5px",
+                        border: "1px solid rgba(226, 232, 240, 0.9)",
+                        color: "#334155"
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* All Categories Option */}
+                <div
+                  className={`pp1-custom-select-option ${!filters.category ? "selected" : ""}`}
+                  onClick={() => {
+                    handleInputChange("category", "");
+                    setCatOpen(false);
+                    setCatSearch("");
+                  }}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: "11px",
+                    fontWeight: 500,
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    transition: "all 0.1s ease"
+                  }}
+                >
+                  All Categories
+                </div>
+
+                {/* Individual Categories */}
+                {filteredCategories.length === 0 ? (
+                  <div style={{ padding: "6px 10px", fontSize: "10.5px", color: "#94a3b8", textAlign: "center" }}>
+                    No categories found
+                  </div>
+                ) : (
+                  filteredCategories.map(c => {
+                    const isSelected = String(filters.category || "").trim().toLowerCase() === String(c).trim().toLowerCase();
+                    return (
+                      <div
+                        key={c}
+                        className={`pp1-custom-select-option ${isSelected ? "selected" : ""}`}
+                        onClick={() => {
+                          handleInputChange("category", c);
+                          setCatOpen(false);
+                          setCatSearch("");
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          borderRadius: "5px",
+                          cursor: "pointer",
+                          transition: "all 0.1s ease"
+                        }}
+                      >
+                        {c}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
         </div>
 
         {/* Part Number Multi-Select with modern UI */}
-        <div className="pp1-filter-group" style={{ minWidth: "130px", flex: "1 1 130px" }}>
+        <div className="pp1-filter-group" style={{ minWidth: "140px", flex: "1 1 140px", maxWidth: "200px" }}>
           <label className="pp1-filter-label">Part Number</label>
           <Pp1SearchableMultiSelect
             value={filters.partNumber}
@@ -7221,7 +7302,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "1 1 135px" }}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "0 0 auto", maxWidth: "150px" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
@@ -7279,7 +7360,7 @@ function PurchaseValueDashboardView({ data, filters, onFilterChange, onClose, ta
           </div>
         </div>
 
-        <button type="button" className="pp1-filter-btn pp1-filter-btn--reset" onClick={handleReset} style={{ flexShrink: 0, height: "28px" }}>
+        <button type="button" className="pp1-filter-btn pp1-filter-btn--reset" onClick={handleReset} style={{ flexShrink: 0, height: "28px", alignSelf: "flex-end" }}>
           Reset
         </button>
       </div>
@@ -16500,15 +16581,23 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.supplier, onSrData]);
 
-  const chartData = Array.isArray(srSource?.data) ? srSource.data : [];
-  const chartLabels = Array.isArray(srSource?.labels) ? srSource.labels : [];
+  const chartData = Array.isArray(srSource?.monthWise?.data)
+    ? srSource.monthWise.data
+    : (Array.isArray(srSource?.data) ? srSource.data : []);
+  const chartLabels = Array.isArray(srSource?.monthWise?.labels)
+    ? srSource.monthWise.labels
+    : (Array.isArray(srSource?.labels) ? srSource.labels : []);
   const avgRating = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
+
+  const allSuppliers = Array.isArray(srSource?.filterOptions?.suppliers)
+    ? srSource.filterOptions.suppliers
+    : [];
 
   const kpiData = srSource?.kpis || {};
   const avgRatingVal = kpiData.avg_rating != null ? `${kpiData.avg_rating}%` : `${avgRating}%`;
   const onTimeSupplyVal = kpiData.on_time_supply != null ? `${kpiData.on_time_supply}%` : "94.2%";
   const qualityComplianceVal = kpiData.quality_compliance != null ? `${kpiData.quality_compliance}%` : "98.1%";
-  const activeSuppliersVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
+  const activeSuppliersVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(allSuppliers.length || chartLabels.length);
 
   const kpis = [
     { label: "Avg Rating", value: avgRatingVal, icon: Star, color: "#eab308" },
@@ -16523,10 +16612,6 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
   const [chartTypeOpen, setChartTypeOpen] = useState(false);
   const chartTypeRef = useRef(null);
   const [suppSearch, setSuppSearch] = useState("");
-
-  const allSuppliers = Array.isArray(srSource?.filterOptions?.suppliers)
-    ? srSource.filterOptions.suppliers
-    : [];
 
   const filteredSuppliers = useMemo(() => {
     const q = suppSearch.trim().toLowerCase();
@@ -16735,6 +16820,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
           borderRadius: 8,
           borderSkipped: "bottom",
           hoverBackgroundColor: "#eab308",
+          maxBarThickness: 46,
         };
         datasets.push(mainDataset);
       }
@@ -16777,7 +16863,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
               borderColor: "rgba(255, 255, 255, 0.1)",
               borderWidth: 1,
             },
-            datalabels: pp1DataLabelsPercent({ maxPoints: 96, accentColor: "rgba(234, 179, 8, 0.92)" }),
+            datalabels: pp1DataLabelsPercent({ maxPoints: 24, accentColor: "rgba(234, 179, 8, 0.92)" }),
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
@@ -16803,12 +16889,10 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
               grid: { display: false, drawBorder: false },
               ticks: {
                 display: true,
-                font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" },
+                font: { family: "Outfit, Inter, sans-serif", size: 10.5, weight: "600" },
                 color: "#64748b",
-                maxRotation: chartLabels.length > 8 ? 45 : 0,
-                minRotation: chartLabels.length > 8 ? 30 : 0,
-                autoSkip: chartLabels.length > 15,
-                autoSkipPadding: 8,
+                maxRotation: 0,
+                minRotation: 0,
               }
             },
             y: {
@@ -16833,7 +16917,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
   );
 
   const isSupplierSelected = (filters.supplier || []).length > 0;
-  const rangeHintText = isSupplierSelected ? "Supplier Wise Rating Score" : "Overall Supplier Rating Score";
+  const rangeHintText = isSupplierSelected ? "Supplier Wise Rating Score (Month Wise)" : "Overall Supplier Rating Score (Month Wise)";
   const rebuildToken = `supplier-rating-chart|${targetConfig?.supplier_rating?.minRating ?? 90}|${chartType}|${JSON.stringify(chartData)}|${JSON.stringify(chartLabels)}|${isSupplierSelected}`;
 
   return (
@@ -16851,7 +16935,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
-        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ maxWidth: "230px" }}>
+        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ minWidth: "210px", flex: "1 1 210px", maxWidth: "250px" }}>
           <label className="pp1-filter-label">Date Range</label>
           <PlantPerformance1DatePicker
             from={pickerFrom}
@@ -16861,7 +16945,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
         </div>
 
         {/* Supplier Multi-Select Dropdown */}
-        <div className="pp1-filter-group" ref={suppRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#eab308' }}>
+        <div className="pp1-filter-group" ref={suppRef} style={{ minWidth: "190px", flex: "1 1 190px", maxWidth: "260px", '--act-color': '#eab308' }}>
           <label className="pp1-filter-label">Supplier Name</label>
           <div className="pp1-multiselect-wrap">
             <div
@@ -16973,7 +17057,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef} style={{ maxWidth: "120px" }}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "0 0 auto", maxWidth: "150px" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-part-autocomplete-wrap">
             <div
@@ -17071,7 +17155,7 @@ function SupplierRatingReportDashboardView({ data, filters, onFilterChange, onCl
           type="button"
           className="pp1-filter-btn pp1-filter-btn--reset"
           onClick={handleReset}
-          style={{ flexShrink: 0, height: "28px" }}
+          style={{ flexShrink: 0, height: "28px", alignSelf: "flex-end" }}
         >
           Reset
         </button>
@@ -17149,15 +17233,20 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
     return () => ctrl.abort();
   }, [filters.fromDate, filters.toDate, filters.vendor, onVrData]);
 
-  const chartData = Array.isArray(vrSource?.data) ? vrSource.data : [];
-  const chartLabels = Array.isArray(vrSource?.labels) ? vrSource.labels : [];
+  const chartData = Array.isArray(vrSource?.monthWise?.data)
+    ? vrSource.monthWise.data
+    : (Array.isArray(vrSource?.data) ? vrSource.data : []);
+  const chartLabels = Array.isArray(vrSource?.monthWise?.labels)
+    ? vrSource.monthWise.labels
+    : (Array.isArray(vrSource?.labels) ? vrSource.labels : []);
   const avgRating = chartData.length > 0 ? (chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(1) : "0.0";
 
   const kpiData = vrSource?.kpis || {};
   const avgRatingVal = kpiData.avg_rating != null ? `${kpiData.avg_rating}%` : `${avgRating}%`;
   const onTimeSupplyVal = kpiData.on_time_supply != null ? `${kpiData.on_time_supply}%` : "—";
   const qualityComplianceVal = kpiData.quality_compliance != null ? `${kpiData.quality_compliance}%` : "—";
-  const activeVendorsVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(chartLabels.length);
+  const activeVendorsCount = Array.isArray(vrSource?.rows) ? vrSource.rows.length : (Array.isArray(vrSource?.vendorWise?.labels) ? vrSource.vendorWise.labels.length : chartLabels.length);
+  const activeVendorsVal = kpiData.active_suppliers != null ? String(kpiData.active_suppliers) : String(activeVendorsCount);
 
   const kpis = [
     { label: "Avg Rating", value: avgRatingVal, icon: Award, color: "#3b82f6" },
@@ -17285,12 +17374,12 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           borderColor: "#3b82f6",
           backgroundColor: "transparent",
           borderWidth: 3,
-          tension: 0.4,
+          tension: 0.35,
           fill: false,
           pointBackgroundColor: "#3b82f6",
           pointBorderColor: "#ffffff",
           pointBorderWidth: 2,
-          pointRadius: 4.5,
+          pointRadius: 5,
           pointHoverRadius: 7,
           pointHoverBorderWidth: 3,
         };
@@ -17305,13 +17394,13 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           borderColor: "#3b82f6",
           backgroundColor: gradient,
           borderWidth: 2.5,
-          tension: 0.4,
+          tension: 0.35,
           fill: true,
           pointBackgroundColor: "#3b82f6",
           pointBorderColor: "#ffffff",
           pointBorderWidth: 1.5,
-          pointRadius: 4,
-          pointHoverRadius: 6,
+          pointRadius: 5,
+          pointHoverRadius: 7,
         };
         datasets.push(mainDataset);
       } else if (chartType === "radar") {
@@ -17372,6 +17461,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           borderRadius: 8,
           borderSkipped: "bottom",
           hoverBackgroundColor: "#3b82f6",
+          maxBarThickness: 46,
         };
         datasets.push(mainDataset);
       }
@@ -17404,7 +17494,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
               boxWidth: 7, boxHeight: 7, usePointStyle: true,
               borderColor: "rgba(255, 255, 255, 0.1)", borderWidth: 1,
             },
-            datalabels: pp1DataLabelsPercent({ maxPoints: 96, accentColor: "rgba(59, 130, 246, 0.92)" }),
+            datalabels: pp1DataLabelsPercent({ maxPoints: 24, accentColor: "rgba(59, 130, 246, 0.92)" }),
           },
           scales: (chartType === "radar" || chartType === "polarArea") ? {
             r: {
@@ -17420,7 +17510,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           } : {
             x: {
               grid: { display: false, drawBorder: false },
-              ticks: { display: false, font: { family: "Outfit, Inter, sans-serif", size: 10, weight: "500" }, color: "#64748b" }
+              ticks: { display: true, font: { family: "Outfit, Inter, sans-serif", size: 10.5, weight: "600" }, color: "#64748b" }
             },
             y: {
               min: 0, max: 100,
@@ -17447,14 +17537,14 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
       kpis={kpis}
       setupChart={setupChart}
       chartHeight={260}
-      rangeHint="Vendor Wise Rating Score"
+      rangeHint={filters?.vendor && filters.vendor.length > 0 ? "Vendor Wise Rating Score (Month Wise)" : "Overall Vendor Rating Score (Month Wise)"}
       onClose={onClose}
       rebuildToken={rebuildToken}
       noData={chartLabels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
-        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ maxWidth: "230px" }}>
+        <div className="pp1-filter-group pp1-filter-group--date-range" style={{ minWidth: "210px", flex: "1 1 210px", maxWidth: "250px" }}>
           <label className="pp1-filter-label">Date Range</label>
           <PlantPerformance1DatePicker
             from={pickerFrom}
@@ -17464,7 +17554,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
         </div>
 
         {/* Vendor Multi-Select Dropdown */}
-        <div className="pp1-filter-group" ref={vendRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#3b82f6' }}>
+        <div className="pp1-filter-group" ref={vendRef} style={{ minWidth: "190px", flex: "1 1 190px", maxWidth: "260px", '--act-color': '#3b82f6' }}>
           <label className="pp1-filter-label">Vendor Name</label>
           <div className="pp1-multiselect-wrap">
             <div
@@ -17572,7 +17662,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
         </div>
 
         {/* Chart Type Dropdown */}
-        <div className="pp1-filter-group" ref={chartTypeRef} style={{ maxWidth: "120px" }}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "0 0 auto" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-part-autocomplete-wrap">
             <div
@@ -17627,7 +17717,7 @@ function VendorRatingReportDashboardView({ data, filters, onFilterChange, onClos
           type="button"
           className="pp1-filter-btn pp1-filter-btn--reset"
           onClick={handleReset}
-          style={{ flexShrink: 0, height: "28px" }}
+          style={{ flexShrink: 0, height: "28px", alignSelf: "flex-end" }}
         >
           Reset
         </button>
@@ -17688,13 +17778,11 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
   const fgValueSource = fgValueLive || data?.fgValueCompare;
 
   const [customerOpen, setCustomerOpen] = React.useState(false);
-  const [itemCodeOpen, setItemCodeOpen] = React.useState(false);
   const [chartType, setChartType] = React.useState("line");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [custSearch, setCustSearch] = React.useState("");
 
   const customerRef = React.useRef(null);
-  const itemCodeRef = React.useRef(null);
   const chartTypeRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -17702,9 +17790,6 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
       if (customerRef.current && !customerRef.current.contains(event.target)) {
         setCustomerOpen(false);
         setCustSearch("");
-      }
-      if (itemCodeRef.current && !itemCodeRef.current.contains(event.target)) {
-        setItemCodeOpen(false);
       }
       if (chartTypeRef.current && !chartTypeRef.current.contains(event.target)) {
         setChartTypeOpen(false);
@@ -17749,7 +17834,12 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
       list = list.filter(r => filters.customer.includes(r.customerName));
     }
     if (filters?.itemCode) {
-      list = list.filter(r => r.partNo === filters.itemCode);
+      const selectedItems = Array.isArray(filters.itemCode)
+        ? filters.itemCode
+        : String(filters.itemCode).split(",").map(i => i.trim()).filter(Boolean);
+      if (selectedItems.length > 0) {
+        list = list.filter(r => selectedItems.includes(r.partNo));
+      }
     }
     return list;
   }, [fgRows, filters?.customer, filters?.itemCode]);
@@ -17760,9 +17850,14 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
   }, [fgRows]);
 
   const allItemCodes = React.useMemo(() => {
-    const list = Array.isArray(fgRows) ? fgRows.map(r => r.partNo) : [];
+    let source = fgRows;
+    if (filters?.customer && filters.customer.length > 0) {
+      const filtered = source.filter(r => filters.customer.includes(r.customerName));
+      if (filtered.length > 0) source = filtered;
+    }
+    const list = Array.isArray(source) ? source.map(r => r.partNo) : [];
     return [...new Set(list)].filter(Boolean).sort();
-  }, [fgRows]);
+  }, [fgRows, filters?.customer]);
 
   const filteredCustomers = React.useMemo(() => {
     const q = custSearch.trim().toLowerCase();
@@ -17783,11 +17878,6 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
       customer: isAllCustSelected ? [] : [...allCustomers]
     }));
   };
-
-  const itemSuggestions = React.useMemo(() => {
-    if (!filters.itemCode) return allItemCodes;
-    return allItemCodes.filter(i => i.toLowerCase().includes(filters.itemCode.toLowerCase()));
-  }, [filters.itemCode, allItemCodes]);
 
   const kpis = React.useMemo(() => {
     const totalValRub = filteredRows.reduce((sum, r) => sum + (Number(r.finalInspectionValue) || 0) + (Number(r.dispatchValue) || 0), 0);
@@ -18120,7 +18210,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Customer Multi-Select Dropdown */}
-        <div className="pp1-filter-group" ref={customerRef} style={{ width: "230px", maxWidth: "230px", '--act-color': '#ec4899' }}>
+        <div className="pp1-filter-group" ref={customerRef} style={{ minWidth: "190px", flex: "1 1 190px", maxWidth: "260px", '--act-color': '#ec4899' }}>
           <label className="pp1-filter-label">Customer Name</label>
           <div className="pp1-multiselect-wrap">
             <div
@@ -18196,51 +18286,23 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
           </div>
         </div>
 
-        {/* Item Code Autocomplete */}
-        <div className="pp1-filter-group" ref={itemCodeRef} style={{ maxWidth: "160px" }}>
+        {/* Item Code Multi-Select Dropdown */}
+        <div className="pp1-filter-group" style={{ minWidth: "160px", flex: "1 1 160px", maxWidth: "240px" }}>
           <label className="pp1-filter-label">Item Code</label>
-          <div className="pp1-part-autocomplete-wrap">
-            <input
-              type="text"
-              className="pp1-filter-input pp1-part-autocomplete-input"
-              placeholder="Item Code..."
-              value={filters.itemCode}
-              onChange={e => {
-                handleInputChange("itemCode", e.target.value);
-                setItemCodeOpen(true);
-              }}
-              onFocus={() => setItemCodeOpen(true)}
-            />
-            {itemCodeOpen && itemSuggestions.length > 0 && (
-              <div className="pp1-part-suggestions">
-                <div
-                  className={`pp1-part-suggestion-item ${!filters.itemCode ? "selected" : ""}`}
-                  onClick={() => {
-                    handleInputChange("itemCode", "");
-                    setItemCodeOpen(false);
-                  }}
-                >
-                  All Items
-                </div>
-                {itemSuggestions.map(i => (
-                  <div
-                    key={i}
-                    className={`pp1-part-suggestion-item ${filters.itemCode === i ? "selected" : ""}`}
-                    onClick={() => {
-                      handleInputChange("itemCode", i);
-                      setItemCodeOpen(false);
-                    }}
-                  >
-                    {i}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Pp1SearchableMultiSelect
+            value={filters?.itemCode || ""}
+            options={allItemCodes}
+            onChange={(val) => handleInputChange("itemCode", val)}
+            placeholder="Search item..."
+            allLabel="All Items"
+            searchPlaceholder="Search item code..."
+            accentColor="#ec4899"
+            listMaxHeight="160px"
+          />
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef} style={{ maxWidth: "120px" }}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "0 0 auto" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-part-autocomplete-wrap">
             <div
@@ -18338,7 +18400,7 @@ function FgValueReportDashboardView({ data, loading, filters, onFilterChange, on
           type="button"
           className="pp1-filter-btn pp1-filter-btn--reset"
           onClick={handleReset}
-          style={{ flexShrink: 0, height: "28px" }}
+          style={{ flexShrink: 0, height: "28px", alignSelf: "flex-end" }}
         >
           Reset
         </button>
@@ -18359,7 +18421,12 @@ function FgValueReportBottomTable({ data, filters }) {
       list = list.filter(r => filters.customer.includes(r.customerName));
     }
     if (filters?.itemCode) {
-      list = list.filter(r => r.partNo === filters.itemCode);
+      const selectedItems = Array.isArray(filters.itemCode)
+        ? filters.itemCode
+        : String(filters.itemCode).split(",").map(i => i.trim()).filter(Boolean);
+      if (selectedItems.length > 0) {
+        list = list.filter(r => selectedItems.includes(r.partNo));
+      }
     }
 
     return list.map((row, idx) => {
@@ -19256,9 +19323,13 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
   );
 
   const customersList = React.useMemo(() => {
+    const fromApi = targetVsActualSource?.filterOptions?.customers;
+    if (Array.isArray(fromApi) && fromApi.length > 0) {
+      return fromApi.filter(c => c && c !== "—" && c !== "-" && c.trim() !== "");
+    }
     const list = rawRows.map(r => r.customerName);
-    return [...new Set(list)].filter(Boolean).sort();
-  }, [rawRows]);
+    return [...new Set(list)].filter(c => c && c !== "—" && c !== "-" && c.trim() !== "").sort();
+  }, [targetVsActualSource?.filterOptions?.customers, rawRows]);
 
   const filteredData = React.useMemo(() => {
     let list = rawRows;
@@ -19422,7 +19493,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
         </div>
 
         {/* Customer Name Multi-Select Dropdown */}
-        <div className="pp1-filter-group" style={{ width: "230px", maxWidth: "230px" }}>
+        <div className="pp1-filter-group" style={{ minWidth: "190px", flex: "1 1 190px", maxWidth: "280px" }}>
           <label className="pp1-filter-label">Customer Name</label>
           <Pp1SearchableMultiSelect
             value={filters.customer || ""}
@@ -19431,11 +19502,12 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
             placeholder="Select Customers..."
             allLabel="All Customers"
             searchPlaceholder="Search customer..."
+            listMaxHeight="160px"
           />
         </div>
 
         {/* Chart Type Dropdown Filter */}
-        <div className="pp1-filter-group" ref={chartTypeRef}>
+        <div className="pp1-filter-group" ref={chartTypeRef} style={{ minWidth: "135px", flex: "0 0 auto" }}>
           <label className="pp1-filter-label">Chart Type</label>
           <div className="pp1-custom-select-wrap">
             <button
@@ -19497,7 +19569,7 @@ function TargetVsActualDashboardView({ data, loading, filters, onFilterChange, o
           type="button"
           className="pp1-filter-btn pp1-filter-btn--reset"
           onClick={handleReset}
-          style={{ flexShrink: 0, height: "28px" }}
+          style={{ flexShrink: 0, height: "28px", alignSelf: "flex-end" }}
         >
           Reset
         </button>
@@ -23063,10 +23135,14 @@ export default function PlantPerformance1() {
     }
 
     // Supplier Rating trend calculation (UI alone)
-    const _srData = data?.supplierRating?.data;
-    const supplierRating = Array.isArray(_srData) && _srData.length > 0
-      ? Number((_srData.reduce((a, b) => a + b, 0) / _srData.length).toFixed(1))
-      : 0;
+    const _srSource = srPanelData || data?.supplierRating;
+    const _srKpi = _srSource?.kpis;
+    const _srData = _srSource?.data;
+    const supplierRating = _srKpi?.avg_rating != null
+      ? Number(_srKpi.avg_rating)
+      : (Array.isArray(_srData) && _srData.length > 0
+        ? Number((_srData.reduce((a, b) => a + b, 0) / _srData.length).toFixed(1))
+        : 0);
     const supplierTarget = targetConfig.supplier_rating?.minRating ?? 90;
     const supplierOk = supplierRating >= supplierTarget;
     const supplierDiff = supplierRating > 0 ? (((supplierRating - supplierTarget) / supplierTarget) * 100).toFixed(1) : "0.0";
