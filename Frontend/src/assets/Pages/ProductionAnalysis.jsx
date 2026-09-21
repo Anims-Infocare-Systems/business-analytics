@@ -105,14 +105,23 @@ function formatHoursMins(val) {
   if (val === null || val === undefined || val === "") return "00 hour 00 mins";
   if (typeof val === "string") {
     if (val.includes("hour") || val.includes("mins")) return val;
-    val = Number(val);
+    if (val.includes(":")) {
+      const parts = val.replace(/,/g, "").split(":");
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const hStr = h >= 1000 ? h.toLocaleString("en-IN") : String(h).padStart(2, "0");
+      const mStr = String(m).padStart(2, "0");
+      const hLabel = h === 1 ? "hour" : "hours";
+      return `${hStr} ${hLabel} ${mStr} mins`;
+    }
+    val = Number(val.replace(/,/g, ""));
   }
   const decimalHours = Number(val);
   if (isNaN(decimalHours) || decimalHours <= 0) return "00 hour 00 mins";
   const totalSeconds = Math.round(decimalHours * 3600);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
-  const hStr = String(h).padStart(2, "0");
+  const hStr = h >= 1000 ? h.toLocaleString("en-IN") : String(h).padStart(2, "0");
   const mStr = String(m).padStart(2, "0");
   const hLabel = h === 1 ? "hour" : "hours";
   return `${hStr} ${hLabel} ${mStr} mins`;
@@ -121,7 +130,7 @@ function formatHoursMins(val) {
 /* ═══════════════════════════════════════════════
 ANIMATED NUMBER COUNTER
 ═══════════════════════════════════════════════ */
-function AnimatedValue({ target, duration = 900, prefix = "", suffix = "" }) {
+function AnimatedValue({ target, duration = 900, prefix = "", suffix = "", decimals }) {
   if (typeof target === "string" && (target.includes("hour") || target.includes("mins"))) {
     return <>{prefix}{target}{suffix}</>;
   }
@@ -142,6 +151,7 @@ function AnimatedValue({ target, duration = 900, prefix = "", suffix = "" }) {
     return () => cancelAnimationFrame(frame.current);
   }, [target]);
   const fmt = (n) => {
+    if (decimals !== undefined) return n.toFixed(decimals);
     if (suffix === "%" || String(target).includes(".")) return n.toFixed(1);
     return Math.round(n).toLocaleString("en-IN");
   };
@@ -1051,6 +1061,9 @@ export default function ProductionAnalysis() {
   const idleHoursPct = kpiValues.totalMachineHours > 0 ? ((kpiValues.idleHours / kpiValues.totalMachineHours) * 100).toFixed(1) : "0.0";
   const settingHoursPct = kpiValues.totalMachineHours > 0 ? ((kpiValues.settingHours / kpiValues.totalMachineHours) * 100).toFixed(1) : "0.0";
   const manEffMeta = kpiValues.manEfficiency > 0 ? `${kpiValues.manEfficiency >= 85 ? "✔ Above" : "↑ Target:"} 85%` : "Target: 85% ↑";
+  const totalAcceptedHrs = idleBreakdown.accepted.total_hours || 0;
+  const totalNonAccepted = idleBreakdown.non_accepted.total_hours || 0;
+  const totalLoss = idleBreakdown.non_accepted.total_loss || 0;
 
   const activeKpiData = [
     {
@@ -1066,7 +1079,8 @@ export default function ProductionAnalysis() {
       value: kpiValues.manEfficiency,
       unit: "%",
       meta: manEffMeta,
-      pos: kpiValues.manEfficiency >= 85
+      pos: kpiValues.manEfficiency >= 85,
+      decimals: 2
     },
     {
       variant: "pa2-kpi--green",
@@ -1090,9 +1104,9 @@ export default function ProductionAnalysis() {
           <polyline points="22 4 12 14.01 9 11.01" />
         </svg>
       ),
-      label: "Idle Accepted %",
-      value: idleBreakdown.summary.accepted_pct,
-      unit: "%",
+      label: "Idle Accepted Hours",
+      value: formatHoursMins(totalAcceptedHrs),
+      unit: "",
       meta: "Of Total Idle Time",
       pos: true
     },
@@ -1105,9 +1119,9 @@ export default function ProductionAnalysis() {
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       ),
-      label: "Idle Non Accepted %",
-      value: idleBreakdown.summary.non_accepted_pct,
-      unit: "%",
+      label: "Idle Non Accepted Hours",
+      value: formatHoursMins(totalNonAccepted),
+      unit: "",
       meta: "Needs Action",
       pos: false
     },
@@ -1124,7 +1138,8 @@ export default function ProductionAnalysis() {
       value: kpiValues.overallOee,
       unit: "%",
       meta: oeeMeta,
-      pos: kpiValues.overallOee >= 85
+      pos: kpiValues.overallOee >= 85,
+      decimals: 2
     },
     {
       variant: "pa2-kpi--purple",
@@ -1853,10 +1868,6 @@ export default function ProductionAnalysis() {
       .finally(() => setTableLoading(false));
   }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
 
-  /* ── Derived idle totals from live data ─────── */
-  const totalAcceptedHrs = idleBreakdown.accepted.total_hours || 0;
-  const totalNonAccepted = idleBreakdown.non_accepted.total_hours || 0;
-  const totalLoss = idleBreakdown.non_accepted.total_loss || 0;
 
 
   /* ── Production Value chart ─────────────────── */
@@ -2003,7 +2014,7 @@ export default function ProductionAnalysis() {
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: ctx => ` OEE: ${ctx.parsed.y}%` } },
+          tooltip: { callbacks: { label: ctx => ` OEE: ${Number(ctx.parsed.y).toFixed(2)}%` } },
           datalabels: {
             display: true,
             anchor: context => {
@@ -2037,9 +2048,9 @@ export default function ProductionAnalysis() {
             formatter: (v, context) => {
               const isMobile = window.innerWidth < 640;
               if (isMobile && oeeChartType === "line") {
-                return `${v}`; // Truncate % symbol on mobile line chart to save space
+                return `${Number(v).toFixed(2)}`; // Truncate % symbol on mobile line chart to save space
               }
-              return `${v}%`;
+              return `${Number(v).toFixed(2)}%`;
             },
             font: context => {
               const isMobile = window.innerWidth < 640;
@@ -2796,7 +2807,7 @@ export default function ProductionAnalysis() {
               </div>
               <div className="pa2-kpi-body">
                 <div className="pa2-kpi-value">
-                  <AnimatedValue target={k.value} suffix="" />
+                  <AnimatedValue target={k.value} suffix="" decimals={k.decimals} />
                   <span className="pa2-kpi-unit"> {k.unit}</span>
                 </div>
               </div>
@@ -2911,7 +2922,7 @@ export default function ProductionAnalysis() {
                             minWidth: "36px",
                             textAlign: "center",
                             fontVariantNumeric: "tabular-nums"
-                          }}>{macDetails.oprEff}%</span>
+                          }}>{Number(macDetails.oprEff || 0).toFixed(2)}%</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span style={{ fontSize: "9px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.2px" }}>OEE</span>
@@ -2926,7 +2937,7 @@ export default function ProductionAnalysis() {
                             minWidth: "36px",
                             textAlign: "center",
                             fontVariantNumeric: "tabular-nums"
-                          }}>{macDetails.oee}%</span>
+                          }}>{Number(macDetails.oee || 0).toFixed(2)}%</span>
                         </div>
                       </div>
                     </div>
@@ -3137,7 +3148,7 @@ export default function ProductionAnalysis() {
               ))
             ) : (
               [{ name: "Machine Utilization", pct: kpiValues.machineUtilization, color: "#2d6de8", bg: "#dbe9ff" }, { name: "Machine Efficiency", pct: kpiValues.machineEfficiency, color: "#f59e0b", bg: "#fef3c7" }, { name: "Operator Efficiency", pct: kpiValues.operatorEfficiency, color: "#059669", bg: "#d1fae5" }, { name: "Quality Rate", pct: kpiValues.qualityRate, color: "#059669", bg: "#d1fae5" }, { name: "Material Rejection", pct: kpiValues.materialRejection, color: "#ef4444", bg: "#fee2e2" }, { name: "Machine Rejection", pct: kpiValues.machineRejection, color: "#ef4444", bg: "#fee2e2" }].map((m, i) => (
-                <div key={i} className="pa2-metric-row"><div className="pa2-metric-name">{m.name}</div><ProgressBar pct={m.pct} color={m.color} bg={m.bg} /><div className="pa2-metric-pct" style={{ color: m.color }}>{m.pct}%</div></div>
+                <div key={i} className="pa2-metric-row"><div className="pa2-metric-name">{m.name}</div><ProgressBar pct={m.pct} color={m.color} bg={m.bg} /><div className="pa2-metric-pct" style={{ color: m.color }}>{m.name === "Operator Efficiency" ? Number(m.pct || 0).toFixed(2) : m.pct}%</div></div>
               ))
             )}
           </div>
@@ -4506,7 +4517,7 @@ export default function ProductionAnalysis() {
                         </div>
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <span className="pa2-badge" style={{ background: "rgba(16, 185, 129, 0.08)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.15)", fontWeight: "800", fontSize: "11px" }}>{row.oee}%</span>
+                        <span className="pa2-badge" style={{ background: "rgba(16, 185, 129, 0.08)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.15)", fontWeight: "800", fontSize: "11px" }}>{Number(row.oee || 0).toFixed(2)}%</span>
                       </td>
                     </tr>
                   ))
@@ -4550,7 +4561,7 @@ export default function ProductionAnalysis() {
                         </div>
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <span className="pa2-badge" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.15)", fontWeight: "800", fontSize: "11px" }}>{row.oee}%</span>
+                        <span className="pa2-badge" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.15)", fontWeight: "800", fontSize: "11px" }}>{Number(row.oee || 0).toFixed(2)}%</span>
                       </td>
                     </tr>
                   ))

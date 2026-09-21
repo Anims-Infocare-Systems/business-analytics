@@ -21,7 +21,8 @@ import {
   FiLoader,
   FiUser,
   FiPieChart,
-  FiX
+  FiX,
+  FiFilter
 } from "react-icons/fi";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -58,29 +59,93 @@ function toIsoDate(d) {
   return `${y}-${m}-${day}`;
 }
 
-/** Decimal hours → HH:MM:SS (matches ERP TotalIdleHours display). */
-function decimalHoursToHms(hours) {
-  const secs = Math.max(0, Math.round(Number(hours || 0) * 3600));
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+/** Strips seconds from HH:MM:SS or HH:MM time strings, returning HH:MM (e.g. "8,299:00:00" -> "8,299:00") */
+function stripSeconds(val) {
+  if (val == null || val === "" || val === "—") return "0:00";
+  const str = String(val).trim();
+  if (str.includes(":")) {
+    const parts = str.split(":");
+    if (parts.length >= 3) {
+      return `${parts[0]}:${parts[1]}`;
+    }
+    return str;
+  }
+  const num = Number(str);
+  if (!isNaN(num)) {
+    const totalMins = Math.round(num * 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return `${h.toLocaleString()}:${String(m).padStart(2, "0")}`;
+  }
+  return str;
 }
 
-/** Decimal hours → 'X Hrs Y Mins' */
+/**
+ * Parse any time representation into { hours: string, mins: number, totalMins: number, formatted: string }
+ * Handles:
+ *  - "X Hrs Y Mins"
+ *  - "HH:MM:SS" or "HH:MM" (e.g. "369:25:00", "8,299:00:00")
+ *  - Decimal hours number or string (e.g. 369.4, "131.2 hrs")
+ */
+function parseHrsMins(val) {
+  if (val == null || val === "" || val === "—") {
+    return { hours: "0", mins: 0, totalMins: 0, formatted: "0 Hrs 0 Mins" };
+  }
+  if (typeof val === "string" && (val.includes("Hrs") || val.includes("hrs") || val.includes("h"))) {
+    const hrsMatch = val.match(/([\d,]+)\s*(?:Hrs|hrs|h)/i);
+    const minsMatch = val.match(/(\d+)\s*(?:Mins|mins|m)/i);
+    if (hrsMatch || minsMatch) {
+      const h = hrsMatch ? parseInt(hrsMatch[1].replace(/,/g, ""), 10) || 0 : 0;
+      const m = minsMatch ? parseInt(minsMatch[1], 10) || 0 : 0;
+      const totalMins = h * 60 + m;
+      return { hours: h.toLocaleString(), mins: m, totalMins, formatted: `${h.toLocaleString()} Hrs ${m} Mins` };
+    }
+    const decMatch = val.match(/([\d,.]+)\s*(?:hrs|h)/i);
+    if (decMatch) {
+      const num = parseFloat(decMatch[1].replace(/,/g, "")) || 0;
+      const totalMins = Math.max(0, Math.round(num * 60));
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return { hours: h.toLocaleString(), mins: m, totalMins, formatted: `${h.toLocaleString()} Hrs ${m} Mins` };
+    }
+  }
+  if (typeof val === "string" && val.includes(":")) {
+    const cleaned = val.replace(/,/g, "").trim();
+    const parts = cleaned.split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const totalMins = h * 60 + m;
+      return { hours: h.toLocaleString(), mins: m, totalMins, formatted: `${h.toLocaleString()} Hrs ${m} Mins` };
+    }
+  }
+  const num = Number(val);
+  if (!isNaN(num)) {
+    const totalMins = Math.max(0, Math.round(num * 60));
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return { hours: h.toLocaleString(), mins: m, totalMins, formatted: `${h.toLocaleString()} Hrs ${m} Mins` };
+  }
+  return { hours: "0", mins: 0, totalMins: 0, formatted: String(val) };
+}
+
+/** Decimal hours or string → 'X Hrs Y Mins' */
 function formatIdleHrsMins(hours) {
-  const totalMins = Math.max(0, Math.round(Number(hours || 0) * 60));
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  return `${h} Hrs ${m} Mins`;
+  return parseHrsMins(hours).formatted;
 }
 
-/** Decimal hours → 'Xh Ym' for compact datalabels */
+/** Decimal hours or string → 'Xh Ym' (or 'Xh' if 0m) for compact datalabels */
 function formatCompactHrsMins(hours) {
-  const totalMins = Math.max(0, Math.round(Number(hours || 0) * 60));
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const p = parseHrsMins(hours);
+  return p.mins > 0 ? `${p.hours}h ${p.mins}m` : `${p.hours}h`;
+}
+
+/** Formats bar datalabels as 'Xh Ym' (or 'Xh 0m') showing hours and minutes alone */
+function formatBarHrsMins(val) {
+  if (!val || val === "0:00" || val === 0) return "";
+  const p = parseHrsMins(val);
+  if (p.totalMins <= 0) return "";
+  return `${p.hours}h ${p.mins}m`;
 }
 
 /* ════════════════════════════════════════════════
@@ -100,10 +165,12 @@ function buildKpiCards(kpis, periodLabel) {
   const k = kpis || {};
   const pct = k.top_idle_reason_pct != null ? `${k.top_idle_reason_pct}% of total` : "0% of total";
   const mc = k.machine_count != null ? `${k.machine_count} m/c` : "0 m/c";
+  const totalIdleDisp = k.total_idle_hours_display ? parseHrsMins(k.total_idle_hours_display).formatted : "0 Hrs 0 Mins";
+  const avgIdleDisp = k.avg_idle_display ? parseHrsMins(k.avg_idle_display).formatted : "0 Hrs 0 Mins";
   return [
-    { ...KPI_CARD_STYLES[0], value: k.total_idle_hours_display ?? "0:00:00", sub: periodLabel || "This Period", badge: "" },
+    { ...KPI_CARD_STYLES[0], value: totalIdleDisp, sub: periodLabel || "This Period", badge: "" },
     { ...KPI_CARD_STYLES[1], value: k.total_idle_cost_display ?? "₹ 0", sub: "RatePerHr × idle hrs", badge: "" },
-    { ...KPI_CARD_STYLES[2], value: k.avg_idle_display ?? "0:00:00", sub: "Avg per machine", badge: mc },
+    { ...KPI_CARD_STYLES[2], value: avgIdleDisp, sub: "Avg per machine", badge: mc },
     { ...KPI_CARD_STYLES[3], value: k.idle_not_entered != null ? String(k.idle_not_entered) : "0", sub: "Shift slots missing entry", badge: "" },
     { ...KPI_CARD_STYLES[4], value: k.top_idle_reason ?? "—", sub: pct, badge: (k.top_idle_reason_pct ?? 0) > 10 ? "high" : "" },
     { ...KPI_CARD_STYLES[5], value: k.continuous_idle_over_4h != null ? String(k.continuous_idle_over_4h) : "0", sub: "Machines flagged", badge: "" },
@@ -131,19 +198,21 @@ function buildAcceptedIdle(api) {
   const chart = a.chart_hours?.length === 2
     ? a.chart_hours.map(v => Number(v) || 0)
     : [0, 0];
+  const accDisp = stripSeconds(a.accepted_hours_display ?? "0:00");
+  const naDisp = stripSeconds(a.non_accepted_hours_display ?? "0:00");
   return {
     chart,
-    hours_display: [a.accepted_hours_display ?? "0:00:00", a.non_accepted_hours_display ?? "0:00:00"],
+    hours_display: [accDisp, naDisp],
     tiles: [
       {
         lbl: "Accepted Idle",
-        val: a.accepted_hours_display ?? "0:00:00",
+        val: accDisp,
         pct: `${accPct}%`,
         ...SPLIT_TILE_STYLE.accepted,
       },
       {
         lbl: "Non-Accepted Idle",
-        val: a.non_accepted_hours_display ?? "0:00:00",
+        val: naDisp,
         pct: `${naPct}%`,
         ...SPLIT_TILE_STYLE.nonAccepted,
       },
@@ -261,39 +330,31 @@ function buildTotalStats(u) {
   const t = u || {};
   const pct = t.overall_idle_percent != null ? `${t.overall_idle_percent}%` : "0%";
   return [
-    { label: "Total Machine Hours Available", value: t.total_machine_hours_available ?? "0:00", color: "#2563eb" },
-    { label: "Total Idle Hours", value: t.total_idle_hours ?? "0:00", color: "#dc2626" },
-    { label: "Total Productive Hours", value: t.total_productive_hours ?? "0:00", color: "#16a34a" },
+    { label: "Total Machine Hours Available", value: stripSeconds(t.total_machine_hours_available), color: "#2563eb" },
+    { label: "Total Idle Hours", value: stripSeconds(t.total_idle_hours), color: "#dc2626" },
+    { label: "Total Productive Hours", value: stripSeconds(t.total_productive_hours), color: "#16a34a" },
     { label: "Overall Idle %", value: pct, color: "#f97316" },
   ];
 }
 
-function formatTotalIdleMinutes(k) {
-  if (!k) return "0 Mins";
-  if (k.total_idle_minutes_display) return k.total_idle_minutes_display;
-  if (k.total_idle_minutes != null) {
-    return `${Number(k.total_idle_minutes).toLocaleString()} Mins`;
+function formatTotalIdleTime(k) {
+  if (!k) return "0 Hrs 0 Mins";
+  if (k.total_idle_hours_display) {
+    return parseHrsMins(k.total_idle_hours_display).formatted;
   }
   if (k.total_idle_seconds != null) {
-    const mins = Math.round(Number(k.total_idle_seconds) / 60);
-    return `${mins.toLocaleString()} Mins`;
+    return parseHrsMins(Number(k.total_idle_seconds) / 3600).formatted;
+  }
+  if (k.total_idle_minutes != null) {
+    return parseHrsMins(Number(k.total_idle_minutes) / 60).formatted;
   }
   if (k.total_idle_hours_decimal != null) {
-    const mins = Math.round(Number(k.total_idle_hours_decimal) * 60);
-    return `${mins.toLocaleString()} Mins`;
+    return parseHrsMins(k.total_idle_hours_decimal).formatted;
   }
-  if (k.total_idle_hours_display) {
-    const parts = String(k.total_idle_hours_display).replace(/,/g, "").split(":");
-    if (parts.length >= 2) {
-      const h = parseInt(parts[0], 10) || 0;
-      const m = parseInt(parts[1], 10) || 0;
-      const s = parts[2] ? parseInt(parts[2], 10) || 0 : 0;
-      const mins = Math.round(h * 60 + m + s / 60);
-      return `${mins.toLocaleString()} Mins`;
-    }
-  }
-  return "0 Mins";
+  return "0 Hrs 0 Mins";
 }
+
+const formatTotalIdleMinutes = formatTotalIdleTime;
 
 function formatAvgCostPerMinute(k) {
   if (!k) return "₹ 0";
@@ -327,13 +388,78 @@ function formatAvgCostPerMinute(k) {
   return "₹ 0";
 }
 
-function buildFooterStats(kpis) {
+function formatAvgCostPerHour(k, costMachineSummary) {
+  if (costMachineSummary?.avg_cost_per_hr_display) {
+    return costMachineSummary.avg_cost_per_hr_display;
+  }
+  if (costMachineSummary?.avg_cost_per_hr != null && Number(costMachineSummary.avg_cost_per_hr) > 0) {
+    return `₹ ${Number(costMachineSummary.avg_cost_per_hr).toFixed(2)}`;
+  }
+  if (k?.avg_cost_per_hour_display) return k.avg_cost_per_hour_display;
+  if (k?.avg_cost_per_hour != null && Number(k.avg_cost_per_hour) > 0) {
+    return `₹ ${Number(k.avg_cost_per_hour).toFixed(2)}`;
+  }
+
+  const totalCost = Number(k?.total_idle_cost ?? 0);
+  let totalHours = 0;
+  if (k?.total_idle_hours_decimal != null && Number(k.total_idle_hours_decimal) > 0) {
+    totalHours = Number(k.total_idle_hours_decimal);
+  } else if (k?.total_idle_seconds != null && Number(k.total_idle_seconds) > 0) {
+    totalHours = Number(k.total_idle_seconds) / 3600;
+  } else if (k?.total_idle_minutes != null && Number(k.total_idle_minutes) > 0) {
+    totalHours = Number(k.total_idle_minutes) / 60;
+  } else if (k?.total_idle_hours_display) {
+    const parts = String(k.total_idle_hours_display).replace(/,/g, "").split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const s = parts[2] ? parseInt(parts[2], 10) || 0 : 0;
+      totalHours = h + m / 60 + s / 3600;
+    }
+  }
+
+  if (totalCost > 0 && totalHours > 0) {
+    return `₹ ${(totalCost / totalHours).toFixed(2)}`;
+  }
+  if (k?.avg_cost_per_minute != null && Number(k.avg_cost_per_minute) > 0) {
+    return `₹ ${(Number(k.avg_cost_per_minute) * 60).toFixed(2)}`;
+  }
+  return "₹ 0";
+}
+
+function buildFooterStats(kpis, fullData) {
   const k = kpis || {};
+
+  let highMac = k.high_idle_mac || "";
+  let highHours = k.high_idle_mac_hours || "";
+
+  if (!highMac || highMac === "—") {
+    if (fullData?.top_machines?.labels?.length) {
+      highMac = fullData.top_machines.labels[0];
+      highHours = fullData.top_machines.hours_display?.[0] || "";
+    } else if (fullData?.continuous_idle_reasons?.length) {
+      highMac = fullData.continuous_idle_reasons[0].machine || "";
+      highHours = fullData.continuous_idle_reasons[0].hours || "";
+    }
+  }
+
+  let highSub = "";
+  if (highHours && highHours !== "0:00") {
+    const p = parseHrsMins(highHours);
+    highSub = p.totalMins > 0 ? p.formatted : highHours;
+  }
+
   return [
-    { label: "Total Idle Minutes", value: formatTotalIdleMinutes(k), icon: FiClock },
+    { label: "Total Idle Hours", value: formatTotalIdleTime(k), icon: FiClock },
     { label: "Total Idle Cost", value: k.total_idle_cost_display ?? "₹ 0", icon: FiDollarSign },
-    { label: "Avg Cost / Minute", value: formatAvgCostPerMinute(k), icon: FiTrendingUp },
+    { label: "Avg Cost / Hour", value: formatAvgCostPerHour(k), icon: FiTrendingUp },
     { label: "Machines Monitored", value: k.machine_count != null ? String(k.machine_count) : "0", icon: FiCpu },
+    {
+      label: "High Idle Mac",
+      value: highMac || "—",
+      title: highSub ? `${highMac || "—"} (${highSub})` : (highMac || "—"),
+      icon: FiAlertTriangle,
+    },
   ];
 }
 
@@ -582,7 +708,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const allLabel = options[0] || "All Machines";
+  const allLabel = options?.[0] || "All";
   const isAllSelected = !value || value === allLabel || value === "";
 
   const selectedList = isAllSelected ? [] : value.split(",").map(v => v.trim()).filter(Boolean);
@@ -638,7 +764,7 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
       </button>
 
       {isOpen && (
-        <div className="itr-custom-select-dropdown" style={{ width: '220px', padding: '8px', zIndex: 999, boxSizing: 'border-box', fontFamily: 'var(--itr-sans)' }}>
+        <div className="itr-custom-select-dropdown" style={{ minWidth: '220px', width: 'max-content', maxWidth: '300px', padding: '8px', zIndex: 999, boxSizing: 'border-box', fontFamily: 'var(--itr-sans)' }}>
           <div style={{ position: 'relative', marginBottom: '8px' }}>
             <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -839,10 +965,38 @@ export default function IdleTimeReport() {
     shift: "All Shifts",
     reason: "All Reasons",
   });
+  const [appliedDateRange, setAppliedDateRange] = useState({ from: _saved.from, to: _saved.to });
+  const [appliedFilters, setAppliedFilters] = useState({
+    mac_type: "All Types",
+    machine: "All Machines",
+    shift: "All Shifts",
+    reason: "All Reasons",
+  });
+  const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  const normalizeFilterVal = (val) => {
+    if (!val) return "";
+    if (Array.isArray(val)) return [...val].map(s => String(s).trim()).sort().join(",");
+    return String(val).split(",").map(s => s.trim()).filter(Boolean).sort().join(",");
+  };
+
+  const hasPendingChanges = useMemo(() => {
+    const dFrom = toIsoDate(dateRange.from);
+    const dTo = toIsoDate(dateRange.to);
+    const aFrom = toIsoDate(appliedDateRange.from);
+    const aTo = toIsoDate(appliedDateRange.to);
+    if (dFrom !== aFrom || dTo !== aTo) return true;
+    if ((filters.mac_type || "") !== (appliedFilters.mac_type || "")) return true;
+    if ((filters.shift || "") !== (appliedFilters.shift || "")) return true;
+    if (normalizeFilterVal(filters.machine) !== normalizeFilterVal(appliedFilters.machine)) return true;
+    if (normalizeFilterVal(filters.reason) !== normalizeFilterVal(appliedFilters.reason)) return true;
+    return false;
+  }, [dateRange, appliedDateRange, filters, appliedFilters]);
+
   const [filterOptions, setFilterOptions] = useState(DEFAULT_FILTER_OPTIONS);
   const [kpiCards, setKpiCards] = useState(() => buildKpiCards({}, "This Period"));
   const [topReasonsChart, setTopReasonsChart] = useState({ labels: [], data: [], hours_display: [], colors: [] });
-  const [acceptedIdle, setAcceptedIdle] = useState({ chart: [0, 0], hours_display: ["0:00:00", "0:00:00"], tiles: [] });
+  const [acceptedIdle, setAcceptedIdle] = useState({ chart: [0, 0], hours_display: ["0:00", "0:00"], tiles: [] });
   const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [], hours_display: [] });
   const [daywiseChart, setDaywiseChart] = useState({ labels: [], data: [], isSunday: [], hours_display: [] });
   const [idleChartType, setIdleChartType] = useState("daily");
@@ -850,10 +1004,11 @@ export default function IdleTimeReport() {
   const [shiftTiles, setShiftTiles] = useState([]);
   const [shiftChart, setShiftChart] = useState({ labels: [], datasets: [] });
   const [footerStats, setFooterStats] = useState(() => buildFooterStats({}));
+  const [kpisData, setKpisData] = useState({});
 
   // NEW: Dynamic state for the two target charts
-  const [costMachineData, setCostMachineData] = useState({ labels: [], hours: [], cost: [] });
-  const [pctMachineData, setPctMachineData] = useState({ labels: [], data: [] });
+  const [costMachineData, setCostMachineData] = useState({ labels: [], hours: [], cost: [], hours_display: [], summary: {} });
+  const [pctMachineData, setPctMachineData] = useState({ labels: [], data: [], idle_hours: [], prod_hours: [] });
   const [continuousIdle, setContinuousIdle] = useState([]);
   const [idleTimeNotEntered, setIdleTimeNotEntered] = useState({ rows: [], summary: { not_entered: 0, partial_entry: 0, completed: 0 } });
   const [reasonMachineDetail, setReasonMachineDetail] = useState({ column_headers: [], rows: [], footer: { cols: [], total: "0:00", pct: "0" } });
@@ -870,21 +1025,23 @@ export default function IdleTimeReport() {
   };
   const charts = useRef({});
 
-  // ✅ Persist date range to sessionStorage on every change
   useEffect(() => {
-    writeFilterSession("ba_filter_idletime", { from: dateRange.from, to: dateRange.to });
-  }, [dateRange.from, dateRange.to]);
-
-  useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
+    if (!appliedDateRange.from || !appliedDateRange.to) return;
     setIsLoading(true);
+    const machineParam = Array.isArray(appliedFilters.machine)
+      ? appliedFilters.machine.join(", ")
+      : (appliedFilters.machine || "All Machines");
+    const reasonParam = Array.isArray(appliedFilters.reason)
+      ? appliedFilters.reason.join(", ")
+      : (appliedFilters.reason || "All Reasons");
+
     const params = new URLSearchParams({
-      from: toIsoDate(dateRange.from),
-      to: toIsoDate(dateRange.to),
-      mac_type: filters.mac_type,
-      machine: filters.machine,
-      shift: filters.shift,
-      reason: filters.reason,
+      from: toIsoDate(appliedDateRange.from),
+      to: toIsoDate(appliedDateRange.to),
+      mac_type: appliedFilters.mac_type,
+      machine: machineParam,
+      shift: appliedFilters.shift,
+      reason: reasonParam,
     });
     fetch(`${API_BASE}/idle-time-report/?${params}`, { credentials: "include" })
       .then(res => (res.ok ? res.json() : Promise.reject(new Error("idle-time-report failed"))))
@@ -909,12 +1066,14 @@ export default function IdleTimeReport() {
           });
         }
         if (data?.kpis) {
+          setKpisData(data.kpis);
           const periodLabel = data.from && data.to ? `${data.from} → ${data.to}` : "This Period";
           setKpiCards(buildKpiCards(data.kpis, periodLabel));
-          setFooterStats(buildFooterStats(data.kpis));
+          setFooterStats(buildFooterStats(data.kpis, data));
         } else {
+          setKpisData({});
           setKpiCards(buildKpiCards({}, ""));
-          setFooterStats(buildFooterStats({}));
+          setFooterStats(buildFooterStats({}, {}));
         }
         if (data?.top_idle_reasons?.labels) {
           setTopReasonsChart({
@@ -931,7 +1090,7 @@ export default function IdleTimeReport() {
         if (data?.accepted_idle) {
           setAcceptedIdle(buildAcceptedIdle(data.accepted_idle));
         } else {
-          setAcceptedIdle({ chart: [0, 0], hours_display: ["0:00:00", "0:00:00"], tiles: [] });
+          setAcceptedIdle({ chart: [0, 0], hours_display: ["0:00", "0:00"], tiles: [] });
         }
         if (data?.monthwise?.labels) {
           setMonthwiseChart({
@@ -949,9 +1108,12 @@ export default function IdleTimeReport() {
             data: data.daywise.hours ?? [],
             isSunday: data.daywise.is_sunday ?? [],
             hours_display: data.daywise.hours_display ?? [],
+            total_seconds: data.daywise.total_seconds ?? 0,
+            total_hours_display: data.daywise.total_hours_display || "",
+            total_formatted: data.daywise.total_formatted || "",
           });
         } else {
-          setDaywiseChart({ labels: [], data: [], isSunday: [], hours_display: [] });
+          setDaywiseChart({ labels: [], data: [], isSunday: [], hours_display: [], total_seconds: 0, total_hours_display: "", total_formatted: "" });
         }
         if (data?.utilization_totals) {
           setTotalStats(buildTotalStats(data.utilization_totals));
@@ -966,6 +1128,7 @@ export default function IdleTimeReport() {
             datasets: (sw.datasets ?? []).map(ds => ({
               label: ds.label,
               data: ds.data ?? [],
+              hours_display: ds.hours_display ?? [],
               backgroundColor: ds.backgroundColor,
               borderColor: ds.borderColor,
             })),
@@ -980,17 +1143,21 @@ export default function IdleTimeReport() {
             labels: data.top_machines.labels,
             hours: data.top_machines.hours,
             cost: data.top_machines.cost_k,
+            hours_display: data.top_machines.hours_display ?? [],
+            summary: data.top_machines.summary || {},
           });
         } else {
-          setCostMachineData({ labels: [], hours: [], cost: [] });
+          setCostMachineData({ labels: [], hours: [], cost: [], hours_display: [], summary: {} });
         }
         if (data?.idle_pct_ranking?.labels) {
           setPctMachineData({
             labels: data.idle_pct_ranking.labels,
             data: data.idle_pct_ranking.data,
+            idle_hours: data.idle_pct_ranking.idle_hours || [],
+            prod_hours: data.idle_pct_ranking.prod_hours || [],
           });
         } else {
-          setPctMachineData({ labels: [], data: [] });
+          setPctMachineData({ labels: [], data: [], idle_hours: [], prod_hours: [] });
         }
         if (Array.isArray(data?.continuous_idle_reasons)) {
           setContinuousIdle(data.continuous_idle_reasons);
@@ -1017,7 +1184,7 @@ export default function IdleTimeReport() {
       })
       .catch((err) => console.error("idle-time-report:", err))
       .finally(() => setIsLoading(false));
-  }, [dateRange.from, dateRange.to, filters.mac_type, filters.machine, filters.shift, filters.reason]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilters, fetchTrigger]);
 
   useEffect(() => {
     const kill = () => {
@@ -1075,10 +1242,11 @@ export default function IdleTimeReport() {
               title: items => items[0]?.label ?? "",
               label: ctx => {
                 const idx = ctx.dataIndex;
+                const rawVal = Number(ctx.raw ?? ctx.parsed?.y ?? 0);
                 const hms = chartHoursDisplay?.[idx]
-                  ?? decimalHoursToHms(ctx.raw ?? ctx.parsed?.y);
-                const dec = Number(ctx.raw ?? ctx.parsed?.y ?? 0).toFixed(1);
-                return `  ${hms}  (${dec} hrs)`;
+                  ? stripSeconds(chartHoursDisplay[idx])
+                  : formatIdleHrsMins(rawVal);
+                return `  ${hms}`;
               },
             },
           },
@@ -1184,7 +1352,7 @@ export default function IdleTimeReport() {
             ...TOOLTIP_BASE,
             callbacks: {
               label: ctx => {
-                const hms = acceptedIdle.hours_display?.[ctx.dataIndex] ?? "0:00:00";
+                const hms = stripSeconds(acceptedIdle.hours_display?.[ctx.dataIndex] ?? "0:00");
                 const pct = ctx.dataIndex === 0 ? acceptedIdle.tiles[0]?.pct : acceptedIdle.tiles[1]?.pct;
                 return `  ${hms}  ·  ${pct}`;
               },
@@ -1473,7 +1641,12 @@ export default function IdleTimeReport() {
           tooltip: {
             ...TOOLTIP_BASE,
             callbacks: {
-              label: ctx => `  ${ctx.dataset.label}: ${Number(ctx.raw ?? 0).toFixed(1)} hrs`,
+              label: ctx => {
+                const ds = shiftChart.datasets[ctx.datasetIndex];
+                const disp = ds?.hours_display?.[ctx.dataIndex];
+                const text = disp ? parseHrsMins(disp).formatted : formatIdleHrsMins(Number(ctx.raw ?? 0));
+                return `  ${ctx.dataset.label}: ${text}`;
+              },
             },
           },
           datalabels: {
@@ -1485,7 +1658,12 @@ export default function IdleTimeReport() {
               return ds?.borderColor ?? "#2563eb";
             },
             font: { size: 9, weight: "800", family: CHART_FONT },
-            formatter: v => v > 0 ? `${Number(v).toFixed(0)}h` : "",
+            formatter: (v, ctx) => {
+              if (!v || v <= 0) return "";
+              const ds = shiftChart.datasets[ctx.datasetIndex];
+              const disp = ds?.hours_display?.[ctx.dataIndex];
+              return formatBarHrsMins(disp || v);
+            },
             rotation: -90,
           },
         },
@@ -1543,8 +1721,13 @@ export default function IdleTimeReport() {
             ...TOOLTIP_BASE,
             callbacks: {
               label: ctx => {
+                if (ctx.datasetIndex === 0) {
+                  const disp = costMachineData.hours_display?.[ctx.dataIndex];
+                  const text = disp ? parseHrsMins(disp).formatted : formatIdleHrsMins(Number(ctx.raw ?? 0));
+                  return `  Idle Hrs: ${text}`;
+                }
                 const v = Number(ctx.raw ?? 0);
-                return ctx.datasetIndex === 0 ? `  Idle Hrs: ${v.toFixed(1)} h` : `  Cost: ₹${v.toFixed(1)} K`;
+                return `  Cost: ₹${v.toFixed(1)} K`;
               },
             },
           },
@@ -1556,7 +1739,11 @@ export default function IdleTimeReport() {
             font: { size: 9, weight: "800", family: CHART_FONT },
             formatter: (v, ctx) => {
               if (!v) return "";
-              return ctx.datasetIndex === 0 ? `${Number(v).toFixed(0)}h` : `₹${Number(v).toFixed(0)}K`;
+              if (ctx.datasetIndex === 0) {
+                const disp = costMachineData.hours_display?.[ctx.dataIndex];
+                return formatBarHrsMins(disp || v);
+              }
+              return `₹${Number(v).toFixed(0)}K`;
             },
             rotation: -90,
           },
@@ -1576,8 +1763,8 @@ export default function IdleTimeReport() {
     const canvas = cnv.pctChart.current;
     if (!canvas) return kill;
 
-    const pctValues = pctMachineData.data.map(v => Number(v) || 0);
-    const pctMacnos = pctMachineData.labels || [];
+    const pctValues = (pctMachineData.data || []).slice(0, 10).map(v => Number(v) || 0);
+    const pctMacnos = (pctMachineData.labels || []).slice(0, 10);
     const pctBarColor = v =>
       v > 75 ? "rgba(220,38,38,0.80)" :
         v > 50 ? "rgba(249,115,22,0.80)" :
@@ -1675,37 +1862,71 @@ export default function IdleTimeReport() {
 
   // ── Calculate Total Idle Hrs for Daily / Period Breakdown ──
   const totalDailyIdleParts = useMemo(() => {
-    // 1. Check exact precision from totalStats or kpiCards
-    const rawHms = totalStats[1]?.value || kpiCards[0]?.value || "";
-    if (rawHms && rawHms !== "0:00" && rawHms !== "0:00:00") {
-      const cleaned = String(rawHms).replace(/,/g, "").trim();
-      const parts = cleaned.split(":");
+    // 1. Monthly view: sum from monthwiseChart.hours
+    if (idleChartType === "monthly") {
+      const sum = (monthwiseChart.hours || []).reduce((acc, v) => acc + (Number(v) || 0), 0);
+      if (sum > 0) {
+        const totalMins = Math.round(sum * 60);
+        const h = Math.floor(totalMins / 60);
+        const m = totalMins % 60;
+        return { hours: h.toLocaleString(), mins: m };
+      }
+      return { hours: "0", mins: 0 };
+    }
+
+    // 2. Daily / Weekly view: use daywiseChart total from backend if provided
+    if (daywiseChart.total_hours_display) {
+      const parts = String(daywiseChart.total_hours_display).replace(/,/g, "").split(":");
       if (parts.length >= 2) {
         const h = parseInt(parts[0], 10) || 0;
         const m = parseInt(parts[1], 10) || 0;
         return { hours: h.toLocaleString(), mins: m };
       }
     }
-    // 2. Sum based on active view if available
-    const sum = (idleChartType === "monthly" ? monthwiseChart.hours : daywiseChart.data)
-      .reduce((acc, v) => acc + (Number(v) || 0), 0);
+    if (daywiseChart.total_seconds != null && daywiseChart.total_seconds > 0) {
+      const totalMins = Math.round(daywiseChart.total_seconds / 60);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return { hours: h.toLocaleString(), mins: m };
+    }
+
+    // 3. Sum directly from the data points plotted in the daily chart
+    const sum = (daywiseChart.data || []).reduce((acc, v) => acc + (Number(v) || 0), 0);
     if (sum > 0) {
       const totalMins = Math.round(sum * 60);
       const h = Math.floor(totalMins / 60);
       const m = totalMins % 60;
       return { hours: h.toLocaleString(), mins: m };
     }
+
     return { hours: "0", mins: 0 };
-  }, [totalStats, kpiCards, idleChartType, monthwiseChart.hours, daywiseChart.data]);
+  }, [idleChartType, monthwiseChart.hours, daywiseChart]);
+
+  const handleApplyFilters = () => {
+    setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+    setAppliedFilters({ ...filters });
+    setFetchTrigger(p => p + 1);
+    writeFilterSession("ba_filter_idletime", { from: dateRange.from, to: dateRange.to });
+  };
 
   const handleResetFilters = () => {
-    setDateRange({ from: new Date(2026, 2, 1), to: new Date(2026, 2, 27) });
-    setFilters({
+    const dfltRange = getModuleDefaultDateRange("idle_time_report", {
+      from: new Date(_now.getFullYear(), _now.getMonth(), 1),
+      to: new Date(_now.getFullYear(), _now.getMonth(), _now.getDate()),
+    });
+    const resetRange = { from: dfltRange.from, to: dfltRange.to };
+    const resetF = {
       mac_type: "All Types",
       machine: "All Machines",
       shift: "All Shifts",
       reason: "All Reasons",
-    });
+    };
+    setDateRange(resetRange);
+    setFilters(resetF);
+    setAppliedDateRange(resetRange);
+    setAppliedFilters(resetF);
+    setFetchTrigger(p => p + 1);
+    writeFilterSession("ba_filter_idletime", resetRange);
   };
 
   return (
@@ -1994,9 +2215,9 @@ export default function IdleTimeReport() {
               />
             </div>
 
-            <div className="itr-filter-group" style={{ minWidth: '140px' }}>
+            <div className="itr-filter-group" style={{ minWidth: '175px' }}>
               <label className="itr-filter-label">Reason</label>
-              <SearchableSelect
+              <SearchableMultiSelect
                 value={filters.reason}
                 options={filterOptions.reasons}
                 onChange={val => hc("reason", val)}
@@ -2006,13 +2227,34 @@ export default function IdleTimeReport() {
 
             <div className="itr-filter-group" data-spotlight="itr-export-controls">
               <label className="itr-filter-label">&nbsp;</label>
-              <button
-                className="itr-btn-reset"
-                onClick={handleResetFilters}
-                title="Click to reset filters"
-              >
-                <FiRefreshCw size={13} /> Reset
-              </button>
+              <div className="itr-filter-btn-row">
+                <button
+                  type="button"
+                  className={`itr-btn-apply ${hasPendingChanges ? "itr-btn-apply--pending" : ""}`}
+                  onClick={handleApplyFilters}
+                  disabled={isLoading}
+                  title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
+                >
+                  {isLoading ? (
+                    <FiLoader className="itr-spin" size={14} />
+                  ) : (
+                    <FiFilter size={14} className="itr-apply-icon" />
+                  )}
+                  <span>{isLoading ? "Applying..." : "Apply Filter"}</span>
+                  {hasPendingChanges && !isLoading && (
+                    <span className="itr-apply-pulse-dot" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  className="itr-btn-reset"
+                  onClick={handleResetFilters}
+                  title="Click to reset filters"
+                >
+                  <FiRefreshCw size={13} /> Reset
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2055,7 +2297,7 @@ export default function IdleTimeReport() {
                       </div>
                     )}
                   </div>
-                  <div className="itr-footer-stat-val">{s.value}</div>
+                  <div className="itr-footer-stat-val" title={s.title || s.value}>{s.value}</div>
                 </div>
               );
             })}
@@ -2256,7 +2498,7 @@ export default function IdleTimeReport() {
             <EmptyState message="No shift metrics recorded for this selection." />
           ) : (
             <>
-              <div className="itr-shift-tiles">
+              <div className="itr-shift-tiles" style={{ "--shift-tile-cols": shiftTiles.length || 4 }}>
                 {shiftTiles.map((s, i) => (
                   <div key={i} className="itr-shift-tile" style={{ background: s.bg, border: `1.5px solid ${s.border}` }}>
                     <div className="itr-shift-count" style={{ color: s.color }}>{s.count}</div>
@@ -2264,7 +2506,6 @@ export default function IdleTimeReport() {
                     <div className="itr-shift-bar" style={{ background: `${s.color}20` }}>
                       <div className="itr-shift-fill" style={{ width: `${s.total ? (s.count / s.total) * 100 : 0}%`, background: s.color }} />
                     </div>
-                    <div className="itr-shift-pct-txt">{Math.round((s.count / s.total) * 100)}% of {s.total} m/c</div>
                   </div>
                 ))}
               </div>
@@ -2283,9 +2524,9 @@ export default function IdleTimeReport() {
               <>
                 <div className="itr-cost-mini-grid">
                   {[
-                    { lbl: "Total Cost", val: footerStats[1]?.value ?? "₹ 0", c: "#dc2626", bg: "rgba(220,38,38,0.06)", bc: "rgba(220,38,38,0.2)" },
-                    { lbl: footerStats[2]?.label || "Avg Cost/Min", val: footerStats[2]?.value ?? "₹ 0", c: "#f97316", bg: "rgba(249,115,22,0.06)", bc: "rgba(249,115,22,0.2)" },
-                    { lbl: "Highest M/c", val: costMachineData.labels[0] || "—", c: "#2563eb", bg: "rgba(37,99,235,0.06)", bc: "rgba(37,99,235,0.2)" },
+                    { lbl: "Total Cost", val: costMachineData.summary?.total_cost_display || footerStats[1]?.value || "₹ 0", c: "#dc2626", bg: "rgba(220,38,38,0.06)", bc: "rgba(220,38,38,0.2)" },
+                    { lbl: "Avg Cost / Hour", val: formatAvgCostPerHour(kpisData, costMachineData.summary), c: "#f97316", bg: "rgba(249,115,22,0.06)", bc: "rgba(249,115,22,0.2)" },
+                    { lbl: "Highest M/c", val: costMachineData.summary?.highest_machine || costMachineData.labels[0] || "—", c: "#2563eb", bg: "rgba(37,99,235,0.06)", bc: "rgba(37,99,235,0.2)" },
                   ].map((s, i) => (
                     <div key={i} className="itr-cost-mini-tile" style={{ background: s.bg, border: `1px solid ${s.bc}` }}>
                       <div className="itr-cost-mini-val" style={{ color: s.c }}>{s.val}</div>
@@ -2319,7 +2560,7 @@ export default function IdleTimeReport() {
         <div className="itr-g2">
           <Card data-spotlight="itr-continuous-idle" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiRefreshCw size={16} /> Continuous Idle Reasons (≥ 4 hrs)</span>}
             badge={`${continuousIdle.length} Flagged`} badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626">
-            <div className="itr-table-scroll itr-table-scroll--continuous">
+            <div className="itr-table-scroll itr-table-scroll--continuous itr-table-scroll--continuous-left">
               <table className="itr-table">
                 <thead className="itr-thead--red">
                   <tr><th>Machine</th><th>Reason</th><th>Hours</th><th className="center">Shifts</th><th>Status</th></tr>
@@ -2361,19 +2602,18 @@ export default function IdleTimeReport() {
             <div className="itr-table-scroll itr-table-scroll--continuous">
               <table className="itr-table">
                 <thead className="itr-thead--amber">
-                  <tr><th>Machine</th><th>Shift</th><th>Date</th><th>Operator</th></tr>
+                  <tr><th>Machine</th><th>Shift</th><th>Date</th></tr>
                 </thead>
                 <tbody>
                   {idleTimeNotEntered.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="itr-td-muted itr-td-center">No idle time gaps in this period.</td>
+                      <td colSpan={3} className="itr-td-muted itr-td-center">No idle time gaps in this period.</td>
                     </tr>
                   ) : idleTimeNotEntered.rows.map((r, i) => (
                     <tr key={i}>
                       <td className="itr-td-name">{r.machine}</td>
                       <td className="itr-td-muted">{r.shift}</td>
                       <td className="itr-td-date">{r.date}</td>
-                      <td className={r.operator === "Pending" ? "itr-pending" : "itr-normal"}>{r.operator}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2396,14 +2636,17 @@ export default function IdleTimeReport() {
             badge="All Machines" badgeBg="#fef2f2" badgeColor="#dc2626" accentColor="#dc2626"
           >
             {(() => {
-              const machineData = [
-                { name: "MANUAL 1", pct: 79.9 }, { name: "VMC-3", pct: 65.4 },
-                { name: "VMC 1", pct: 64.4 }, { name: "VMC 2", pct: 60.6 },
-                { name: "HTC 1", pct: 60.5 }, { name: "HTC 3", pct: 56.6 },
-                { name: "HTC 2", pct: 54.5 }, { name: "VTL 4", pct: 52.1 },
-                { name: "VTL 3", pct: 52.0 }, { name: "VTL 2", pct: 48.3 },
-                { name: "VTL 1", pct: 43.2 },
-              ];
+              const machineData = (pctMachineData.labels || []).map((name, i) => ({
+                name,
+                pct: Number(pctMachineData.data?.[i] ?? 0),
+                idleHours: pctMachineData.idle_hours?.[i] || "",
+                prodHours: pctMachineData.prod_hours?.[i] || "",
+              }));
+
+              if (machineData.length === 0) {
+                return <EmptyState message="No machine idle percentage records found." />;
+              }
+
               const tc = (p) =>
                 p >= 75 ? { bg: "#fef2f2", stroke: "#dc2626", text: "#dc2626" }
                   : p >= 50 ? { bg: "#fff7ed", stroke: "#f97316", text: "#f97316" }
@@ -2415,9 +2658,16 @@ export default function IdleTimeReport() {
                   <div className="itr-mpct-grid">
                     {machineData.map((m, i) => {
                       const c = tc(m.pct);
-                      const offset = CIRC - (m.pct / 100) * CIRC;
+                      const clampedPct = Math.min(Math.max(m.pct, 0), 100);
+                      const offset = CIRC - (clampedPct / 100) * CIRC;
+                      const tooltip = `${m.name}: ${m.pct}% idle${m.idleHours ? ` | Idle: ${m.idleHours} hrs` : ""}${m.prodHours ? ` | Prod: ${m.prodHours} hrs` : ""}`;
                       return (
-                        <div key={i} className="itr-mpct-card" style={{ background: c.bg, animationDelay: `${i * 55}ms` }}>
+                        <div
+                          key={m.name || i}
+                          className="itr-mpct-card"
+                          title={tooltip}
+                          style={{ background: c.bg, animationDelay: `${i * 45}ms` }}
+                        >
                           <div className="itr-mpct-gauge">
                             <svg width="56" height="56" viewBox="0 0 56 56">
                               <circle cx="28" cy="28" r={R} fill="none" stroke="#e2e8f0" strokeWidth="5" />
@@ -2427,9 +2677,11 @@ export default function IdleTimeReport() {
                                 transform="rotate(-90 28 28)" className="itr-mpct-arc"
                               />
                             </svg>
-                            <span className="itr-mpct-pct-text" style={{ color: c.text }}>{m.pct}%</span>
+                            <span className="itr-mpct-pct-text" style={{ color: c.text }}>
+                              {Number(m.pct).toFixed(1)}%
+                            </span>
                           </div>
-                          <div className="itr-mpct-name">{m.name}</div>
+                          <div className="itr-mpct-name" title={m.name}>{m.name}</div>
                         </div>
                       );
                     })}
@@ -2483,7 +2735,6 @@ export default function IdleTimeReport() {
                               <span className="itr-op-pct-badge" style={{ background: `${col}18`, color: col, border: `1px solid ${col}30` }}>{op.pct}%</span>
                             </div>
                           </div>
-                          of {mx}
                           <div className="itr-op-track">
                             <div className="itr-op-fill" style={{ width: `${(op.pct / mx) * 100}%`, background: `linear-gradient(90deg,${col}99,${col})`, animationDelay: `${i * 60 + 150}ms` }} />
                           </div>
@@ -2501,8 +2752,11 @@ export default function IdleTimeReport() {
         {/* Detail table */}
         <div className="itr-detail-section">
           <div className="itr-detail-header">
-            <span className="itr-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="itr-detail-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FiList size={16} /> Idle Time by Reason &amp; Machine — Detailed View
+              {reasonMachineDetail.rows.length > 0 && (
+                <span className="itr-detail-count-pill">{reasonMachineDetail.rows.length} Reasons</span>
+              )}
             </span>
             <div className="itr-legend-row">
               {[["High", "#dc2626", "#fef2f2"], ["Medium", "#f97316", "#fff7ed"], ["Low", "#16a34a", "#f0fdf4"]].map(([l, c, bg]) => (
@@ -2510,7 +2764,7 @@ export default function IdleTimeReport() {
               ))}
             </div>
           </div>
-          <div className="itr-table-scroll">
+          <div className="itr-table-scroll itr-table-scroll--detail">
             <table className="itr-table" style={{ minWidth: 760 }}>
               <thead className="itr-thead--blue">
                 <tr>
@@ -2540,7 +2794,9 @@ export default function IdleTimeReport() {
                     </td>
                   </tr>
                 ))}
-                {reasonMachineDetail.rows.length > 0 && (
+              </tbody>
+              {reasonMachineDetail.rows.length > 0 && (
+                <tfoot>
                   <tr className="itr-tr-total">
                     <td>TOTAL</td>
                     {reasonMachineDetail.footer.cols.map((v, i) => (
@@ -2549,8 +2805,8 @@ export default function IdleTimeReport() {
                     <td style={{ fontWeight: 900 }}>{reasonMachineDetail.footer.total}</td>
                     <td>{reasonMachineDetail.footer.pct}%</td>
                   </tr>
-                )}
-              </tbody>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

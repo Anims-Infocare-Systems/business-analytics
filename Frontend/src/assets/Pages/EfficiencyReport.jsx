@@ -4,7 +4,7 @@
  * Prefix: er-
  */
 import { useState, useEffect, useMemo, useRef } from "react";
-import { User, Settings, Search, ChevronDown, BarChart2, X, Trophy, AlertTriangle, Filter, Inbox } from "lucide-react";
+import { User, Settings, Search, ChevronDown, BarChart2, X, Trophy, AlertTriangle, Filter, Inbox, RotateCcw, Check, Layers, Cpu, Wrench, Loader2 } from "lucide-react";
 import { resolveApiBase } from "../../apiBase";
 import "./EfficiencyReport.css";
 import EfficiencyReportDatePicker from "./EfficiencyReportDatePicker";
@@ -107,24 +107,35 @@ function ErEmptyState({ message = "No Data found on this period", subtitle = "Pl
 /* ═══════════════════════════════════════════════════════
    MULTI SELECT COMPONENT
 ═══════════════════════════════════════════════════════ */
-function MultiSelectDropdown({ options, selectedValues, onChange, placeholder, isOp }) {
+function MultiSelectDropdown({ options = [], selectedValues = [], onChange, placeholder, isOp, variant = "default" }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchVal, setSearchVal] = useState("");
     const containerRef = useRef(null);
+    const searchInputRef = useRef(null);
 
     useEffect(() => {
         function handleClickOutside(event) {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
+                setSearchVal("");
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const filteredOptions = options.filter(opt =>
-        opt.toLowerCase().includes(searchVal.toLowerCase())
-    );
+    useEffect(() => {
+        if (isOpen && searchInputRef.current) {
+            const timer = setTimeout(() => searchInputRef.current?.focus(), 60);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+
+    const filteredOptions = useMemo(() => {
+        if (!searchVal.trim()) return options;
+        const q = searchVal.toLowerCase();
+        return options.filter(opt => (opt || "").toLowerCase().includes(q));
+    }, [options, searchVal]);
 
     const toggleOption = (opt) => {
         if (selectedValues.includes(opt)) {
@@ -138,35 +149,65 @@ function MultiSelectDropdown({ options, selectedValues, onChange, placeholder, i
         if (selectedValues.length === options.length) {
             onChange([]);
         } else {
-            onChange(options);
+            onChange([...options]);
         }
     };
 
-    const displayText = selectedValues.length === 0
-        ? placeholder
-        : selectedValues.length === options.length
-            ? `All ${isOp ? 'Operators' : 'Machines'}`
-            : `${selectedValues.length} Selected`;
+    const handleClear = (e) => {
+        e.stopPropagation();
+        onChange([]);
+    };
+
+    const isAll = selectedValues.length === options.length && options.length > 0;
+    const hasActive = selectedValues.length > 0;
+
+    let triggerText = placeholder;
+    if (hasActive) {
+        if (selectedValues.length === 1) {
+            triggerText = selectedValues[0];
+        } else if (isAll) {
+            triggerText = `All ${isOp ? 'Operators' : 'Machines'}`;
+        } else {
+            triggerText = `${selectedValues.length} Selected`;
+        }
+    }
+
+    const themeClass = isOp ? "er-ms--op" : "er-ms--mac";
+    const variantClass = variant === "chart" ? "er-ms-container--chart" : "er-ms-container--filter";
 
     return (
-        <div className="er-ms-container" ref={containerRef}>
+        <div className={`er-ms-container ${themeClass} ${variantClass}`} ref={containerRef}>
             <button
                 type="button"
-                className={`er-ms-trigger ${isOp ? 'er-ms-trigger--op' : 'er-ms-trigger--mac'} ${isOpen ? 'er-ms-trigger--open' : ''}`}
+                className={`er-ms-trigger ${isOpen ? 'er-ms-trigger--open' : ''} ${hasActive ? 'er-ms-trigger--active' : ''}`}
                 onClick={() => setIsOpen(!isOpen)}
+                title={hasActive ? selectedValues.join(", ") : placeholder}
             >
-                <span className="er-ms-trigger-text">{displayText}</span>
+                <span className="er-ms-trigger-icon">
+                    {isOp ? <User size={13} /> : <Settings size={13} />}
+                </span>
+                <span className="er-ms-trigger-text">{triggerText}</span>
+                {hasActive && (
+                    <span
+                        className="er-ms-trigger-clear"
+                        onClick={handleClear}
+                        title="Clear selection"
+                    >
+                        <X size={11} />
+                    </span>
+                )}
                 <ChevronDown className="er-ms-arrow" size={11} />
             </button>
 
             {isOpen && (
                 <div className="er-ms-dropdown">
                     <div className="er-ms-search-wrap">
-                        <Search className="er-ms-search-icon" size={11} />
+                        <Search className="er-ms-search-icon" size={12} />
                         <input
+                            ref={searchInputRef}
                             type="text"
                             className="er-ms-search-input"
-                            placeholder="Search..."
+                            placeholder={`Search ${isOp ? 'operators' : 'machines'}...`}
                             value={searchVal}
                             onChange={e => setSearchVal(e.target.value)}
                         />
@@ -175,36 +216,190 @@ function MultiSelectDropdown({ options, selectedValues, onChange, placeholder, i
                                 type="button"
                                 className="er-ms-clear-btn"
                                 onClick={() => setSearchVal("")}
+                                title="Clear search"
                             >
                                 <X size={10} />
                             </button>
                         )}
                     </div>
+
+                    <div className="er-ms-actions-bar">
+                        <div className="er-ms-select-all" onClick={toggleAll}>
+                            <span className={`er-ms-custom-chk ${isAll ? 'er-ms-custom-chk--checked' : ''}`}>
+                                {isAll && <Check size={10} strokeWidth={3} />}
+                            </span>
+                            <span className="er-ms-action-text">Select All</span>
+                            <span className="er-ms-count-pill">{options.length}</span>
+                        </div>
+                        {hasActive && (
+                            <button
+                                type="button"
+                                className="er-ms-action-clear-btn"
+                                onClick={handleClear}
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+
                     <div className="er-ms-options-list">
-                        <label className="er-ms-option er-ms-option--all">
-                            <input
-                                type="checkbox"
-                                checked={selectedValues.length === options.length && options.length > 0}
-                                onChange={toggleAll}
-                            />
-                            <span className="er-ms-option-text">Select All</span>
-                        </label>
                         {filteredOptions.map(opt => {
                             const isChecked = selectedValues.includes(opt);
                             return (
-                                <label key={opt} className={`er-ms-option ${isChecked ? 'er-ms-option--checked' : ''}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={() => toggleOption(opt)}
-                                    />
-                                    <span className="er-ms-option-text">{opt}</span>
-                                </label>
+                                <div
+                                    key={opt}
+                                    className={`er-ms-option ${isChecked ? 'er-ms-option--checked' : ''}`}
+                                    onClick={() => toggleOption(opt)}
+                                >
+                                    <span className={`er-ms-custom-chk ${isChecked ? 'er-ms-custom-chk--checked' : ''}`}>
+                                        {isChecked && <Check size={10} strokeWidth={3} />}
+                                    </span>
+                                    <span className="er-ms-option-text" title={opt}>{opt}</span>
+                                </div>
                             );
                         })}
                         {filteredOptions.length === 0 && (
-                            <div className="er-ms-empty">No match found</div>
+                            <div className="er-ms-empty">
+                                <Inbox size={18} className="er-ms-empty-icon" />
+                                <span>No match found</span>
+                            </div>
                         )}
+                    </div>
+
+                    {hasActive && (
+                        <div className="er-ms-footer-info">
+                            <span>{selectedValues.length} of {options.length} selected</span>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAC TYPE DROPDOWN COMPONENT
+═══════════════════════════════════════════════════════ */
+function MacTypeDropdown({ chkCNC, chkConv, onChange }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const isAll = chkCNC && chkConv;
+    const isCncOnly = chkCNC && !chkConv;
+    const isConvOnly = !chkCNC && chkConv;
+
+    let triggerText = "All Types";
+    let triggerIcon = <Layers size={13} />;
+    let triggerTheme = "er-mactype--all";
+
+    if (isCncOnly) {
+        triggerText = "CNC";
+        triggerIcon = <Cpu size={13} />;
+        triggerTheme = "er-mactype--cnc";
+    } else if (isConvOnly) {
+        triggerText = "Conventional";
+        triggerIcon = <Wrench size={13} />;
+        triggerTheme = "er-mactype--conv";
+    }
+
+    const handleSelect = (type) => {
+        if (type === "all") {
+            onChange(true, true);
+        } else if (type === "cnc") {
+            onChange(true, false);
+        } else if (type === "conv") {
+            onChange(false, true);
+        }
+        setIsOpen(false);
+    };
+
+    const handleReset = (e) => {
+        e.stopPropagation();
+        onChange(true, true);
+    };
+
+    return (
+        <div className={`er-ms-container er-mactype-container ${triggerTheme}`} ref={containerRef}>
+            <button
+                type="button"
+                className={`er-ms-trigger er-mactype-trigger ${isOpen ? 'er-ms-trigger--open' : ''} ${!isAll ? 'er-ms-trigger--active' : ''}`}
+                onClick={() => setIsOpen(!isOpen)}
+                title={`Machine Type: ${triggerText}`}
+            >
+                <span className="er-ms-trigger-icon">
+                    {triggerIcon}
+                </span>
+                <span className="er-ms-trigger-text">{triggerText}</span>
+                {!isAll && (
+                    <span
+                        className="er-ms-trigger-clear"
+                        onClick={handleReset}
+                        title="Reset to All Types"
+                    >
+                        <X size={11} />
+                    </span>
+                )}
+                <ChevronDown className="er-ms-arrow" size={11} />
+            </button>
+
+            {isOpen && (
+                <div className="er-ms-dropdown er-mactype-dropdown">
+                    <div className="er-mactype-dropdown-header">
+                        <span className="er-mactype-title">Filter by Machine Type</span>
+                    </div>
+
+                    <div className="er-mactype-options-list">
+                        <div
+                            className={`er-mactype-option ${isAll ? 'er-mactype-option--selected' : ''}`}
+                            onClick={() => handleSelect("all")}
+                        >
+                            <span className="er-mactype-option-icon er-mactype-icon--all">
+                                <Layers size={14} />
+                            </span>
+                            <div className="er-mactype-option-info">
+                                <span className="er-mactype-option-name">All Types</span>
+                                <span className="er-mactype-option-sub">CNC & Conventional</span>
+                            </div>
+                            {isAll && <Check size={14} className="er-mactype-check" strokeWidth={3} />}
+                        </div>
+
+                        <div
+                            className={`er-mactype-option ${isCncOnly ? 'er-mactype-option--selected' : ''}`}
+                            onClick={() => handleSelect("cnc")}
+                        >
+                            <span className="er-mactype-option-icon er-mactype-icon--cnc">
+                                <Cpu size={14} />
+                            </span>
+                            <div className="er-mactype-option-info">
+                                <span className="er-mactype-option-name">CNC</span>
+                                <span className="er-mactype-option-sub">ProductionEntry machines</span>
+                            </div>
+                            {isCncOnly && <Check size={14} className="er-mactype-check" strokeWidth={3} />}
+                        </div>
+
+                        <div
+                            className={`er-mactype-option ${isConvOnly ? 'er-mactype-option--selected' : ''}`}
+                            onClick={() => handleSelect("conv")}
+                        >
+                            <span className="er-mactype-option-icon er-mactype-icon--conv">
+                                <Wrench size={14} />
+                            </span>
+                            <div className="er-mactype-option-info">
+                                <span className="er-mactype-option-name">Conventional</span>
+                                <span className="er-mactype-option-sub">ConvProductionEntry & Rod</span>
+                            </div>
+                            {isConvOnly && <Check size={14} className="er-mactype-check" strokeWidth={3} />}
+                        </div>
                     </div>
                 </div>
             )}
@@ -353,7 +548,7 @@ function OprHeaderFilter({ operator, setOperator, val, setVal, setPage }) {
  * Features: bezier curves, area fill, animated reveal,
  *           staggered dots, column hover, dark tooltip
  */
-function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFilterChange, filterOptions = [], filterPlaceholder = "" }) {
+function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFilterChange, filterOptions = [], filterPlaceholder = "", isFullWidth = false }) {
     const [animated, setAnimated] = useState(false);
     const [hoverIdx, setHoverIdx] = useState(null);
 
@@ -364,14 +559,17 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
         return () => cancelAnimationFrame(id);
     }, [animKey]);
 
-    const items = data.slice(0, 12);
+    const maxItems = isFullWidth ? 18 : 12;
+    const items = data.slice(0, maxItems);
     if (!items.length) {
         return <ErEmptyState message="No data available for charts" subtitle="Adjust filters or check other date ranges." />;
     }
 
     /* ── Canvas dimensions ── */
-    const W = 540, H = 230;
-    const PAD = { top: 18, right: 24, bottom: 46, left: 44 };
+    const W = isFullWidth ? 1000 : 540, H = isFullWidth ? 260 : 230;
+    const PAD = isFullWidth
+        ? { top: 20, right: 30, bottom: 62, left: 68 }
+        : { top: 18, right: 24, bottom: 50, left: 52 };
     const cW = W - PAD.left - PAD.right;
     const cH = H - PAD.top - PAD.bottom;
 
@@ -437,6 +635,7 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
                             onChange={onFilterChange}
                             placeholder={filterPlaceholder}
                             isOp={isOp}
+                            variant="chart"
                         />
                     )}
                 </div>
@@ -627,24 +826,45 @@ function EffLineChart({ data, labelKey, title, badge, animKey, filterValue, onFi
                         </g>
                     )}
 
-                    {/* ── X-axis labels ── */}
+                    {/* ── X-axis tick marks ── */}
+                    {items.map((d, i) => (
+                        <line
+                            key={`tick-${i}`}
+                            x1={toX(i)}
+                            y1={PAD.top + cH}
+                            x2={toX(i)}
+                            y2={PAD.top + cH + 4}
+                            stroke={hoverIdx === i ? accentColor : "#cbd5e1"}
+                            strokeWidth={hoverIdx === i ? 1.5 : 1}
+                        />
+                    ))}
+
+                    {/* ── X-axis labels (neatly angled & aligned without collisions) ── */}
                     {items.map((d, i) => {
                         const raw = String(d[labelKey] || '');
-                        const lbl = raw.length > 10 ? raw.slice(0, 9) + '…' : raw;
+                        const maxLen = isFullWidth ? 15 : 11;
+                        const lbl = raw.length > maxLen ? raw.slice(0, maxLen - 1) + '…' : raw;
                         const isH = hoverIdx === i;
+                        const posX = toX(i);
+                        const posY = PAD.top + cH + 12;
                         return (
                             <text
                                 key={i}
-                                x={toX(i)}
-                                y={PAD.top + cH + 15}
-                                textAnchor="middle"
+                                x={posX}
+                                y={posY}
+                                transform={`rotate(-32 ${posX} ${posY})`}
+                                textAnchor="end"
                                 className="er-lc-x-tick"
                                 style={{
-                                    fontSize: n > 9 ? '7px' : '8px',
-                                    fill: isH ? accentColor : '#6b7fa8',
-                                    fontWeight: isH ? '700' : '500',
+                                    fontSize: isFullWidth ? '8.5px' : '7.5px',
+                                    fontFamily: isOp ? "'Plus Jakarta Sans', sans-serif" : "'JetBrains Mono', monospace",
+                                    fill: isH ? accentColor : '#64748b',
+                                    fontWeight: isH ? '700' : '600',
+                                    letterSpacing: '0.2px',
                                     transition: 'fill 0.15s, font-weight 0.15s',
+                                    cursor: 'pointer',
                                 }}
+                                onMouseEnter={() => setHoverIdx(i)}
                             >{lbl}</text>
                         );
                     })}
@@ -681,26 +901,55 @@ function writeFilterSession(key, data) {
 }
 
 export default function EfficiencyReport() {
-    /* ── Filter state ── */
+    /* ── Filter draft state ── */
     const _now = new Date();
     const _fallback = { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) };
     const _dflt = getModuleDefaultDateRange("efficiency_report", _fallback);
     const _saved = readFilterSession("ba_filter_efficiency", _dflt);
     const [dateRange, setDateRange] = useState({ from: _saved.from, to: _saved.to });
+    const [chkCNC, setChkCNC] = useState(true);
+    const [chkConv, setChkConv] = useState(true);
+    const [opFilter, setOpFilter] = useState([]);
+    const [macFilter, setMacFilter] = useState([]);
+
+    /* ── Applied filter state (updated on "Apply Filter" click or initial load) ── */
+    const [appliedDateRange, setAppliedDateRange] = useState({ from: _saved.from, to: _saved.to });
+    const [appliedChkCNC, setAppliedChkCNC] = useState(true);
+    const [appliedChkConv, setAppliedChkConv] = useState(true);
+    const [appliedOpFilter, setAppliedOpFilter] = useState([]);
+    const [appliedMacFilter, setAppliedMacFilter] = useState([]);
+    const [fetchTrigger, setFetchTrigger] = useState(0);
+
     const [loading, setLoading] = useState(false);
     const fromDate = dateRange.from ? dateRange.from.toISOString().slice(0, 10) : "";
     const toDate = dateRange.to ? dateRange.to.toISOString().slice(0, 10) : "";
-    const [chkCNC, setChkCNC] = useState(true);
-    const [chkConv, setChkConv] = useState(true);
     const [effType, setEffType] = useState("operator");
     const [teamName, setTeamName] = useState("");
     const [deptName, setDeptName] = useState("");
-    const [opFilter, setOpFilter] = useState([]);
-    const [macFilter, setMacFilter] = useState([]);
     const [reportType, setReportType] = useState("rank");
     const [search, setSearch] = useState("");
     const [oprFilterOp, setOprFilterOp] = useState(">");
     const [oprFilterVal, setOprFilterVal] = useState("");
+
+    /* ── Detect Pending Changes for Apply Filter Button ── */
+    const hasPendingChanges = useMemo(() => {
+        const dFrom = toIsoDate(dateRange.from);
+        const dTo = toIsoDate(dateRange.to);
+        const aFrom = toIsoDate(appliedDateRange.from);
+        const aTo = toIsoDate(appliedDateRange.to);
+        if (dFrom !== aFrom || dTo !== aTo) return true;
+        if (chkCNC !== appliedChkCNC || chkConv !== appliedChkConv) return true;
+
+        const normMac = [...macFilter].sort().join(",");
+        const normAppliedMac = [...appliedMacFilter].sort().join(",");
+        if (normMac !== normAppliedMac) return true;
+
+        const normOp = [...opFilter].sort().join(",");
+        const normAppliedOp = [...appliedOpFilter].sort().join(",");
+        if (normOp !== normAppliedOp) return true;
+
+        return false;
+    }, [dateRange, appliedDateRange, chkCNC, appliedChkCNC, chkConv, appliedChkConv, macFilter, appliedMacFilter, opFilter, appliedOpFilter]);
 
     /* ── Tab / sort / page ── */
     const [tab, setTab] = useState("operator");
@@ -712,16 +961,16 @@ export default function EfficiencyReport() {
     const [isOprFilterOpen, setIsOprFilterOpen] = useState(false);
     const oprFilterRef = useRef(null);
 
-    /* ── Load operator / machine table from API ── */
+    /* ── Load operator / machine table from API (driven by applied filter state) ── */
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
-        // ✅ Persist date range to sessionStorage on every change
-        writeFilterSession("ba_filter_efficiency", { from: dateRange.from, to: dateRange.to });
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
+        // ✅ Persist date range to sessionStorage on applied change
+        writeFilterSession("ba_filter_efficiency", { from: appliedDateRange.from, to: appliedDateRange.to });
         const params = new URLSearchParams({
-            from: toIsoDate(dateRange.from),
-            to: toIsoDate(dateRange.to),
-            cnc: chkCNC ? "1" : "0",
-            conv: chkConv ? "1" : "0",
+            from: toIsoDate(appliedDateRange.from),
+            to: toIsoDate(appliedDateRange.to),
+            cnc: appliedChkCNC ? "1" : "0",
+            conv: appliedChkConv ? "1" : "0",
             tab,
         });
         setLoading(true);
@@ -743,7 +992,64 @@ export default function EfficiencyReport() {
                 setTableData([]);
                 setLoading(false);
             });
-    }, [dateRange.from, dateRange.to, chkCNC, chkConv, tab]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedChkCNC, appliedChkConv, tab, fetchTrigger]);
+
+    /* ── Handle Apply Filters Click ── */
+    const handleApplyFilters = () => {
+        const needFetch = (
+            toIsoDate(dateRange.from) !== toIsoDate(appliedDateRange.from) ||
+            toIsoDate(dateRange.to) !== toIsoDate(appliedDateRange.to) ||
+            chkCNC !== appliedChkCNC ||
+            chkConv !== appliedChkConv
+        );
+
+        setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+        setAppliedChkCNC(chkCNC);
+        setAppliedChkConv(chkConv);
+        setAppliedMacFilter([...macFilter]);
+        setAppliedOpFilter([...opFilter]);
+
+        writeFilterSession("ba_filter_efficiency", { from: dateRange.from, to: dateRange.to });
+
+        if (needFetch) {
+            setFetchTrigger(p => p + 1);
+        }
+    };
+
+    /* ── Handle Reset Filters Click ── */
+    const handleResetFilters = () => {
+        const resetRange = { from: _dflt.from, to: _dflt.to };
+        setDateRange(resetRange);
+        setChkCNC(true);
+        setChkConv(true);
+        setMacFilter([]);
+        setOpFilter([]);
+
+        setAppliedDateRange(resetRange);
+        setAppliedChkCNC(true);
+        setAppliedChkConv(true);
+        setAppliedMacFilter([]);
+        setAppliedOpFilter([]);
+
+        const needFetch = (
+            toIsoDate(appliedDateRange.from) !== toIsoDate(resetRange.from) ||
+            toIsoDate(appliedDateRange.to) !== toIsoDate(resetRange.to) ||
+            !appliedChkCNC ||
+            !appliedChkConv
+        );
+        if (needFetch) {
+            setFetchTrigger(p => p + 1);
+        }
+        writeFilterSession("ba_filter_efficiency", resetRange);
+    };
+
+    const hasActiveFilters = macFilter.length > 0 || opFilter.length > 0 || !chkCNC || !chkConv ||
+        appliedMacFilter.length > 0 || appliedOpFilter.length > 0 || !appliedChkCNC || !appliedChkConv;
+
+    const activeFiltersCount = Math.max(
+        macFilter.length + opFilter.length + (!chkCNC || !chkConv ? 1 : 0),
+        appliedMacFilter.length + appliedOpFilter.length + (!appliedChkCNC || !appliedChkConv ? 1 : 0)
+    );
 
     /* ── Live clock ── */
     const [time, setTime] = useState(new Date());
@@ -779,13 +1085,33 @@ export default function EfficiencyReport() {
         return Array.from(new Set(macs)).sort();
     }, [tableData]);
 
+    /* ── Prune stale selections if active options change ── */
+    useEffect(() => {
+        if (opFilter.length > 0) {
+            const valid = opFilter.filter(op => uniqueOperators.includes(op));
+            if (valid.length !== opFilter.length) setOpFilter(valid);
+        }
+        if (macFilter.length > 0) {
+            const valid = macFilter.filter(mac => uniqueMachines.includes(mac));
+            if (valid.length !== macFilter.length) setMacFilter(valid);
+        }
+        if (appliedOpFilter.length > 0) {
+            const valid = appliedOpFilter.filter(op => uniqueOperators.includes(op));
+            if (valid.length !== appliedOpFilter.length) setAppliedOpFilter(valid);
+        }
+        if (appliedMacFilter.length > 0) {
+            const valid = appliedMacFilter.filter(mac => uniqueMachines.includes(mac));
+            if (valid.length !== appliedMacFilter.length) setAppliedMacFilter(valid);
+        }
+    }, [uniqueOperators, uniqueMachines]);
 
 
-    /* ── Filtered + sorted data ── */
+
+    /* ── Filtered + sorted data (uses applied machine & operator filters) ── */
     const filtered = useMemo(() => {
         let d = tableData.filter(r => {
-            if (opFilter && opFilter.length > 0 && !opFilter.includes(r[0])) return false;
-            if (macFilter && macFilter.length > 0 && !macFilter.includes(r[2])) return false;
+            if (appliedOpFilter && appliedOpFilter.length > 0 && !appliedOpFilter.includes(r[0])) return false;
+            if (appliedMacFilter && appliedMacFilter.length > 0 && !appliedMacFilter.includes(r[2])) return false;
             if (deptName && !(r[1] || "").toLowerCase().includes(deptName.toLowerCase())) return false;
 
             if (oprFilterVal !== "") {
@@ -817,7 +1143,7 @@ export default function EfficiencyReport() {
         });
 
         return d;
-    }, [tableData, opFilter, macFilter, deptName, search, reportType, sortCol, sortDir, oprFilterOp, oprFilterVal]);
+    }, [tableData, appliedOpFilter, appliedMacFilter, deptName, search, reportType, sortCol, sortDir, oprFilterOp, oprFilterVal]);
 
     /* ── Top & Bottom performers logic (based on Active Tab sorting) ── */
     const topPerformers = useMemo(() => {
@@ -930,20 +1256,78 @@ export default function EfficiencyReport() {
                         />
                     </div>
 
-                    <div className="er-fcheck-group" data-spotlight="er-filter-dropdowns">
-                        <label className={`er-fcheck-item ${chkCNC ? "er-fcheck-item--active" : ""}`}>
-                            <input type="checkbox" checked={chkCNC}
-                                onChange={e => setChkCNC(e.target.checked)} />
-                            <span>CNC</span>
-                        </label>
-                        <label className={`er-fcheck-item ${chkConv ? "er-fcheck-item--active" : ""}`}>
-                            <input type="checkbox" checked={chkConv}
-                                onChange={e => setChkConv(e.target.checked)} />
-                            <span>CONVENTIONAL</span>
-                        </label>
+                    <div className="er-fgroup er-fgroup--col" data-spotlight="er-filter-dropdowns">
+                        <span className="er-flabel">Mac Type</span>
+                        <MacTypeDropdown
+                            chkCNC={chkCNC}
+                            chkConv={chkConv}
+                            onChange={(cnc, conv) => {
+                                setChkCNC(cnc);
+                                setChkConv(conv);
+                            }}
+                        />
                     </div>
 
-                    <div className="er-filter-sep" />
+                    {/* Machine Multi-Select Filter */}
+                    <div className="er-fgroup er-fgroup--col" data-spotlight="er-filter-machine">
+                        <span className="er-flabel">Machine</span>
+                        <MultiSelectDropdown
+                            options={uniqueMachines}
+                            selectedValues={macFilter}
+                            onChange={setMacFilter}
+                            placeholder="All Machines"
+                            isOp={false}
+                            variant="filter"
+                        />
+                    </div>
+
+                    {/* Operator Multi-Select Filter */}
+                    <div className="er-fgroup er-fgroup--col" data-spotlight="er-filter-operator">
+                        <span className="er-flabel">Operator</span>
+                        <MultiSelectDropdown
+                            options={uniqueOperators}
+                            selectedValues={opFilter}
+                            onChange={setOpFilter}
+                            placeholder="All Operators"
+                            isOp={true}
+                            variant="filter"
+                        />
+                    </div>
+
+                    {/* Apply Filter Button with Modern UI & Premium Animation */}
+                    <button
+                        type="button"
+                        className={`er-btn-apply ${hasPendingChanges ? "er-btn-apply--pending" : ""}`}
+                        onClick={handleApplyFilters}
+                        disabled={loading}
+                        title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
+                    >
+                        {loading ? (
+                            <Loader2 size={13} className="er-spin" />
+                        ) : (
+                            <Filter size={13} className="er-apply-icon" />
+                        )}
+                        <span>{loading ? "Applying..." : "Apply Filter"}</span>
+                        {hasPendingChanges && !loading && (
+                            <span className="er-apply-pulse-dot" />
+                        )}
+                    </button>
+
+                    {/* Quick Reset All Filters Button */}
+                    {hasActiveFilters && (
+                        <button
+                            type="button"
+                            className="er-btn-reset-filters"
+                            onClick={handleResetFilters}
+                            title="Clear all active Machine, Operator, and Mac Type filters"
+                        >
+                            <RotateCcw size={12} className="er-reset-icon" />
+                            <span>Reset Filters</span>
+                            <span className="er-reset-badge">
+                                {activeFiltersCount}
+                            </span>
+                        </button>
+                    )}
 
                     {/* <div className="er-fgroup">
                         <span className="er-flabel">Efficiency Type</span>
@@ -1065,8 +1449,7 @@ export default function EfficiencyReport() {
                             Efficiency Analytics
                         </span>
                     </div>
-                    <div className="er-charts-grid">
-                        <ChartSkeleton />
+                    <div className="er-charts-grid er-charts-grid--single">
                         <ChartSkeleton />
                     </div>
                 </div>
@@ -1077,39 +1460,45 @@ export default function EfficiencyReport() {
                             <BarChart2 size={15} style={{ color: "var(--er-primary)", marginRight: 5 }} />
                             Efficiency Analytics
                         </span>
-                        <span className="er-charts-sub">OA / OPR / QF Efficiency % — {Math.min(12, filtered.length)} Records</span>
+                        <span className="er-charts-sub">OA / OPR / QF Efficiency % — {Math.min(18, filtered.length)} Records</span>
                     </div>
-                    <div className="er-charts-grid">
-                        {/* Operator Efficiency Line Chart */}
-                        <div className="er-chart-card">
-                            <EffLineChart
-                                data={filtered}
-                                labelKey={0}
-                                title="Operator Efficiency"
-                                badge="er-chart-card-badge--op"
-                                accentGrad="blue"
-                                animKey={`op-${tab}-${filtered.length}`}
-                                filterValue={opFilter}
-                                onFilterChange={setOpFilter}
-                                filterOptions={uniqueOperators}
-                                filterPlaceholder="All Operators"
-                            />
-                        </div>
-                        {/* Machine Efficiency Line Chart */}
-                        <div className="er-chart-card">
-                            <EffLineChart
-                                data={[...filtered].sort((a, b) => (a[2] || '').localeCompare(b[2] || ''))}
-                                labelKey={2}
-                                title="Machine Efficiency"
-                                badge="er-chart-card-badge--mac"
-                                accentGrad="green"
-                                animKey={`mac-${tab}-${filtered.length}`}
-                                filterValue={macFilter}
-                                onFilterChange={setMacFilter}
-                                filterOptions={uniqueMachines}
-                                filterPlaceholder="All Machines"
-                            />
-                        </div>
+                    <div className="er-charts-grid er-charts-grid--single">
+                        {/* Operator Efficiency Line Chart — shown only when Operator Efficiency tab is active */}
+                        {tab === "operator" && (
+                            <div className="er-chart-card">
+                                <EffLineChart
+                                    data={filtered}
+                                    labelKey={0}
+                                    title="Operator Efficiency"
+                                    badge="er-chart-card-badge--op"
+                                    accentGrad="blue"
+                                    animKey={`op-${tab}-${filtered.length}`}
+                                    filterValue={opFilter}
+                                    onFilterChange={setOpFilter}
+                                    filterOptions={uniqueOperators}
+                                    filterPlaceholder="All Operators"
+                                    isFullWidth={true}
+                                />
+                            </div>
+                        )}
+                        {/* Machine Efficiency Line Chart — shown only when Machine Efficiency tab is active */}
+                        {tab === "machine" && (
+                            <div className="er-chart-card">
+                                <EffLineChart
+                                    data={[...filtered].sort((a, b) => (a[2] || '').localeCompare(b[2] || ''))}
+                                    labelKey={2}
+                                    title="Machine Efficiency"
+                                    badge="er-chart-card-badge--mac"
+                                    accentGrad="green"
+                                    animKey={`mac-${tab}-${filtered.length}`}
+                                    filterValue={macFilter}
+                                    onFilterChange={setMacFilter}
+                                    filterOptions={uniqueMachines}
+                                    filterPlaceholder="All Machines"
+                                    isFullWidth={true}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

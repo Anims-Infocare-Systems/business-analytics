@@ -12380,14 +12380,14 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
       if (apiKpis && apiKpis.rowCount > 0 && !filters?.machineType && !filters?.machine && !filters?.fromDate && !filters?.toDate) {
         return [
           { label: "Avg OEE", value: `${Number(apiKpis.avgOee || 0).toFixed(2)}%`, color: "#0ea5e9", icon: TrendingUp },
-          { label: "Met Target", value: "0", color: "#10b981", icon: CheckCircle2 },
-          { label: "Not Met Target", value: "0", color: "#ef4444", icon: AlertTriangle },
+          { label: "Met Target count", value: "0", color: "#10b981", icon: CheckCircle2 },
+          { label: "Not Met Target count", value: "0", color: "#ef4444", icon: AlertTriangle },
         ];
       }
       return [
         { label: "Avg OEE", value: loading || oeeLoading ? "…" : "0%", color: "#0ea5e9", icon: TrendingUp },
-        { label: "Met Target", value: loading || oeeLoading ? "…" : "0", color: "#10b981", icon: CheckCircle2 },
-        { label: "Not Met Target", value: loading || oeeLoading ? "…" : "0", color: "#ef4444", icon: AlertTriangle },
+        { label: "Met Target count", value: loading || oeeLoading ? "…" : "0", color: "#10b981", icon: CheckCircle2 },
+        { label: "Not Met Target count", value: loading || oeeLoading ? "…" : "0", color: "#ef4444", icon: AlertTriangle },
       ];
     }
 
@@ -12399,20 +12399,75 @@ function OeeComparisonReportDashboardView({ data, loading, filters, onFilterChan
 
     let metCount = 0;
     let notMetCount = 0;
-    validOee.forEach((r) => {
-      if (Number(r.overallOee) >= targetVal) {
-        metCount += 1;
-      } else {
-        notMetCount += 1;
-      }
-    });
+
+    if (xAxisGroup === "Overall" || xAxisGroup === "Month Wise") {
+      monthLabels.forEach((mo) => {
+        const rowsInMo = filteredRows.filter(r => r.month === mo && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        if (rowsInMo.length > 0) {
+          const sum = rowsInMo.reduce((acc, r) => acc + Number(r.overallOee), 0);
+          const moAvg = Number((Math.min(100, Math.max(0, sum / rowsInMo.length))).toFixed(2));
+          if (moAvg >= targetVal) {
+            metCount += 1;
+          } else {
+            notMetCount += 1;
+          }
+        }
+      });
+    } else if (xAxisGroup === "Day Wise") {
+      const dayDates = machineSummaries[0]?.dayDates || [...new Set(filteredRows.map(r => (r.date || "").slice(0, 10)).filter(Boolean))].sort();
+      dayDates.forEach((d) => {
+        const rowsOnDate = filteredRows.filter(r => (r.date || "").slice(0, 10) === d && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        if (rowsOnDate.length > 0) {
+          const sum = rowsOnDate.reduce((acc, r) => acc + Number(r.overallOee), 0);
+          const dayAvg = Number((Math.min(100, Math.max(0, sum / rowsOnDate.length))).toFixed(2));
+          if (dayAvg >= targetVal) {
+            metCount += 1;
+          } else {
+            notMetCount += 1;
+          }
+        }
+      });
+    } else if (xAxisGroup === "Mac Wise") {
+      const sortedSummaries = [...machineSummaries].sort((a, b) => a.name.localeCompare(b.name));
+      sortedSummaries.forEach((m) => {
+        const rowsForMac = filteredRows.filter(r => r.machine === m.name && r.overallOee != null && !isNaN(Number(r.overallOee)));
+        const macAvg = rowsForMac.length
+          ? Number((Math.min(100, Math.max(0, rowsForMac.reduce((acc, r) => acc + Number(r.overallOee), 0) / rowsForMac.length))).toFixed(2))
+          : Math.min(100, Math.max(0, m.avgVal));
+        if (macAvg >= targetVal) {
+          metCount += 1;
+        } else {
+          notMetCount += 1;
+        }
+      });
+    } else if (xAxisGroup === "Team Wise") {
+      const teamMap = {};
+      filteredRows.forEach((r) => {
+        if (r.overallOee == null || isNaN(Number(r.overallOee))) return;
+        const team = r.team || "—";
+        if (!teamMap[team]) teamMap[team] = { sum: 0, count: 0 };
+        teamMap[team].sum += Number(r.overallOee);
+        teamMap[team].count += 1;
+      });
+      Object.keys(teamMap).forEach((t) => {
+        const item = teamMap[t];
+        if (item && item.count > 0) {
+          const teamAvg = Number((Math.min(100, Math.max(0, item.sum / item.count))).toFixed(2));
+          if (teamAvg >= targetVal) {
+            metCount += 1;
+          } else {
+            notMetCount += 1;
+          }
+        }
+      });
+    }
 
     return [
       { label: "Avg OEE", value: `${avgOee}%`, color: "#0ea5e9", icon: TrendingUp },
-      { label: "Met Target", value: String(metCount), color: "#10b981", icon: CheckCircle2 },
-      { label: "Not Met Target", value: String(notMetCount), color: "#ef4444", icon: AlertTriangle },
+      { label: "Met Target count", value: String(metCount), color: "#10b981", icon: CheckCircle2 },
+      { label: "Not Met Target count", value: String(notMetCount), color: "#ef4444", icon: AlertTriangle },
     ];
-  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig, xAxisGroup]);
+  }, [filteredRows, oeeSource?.kpis, filters, loading, oeeLoading, targetConfig, xAxisGroup, monthLabels, machineSummaries]);
 
   const setupChart1 = React.useCallback((canvas) => {
     let minUtilization = 75;
@@ -13674,7 +13729,7 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
         const topStr = apiKpis.topPerformer
           ? `${apiKpis.topPerformer} (${Number(apiKpis.topPerformerOaeff || 0).toFixed(2)}%)`
           : "N/A";
-        const metPct = (Number(apiKpis.avgOaeff || 0) >= targetVal ? 100 : 0).toFixed(2);
+        const metPct = targetVal > 0 ? ((Number(avgEff) / targetVal) * 100).toFixed(2) : "0.00";
         return [
           { label: "Avg Efficiency", value: `${avgEff}%`, color: "#10b981", icon: UserCheck },
           { label: "Top Performer", value: topStr, color: "#3b82f6", icon: Award },
@@ -13715,12 +13770,8 @@ function EfficiencyEffReportDashboardView({ data, loading, filters, onFilterChan
       ? `${topOp} (${(topOpAvg).toFixed(2)}%)`
       : "N/A";
 
-    // 3. Target Status
-    let metCount = 0;
-    filteredRows.forEach((r) => {
-      if (Number(r.oaeff || 0) >= targetVal) metCount += 1;
-    });
-    const metPct = filteredRows.length > 0 ? ((metCount / filteredRows.length) * 100).toFixed(2) : "0.00";
+    // 3. Target Status: (avg eff / eff target) * 100
+    const metPct = targetVal > 0 ? ((Number(avgEff) / targetVal) * 100).toFixed(2) : "0.00";
     const targetStatusStr = `${metPct}% Met`;
 
     return [
@@ -15853,10 +15904,26 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
     return stockSource?.filterOptions?.groupItemCodes || {};
   }, [stockSource?.filterOptions?.groupItemCodes]);
 
-  // Always show ALL item codes — group filter affects backend data, not the item code list
+  // Filter item codes by selected groups; if no group is selected, show all item codes
   const itemCodesList = React.useMemo(() => {
+    const rawCat = filters.category;
+    const selectedGroups = Array.isArray(rawCat)
+      ? rawCat
+      : typeof rawCat === "string" && rawCat.trim()
+        ? rawCat.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+
+    if (selectedGroups.length > 0) {
+      const set = new Set();
+      selectedGroups.forEach(g => {
+        (groupItemCodes[g] || []).forEach(c => {
+          if (c) set.add(c);
+        });
+      });
+      return Array.from(set).sort();
+    }
     return Array.isArray(stockSource?.filterOptions?.itemCodes) ? stockSource.filterOptions.itemCodes : [];
-  }, [stockSource?.filterOptions?.itemCodes]);
+  }, [stockSource?.filterOptions?.itemCodes, filters.category, groupItemCodes]);
 
   const toggleGroup = (g) => {
     const current = filters.category || [];

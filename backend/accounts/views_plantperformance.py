@@ -59,7 +59,7 @@ PO_DATA AS
         MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POMonth,
         DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS MonthName,
         CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE) AS PODate,
-        ISNULL(CM.CName, N'—') AS CustomerName,
+        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')) AS CustomerName,
 
         PM.Apono,
         PD.ItCode,
@@ -77,6 +77,8 @@ PO_DATA AS
        AND S.poslno = PD.poslno
     LEFT JOIN CustMast CM
         ON PM.CId = CM.Id
+    LEFT JOIN CustAliasMast CA
+        ON PM.CId = CA.Id
     WHERE PM.Deleted = 0
       AND PD.Deleted = 0
       AND ISNULL(S.deleted, 0) = 0
@@ -85,7 +87,7 @@ PO_DATA AS
         MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
         DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
         CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE),
-        CM.CName,
+        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')),
         PM.Apono,
         PD.ItCode,
         PM.type
@@ -98,7 +100,7 @@ PO_DATA AS
         MONTH(PM.PODT) AS POMonth,
         DATENAME(MONTH, PM.PODT) AS MonthName,
         CAST(PM.PODT AS DATE) AS PODate,
-        ISNULL(CM.CName, N'—') AS CustomerName,
+        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')) AS CustomerName,
 
         PM.Apono,
         PD.ItCode,
@@ -112,6 +114,8 @@ PO_DATA AS
         ON PM.PONO = PD.PONO
     LEFT JOIN CustMast CM
         ON PM.CId = CM.Id
+    LEFT JOIN CustAliasMast CA
+        ON PM.CId = CA.Id
     LEFT JOIN SHD_PO_DET SPD
         ON (SPD.Apono = PM.Apono OR SPD.pono = PM.PONO)
        AND SPD.itcode = PD.ItCode
@@ -124,7 +128,7 @@ PO_DATA AS
         MONTH(PM.PODT),
         DATENAME(MONTH, PM.PODT),
         CAST(PM.PODT AS DATE),
-        CM.CName,
+        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')),
         PM.Apono,
         PD.ItCode,
         PM.type
@@ -462,7 +466,7 @@ LATEST_RATE AS
 SELECT
     R.PartNo,
     MAX(PD.Description) AS Description,
-    MAX(CM.CName) AS CustomerName,
+    MAX(ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—'))) AS CustomerName,
     SUM(ISNULL(R.FinalInspQty,0)) AS FinalInspQty,
     SUM(ISNULL(R.DCQty,0)) AS DCQty,
     ISNULL(MAX(LR.Rate),0) AS Rate,
@@ -481,6 +485,10 @@ ON PC.PartNo = R.PartNo
 LEFT JOIN CustMast CM
 ON CM.ID = PC.CID
 AND CM.Deleted = 0
+
+LEFT JOIN CustAliasMast CA
+ON CA.ID = PC.CID
+AND CA.Deleted = 0
 
 LEFT JOIN LATEST_RATE LR
 ON LR.PartNo = R.PartNo
@@ -677,7 +685,7 @@ STOCK_AVAIL_TOTAL AS
 
 SELECT
     UC.CID,
-    ISNULL(CM.CName, N'—') AS CustomerName,
+    ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')) AS CustomerName,
     UC.PartNo,
     MAX(ISNULL(PD.Description, N'')) AS Description,
     UC.ComboDate AS PlanDate,
@@ -713,6 +721,10 @@ LEFT JOIN CustMast CM
     ON CM.ID = UC.CID
    AND CM.Deleted = 0
 
+LEFT JOIN CustAliasMast CA
+    ON CA.ID = UC.CID
+   AND CA.Deleted = 0
+
 LEFT JOIN PART_DESCRIPTION PD
     ON PD.PartNo = UC.PartNo
 
@@ -721,7 +733,7 @@ LEFT JOIN STOCK_AVAIL_TOTAL SA
 
 GROUP BY
     UC.CID,
-    CM.CName,
+    ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')),
     UC.PartNo,
     UC.ComboDate
 
@@ -765,13 +777,17 @@ ORDER BY
                 "dispatchPercentage": dispatch_pct,
                 "dispatchStatus": dispatch_status
             })
-        # Query distinct customers from CustMast for full customer filter options
+        # Query distinct customers from CustMast and CustAliasMast for full customer filter options
         all_customers = []
         try:
             cursor.execute("""
                 SELECT DISTINCT LTRIM(RTRIM(CName)) AS CustomerName
-                FROM CustMast
-                WHERE Deleted = 0 AND CName IS NOT NULL AND LTRIM(RTRIM(CName)) <> '' AND LTRIM(RTRIM(CName)) <> '—' AND LTRIM(RTRIM(CName)) <> '-'
+                FROM (
+                    SELECT CName FROM CustMast WHERE Deleted = 0 AND CName IS NOT NULL
+                    UNION
+                    SELECT CName FROM CustAliasMast WHERE Deleted = 0 AND CName IS NOT NULL
+                ) c
+                WHERE LTRIM(RTRIM(CName)) <> '' AND LTRIM(RTRIM(CName)) <> '—' AND LTRIM(RTRIM(CName)) <> '-'
                 ORDER BY CustomerName ASC
             """)
             for r in cursor.fetchall() or []:
