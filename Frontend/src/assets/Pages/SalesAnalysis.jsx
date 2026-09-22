@@ -23,6 +23,7 @@ import {
   Layers,
   Lightbulb,
   Link,
+  Loader2,
   Package,
   Percent,
   Pin,
@@ -1510,6 +1511,43 @@ export default function SalesAnalysis() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
+
+  // ── Applied Filters State (Trigger fetches & calculations only on Apply) ──
+  const [appliedDateRange, setAppliedDateRange] = useState({ from: _dflt.from, to: _dflt.to });
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
+  const [appliedSelectedCustomers, setAppliedSelectedCustomers] = useState([]);
+  const [appliedSelectedInvoiceTypes, setAppliedSelectedInvoiceTypes] = useState([]);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  const normalizeArr = (arr) => {
+    if (!arr || !Array.isArray(arr)) return "";
+    return [...arr].map(s => String(s).trim()).sort().join(",");
+  };
+
+  const hasPendingChanges = useMemo(() => {
+    const dFrom = toIsoDate(dateRange?.from);
+    const dTo = toIsoDate(dateRange?.to);
+    const aFrom = toIsoDate(appliedDateRange?.from);
+    const aTo = toIsoDate(appliedDateRange?.to);
+    if (dFrom !== aFrom || dTo !== aTo) return true;
+    if ((searchQuery || "").trim() !== (appliedSearchQuery || "").trim()) return true;
+    if (normalizeArr(selectedCustomers) !== normalizeArr(appliedSelectedCustomers)) return true;
+    if (normalizeArr(selectedInvoiceTypes) !== normalizeArr(appliedSelectedInvoiceTypes)) return true;
+    return false;
+  }, [
+    dateRange, appliedDateRange,
+    searchQuery, appliedSearchQuery,
+    selectedCustomers, appliedSelectedCustomers,
+    selectedInvoiceTypes, appliedSelectedInvoiceTypes,
+  ]);
+
+  const handleApplyFilters = useCallback(() => {
+    setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+    setAppliedSearchQuery(searchQuery);
+    setAppliedSelectedCustomers([...selectedCustomers]);
+    setAppliedSelectedInvoiceTypes([...selectedInvoiceTypes]);
+    setFetchTrigger(prev => prev + 1);
+  }, [dateRange, searchQuery, selectedCustomers, selectedInvoiceTypes]);
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef(null);
   const [customerFocusedIndex, setCustomerFocusedIndex] = useState(-1);
@@ -1626,7 +1664,7 @@ export default function SalesAnalysis() {
   }, [invoiceBtypes, invoiceTypeSearch]);
   const filteredProjections = useMemo(() => {
     return projections.filter((r) => {
-      if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) {
+      if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) {
         return false;
       }
       if (projMonthFilter && projMonthFilter !== "All") {
@@ -1639,8 +1677,8 @@ export default function SalesAnalysis() {
         let yVal = parseInt(parts[1], 10);
         if (mIdx === -1 || isNaN(yVal)) return false;
 
-        const ref = dateRange.from
-          ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 1)
+        const ref = appliedDateRange.from
+          ? new Date(appliedDateRange.from.getFullYear(), appliedDateRange.from.getMonth(), 1)
           : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
         let maxMonths = 3;
@@ -1654,7 +1692,7 @@ export default function SalesAnalysis() {
       }
       return true;
     });
-  }, [projections, selectedCustomers, projMonthFilter, dateRange.from]);
+  }, [projections, appliedSelectedCustomers, projMonthFilter, appliedDateRange.from]);
 
   const uniqueTraceCustomers = useMemo(() => {
     const set = new Set();
@@ -1680,7 +1718,7 @@ export default function SalesAnalysis() {
     const invQ = traceInvFilter.trim().toLowerCase();
 
     return traceability.filter((r) => {
-      if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) {
+      if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) {
         return false;
       }
       if (traceCustomerFilter.length > 0 && !traceCustomerFilter.includes(r.customer)) {
@@ -1697,7 +1735,7 @@ export default function SalesAnalysis() {
       }
       return true;
     });
-  }, [traceability, selectedCustomers, traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
+  }, [traceability, appliedSelectedCustomers, traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -1847,7 +1885,7 @@ export default function SalesAnalysis() {
     return processedPoLedger.filter((row) => {
       if (poTypeFilter && poTypeFilter !== "All" && row.type !== poTypeFilter) return false;
       if (poPendingOnly && row.pendingQty <= 0) return false;
-      if (selectedCustomers.length > 0 && !selectedCustomers.includes(row.custName)) return false;
+      if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(row.custName)) return false;
       const q = poSearchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
@@ -1858,7 +1896,7 @@ export default function SalesAnalysis() {
         (row.dcNo && row.dcNo.toLowerCase().includes(q))
       );
     });
-  }, [processedPoLedger, poTypeFilter, poSearchQuery, poPendingOnly, selectedCustomers]);
+  }, [processedPoLedger, poTypeFilter, poSearchQuery, poPendingOnly, appliedSelectedCustomers]);
 
   const sortedPoLedger = useMemo(() => {
     const sorted = [...filteredPoLedger];
@@ -2019,9 +2057,9 @@ export default function SalesAnalysis() {
   const filteredPlanVsActual = useMemo(() => {
     return planVsActual.filter((row) => {
       const rowDate = new Date(row.date);
-      if (dateRange.from && rowDate < dateRange.from) return false;
-      if (dateRange.to && rowDate > dateRange.to) return false;
-      if (selectedCustomers.length > 0 && !selectedCustomers.includes(row.customer)) return false;
+      if (appliedDateRange.from && rowDate < appliedDateRange.from) return false;
+      if (appliedDateRange.to && rowDate > appliedDateRange.to) return false;
+      if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(row.customer)) return false;
 
       const q = planSearchQuery.toLowerCase().trim();
       if (q) {
@@ -2032,7 +2070,7 @@ export default function SalesAnalysis() {
       }
       return true;
     });
-  }, [dateRange, planSearchQuery, planVsActual, selectedCustomers]);
+  }, [appliedDateRange, planSearchQuery, planVsActual, appliedSelectedCustomers]);
 
   const { uniqueDespatchCustomers, uniqueDespatchParts } = useMemo(() => {
     const custSet = new Set();
@@ -2376,13 +2414,13 @@ export default function SalesAnalysis() {
   }, []);
   const filteredInvoices = useMemo(() => {
     let list = invoiceRows.filter((r) => {
-      if (selectedCustomers.length > 0 && !selectedCustomers.includes(r.customer)) return false;
-      if (selectedInvoiceTypes.length > 0) {
+      if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) return false;
+      if (appliedSelectedInvoiceTypes.length > 0) {
         let bt = r.btype || "";
         if (isCreditNoteType(bt, r.invoice_no)) bt = "Credit Note";
-        if (!selectedInvoiceTypes.includes(bt) && !selectedInvoiceTypes.includes(r.btype)) return false;
+        if (!appliedSelectedInvoiceTypes.includes(bt) && !appliedSelectedInvoiceTypes.includes(r.btype)) return false;
       }
-      const q = searchQuery.toLowerCase().trim();
+      const q = appliedSearchQuery.toLowerCase().trim();
       if (!q) return true;
       return (
         (r.invoice_no && r.invoice_no.toLowerCase().includes(q)) ||
@@ -2412,11 +2450,11 @@ export default function SalesAnalysis() {
       });
     }
     return list;
-  }, [invoiceRows, searchQuery, selectedCustomers, selectedInvoiceTypes, invSortConfig]);
+  }, [invoiceRows, appliedSearchQuery, appliedSelectedCustomers, appliedSelectedInvoiceTypes, invSortConfig]);
 
   const derivedSummary = useMemo(() => {
     if (!summary) return null;
-    if (selectedCustomers.length === 0) return summary;
+    if (appliedSelectedCustomers.length === 0) return summary;
 
     const totalInvoicesSet = new Set();
     const custInvoicesMap = {};
@@ -2459,7 +2497,7 @@ export default function SalesAnalysis() {
 
     const totalInvoices = totalInvoicesSet.size;
     const avgInvoice = totalInvoices > 0 ? grandTotal / totalInvoices : 0;
-    const activeCustomers = Object.keys(custAmountMap).length || selectedCustomers.length;
+    const activeCustomers = Object.keys(custAmountMap).length || appliedSelectedCustomers.length;
 
     let repeatBuyers = 0;
     Object.values(custInvoicesMap).forEach((invSet) => {
@@ -2508,7 +2546,7 @@ export default function SalesAnalysis() {
       top_customer_pct: topCustPct,
       avg_selling_rate: avgSellingRate,
     };
-  }, [summary, selectedCustomers, filteredInvoices]);
+  }, [summary, appliedSelectedCustomers, filteredInvoices]);
 
   const kpiCards = useMemo(() => buildKpiCards(derivedSummary), [derivedSummary]);
 
@@ -2644,7 +2682,7 @@ export default function SalesAnalysis() {
   // Derived Revenue Charts (Donuts & Rankings)
   const derivedRevenueCharts = useMemo(() => {
     if (!revenueCharts) return null;
-    if (selectedCustomers.length === 0) return revenueCharts;
+    if (appliedSelectedCustomers.length === 0) return revenueCharts;
 
     const custMap = {};
     let totalRevenue = 0;
@@ -2706,12 +2744,12 @@ export default function SalesAnalysis() {
         percentages: prodPercentages
       }
     };
-  }, [revenueCharts, filteredInvoices, selectedCustomers]);
+  }, [revenueCharts, filteredInvoices, appliedSelectedCustomers]);
 
   // Derived Weekly Trend
   const derivedWeeklyTrend = useMemo(() => {
     if (!weeklyTrend) return null;
-    if (selectedCustomers.length === 0) return weeklyTrend;
+    if (appliedSelectedCustomers.length === 0) return weeklyTrend;
 
     const salesMap = {};
     const labels = weeklyTrend.labels || [];
@@ -2754,12 +2792,12 @@ export default function SalesAnalysis() {
       total: jsRound(running, 2),
       turn_over_lakhs: jsRound(running / 100_000, 2)
     };
-  }, [weeklyTrend, filteredInvoices, selectedCustomers]);
+  }, [weeklyTrend, filteredInvoices, appliedSelectedCustomers]);
 
   // Derived Month Summary
   const derivedMonthSummary = useMemo(() => {
     if (!monthSummary) return null;
-    if (selectedCustomers.length === 0) return monthSummary;
+    if (appliedSelectedCustomers.length === 0) return monthSummary;
 
     const monthMap = {};
     filteredInvoices.forEach(r => {
@@ -2783,7 +2821,7 @@ export default function SalesAnalysis() {
       "July", "August", "September", "October", "November", "December",
     ];
 
-    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    const slots = getMonthSlotsInRange(appliedDateRange.from, appliedDateRange.to);
     let prevAmount = null;
     let totalQty = 0;
     let totalAmount = 0;
@@ -2875,15 +2913,15 @@ export default function SalesAnalysis() {
       },
       invoice_status
     };
-  }, [monthSummary, filteredInvoices, selectedCustomers, dateRange, derivedSummary]);
+  }, [monthSummary, filteredInvoices, appliedSelectedCustomers, appliedDateRange, derivedSummary]);
 
   // Derived Monthly Trend Data
   const derivedMonthlyTrendData = useMemo(() => {
     if (!monthlyTrendData) return null;
-    if (selectedCustomers.length === 0) return monthlyTrendData;
+    if (appliedSelectedCustomers.length === 0) return monthlyTrendData;
 
     const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    const slots = getMonthSlotsInRange(appliedDateRange.from, appliedDateRange.to);
 
     const monthMap = {};
     filteredInvoices.forEach(r => {
@@ -2909,7 +2947,7 @@ export default function SalesAnalysis() {
       total,
       total_lakhs: jsRound(total / 100_000, 3)
     };
-  }, [monthlyTrendData, filteredInvoices, selectedCustomers, dateRange]);
+  }, [monthlyTrendData, filteredInvoices, appliedSelectedCustomers, appliedDateRange]);
 
   const monthlyAvg = useMemo(() => {
     if (!derivedMonthlyTrendData?.sales_values_lakhs?.length) return 0;
@@ -2921,10 +2959,10 @@ export default function SalesAnalysis() {
   // Derived Bill Type Revenue Data
   const derivedBillTypeRevenueData = useMemo(() => {
     if (!billTypeRevenueData) return null;
-    if (selectedCustomers.length === 0) return billTypeRevenueData;
+    if (appliedSelectedCustomers.length === 0) return billTypeRevenueData;
 
     const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    const slots = getMonthSlotsInRange(appliedDateRange.from, appliedDateRange.to);
     const labels = slots.map(s => `${MONTH_SHORT[s.month - 1]}`);
 
     const btypesSet = billTypeRevenueData.bill_types || [];
@@ -2966,16 +3004,16 @@ export default function SalesAnalysis() {
       bill_types: btypesSet,
       datasets
     };
-  }, [billTypeRevenueData, filteredInvoices, selectedCustomers, dateRange]);
+  }, [billTypeRevenueData, filteredInvoices, appliedSelectedCustomers, appliedDateRange]);
 
   // Derived Monthly Tax Data
   const derivedMonthlyTaxData = useMemo(() => {
     if (!monthlyTaxData) return null;
-    if (selectedCustomers.length === 0) return monthlyTaxData;
+    if (appliedSelectedCustomers.length === 0) return monthlyTaxData;
 
     const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const fyOrder = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
-    const slots = getMonthSlotsInRange(dateRange.from, dateRange.to);
+    const slots = getMonthSlotsInRange(appliedDateRange.from, appliedDateRange.to);
 
     const sortedSlots = [...slots].sort((a, b) => {
       const idxA = fyOrder.indexOf(a.month);
@@ -3022,7 +3060,7 @@ export default function SalesAnalysis() {
       total,
       total_lakhs: jsRound(total / 100_000, 2)
     };
-  }, [monthlyTaxData, filteredInvoices, selectedCustomers, dateRange]);
+  }, [monthlyTaxData, filteredInvoices, appliedSelectedCustomers, appliedDateRange]);
 
   const customerRanking = useMemo(
     () => buildCustomerRanking(derivedRevenueCharts ? derivedRevenueCharts.customer_ranking : []),
@@ -4597,8 +4635,8 @@ export default function SalesAnalysis() {
   }, [monthlyProjectionsChartData, loading, projChartType]);
 
   useEffect(() => {
-    let fromDate = dateRange.from;
-    let toDate = dateRange.to;
+    let fromDate = appliedDateRange.from;
+    let toDate = appliedDateRange.to;
 
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
       return;
@@ -4609,11 +4647,11 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (selectedInvoiceTypes.length > 0) {
-      params.set("btype", selectedInvoiceTypes.join(","));
+    if (appliedSelectedInvoiceTypes.length > 0) {
+      params.set("btype", appliedSelectedInvoiceTypes.join(","));
     }
-    if (debouncedSearchQuery) {
-      params.set("search", debouncedSearchQuery);
+    if (appliedSearchQuery.trim()) {
+      params.set("search", appliedSearchQuery.trim());
     }
     const ctrl = new AbortController();
     const fetchOpts = { credentials: "include", signal: ctrl.signal };
@@ -4861,11 +4899,11 @@ export default function SalesAnalysis() {
     });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
 
   useEffect(() => {
-    let fromDate = dateRange.from;
-    let toDate = dateRange.to;
+    let fromDate = appliedDateRange.from;
+    let toDate = appliedDateRange.to;
 
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
       return;
@@ -4876,8 +4914,8 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (selectedInvoiceTypes.length > 0) params.set("btype", selectedInvoiceTypes.join(","));
-    if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
+    if (appliedSelectedInvoiceTypes.length > 0) params.set("btype", appliedSelectedInvoiceTypes.join(","));
+    if (appliedSearchQuery.trim()) params.set("search", appliedSearchQuery.trim());
     const ctrl = new AbortController();
 
     fetch(`${API_BASE}/sales-analysis/invoice-details/?${params}`, {
@@ -4907,12 +4945,12 @@ export default function SalesAnalysis() {
       });
 
     return () => ctrl.abort();
-  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
 
   // ── Real-time Live Background Sync for Despatch Planning Status ──
   const fetchDespatchPlanLive = useCallback(async () => {
-    let fromDate = dateRange.from;
-    let toDate = dateRange.to;
+    let fromDate = appliedDateRange.from;
+    let toDate = appliedDateRange.to;
     if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
       return;
     }
@@ -4921,8 +4959,8 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
-    if (selectedInvoiceTypes.length > 0) params.set("btype", selectedInvoiceTypes.join(","));
-    if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
+    if (appliedSelectedInvoiceTypes.length > 0) params.set("btype", appliedSelectedInvoiceTypes.join(","));
+    if (appliedSearchQuery.trim()) params.set("search", appliedSearchQuery.trim());
 
     try {
       const res = await fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, {
@@ -4944,7 +4982,7 @@ export default function SalesAnalysis() {
         console.warn("Live despatch poll skipped:", err);
       }
     }
-  }, [dateRange.from, dateRange.to, selectedInvoiceTypes, debouncedSearchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery]);
 
   useEffect(() => {
     // Background polling every 3 seconds for near real-time live data
@@ -4969,7 +5007,8 @@ export default function SalesAnalysis() {
 
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
-    setDateRange(getModuleDefaultDateRange("sales_analysis", getTodayMonthRange()));
+    const defRange = getModuleDefaultDateRange("sales_analysis", getTodayMonthRange());
+    setDateRange(defRange);
     setSearchQuery("");
     setSelectedInvoiceTypes([]);
     setInvoiceTypeSearch("");
@@ -4978,6 +5017,13 @@ export default function SalesAnalysis() {
     setDespatchCustFilter([]);
     setDespatchPartFilter([]);
     setDespatchStatusFilter([]);
+
+    // Also commit reset to applied state & trigger fetch immediately
+    setAppliedDateRange(defRange);
+    setAppliedSearchQuery("");
+    setAppliedSelectedCustomers([]);
+    setAppliedSelectedInvoiceTypes([]);
+    setFetchTrigger(prev => prev + 1);
   };
 
   const isGlobalLoading = loading || tableLoading;
@@ -5050,6 +5096,11 @@ export default function SalesAnalysis() {
               placeholder="Search Part No. or Desc"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !loading) {
+                  handleApplyFilters();
+                }
+              }}
               disabled={loading}
             />
             {searchQuery && !loading && (
@@ -5420,17 +5471,37 @@ export default function SalesAnalysis() {
           </div>
         </div>
 
-        {/* Reset Filters */}
-        <button
-          type="button"
-          className="sa-btn-reset"
-          disabled={loading}
-          onClick={() => !loading && resetFilters()}
-          style={loading ? { opacity: 0.6, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
-        >
-          <RotateCcw className="sa-btn-reset-icon" size={14} />
-          Reset Filters
-        </button>
+        {/* Actions Container: Apply Filter + Reset Filters */}
+        <div className="sa-filter-actions">
+          <button
+            type="button"
+            className={`sa-btn-apply ${hasPendingChanges ? "sa-btn-apply--pending" : ""}`}
+            onClick={() => !loading && handleApplyFilters()}
+            disabled={loading}
+            title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
+          >
+            {loading ? (
+              <Loader2 className="sa-btn-apply-spin" size={14} />
+            ) : (
+              <Filter className="sa-btn-apply-icon" size={14} strokeWidth={2.4} />
+            )}
+            <span>{loading ? "Applying..." : "Apply Filter"}</span>
+            {hasPendingChanges && !loading && (
+              <span className="sa-btn-apply-pulse-dot" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="sa-btn-reset"
+            disabled={loading}
+            onClick={() => !loading && resetFilters()}
+            title="Reset all filters to defaults"
+          >
+            <RotateCcw className="sa-btn-reset-icon" size={14} />
+            Reset Filters
+          </button>
+        </div>
       </div>
 
       {/* ── Summary Strip ── */}
@@ -7099,8 +7170,8 @@ export default function SalesAnalysis() {
       ═══════════════════════════════════════════════════════ */}
       <div data-spotlight="sa-part-wise-history" className="sales-part-wise-history-section">
         <PartWiseHistorySection
-          dateRange={dateRange}
-          selectedCustomers={selectedCustomers}
+          dateRange={appliedDateRange}
+          selectedCustomers={appliedSelectedCustomers}
           loading={loading || tableLoading}
         />
       </div>

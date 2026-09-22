@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { resolveApiBase } from "../../apiBase";
 import "./PurchaseAnalysis.css";
@@ -42,6 +42,7 @@ import {
     ShieldAlert,
     Percent,
     Layers,
+    Loader2,
     Sparkles,
     ChevronLeft,
     Eye,
@@ -2234,6 +2235,7 @@ export default function PurchaseAnalysis() {
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const toIso = d => {
+        if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "";
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, "0");
         const day = String(d.getDate()).padStart(2, "0");
@@ -2254,6 +2256,44 @@ export default function PurchaseAnalysis() {
     const [searchQuery, setSearchQuery] = useState("");
     const [poTableSearchQuery, setPoTableSearchQuery] = useState("");
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+    // ── Applied Filters State (Trigger fetches & calculations only on Apply) ──
+    const [appliedDateRange, setAppliedDateRange] = useState({ from: _saved.from, to: _saved.to });
+    const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
+    const [appliedPoType, setAppliedPoType] = useState("All Types");
+    const [appliedSupplier, setAppliedSupplier] = useState(["All Suppliers"]);
+    const [fetchTrigger, setFetchTrigger] = useState(0);
+
+    const normalizeArr = (arr) => {
+        if (!arr) return "";
+        if (Array.isArray(arr)) return [...arr].map(s => String(s).trim()).sort().join(",");
+        return String(arr).trim();
+    };
+
+    const hasPendingChanges = useMemo(() => {
+        const dFrom = toIso(dateRange?.from);
+        const dTo = toIso(dateRange?.to);
+        const aFrom = toIso(appliedDateRange?.from);
+        const aTo = toIso(appliedDateRange?.to);
+        if (dFrom !== aFrom || dTo !== aTo) return true;
+        if ((searchQuery || "").trim() !== (appliedSearchQuery || "").trim()) return true;
+        if ((filters.poType || "All Types") !== (appliedPoType || "All Types")) return true;
+        if (normalizeArr(filters.supplier) !== normalizeArr(appliedSupplier)) return true;
+        return false;
+    }, [
+        dateRange, appliedDateRange,
+        searchQuery, appliedSearchQuery,
+        filters.poType, appliedPoType,
+        filters.supplier, appliedSupplier,
+    ]);
+
+    const handleApplyFilters = useCallback(() => {
+        setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+        setAppliedSearchQuery(searchQuery);
+        setAppliedPoType(filters.poType);
+        setAppliedSupplier(Array.isArray(filters.supplier) ? [...filters.supplier] : ["All Suppliers"]);
+        setFetchTrigger(prev => prev + 1);
+    }, [dateRange, searchQuery, filters.poType, filters.supplier]);
 
     useEffect(() => {
         const handler = setTimeout(() => {
@@ -2518,7 +2558,7 @@ export default function PurchaseAnalysis() {
                     (r.grn_date && r.grn_date.toLowerCase().includes(tableQ));
                 if (!match) return false;
             }
-            const globalQ = searchQuery.toLowerCase().trim();
+            const globalQ = appliedSearchQuery.toLowerCase().trim();
             if (globalQ) {
                 const match = (r.po_number && r.po_number.toLowerCase().includes(globalQ)) ||
                     (r.pi_no && r.pi_no.toLowerCase().includes(globalQ)) ||
@@ -2530,8 +2570,8 @@ export default function PurchaseAnalysis() {
                     (r.material && r.material.toLowerCase().includes(globalQ));
                 if (!match) return false;
             }
-            if (filters.supplier && filters.supplier.length > 0 && !filters.supplier.includes("All Suppliers")) {
-                if (!filters.supplier.includes(r.vendor_name)) return false;
+            if (appliedSupplier && appliedSupplier.length > 0 && !appliedSupplier.includes("All Suppliers")) {
+                if (!appliedSupplier.includes(r.vendor_name)) return false;
             }
             if (filters.status && filters.status !== "All Status") {
                 const isGrn = !!r.grn_no;
@@ -2540,7 +2580,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [poRows, poTablePendingFilter, poTableDeptFilter, poTableSearchQuery, searchQuery, filters.supplier, filters.status]);
+    }, [poRows, poTablePendingFilter, poTableDeptFilter, poTableSearchQuery, appliedSearchQuery, appliedSupplier, filters.status]);
 
     const sortedFilteredPoRows = useMemo(() => {
         const sorted = [...filteredPoRows];
@@ -2697,7 +2737,7 @@ export default function PurchaseAnalysis() {
 
     const filteredAmendedPoRows = useMemo(() => {
         return amendedPoRows.filter(r => {
-            const q = searchQuery.toLowerCase().trim();
+            const q = appliedSearchQuery.toLowerCase().trim();
             if (q) {
                 const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
                     (r.po_amnd_no && r.po_amnd_no.toLowerCase().includes(q)) ||
@@ -2708,8 +2748,8 @@ export default function PurchaseAnalysis() {
                     (r.grn_no && r.grn_no.toLowerCase().includes(q));
                 if (!match) return false;
             }
-            if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-                if (!filters.supplier.includes(r.vendor_name)) return false;
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                if (!appliedSupplier.includes(r.vendor_name)) return false;
             }
             if (filters.status && filters.status !== "All Status") {
                 const isGrn = !!r.grn_no;
@@ -2718,7 +2758,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [amendedPoRows, searchQuery, filters.supplier, filters.status]);
+    }, [amendedPoRows, appliedSearchQuery, appliedSupplier, filters.status]);
 
     const amendedPoTableTotals = useMemo(() => {
         let totalValue = 0;
@@ -3377,7 +3417,7 @@ export default function PurchaseAnalysis() {
 
     const filteredShortCloseRows = useMemo(() => {
         return shortCloseRows.filter(r => {
-            const q = searchQuery.toLowerCase().trim();
+            const q = appliedSearchQuery.toLowerCase().trim();
             if (q) {
                 const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
                     (r.supplier_name && r.supplier_name.toLowerCase().includes(q)) ||
@@ -3386,12 +3426,12 @@ export default function PurchaseAnalysis() {
                     (r.short_close_user && r.short_close_user.toLowerCase().includes(q));
                 if (!match) return false;
             }
-            if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-                if (!filters.supplier.includes(r.supplier_name)) return false;
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                if (!appliedSupplier.includes(r.supplier_name)) return false;
             }
             return true;
         });
-    }, [shortCloseRows, searchQuery, filters.supplier]);
+    }, [shortCloseRows, appliedSearchQuery, appliedSupplier]);
 
     const uniquePtTypes = useMemo(() => {
         const set = new Set();
@@ -3493,7 +3533,7 @@ export default function PurchaseAnalysis() {
                 if (!ptPartFilter.includes(part)) return false;
             }
 
-            const q = searchQuery.toLowerCase().trim();
+            const q = appliedSearchQuery.toLowerCase().trim();
             if (q) {
                 const match = (r.partDesc && r.partDesc.toLowerCase().includes(q)) ||
                     (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
@@ -3504,7 +3544,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [priceTrendRows, ptTypeFilter, ptSupplierFilter, ptPartFilter, searchQuery]);
+    }, [priceTrendRows, ptTypeFilter, ptSupplierFilter, ptPartFilter, appliedSearchQuery]);
 
     const [collapsedPtSuppliers, setCollapsedPtSuppliers] = useState({});
 
@@ -3542,7 +3582,7 @@ export default function PurchaseAnalysis() {
 
     const filteredTraceData = useMemo(() => {
         return traceRows.filter(row => {
-            const q = (searchQuery || traceSearch || "").toLowerCase().trim();
+            const q = (appliedSearchQuery || traceSearch || "").toLowerCase().trim();
             if (!q) return true;
             return (
                 (row.supplierName || "").toLowerCase().includes(q) ||
@@ -3553,7 +3593,7 @@ export default function PurchaseAnalysis() {
                 (row.poType || "").toLowerCase().includes(q)
             );
         });
-    }, [traceRows, traceSearch, searchQuery]);
+    }, [traceRows, traceSearch, appliedSearchQuery]);
 
     const handleExportTraceabilityCsv = () => {
         if (!filteredTraceData || filteredTraceData.length === 0) return;
@@ -3742,8 +3782,8 @@ export default function PurchaseAnalysis() {
 
     // ✅ Persist date range to sessionStorage on every change
     useEffect(() => {
-        writeFilterSession("ba_filter_purchase", { from: dateRange.from, to: dateRange.to });
-    }, [dateRange.from, dateRange.to]);
+        writeFilterSession("ba_filter_purchase", { from: appliedDateRange.from, to: appliedDateRange.to });
+    }, [appliedDateRange.from, appliedDateRange.to]);
 
     // ── Fetch live PO types from POMas ──────────────────────
     useEffect(() => {
@@ -3757,7 +3797,7 @@ export default function PurchaseAnalysis() {
 
     // ── Fetch PO table rows + pipeline summary ─────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3765,17 +3805,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setPoLoading(true);
@@ -3793,11 +3833,11 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Amended PO table rows ──────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3805,17 +3845,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setAmendedPoLoading(true);
@@ -3832,29 +3872,23 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAmendedPoLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Short Close table rows ──────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
-        const toIso = d => {
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, "0");
-            const day = String(d.getDate()).padStart(2, "0");
-            return `${y}-${m}-${day}`;
-        };
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setShortCloseLoading(true);
@@ -3870,11 +3904,12 @@ export default function PurchaseAnalysis() {
             .catch(err => {
                 if (err.name !== "AbortError") setShortCloseLoading(false);
             });
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+        return () => ctrl.abort();
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Price Trend table rows ──────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3882,17 +3917,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setPriceTrendLoading(true);
@@ -3909,11 +3944,11 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setPriceTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch management alerts ──────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3921,17 +3956,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setAlertsLoading(true);
@@ -3948,11 +3983,11 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setAlertsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Traceability Table data ────────────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3960,17 +3995,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setTraceLoading(true);
@@ -3987,11 +4022,11 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setTraceLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch PO Fulfillment Schedule ────────────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3999,17 +4034,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setFsLoading(true);
@@ -4026,11 +4061,11 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setFsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Average Purchase Value (APV) ────────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -4038,14 +4073,14 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setApvLoading(true);
@@ -4062,13 +4097,13 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setApvLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Advanced Purchase Analytics (PO line items + Commer_BaseRateDet) ──
     const [apaBackendData, setApaBackendData] = useState({ po_rows: [], commercial_rates: {} });
     const [apaLoading, setApaLoading] = useState(false);
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -4076,8 +4111,8 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
         const ctrl = new AbortController();
         setApaLoading(true);
@@ -4097,12 +4132,12 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setApaLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to]);
+    }, [appliedDateRange.from, appliedDateRange.to, fetchTrigger]);
 
     // ── Fetch charts data (donuts + supplier ranking) ─────────────
     const [chartsData, setChartsData] = useState(null);
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -4110,17 +4145,17 @@ export default function PurchaseAnalysis() {
             return `${y}-${m}-${day}`;
         };
         const params = new URLSearchParams({
-            from: toIso(dateRange.from),
-            to: toIso(dateRange.to),
+            from: toIso(appliedDateRange.from),
+            to: toIso(appliedDateRange.to),
         });
-        if (filters.poType && filters.poType !== "All Types") {
-            params.set("dtype", filters.poType);
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
         }
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setChartsLoading(true);
@@ -4137,7 +4172,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setChartsLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Redraw donut charts (supplier + category) ─────────────────
     useEffect(() => {
@@ -4265,20 +4300,20 @@ export default function PurchaseAnalysis() {
 
     // ── Fetch weekly trend + redraw chart ─────────────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
             const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
         };
-        const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
-        if (filters.poType && filters.poType !== "All Types") params.set("dtype", filters.poType);
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        const params = new URLSearchParams({ from: toIso(appliedDateRange.from), to: toIso(appliedDateRange.to) });
+        if (appliedPoType && appliedPoType !== "All Types") params.set("dtype", appliedPoType);
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setTrendLoading(true);
@@ -4294,24 +4329,24 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setTrendLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch summary metrics (KPI cards & strip) ────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
             const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
         };
-        const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to) });
-        if (filters.poType && filters.poType !== "All Types") params.set("dtype", filters.poType);
-        if (filters.supplier && !filters.supplier.includes("All Suppliers") && filters.supplier.length > 0) {
-            params.set("supplier", filters.supplier.join(","));
+        const params = new URLSearchParams({ from: toIso(appliedDateRange.from), to: toIso(appliedDateRange.to) });
+        if (appliedPoType && appliedPoType !== "All Types") params.set("dtype", appliedPoType);
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
         }
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setSummaryLoading(true);
@@ -4327,20 +4362,20 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setSummaryLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, filters.poType, filters.supplier, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Supplier Rating ───────────────────
     useEffect(() => {
-        if (!dateRange.from || !dateRange.to) return;
+        if (!appliedDateRange.from || !appliedDateRange.to) return;
         const toIso = d => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, "0");
             const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
         };
-        const params = new URLSearchParams({ from: toIso(dateRange.from), to: toIso(dateRange.to), type: "supplier" });
-        if (debouncedSearchQuery) {
-            params.set("search", debouncedSearchQuery);
+        const params = new URLSearchParams({ from: toIso(appliedDateRange.from), to: toIso(appliedDateRange.to), type: "supplier" });
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
         }
         const ctrl = new AbortController();
         setSupplierRatingLoading(true);
@@ -4356,7 +4391,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setSupplierRatingLoading(false);
             });
         return () => ctrl.abort();
-    }, [dateRange.from, dateRange.to, debouncedSearchQuery]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, fetchTrigger]);
 
     // ── Redraw Supplier Rating chart whenever supplierRatingData changes ──
     useEffect(() => {
@@ -5226,6 +5261,11 @@ export default function PurchaseAnalysis() {
             poType: "All Types", supplier: ["All Suppliers"],
             department: "Production", status: "All Status"
         });
+        setAppliedDateRange({ from: dfltRange.from, to: dfltRange.to });
+        setAppliedSearchQuery("");
+        setAppliedPoType("All Types");
+        setAppliedSupplier(["All Suppliers"]);
+        setFetchTrigger(prev => prev + 1);
     };
 
     const isGlobalLoading = poLoading || supplierRatingLoading || summaryLoading || trendLoading || chartsLoading || amendedPoLoading || shortCloseLoading || priceTrendLoading || alertsLoading || traceLoading || fsLoading;
@@ -5276,9 +5316,9 @@ export default function PurchaseAnalysis() {
             const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
             // Initialize only months within the active selected date range filter
-            if (dateRange.from && dateRange.to) {
-                const sDate = new Date(dateRange.from);
-                const eDate = new Date(dateRange.to);
+            if (appliedDateRange.from && appliedDateRange.to) {
+                const sDate = new Date(appliedDateRange.from);
+                const eDate = new Date(appliedDateRange.to);
                 const cur = new Date(sDate.getFullYear(), sDate.getMonth(), 1);
                 const end = new Date(eDate.getFullYear(), eDate.getMonth(), 1);
                 while (cur <= end) {
@@ -6146,6 +6186,11 @@ export default function PurchaseAnalysis() {
                                 placeholder={isGlobalLoading ? "Loading data..." : "Search RM Name"}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !isGlobalLoading) {
+                                        handleApplyFilters();
+                                    }
+                                }}
                                 disabled={isGlobalLoading}
                                 style={{
                                     paddingRight: searchQuery ? "2rem" : "0.85rem",
@@ -6347,17 +6392,40 @@ export default function PurchaseAnalysis() {
                         </div>
                     </div>
 
-                    {/* Reset Filters */}
-                    <button
-                        type="button"
-                        className="pa2-btn-reset"
-                        disabled={isGlobalLoading}
-                        onClick={() => !isGlobalLoading && resetFilters()}
-                        style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.55, pointerEvents: "none" } : {}}
-                    >
-                        <RotateCcw className="pa2-btn-reset-icon" size={14} />
-                        Reset Filters
-                    </button>
+                    {/* Filter Actions */}
+                    <div className="pa2-filter-actions">
+                        <button
+                            type="button"
+                            className={`pa2-btn-apply${hasPendingChanges ? " pa2-btn-apply--pending" : ""}`}
+                            onClick={handleApplyFilters}
+                            disabled={isGlobalLoading}
+                            title={hasPendingChanges ? "Click to apply staged filter selections" : "All filters applied"}
+                        >
+                            {isGlobalLoading ? (
+                                <>
+                                    <Loader2 size={14} className="pa2-btn-apply-spin" />
+                                    <span>Applying...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Filter size={14} className="pa2-btn-apply-icon" />
+                                    <span>Apply Filter</span>
+                                    {hasPendingChanges && <span className="pa2-btn-apply-pulse-dot" />}
+                                </>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            className="pa2-btn-reset"
+                            disabled={isGlobalLoading}
+                            onClick={() => !isGlobalLoading && resetFilters()}
+                            style={isGlobalLoading ? { cursor: "not-allowed", opacity: 0.55, pointerEvents: "none" } : {}}
+                            title="Reset all filters to defaults"
+                        >
+                            <RotateCcw className="pa2-btn-reset-icon" size={14} />
+                            Reset Filters
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -6477,7 +6545,7 @@ export default function PurchaseAnalysis() {
                     <SectionHeader
                         icon={<TrendingUp size={16} style={{ color: "#2d6de8" }} />}
                         title="Purchase Value Trend — Weekly"
-                        badge={weeklyTrend?.period ?? (filters.poType !== "All Types" ? filters.poType : "")}
+                        badge={weeklyTrend?.period ?? (appliedPoType !== "All Types" ? appliedPoType : "")}
                         badgeCls="pa2-badge-blue"
                         extra={
                             <div className="pa2-chart-type-toggle">
@@ -7437,7 +7505,7 @@ export default function PurchaseAnalysis() {
                 {/* PO Pipeline */}
                 <div className="pa2-card pa2-card-premium" data-spotlight="pa-po-pipeline">
                     <SectionHeader icon={<Workflow size={16} style={{ color: "#2d6de8" }} />} title="Purchase Order Pipeline"
-                        badge={filters.poType !== "All Types" ? filters.poType : "All Types"}
+                        badge={appliedPoType !== "All Types" ? appliedPoType : "All Types"}
                         badgeCls="pa2-badge-blue" />
                     {poLoading ? (
                         <div className="pa2-pipeline-body pa2-pulse-loader">

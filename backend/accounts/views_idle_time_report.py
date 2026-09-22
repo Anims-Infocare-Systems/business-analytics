@@ -19,7 +19,8 @@ _IDLE_UNION_SQL = """
         D.Shift,
         D.MacNo,
         ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-        DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
+        DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
     FROM Machine_IdleEntryDet D
     INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
     WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
@@ -30,17 +31,53 @@ _IDLE_UNION_SQL = """
 
     SELECT
         P.proddate AS EntryDate,
-        P.shift,
-        P.macno,
+        P.shift AS Shift,
+        P.macno AS MacNo,
+        ISNULL(PI.reasons, N'Production Idle Time') AS Reason,
+        CASE
+            WHEN PI.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', PI.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', PI.tottime)
+            WHEN PI.stime IS NOT NULL AND PI.etime IS NOT NULL
+            THEN CASE
+                WHEN PI.etime >= PI.stime THEN DATEDIFF(SECOND, PI.stime, PI.etime)
+                ELSE DATEDIFF(SECOND, PI.stime, DATEADD(DAY, 1, PI.etime))
+            END
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN ISNULL(CAST(PI.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+    FROM Prod_IdleEntry PI
+    INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
+    WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(P.deleted, 0) = 0
+      AND ISNULL(PI.deleted, 0) = 0
+
+    UNION ALL
+
+    SELECT
+        P.proddate AS EntryDate,
+        P.shift AS Shift,
+        P.macno AS MacNo,
         N'Production Idle Time' AS Reason,
         CASE
             WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
             THEN DATEDIFF(SECOND, '19000101', P.idlTime)
             ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-        END AS IdleSeconds
+        END AS IdleSeconds,
+        CASE
+            WHEN ISNULL(P.nonaccidletimesecs, 0) > 0 AND ISNULL(P.accidletimesecs, 0) = 0 THEN 0
+            ELSE 1
+        END AS IsEffCalc
     FROM ProductionEntry P
     WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
       AND ISNULL(P.deleted, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM Prod_IdleEntry PI_CHK
+          WHERE PI_CHK.prodid = P.prodid AND ISNULL(PI_CHK.deleted, 0) = 0
+      )
+      AND (
+          (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0)
+          OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
+      )
 
     UNION ALL
 
@@ -49,7 +86,8 @@ _IDLE_UNION_SQL = """
         C.shift,
         C.macno,
         N'Conv Production Idle Time' AS Reason,
-        DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
+        DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
     FROM ConvProductionEntry C
     WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
       AND ISNULL(C.deleted, 0) = 0
@@ -61,7 +99,8 @@ _IDLE_UNION_SQL = """
         R.shift,
         R.macno,
         N'Conv Rod Idle Time' AS Reason,
-        DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
+        DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
     FROM ConvProductionEntryRod R
     WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
       AND ISNULL(R.deleted, 0) = 0
@@ -154,8 +193,8 @@ _SHIFT_TILE_SLOT_LABELS = (
 
 
 def _union_date_params(start_date, end_date):
-    """Four UNION branches — each needs (start, end)."""
-    return [start_date, end_date] * 4
+    """Five UNION branches — each needs (start, end)."""
+    return [start_date, end_date] * 5
 
 
 def _parse_machine(value):
@@ -356,7 +395,8 @@ def _filtered_cte_sql(outer_filters):
             A.Shift,
             A.MacNo,
             A.Reason,
-            A.IdleSeconds
+            A.IdleSeconds,
+            A.IsEffCalc
         FROM (
             {_IDLE_UNION_SQL}
         ) A
@@ -507,220 +547,9 @@ def _compute_kpis(cursor, start_date, end_date, date_params, outer_sql, outer_pa
 
 
 def _fetch_top_idle_reasons(cursor, date_params, outer_sql, outer_params, limit=10):
-    """Top N reasons by total idle hours (decimal) from filtered idle union, joining Prod_IdleEntry for reasons."""
-    start_date = date_params[0] if len(date_params) >= 2 else None
-    end_date = date_params[1] if len(date_params) >= 2 else None
-    if not start_date or not end_date:
-        return {"labels": [], "data": [], "seconds": [], "hours_display": [], "colors": []}
-
-    branches = []
-    branch_params = []
-
-    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
-    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
-        branches.append("""
-            SELECT
-                M.proddate AS EntryDate,
-                D.Shift,
-                D.MacNo,
-                ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-                DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
-            FROM Machine_IdleEntryDet D
-            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-            WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
-              AND ISNULL(M.deleted, 0) = 0
-              AND ISNULL(D.deleted, 0) = 0
-        """)
-        branch_params.extend([start_date, end_date])
-
-    # 2. ProductionEntry + Prod_IdleEntry
-    has_prod_idle = table_exists(cursor, "Prod_IdleEntry")
-    has_prod_entry = table_exists(cursor, "ProductionEntry")
-
-    if has_prod_entry:
-        if has_prod_idle:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    ISNULL(PI.reasons, N'Production Idle Time') AS Reason,
-                    CASE
-                        WHEN PI.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', PI.tottime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', PI.tottime)
-                        WHEN PI.stime IS NOT NULL AND PI.etime IS NOT NULL
-                        THEN CASE
-                            WHEN PI.etime >= PI.stime THEN DATEDIFF(SECOND, PI.stime, PI.etime)
-                            ELSE DATEDIFF(SECOND, PI.stime, DATEADD(DAY, 1, PI.etime))
-                        END
-                        ELSE 0
-                    END AS IdleSeconds
-                FROM Prod_IdleEntry PI
-                INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND ISNULL(PI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            # Fallback for ProductionEntry records without rows in Prod_IdleEntry
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Prod_IdleEntry PI_CHK
-                      WHERE PI_CHK.prodid = P.prodid AND ISNULL(PI_CHK.deleted, 0) = 0
-                  )
-                  AND (
-                      (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0)
-                      OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 3. ConvProductionEntry
-    if table_exists(cursor, "ConvProductionEntry"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Production Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntry C ON CI.entryno = C.entryno
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = C.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 4. ConvProductionEntryRod
-    if table_exists(cursor, "ConvProductionEntryRod"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Rod Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntryRod R ON CI.entryno = R.entryno
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = R.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    if not branches:
-        return {"labels": [], "data": [], "seconds": [], "hours_display": [], "colors": []}
-
-    union_sql = "\nUNION ALL\n".join(branches)
-
-    query = f"""
-        WITH FilteredIdle AS (
-            SELECT
-                A.EntryDate,
-                A.Shift,
-                A.MacNo,
-                A.Reason,
-                A.IdleSeconds
-            FROM (
-                {union_sql}
-            ) A
-            WHERE 1 = 1
-            {outer_sql}
-        )
+    """Top N reasons by total idle hours (decimal) from canonical filtered idle union."""
+    base = _filtered_cte_sql(outer_sql)
+    query = base + f"""
         SELECT TOP ({int(limit)})
             LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) AS Reason,
             CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
@@ -732,7 +561,7 @@ def _fetch_top_idle_reasons(cursor, date_params, outer_sql, outer_params, limit=
         ORDER BY SUM(IdleSeconds) DESC
     """
 
-    cursor.execute(query, branch_params + outer_params)
+    cursor.execute(query, date_params + outer_params)
     rows = cursor.fetchall() or []
     labels = [(str(r[0]).strip() if r[0] is not None else "") or "(blank)" for r in rows]
     data = [float(r[1] or 0) for r in rows]
@@ -969,222 +798,10 @@ def _fetch_idle_pct_ranking(
 
 def _fetch_continuous_idle_reasons(cursor, date_params, outer_sql, outer_params):
     """
-    Machine + reason rows with total idle >= 4 hours in the filtered date range.
-    Joins Prod_IdleEntry for individual idle reasons and durations.
+    Machine + reason rows with total idle >= 4 hours in the filtered date range from canonical FilteredIdle.
     """
-    start_date = date_params[0] if len(date_params) >= 2 else None
-    end_date = date_params[1] if len(date_params) >= 2 else None
-    if not start_date or not end_date:
-        return []
-
-    branches = []
-    branch_params = []
-
-    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
-    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
-        branches.append("""
-            SELECT
-                M.proddate AS EntryDate,
-                D.Shift,
-                D.MacNo,
-                ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-                DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
-            FROM Machine_IdleEntryDet D
-            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-            WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
-              AND ISNULL(M.deleted, 0) = 0
-              AND ISNULL(D.deleted, 0) = 0
-        """)
-        branch_params.extend([start_date, end_date])
-
-    # 2. ProductionEntry + Prod_IdleEntry
-    has_prod_idle = table_exists(cursor, "Prod_IdleEntry")
-    has_prod_entry = table_exists(cursor, "ProductionEntry")
-
-    if has_prod_entry:
-        if has_prod_idle:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    ISNULL(PI.reasons, N'Production Idle Time') AS Reason,
-                    CASE
-                        WHEN PI.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', PI.tottime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', PI.tottime)
-                        WHEN PI.stime IS NOT NULL AND PI.etime IS NOT NULL
-                        THEN CASE
-                            WHEN PI.etime >= PI.stime THEN DATEDIFF(SECOND, PI.stime, PI.etime)
-                            ELSE DATEDIFF(SECOND, PI.stime, DATEADD(DAY, 1, PI.etime))
-                        END
-                        ELSE 0
-                    END AS IdleSeconds
-                FROM Prod_IdleEntry PI
-                INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND ISNULL(PI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            # Fallback for ProductionEntry records without rows in Prod_IdleEntry
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Prod_IdleEntry PI_CHK
-                      WHERE PI_CHK.prodid = P.prodid AND ISNULL(PI_CHK.deleted, 0) = 0
-                  )
-                  AND (
-                      (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0)
-                      OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 3. ConvProductionEntry
-    if table_exists(cursor, "ConvProductionEntry"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Production Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntry C ON CI.entryno = C.entryno
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = C.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 4. ConvProductionEntryRod
-    if table_exists(cursor, "ConvProductionEntryRod"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Rod Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntryRod R ON CI.entryno = R.entryno
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = R.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    if not branches:
-        return []
-
-    union_sql = "\nUNION ALL\n".join(branches)
-
-    query = f"""
-        WITH FilteredIdle AS (
-            SELECT
-                A.EntryDate,
-                A.Shift,
-                A.MacNo,
-                A.Reason,
-                A.IdleSeconds
-            FROM (
-                {union_sql}
-            ) A
-            WHERE 1 = 1
-            {outer_sql}
-        )
+    base = _filtered_cte_sql(outer_sql)
+    query = base + """
         SELECT
             LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
             LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) AS Reason,
@@ -1203,7 +820,7 @@ def _fetch_continuous_idle_reasons(cursor, date_params, outer_sql, outer_params)
             LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))),
             LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512))))
     """
-    cursor.execute(query, branch_params + outer_params)
+    cursor.execute(query, date_params + outer_params)
     rows = []
     for mac, reason, shift_count, total_secs in cursor.fetchall() or []:
         secs = int(total_secs or 0)
@@ -1251,7 +868,7 @@ def _shift_tile_label(shift_name, stime1, etime2):
     t1 = _format_shift_clock(stime1, force_minutes=has_mins)
     t2 = _format_shift_clock(etime2, force_minutes=has_mins)
     if t1 and t2:
-        return f"{name}  {t1}–{t2}"
+        return f"{name}  {t1} - {t2}"
     return name or "Shift"
 
 
@@ -1277,7 +894,7 @@ def _fetch_shift_master(cursor):
     return cursor.fetchall() or []
 
 
-def _fetch_shift_wise_idle(cursor, date_params, outer_sql, outer_params, machine_limit=15):
+def _fetch_shift_wise_idle(cursor, date_params, outer_sql, outer_params, machine_limit=None):
     """
     Shift-wise idle hours per machine (overall idle union by shift) for the
     "No. of Machines Idled — Shift Wise" chart only. Uses up to 3 regular shifts
@@ -1330,11 +947,15 @@ def _fetch_shift_wise_idle(cursor, date_params, outer_sql, outer_params, machine
     mac_totals = {
         m: sum(mac_shift_hours[m].values()) for m in mac_shift_hours
     }
-    labels = sorted(
+    sorted_labels = sorted(
         mac_totals.keys(),
         key=lambda m: mac_totals[m],
         reverse=True,
-    )[: int(machine_limit)]
+    )
+    if machine_limit:
+        labels = sorted_labels[: int(machine_limit)]
+    else:
+        labels = sorted_labels
 
     datasets = []
     if regular_rows:
@@ -1413,215 +1034,9 @@ def _fetch_shift_wise_idle(cursor, date_params, outer_sql, outer_params, machine
 
 
 def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_sql, outer_params):
-    """Daily total idle hours (decimal) for each date in the filtered range, joining Prod_IdleEntry."""
-    branches = []
-    branch_params = []
-
-    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
-    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
-        branches.append("""
-            SELECT
-                M.proddate AS EntryDate,
-                D.Shift,
-                D.MacNo,
-                ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-                DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
-            FROM Machine_IdleEntryDet D
-            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-            WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
-              AND ISNULL(M.deleted, 0) = 0
-              AND ISNULL(D.deleted, 0) = 0
-        """)
-        branch_params.extend([start_date, end_date])
-
-    # 2. ProductionEntry + Prod_IdleEntry
-    has_prod_idle = table_exists(cursor, "Prod_IdleEntry")
-    has_prod_entry = table_exists(cursor, "ProductionEntry")
-
-    if has_prod_entry:
-        if has_prod_idle:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    ISNULL(PI.reasons, N'Production Idle Time') AS Reason,
-                    CASE
-                        WHEN PI.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', PI.tottime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', PI.tottime)
-                        WHEN PI.stime IS NOT NULL AND PI.etime IS NOT NULL
-                        THEN CASE
-                            WHEN PI.etime >= PI.stime THEN DATEDIFF(SECOND, PI.stime, PI.etime)
-                            ELSE DATEDIFF(SECOND, PI.stime, DATEADD(DAY, 1, PI.etime))
-                        END
-                        ELSE 0
-                    END AS IdleSeconds
-                FROM Prod_IdleEntry PI
-                INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND ISNULL(PI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            # Fallback for ProductionEntry records without rows in Prod_IdleEntry
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Prod_IdleEntry PI_CHK
-                      WHERE PI_CHK.prodid = P.prodid AND ISNULL(PI_CHK.deleted, 0) = 0
-                  )
-                  AND (
-                      (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0)
-                      OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 3. ConvProductionEntry
-    if table_exists(cursor, "ConvProductionEntry"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Production Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntry C ON CI.entryno = C.entryno
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = C.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 4. ConvProductionEntryRod
-    if table_exists(cursor, "ConvProductionEntryRod"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Rod Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntryRod R ON CI.entryno = R.entryno
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = R.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    if not branches:
-        return {"labels": [], "hours": [], "is_sunday": [], "hours_display": [], "day_count": 0, "total_seconds": 0, "total_hours_display": "0:00", "total_formatted": "0 Hrs 0 Mins"}
-
-    union_sql = "\nUNION ALL\n".join(branches)
-
-    query = f"""
-        WITH FilteredIdle AS (
-            SELECT
-                A.EntryDate,
-                A.Shift,
-                A.MacNo,
-                A.Reason,
-                A.IdleSeconds
-            FROM (
-                {union_sql}
-            ) A
-            WHERE 1 = 1
-            {outer_sql}
-        )
+    """Daily total idle hours (decimal) for each date in the filtered range from canonical FilteredIdle."""
+    base = _filtered_cte_sql(outer_sql)
+    query = base + """
         SELECT
             CAST(F.EntryDate AS DATE) AS EntryDate,
             CAST(SUM(F.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
@@ -1630,7 +1045,7 @@ def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_s
         GROUP BY CAST(F.EntryDate AS DATE)
         ORDER BY CAST(F.EntryDate AS DATE)
     """
-    cursor.execute(query, branch_params + outer_params)
+    cursor.execute(query, date_params + outer_params)
     daily = {}
     daily_sec = {}
     for row in cursor.fetchall() or []:
@@ -1671,33 +1086,18 @@ def _fetch_daywise_idle_hours(start_date, end_date, cursor, date_params, outer_s
     }
 
 
-def _fetch_accepted_vs_non_accepted(cursor, date_params, outer_sql, outer_params):
+def _build_accepted_vs_non_accepted_branches(cursor, start_date, end_date, include_machine_idle_entry=True):
     """
-    Classify filtered idle seconds as Accepted vs Non-Accepted.
-    For Machine_IdleEntry: classifies via IdleReasons.IsAccept.
-    For ProductionEntry: joins Prod_IdleEntry (PI) on prodid to bring individual
-    idle reasons and IsEffCalc (IsEffCalc true -> Accepted, false -> Non-Accepted, with fallback to IdleReasons.IsAccept).
+    Builds the UNION branches for classifying idle time as Accepted vs Non-Accepted.
+    Returns (branches, branch_params).
+    Each branch yields:
+      EntryDate, Shift, MacNo, Reason, IdleSeconds, IsEffCalc
     """
-    empty = {
-        "accepted_seconds": 0,
-        "non_accepted_seconds": 0,
-        "accepted_hours_display": "0:00",
-        "non_accepted_hours_display": "0:00",
-        "accepted_pct": 0.0,
-        "non_accepted_pct": 0.0,
-        "chart_hours": [0.0, 0.0],
-    }
-
-    start_date = date_params[0] if len(date_params) >= 2 else None
-    end_date = date_params[1] if len(date_params) >= 2 else None
-    if not start_date or not end_date:
-        return empty
-
     branches = []
     branch_params = []
 
     # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
-    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
+    if include_machine_idle_entry and table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
         branches.append("""
             SELECT
                 M.proddate AS EntryDate,
@@ -1930,58 +1330,54 @@ def _fetch_accepted_vs_non_accepted(cursor, date_params, outer_sql, outer_params
             """)
             branch_params.extend([start_date, end_date])
 
-    if not branches:
-        return empty
+    return branches, branch_params
 
-    union_sql = "\nUNION ALL\n".join(branches)
 
-    has_idle_reasons = table_exists(cursor, "IdleReasons")
-    join_idle_reasons = """
-        LEFT JOIN IdleReasons IR
-            ON LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512))))
-             = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
-            AND ISNULL(IR.deleted, 0) = 0
-    """ if has_idle_reasons else ""
+def _fetch_accepted_vs_non_accepted(cursor, date_params, outer_sql, outer_params):
+    """
+    Classify filtered idle seconds as Accepted vs Non-Accepted from canonical FilteredIdle.
+    Uses IsEffCalc for Prod_IdleEntry (1 -> Accepted, 0 -> Non-Accepted),
+    and IdleReasons.IsAccept for Machine_IdleEntry and other entries.
+    """
+    empty = {
+        "accepted_seconds": 0,
+        "non_accepted_seconds": 0,
+        "accepted_hours_display": "0:00",
+        "non_accepted_hours_display": "0:00",
+        "accepted_pct": 0.0,
+        "non_accepted_pct": 0.0,
+        "chart_hours": [0.0, 0.0],
+    }
 
-    ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
-
-    query = f"""
-        WITH FilteredIdle AS (
-            SELECT
-                A.EntryDate,
-                A.Shift,
-                A.MacNo,
-                A.Reason,
-                A.IdleSeconds,
-                A.IsEffCalc
-            FROM (
-                {union_sql}
-            ) A
-            WHERE 1 = 1
-            {outer_sql}
-        )
+    base = _filtered_cte_sql(outer_sql)
+    query = base + """
         SELECT
             ISNULL(SUM(
                 CASE
                     WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
                     WHEN F.IsEffCalc = 0 THEN 0
-                    WHEN {ir_accept_check} THEN F.IdleSeconds
-                    ELSE 0
+                    WHEN IR.IsAccept = 1 THEN F.IdleSeconds
+                    WHEN IR.IsAccept = 0 THEN 0
+                    ELSE F.IdleSeconds
                 END
             ), 0) AS AcceptedSecs,
             ISNULL(SUM(
                 CASE
                     WHEN F.IsEffCalc = 1 THEN 0
                     WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
-                    WHEN {ir_accept_check} THEN 0
-                    ELSE F.IdleSeconds
+                    WHEN IR.IsAccept = 1 THEN 0
+                    WHEN IR.IsAccept = 0 THEN F.IdleSeconds
+                    ELSE 0
                 END
             ), 0) AS NonAcceptedSecs
         FROM FilteredIdle F
-        {join_idle_reasons}
+        LEFT JOIN IdleReasons IR
+            ON LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+            AND ISNULL(IR.deleted, 0) = 0
     """
 
-    cursor.execute(query, branch_params + outer_params)
+    cursor.execute(query, date_params + outer_params)
     row = cursor.fetchone()
     acc_secs = int(row[0] or 0) if row else 0
     na_secs = int(row[1] or 0) if row else 0
@@ -2075,46 +1471,59 @@ def _productive_date_params(start_date, end_date):
     return [start_date, end_date] * 3
 
 
-def _build_utilization_filters(machine, shift, mac_type=None):
+def _build_utilization_filters(machine, shift, mac_type=None, prefix="S_ALL"):
     clauses = []
     params = []
     if machine:
         if isinstance(machine, list):
             placeholders = ",".join(["?"] * len(machine))
-            clauses.append(f"AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN ({placeholders})")
+            clauses.append(f"AND LTRIM(RTRIM(CAST({prefix}.MacNo AS NVARCHAR(512)))) IN ({placeholders})")
             params.extend(machine)
         else:
-            clauses.append("AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) = ?")
+            clauses.append(f"AND LTRIM(RTRIM(CAST({prefix}.MacNo AS NVARCHAR(512)))) = ?")
             params.append(machine)
     if mac_type:
         if mac_type == "CNC":
-            clauses.append("""AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN (
+            clauses.append(f"""AND LTRIM(RTRIM(CAST({prefix}.MacNo AS NVARCHAR(512)))) IN (
                 SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
                 FROM MacMaster
                 WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1
             )""")
         elif mac_type == "CONV":
-            clauses.append("""AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512)))) IN (
+            clauses.append(f"""AND LTRIM(RTRIM(CAST({prefix}.MacNo AS NVARCHAR(512)))) IN (
                 SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
                 FROM MacMaster
                 WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL)
             )""")
     if shift:
         clauses.append(
-            "AND LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128)))) = ?"
+            f"AND LTRIM(RTRIM(CAST({prefix}.Shift AS NVARCHAR(128)))) = ?"
         )
         params.append(shift)
     return "\n".join(clauses), params
 
 
-def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_type=None):
+def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_type=None, reason=None):
     """
     Machine utilization totals (ERP query): available / idle / productive hours
-    and overall idle % for the filtered date range (optional machine & shift).
+    and overall idle % for the filtered date range (optional machine, shift & reason).
+    Uses canonical _IDLE_UNION_SQL so Total Idle Hours exactly matches top KPI cards.
     """
     date_params = _union_date_params(start_date, end_date)
     prod_params = _productive_date_params(start_date, end_date)
-    util_filters, util_params = _build_utilization_filters(machine, shift, mac_type=mac_type)
+    util_filters, util_params = _build_utilization_filters(machine, shift, mac_type=mac_type, prefix="S_ALL")
+
+    idle_filter_clauses = []
+    idle_filter_params = []
+    if reason:
+        if isinstance(reason, list):
+            placeholders = ",".join(["?"] * len(reason))
+            idle_filter_clauses.append(f"AND LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) IN ({placeholders})")
+            idle_filter_params.extend(reason)
+        else:
+            idle_filter_clauses.append("AND LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) = ?")
+            idle_filter_params.append(reason)
+    idle_where = "\n".join(idle_filter_clauses)
 
     if not table_exists(cursor, "shift"):
         return {
@@ -2135,50 +1544,10 @@ def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_
             A.MacNo,
             SUM(A.IdleSeconds) AS TotalIdleSeconds
         FROM (
-            SELECT
-                M.proddate AS EntryDate,
-                D.Shift,
-                D.MacNo,
-                DATEDIFF(SECOND, '1900-01-01 00:00:00', D.tottime) AS IdleSeconds
-            FROM Machine_IdleEntryDet D
-            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-            WHERE M.proddate BETWEEN ? AND ?
-              AND M.deleted = 0
-              AND D.deleted = 0
-
-            UNION ALL
-
-            SELECT
-                P.proddate,
-                P.shift,
-                P.macno,
-                ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-            FROM ProductionEntry P
-            WHERE P.proddate BETWEEN ? AND ?
-              AND P.deleted = 0
-
-            UNION ALL
-
-            SELECT
-                C.entrydate,
-                C.shift,
-                C.macno,
-                DATEDIFF(SECOND, '1900-01-01 00:00:00', C.IdleTime)
-            FROM ConvProductionEntry C
-            WHERE C.entrydate BETWEEN ? AND ?
-              AND C.deleted = 0
-
-            UNION ALL
-
-            SELECT
-                R.entrydate,
-                R.shift,
-                R.macno,
-                DATEDIFF(SECOND, '1900-01-01 00:00:00', R.IdleTime)
-            FROM ConvProductionEntryRod R
-            WHERE R.entrydate BETWEEN ? AND ?
-              AND R.deleted = 0
+            {_IDLE_UNION_SQL}
         ) A
+        WHERE 1 = 1
+        {idle_where}
         GROUP BY A.EntryDate, A.Shift, A.MacNo
     ),
     PRODUCTIVE_DATA AS (
@@ -2192,23 +1561,34 @@ def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_
         ) P
         GROUP BY P.EntryDate, P.Shift, P.MacNo
     ),
+    ALL_SLOTS AS (
+        SELECT EntryDate, Shift, MacNo FROM IDLE_DATA
+        UNION
+        SELECT EntryDate, Shift, MacNo FROM PRODUCTIVE_DATA
+    ),
     DETAIL AS (
         SELECT
-            I.EntryDate,
-            I.Shift,
-            I.MacNo,
+            S_ALL.EntryDate,
+            S_ALL.Shift,
+            S_ALL.MacNo,
             ISNULL(S.ShiftSeconds, 0) AS ShiftSeconds,
-            I.TotalIdleSeconds,
+            ISNULL(I.TotalIdleSeconds, 0) AS TotalIdleSeconds,
             ISNULL(P.TotalProductiveSeconds, 0) AS TotalProductiveSeconds
-        FROM IDLE_DATA I
+        FROM ALL_SLOTS S_ALL
+        LEFT JOIN IDLE_DATA I
+            ON S_ALL.EntryDate = I.EntryDate
+           AND LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
+             = LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128))))
+           AND LTRIM(RTRIM(CAST(S_ALL.MacNo AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512))))
         LEFT JOIN PRODUCTIVE_DATA P
-            ON I.EntryDate = P.EntryDate
-           AND LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128))))
+            ON S_ALL.EntryDate = P.EntryDate
+           AND LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
              = LTRIM(RTRIM(CAST(P.Shift AS NVARCHAR(128))))
-           AND LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512))))
+           AND LTRIM(RTRIM(CAST(S_ALL.MacNo AS NVARCHAR(512))))
              = LTRIM(RTRIM(CAST(P.MacNo AS NVARCHAR(512))))
         LEFT JOIN SHIFT_HOURS S
-            ON LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128))))
+            ON LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
              = LTRIM(RTRIM(CAST(S.Shift AS NVARCHAR(128))))
         WHERE 1 = 1
         {util_filters}
@@ -2217,9 +1597,9 @@ def _fetch_utilization_totals(cursor, start_date, end_date, machine, shift, mac_
         ISNULL(SUM(ShiftSeconds), 0),
         ISNULL(SUM(TotalIdleSeconds), 0),
         ISNULL(SUM(TotalProductiveSeconds), 0)
-    FROM DETAIL I
+    FROM DETAIL
     """
-    params = date_params + prod_params + util_params
+    params = date_params + idle_filter_params + prod_params + util_params
     cursor.execute(sql, params)
     row = cursor.fetchone()
     avail_secs = int(row[0] or 0) if row else 0
@@ -2616,14 +1996,13 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, m
         gap_secs = int(gap_secs or 0)
         has_entry = int(has_entry or 0)
 
-        if gap_secs <= gap_threshold:
+        if not has_entry:
+            not_entered += 1
+        elif gap_secs <= gap_threshold:
             completed += 1
             continue
-
-        if has_entry:
-            partial_entry += 1
         else:
-            not_entered += 1
+            partial_entry += 1
 
         mac_label = (str(mac_no).strip() if mac_no else "") or "—"
         opr = (str(operator).strip() if operator else "") or "Pending"
@@ -2663,223 +2042,12 @@ def _detail_row_level(pct):
 
 def _fetch_reason_machine_detail(cursor, date_params, outer_sql, outer_params):
     """
-    Pivot: idle reasons (rows) × machines (columns), cell values = idle hours (H:MM).
-    Joins Prod_IdleEntry for individual idle reasons and durations across machines.
+    Pivot: idle reasons (rows) × machines (columns), cell values = idle hours (H:MM)
+    from canonical FilteredIdle.
     """
     empty = {"column_headers": [], "rows": [], "footer": {"cols": [], "total": "0:00:00", "pct": "0"}}
-    start_date = date_params[0] if len(date_params) >= 2 else None
-    end_date = date_params[1] if len(date_params) >= 2 else None
-    if not start_date or not end_date:
-        return empty
-
-    branches = []
-    branch_params = []
-
-    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
-    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
-        branches.append("""
-            SELECT
-                M.proddate AS EntryDate,
-                D.Shift,
-                D.MacNo,
-                ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-                DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds
-            FROM Machine_IdleEntryDet D
-            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-            WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
-              AND ISNULL(M.deleted, 0) = 0
-              AND ISNULL(D.deleted, 0) = 0
-        """)
-        branch_params.extend([start_date, end_date])
-
-    # 2. ProductionEntry + Prod_IdleEntry
-    has_prod_idle = table_exists(cursor, "Prod_IdleEntry")
-    has_prod_entry = table_exists(cursor, "ProductionEntry")
-
-    if has_prod_entry:
-        if has_prod_idle:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    ISNULL(PI.reasons, N'Production Idle Time') AS Reason,
-                    CASE
-                        WHEN PI.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', PI.tottime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', PI.tottime)
-                        WHEN PI.stime IS NOT NULL AND PI.etime IS NOT NULL
-                        THEN CASE
-                            WHEN PI.etime >= PI.stime THEN DATEDIFF(SECOND, PI.stime, PI.etime)
-                            ELSE DATEDIFF(SECOND, PI.stime, DATEADD(DAY, 1, PI.etime))
-                        END
-                        ELSE 0
-                    END AS IdleSeconds
-                FROM Prod_IdleEntry PI
-                INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND ISNULL(PI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            # Fallback for ProductionEntry records without rows in Prod_IdleEntry
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Prod_IdleEntry PI_CHK
-                      WHERE PI_CHK.prodid = P.prodid AND ISNULL(PI_CHK.deleted, 0) = 0
-                  )
-                  AND (
-                      (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0)
-                      OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    P.proddate AS EntryDate,
-                    P.shift AS Shift,
-                    P.macno AS MacNo,
-                    N'Production Idle Time' AS Reason,
-                    CASE
-                        WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', P.idlTime) > 0
-                        THEN DATEDIFF(SECOND, '19000101', P.idlTime)
-                        ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0)
-                    END AS IdleSeconds
-                FROM ProductionEntry P
-                WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(P.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 3. ConvProductionEntry
-    if table_exists(cursor, "ConvProductionEntry"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Production Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntry C ON CI.entryno = C.entryno
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = C.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    C.entrydate AS EntryDate,
-                    C.shift AS Shift,
-                    C.macno AS MacNo,
-                    N'Conv Production Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(C.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntry C
-                WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(C.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    # 4. ConvProductionEntryRod
-    if table_exists(cursor, "ConvProductionEntryRod"):
-        if table_exists(cursor, "conv_IdleEntry"):
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    ISNULL(CI.reasons, N'Conv Rod Idle Time') AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(CI.tottime, '19000101')) AS IdleSeconds
-                FROM conv_IdleEntry CI
-                INNER JOIN ConvProductionEntryRod R ON CI.entryno = R.entryno
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND ISNULL(CI.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM conv_IdleEntry CI_CHK
-                      WHERE CI_CHK.entryno = R.entryno AND ISNULL(CI_CHK.deleted, 0) = 0
-                  )
-            """)
-            branch_params.extend([start_date, end_date])
-        else:
-            branches.append("""
-                SELECT
-                    R.entrydate AS EntryDate,
-                    R.shift AS Shift,
-                    R.macno AS MacNo,
-                    N'Conv Rod Idle Time' AS Reason,
-                    DATEDIFF(SECOND, '19000101', ISNULL(R.IdleTime, '19000101')) AS IdleSeconds
-                FROM ConvProductionEntryRod R
-                WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                  AND ISNULL(R.deleted, 0) = 0
-            """)
-            branch_params.extend([start_date, end_date])
-
-    if not branches:
-        return empty
-
-    union_sql = "\nUNION ALL\n".join(branches)
-
-    query = f"""
-        WITH FilteredIdle AS (
-            SELECT
-                A.EntryDate,
-                A.Shift,
-                A.MacNo,
-                A.Reason,
-                A.IdleSeconds
-            FROM (
-                {union_sql}
-            ) A
-            WHERE 1 = 1
-            {outer_sql}
-        )
+    base = _filtered_cte_sql(outer_sql)
+    query = base + """
         SELECT
             LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) AS Reason,
             LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
@@ -2891,7 +2059,7 @@ def _fetch_reason_machine_detail(cursor, date_params, outer_sql, outer_params):
             LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))),
             LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
     """
-    cursor.execute(query, branch_params + outer_params)
+    cursor.execute(query, date_params + outer_params)
 
     pivot = defaultdict(lambda: defaultdict(int))
     machine_totals = defaultdict(int)
@@ -2942,6 +2110,47 @@ def _fetch_reason_machine_detail(cursor, date_params, outer_sql, outer_params):
             "pct": "100",
         },
     }
+
+def _fetch_operator_wise_idle(data_rows):
+    """Aggregate total idle time by operator from enriched data_rows."""
+    if not data_rows:
+        return []
+    op_map = defaultdict(lambda: {"seconds": 0, "decimal": 0.0})
+    total_secs = 0
+    for r in data_rows:
+        op = (r.get("operator") or "").strip()
+        if not op or op in ("—", "Pending", "-", "NO OPERATOR", "None"):
+            continue
+        dec = float(r.get("total_idle_hours_decimal") or 0)
+        secs = round(dec * 3600)
+        if secs <= 0:
+            th = r.get("total_idle_hours") or ""
+            if ":" in str(th):
+                parts = str(th).split(":")
+                secs = int(parts[0] or 0) * 3600 + int(parts[1] or 0) * 60
+                dec = secs / 3600.0
+        if secs > 0:
+            op_map[op]["seconds"] += secs
+            op_map[op]["decimal"] += dec
+            total_secs += secs
+
+    if not op_map:
+        return []
+
+    results = []
+    for op, data in op_map.items():
+        s = data["seconds"]
+        h = s // 3600
+        m = (s % 3600) // 60
+        pct = round((s / total_secs) * 100, 1) if total_secs > 0 else 0.0
+        results.append({
+            "name": op,
+            "hours": f"{h}:{m:02d}",
+            "seconds": s,
+            "pct": pct,
+        })
+    results.sort(key=lambda x: x["seconds"], reverse=True)
+    return results
 
 
 @api_view(["GET"])
@@ -3055,7 +2264,13 @@ def idle_time_report(request):
             CONVERT(VARCHAR(8), DATEADD(SECOND, SUM(A.IdleSeconds), 0), 108) AS TotalIdleHours,
             CAST(SUM(A.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS TotalIdleHours_Decimal,
             {rate_select},
-            ISNULL(MAX(CAST(IR.IsAccept AS INT)), 1) AS IsAccepted
+            CASE
+                WHEN MAX(A.IsEffCalc) = 1 THEN 1
+                WHEN MIN(A.IsEffCalc) = 0 THEN 0
+                WHEN MAX(CAST(IR.IsAccept AS INT)) = 1 THEN 1
+                WHEN MIN(CAST(IR.IsAccept AS INT)) = 0 THEN 0
+                ELSE 1
+            END AS IsAccepted
         FROM (
             {_IDLE_UNION_SQL}
         ) A
@@ -3120,7 +2335,7 @@ def idle_time_report(request):
         
         try:
             utilization_totals = _fetch_utilization_totals(
-                cursor, start_date, end_date, machine, shift, mac_type=mac_type,
+                cursor, start_date, end_date, machine, shift, mac_type=mac_type, reason=reason,
             )
         except Exception:
             pass
@@ -3149,6 +2364,7 @@ def idle_time_report(request):
         )
 
         operators_list = sorted(list({r.get("operator") for r in data_rows if r.get("operator") and r.get("operator") != "—"}))
+        operator_wise_idle = _fetch_operator_wise_idle(data_rows)
 
         cursor.close()
         conn.close()
@@ -3198,4 +2414,5 @@ def idle_time_report(request):
         "continuous_idle_reasons": continuous_idle_reasons,
         "idle_time_not_entered": idle_time_not_entered,
         "reason_machine_detail": reason_machine_detail,
+        "operator_wise_idle": operator_wise_idle,
     })

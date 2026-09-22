@@ -71,12 +71,12 @@ def get_or_restore_session_tenant(request, allow_expired=False):
             curr_session_key = request.session.session_key
 
             # If this user already has an active session elsewhere and this request does not hold that session,
-            # NEVER auto-restore a session. The user must log in properly with password.
+            # fresh login is required with password.
             if active_session_key and curr_session_key != active_session_key:
-                logger.warning(
-                    f"Blocked auto-restoration for superseded session ({curr_session_key}) for {username} ({company_code}). Active is {active_session_key}."
+                logger.info(
+                    f"Auto-restoration blocked for {username} ({company_code}): active session {active_session_key} exists. Fresh login required."
                 )
-                raise ValueError("Logged in from another device or browser. Please login again.")
+                raise ValueError("Session expired. Please log in again.")
 
             try:
                 from .models import Tenant

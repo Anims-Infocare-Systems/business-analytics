@@ -834,6 +834,32 @@ const ACTION_CARDS = [
   { id: "capa_report_dashboard", title: "Quality Action Plan (CAPA)", icon: ClipboardCheck, color: "#0891b2", priority: "medium" }
 ];
 
+const SPOTLIGHT_ACTION_MAP = {
+  "ppd-downtime-reasons": "idle_hours_report_dashboard",
+  "ppd-idle-summary": "idle_hours_report_dashboard",
+  "ppd-quality-split": "rejection_report_dashboard",
+  "ppd-defect-categories": "rejection_report_dashboard",
+  "ppd-customer-complaints": "customer_complaint_report_dashboard",
+  "ppd-iqc-rejections": "vendor_rating_report_dashboard",
+  "ppd-oee-gauges": "oee_comparison_report_dashboard",
+  "ppd-otd-trend": "otd_report_dashboard",
+  "ppd-production-output": "production_analysis_report_dashboard",
+  "ppd-final-inspection-ok": "daily_production_report_dashboard",
+  "ppd-operator-efficiency": "operator_efficiency_report_dashboard",
+  "ppd-po-status": "purchase_value_report_dashboard",
+  "ppd-grn-pipeline": "purchase_report_dashboard",
+  "ppd-customer-po-compare": "customer_po_vs_sales_analysis",
+  "ppd-inspection-queues": "capa_report_dashboard",
+  "ppd-sales-analysis": "sales_analysis_report_dashboard",
+  "ppd-rework": "rework_report_dashboard",
+  "ppd-store-stock": "store_stock_value_report_dashboard",
+  "ppd-supplier-rating": "supplier_rating_report_dashboard",
+  "ppd-fg-value": "fg_value_report_dashboard",
+  "ppd-target-vs-actual": "target_vs_actual_report_dashboard",
+  "ppd-machine-efficiency": "machine_efficiency_report_dashboard",
+  "ppd-efficiency-eff": "efficiency_eff_report_dashboard"
+};
+
 function formatLocalYmd(d) {
   if (!d) return "";
   // If already a YYYY-MM-DD string, return it directly
@@ -23659,6 +23685,66 @@ export default function PlantPerformance1() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [centerKey, selectionId, loading, isStackedLayout]);
+
+  // ── Spotlight Navigation & Section Focus ──────────────────
+  useEffect(() => {
+    const applyTarget = (target) => {
+      if (!target) return;
+      const id = target.id;
+      if (!id) return;
+
+      if (id === "ppd-target-modal") {
+        handleOpenTargetModal();
+        return;
+      }
+      if (id === "ppd-current-state") {
+        setPanelsCollapsed(false);
+        setMobileActiveTab("left");
+        return;
+      }
+      if (id === "ppd-action-queue") {
+        setPanelsCollapsed(false);
+        setMobileActiveTab("right");
+        return;
+      }
+      if (id === "ppd-center-detail") {
+        setMobileActiveTab("center");
+        return;
+      }
+
+      // Check if ID is one of the mapped action views
+      const mappedAction = SPOTLIGHT_ACTION_MAP[id];
+      if (mappedAction) {
+        setSelAction(mappedAction);
+        setCenterKey((k) => k + 1);
+        setMobileActiveTab("center");
+      }
+    };
+
+    const handleSpotlight = (e) => {
+      if (e && e.detail) {
+        applyTarget(e.detail);
+      }
+    };
+
+    window.addEventListener("spotlight-section-selected", handleSpotlight);
+
+    // Mount check: handle spotlight target selected prior to or during mount
+    try {
+      const stored = sessionStorage.getItem("ba_spotlight_target");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && (parsed.module === "Plant Performance Dashboard" || parsed.id?.startsWith("ppd-"))) {
+          applyTarget(parsed);
+        }
+      }
+    } catch { }
+
+    return () => {
+      window.removeEventListener("spotlight-section-selected", handleSpotlight);
+    };
+  }, []);
+
   const themeColor = activeActionCard ? activeActionCard.color : "var(--pp1-blue, #2563eb)";
   const themeBorderColor = activeActionCard ? `${activeActionCard.color}3d` : "rgba(37, 99, 235, 0.24)";
   const themeHoverBg = activeActionCard ? `${activeActionCard.color}0a` : "rgba(37, 99, 235, 0.04)";
@@ -24578,6 +24664,7 @@ export default function PlantPerformance1() {
                       return (
                         <div
                           key={a.id}
+                          data-card-id={a.id}
                           role="button"
                           tabIndex={0}
                           title={computedCardTrends[a.id]?.message || ""}
@@ -24662,49 +24749,93 @@ export default function PlantPerformance1() {
                 <CenterTransitionWrapper uid={centerKey} loading={loading} loadingProgress={loadingProgress}>
                   <DashboardErrorBoundary>
                     {selectionId === "customer_po_vs_sales_analysis" ? (
-                      <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
+                      <div data-spotlight="ppd-customer-po-compare" style={{ width: "100%" }}>
+                        <CustomerPoCompareView data={data} loading={loading} uid={centerKey} filters={poFilters} onFilterChange={setPoFilters} activeSlide={poActiveSlide} onActiveSlideChange={setPoActiveSlide} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setPoShowTargetOnly(false); }} targetConfig={targetConfig} showTargetOnly={poShowTargetOnly} setShowTargetOnly={setPoShowTargetOnly} />
+                      </div>
                     ) : selectionId === "purchase_report_dashboard" ? (
-                      <PurchaseReportDashboardView data={data} loading={loading} filters={purFilters} onFilterChange={setPurFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["purchase_report_dashboard"]} />
+                      <div data-spotlight="ppd-grn-pipeline" style={{ width: "100%" }}>
+                        <PurchaseReportDashboardView data={data} loading={loading} filters={purFilters} onFilterChange={setPurFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["purchase_report_dashboard"]} />
+                      </div>
                     ) : selectionId === "purchase_value_report_dashboard" ? (
-                      <PurchaseValueDashboardView data={data} filters={purchaseValueFilters} onFilterChange={setPurchaseValueFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                      <div data-spotlight="ppd-po-status" style={{ width: "100%" }}>
+                        <PurchaseValueDashboardView data={data} filters={purchaseValueFilters} onFilterChange={setPurchaseValueFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                      </div>
                     ) : selectionId === "sales_analysis_report_dashboard" ? (
-                      <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
+                      <div data-spotlight="ppd-sales-analysis" style={{ width: "100%" }}>
+                        <SalesAnalysisReportDashboardView data={data} loading={loading} filters={salesFilters} onFilterChange={setSalesFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} trend={computedCardTrends["sales_analysis_report_dashboard"]} />
+                      </div>
                     ) : selectionId === "production_analysis_report_dashboard" ? (
-                      <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
+                      <div data-spotlight="ppd-production-output" style={{ width: "100%" }}>
+                        <ProductionAnalysisReportDashboardView data={data} loading={loading} filters={prodFilters} onFilterChange={setProdFilters} xAxisGroup={prodXAxisGroup} setXAxisGroup={setProdXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setProdValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onProdValueData={setProdValuePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
+                      </div>
                     ) : selectionId === "supplier_rating_report_dashboard" ? (
-                      <SupplierRatingReportDashboardView data={data} filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setSrPanelData(null); }} targetConfig={targetConfig} onSrData={setSrPanelData} />
+                      <div data-spotlight="ppd-supplier-rating" style={{ width: "100%" }}>
+                        <SupplierRatingReportDashboardView data={data} filters={supplierFilters} onFilterChange={setSupplierFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setSrPanelData(null); }} targetConfig={targetConfig} onSrData={setSrPanelData} />
+                      </div>
                     ) : selectionId === "idle_hours_report_dashboard" ? (
-                      <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setIdlePanelData(null); }} targetConfig={targetConfig} onIdleData={setIdlePanelData} />
+                      <div data-spotlight="ppd-downtime-reasons" data-spotlight-alt="ppd-idle-summary" style={{ width: "100%" }}>
+                        <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setIdlePanelData(null); }} targetConfig={targetConfig} onIdleData={setIdlePanelData} />
+                      </div>
                     ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
-                      <IdleHoursNonAcceptedReasonLossReportView filters={nonAccFilters} onFilterChange={setNonAccFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                      <div data-spotlight="ppd-downtime-reasons" style={{ width: "100%" }}>
+                        <IdleHoursNonAcceptedReasonLossReportView filters={nonAccFilters} onFilterChange={setNonAccFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} />
+                      </div>
                     ) : selectionId === "oee_comparison_report_dashboard" ? (
-                      <OeeComparisonReportDashboardView data={data} loading={loading} filters={oeeCompFilters} onFilterChange={setOeeCompFilters} activeTab={oeeCompActiveTab} onActiveTabChange={setOeeCompActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOeePanelData(null); }} targetConfig={targetConfig} xAxisGroup={oeeCompXAxisGroup} setXAxisGroup={setOeeCompXAxisGroup} uid={centerKey} onOeeData={setOeePanelData} />
+                      <div data-spotlight="ppd-oee-gauges" style={{ width: "100%" }}>
+                        <OeeComparisonReportDashboardView data={data} loading={loading} filters={oeeCompFilters} onFilterChange={setOeeCompFilters} activeTab={oeeCompActiveTab} onActiveTabChange={setOeeCompActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOeePanelData(null); }} targetConfig={targetConfig} xAxisGroup={oeeCompXAxisGroup} setXAxisGroup={setOeeCompXAxisGroup} uid={centerKey} onOeeData={setOeePanelData} />
+                      </div>
                     ) : selectionId === "efficiency_eff_report_dashboard" ? (
-                      <EfficiencyEffReportDashboardView data={data} loading={loading} filters={effFilters} onFilterChange={setEffFilters} xAxisGroup={effXAxisGroup} setXAxisGroup={setEffXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onEffData={setEffPanelData} />
+                      <div data-spotlight="ppd-efficiency-eff" style={{ width: "100%" }}>
+                        <EfficiencyEffReportDashboardView data={data} loading={loading} filters={effFilters} onFilterChange={setEffFilters} xAxisGroup={effXAxisGroup} setXAxisGroup={setEffXAxisGroup} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onEffData={setEffPanelData} />
+                      </div>
                     ) : selectionId === "rejection_report_dashboard" ? (
-                      <RejectionReportDashboardView data={data} loading={loading} filters={rejFilters} onFilterChange={setRejFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRejPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onRejData={setRejPanelData} />
+                      <div data-spotlight="ppd-quality-split" data-spotlight-alt="ppd-defect-categories" style={{ width: "100%" }}>
+                        <RejectionReportDashboardView data={data} loading={loading} filters={rejFilters} onFilterChange={setRejFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRejPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onRejData={setRejPanelData} />
+                      </div>
                     ) : selectionId === "rework_report_dashboard" ? (
-                      <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
+                      <div data-spotlight="ppd-rework" style={{ width: "100%" }}>
+                        <ReworkReportDashboardView data={data} loading={loading} filters={rewFilters} onFilterChange={setRewFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setRewPanelData(null); }} targetConfig={targetConfig} xAxisGroup={reworkXAxisGroup} setXAxisGroup={setReworkXAxisGroup} uid={centerKey} onRewData={setRewPanelData} />
+                      </div>
                     ) : selectionId === "store_stock_value_report_dashboard" ? (
-                      <StoreStockValueReportDashboardView data={data} filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setStockPanelData(null); }} targetConfig={targetConfig} onStockData={setStockPanelData} />
+                      <div data-spotlight="ppd-store-stock" style={{ width: "100%" }}>
+                        <StoreStockValueReportDashboardView data={data} filters={stockFilters} onFilterChange={setStockFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setStockPanelData(null); }} targetConfig={targetConfig} onStockData={setStockPanelData} />
+                      </div>
                     ) : selectionId === "otd_report_dashboard" ? (
-                      <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
+                      <div data-spotlight="ppd-otd-trend" style={{ width: "100%" }}>
+                        <OtdTrendView data={data} loading={loading} uid={centerKey} filters={otdFilters} onFilterChange={setOtdFilters} from={dateRange.from} to={dateRange.to} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOtdPanelData(null); }} targetConfig={targetConfig} onOtdData={setOtdPanelData} />
+                      </div>
                     ) : selectionId === "vendor_rating_report_dashboard" ? (
-                      <VendorRatingReportDashboardView data={data} filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setVrPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onVrData={setVrPanelData} />
+                      <div data-spotlight="ppd-iqc-rejections" style={{ width: "100%" }}>
+                        <VendorRatingReportDashboardView data={data} filters={vendorFilters} onFilterChange={setVendorFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setVrPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onVrData={setVrPanelData} />
+                      </div>
                     ) : selectionId === "fg_value_report_dashboard" ? (
-                      <FgValueReportDashboardView data={data} loading={loading} filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setFgValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onFgValueData={setFgValuePanelData} />
+                      <div data-spotlight="ppd-fg-value" style={{ width: "100%" }}>
+                        <FgValueReportDashboardView data={data} loading={loading} filters={fgFilters} onFilterChange={setFgFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setFgValuePanelData(null); }} targetConfig={targetConfig} uid={centerKey} onFgValueData={setFgValuePanelData} />
+                      </div>
                     ) : selectionId === "daily_production_report_dashboard" ? (
-                      <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
+                      <div data-spotlight="ppd-final-inspection-ok" style={{ width: "100%" }}>
+                        <DailyProductionDashboardView data={data} loading={loading} filters={dailyProductionFilters} onFilterChange={setDailyProductionFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setDailyProdPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onDailyProdData={setDailyProdPanelData} />
+                      </div>
                     ) : selectionId === "target_vs_actual_report_dashboard" ? (
-                      <TargetVsActualDashboardView data={data} loading={loading} filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setTargetVsActualPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onTargetVsActualData={setTargetVsActualPanelData} />
+                      <div data-spotlight="ppd-target-vs-actual" style={{ width: "100%" }}>
+                        <TargetVsActualDashboardView data={data} loading={loading} filters={targetVsActualFilters} onFilterChange={setTargetVsActualFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setTargetVsActualPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onTargetVsActualData={setTargetVsActualPanelData} />
+                      </div>
                     ) : selectionId === "operator_efficiency_report_dashboard" ? (
-                      <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
+                      <div data-spotlight="ppd-operator-efficiency" style={{ width: "100%" }}>
+                        <OperatorEfficiencyDashboardView data={data} loading={loading} filters={operatorEfficiencyFilters} onFilterChange={setOperatorEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setOpEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onOpEffData={setOpEffPanelData} />
+                      </div>
                     ) : selectionId === "machine_efficiency_report_dashboard" ? (
-                      <MachineEfficiencyDashboardView data={data} loading={loading} filters={machineEfficiencyFilters} onFilterChange={setMachineEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setMachEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onMachEffData={setMachEffPanelData} />
+                      <div data-spotlight="ppd-machine-efficiency" style={{ width: "100%" }}>
+                        <MachineEfficiencyDashboardView data={data} loading={loading} filters={machineEfficiencyFilters} onFilterChange={setMachineEfficiencyFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setMachEffPanelData(null); }} targetConfig={targetConfig} uid={centerKey} onMachEffData={setMachEffPanelData} />
+                      </div>
                     ) : selectionId === "capa_report_dashboard" ? (
-                      <CapaDashboardView data={data} loading={loading} filters={capaFilters} onFilterChange={setCapaFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCapaPanelData(null); }} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} uid={centerKey} onCapaData={setCapaPanelData} />
+                      <div data-spotlight="ppd-inspection-queues" style={{ width: "100%" }}>
+                        <CapaDashboardView data={data} loading={loading} filters={capaFilters} onFilterChange={setCapaFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCapaPanelData(null); }} selectedCapaId={selectedCapaId} onSelectCapaId={setSelectedCapaId} uid={centerKey} onCapaData={setCapaPanelData} />
+                      </div>
                     ) : selectionId === "customer_complaint_report_dashboard" ? (
-                      <CustomerComplaintReportDashboardView data={data} loading={loading} filters={compFilters} onFilterChange={setCompFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCompPanelData(null); }} uid={centerKey} onCompData={setCompPanelData} />
+                      <div data-spotlight="ppd-customer-complaints" style={{ width: "100%" }}>
+                        <CustomerComplaintReportDashboardView data={data} loading={loading} filters={compFilters} onFilterChange={setCompFilters} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setCompPanelData(null); }} uid={centerKey} onCompData={setCompPanelData} />
+                      </div>
                     ) : (
 
                       <div className="pp1-placeholder-container" style={{
@@ -24893,6 +25024,7 @@ export default function PlantPerformance1() {
                         return (
                           <div
                             key={item.id}
+                            data-card-id={item.id}
                             role="button"
                             tabIndex={0}
                             title={item.message || ""}

@@ -1922,6 +1922,147 @@
   font-weight: 600;
 }
 
+/* ── Filter Actions Container ── */
+.sa-filter-actions {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 10px;
+  align-self: flex-end;
+  margin-top: 18px;
+  flex: 0 0 auto;
+}
+
+/* Modern, high-end "Apply Filter" button */
+.sa-btn-apply {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 60%, #1e40af 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0 18px;
+  height: 38px;
+  border-radius: 9px;
+  font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 3px 12px rgba(37, 99, 235, 0.28), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* Premium shimmer light sweep effect */
+.sa-btn-apply::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.38),
+    transparent
+  );
+  transform: skewX(-22deg);
+  pointer-events: none;
+  transition: none;
+}
+
+.sa-btn-apply:hover:not(:disabled)::before {
+  left: 140%;
+  transition: left 0.75s ease-in-out;
+}
+
+.sa-btn-apply:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%);
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.42), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.sa-btn-apply:active:not(:disabled) {
+  transform: scale(0.96) translateY(0);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+}
+
+.sa-btn-apply:disabled,
+.sa-btn-apply[disabled] {
+  cursor: not-allowed !important;
+  opacity: 0.65 !important;
+  background: #94a3b8 !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+/* Dynamic ambient glow & pulse when filter selections are changed and ready to apply */
+.sa-btn-apply--pending {
+  animation: sa-apply-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
+@keyframes sa-apply-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55), 0 4px 14px rgba(37, 99, 235, 0.32);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0), 0 6px 22px rgba(37, 99, 235, 0.55);
+  }
+}
+
+.sa-btn-apply-icon {
+  transition: transform 0.3s ease;
+}
+
+.sa-btn-apply:hover:not(:disabled) .sa-btn-apply-icon {
+  transform: scale(1.12) rotate(6deg);
+}
+
+/* Emerald radar pulse dot signaling pending changes */
+.sa-btn-apply-pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background-color: #34d399;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45), 0 0 8px #10b981;
+  animation: sa-dot-blink 1.4s ease-in-out infinite;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+@keyframes sa-dot-blink {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.75;
+  }
+}
+
+.sa-btn-apply-spin {
+  animation: sa-apply-spin 1s linear infinite;
+}
+
+@keyframes sa-apply-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Reset Button */
 .sa-btn-reset {
   display: inline-flex;
@@ -1930,17 +2071,16 @@
   background: rgba(220, 38, 38, 0.05);
   color: #dc2626;
   border: 1px solid rgba(220, 38, 38, 0.15);
-  border-radius: 8px;
-  padding: 8px 16px;
+  border-radius: 9px;
+  padding: 0 16px;
   font-size: 0.8rem;
   font-weight: 600;
-  font-family: inherit;
+  font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 2px 6px rgba(220, 38, 38, 0.02);
-  align-self: flex-end;
-  height: 35px;
-  margin-top: 18px;
+  height: 38px;
+  box-sizing: border-box;
 }
 
 .sa-btn-reset:hover {
@@ -3138,10 +3278,19 @@
     display: none !important;
   }
 
+  .sa-filter-actions {
+    width: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
+    margin-top: 6px !important;
+  }
+
+  .sa-btn-apply,
   .sa-btn-reset {
+    flex: 1 !important;
     width: 100% !important;
     justify-content: center !important;
-    margin-top: 4px !important;
+    margin-top: 0 !important;
   }
 
   /* Weekly Sales Trend Controls */

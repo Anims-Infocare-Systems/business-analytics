@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings, FiCheck, FiChevronDown, FiSearch } from "react-icons/fi";
+import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings, FiCheck, FiChevronDown, FiSearch, FiFilter, FiInbox } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
@@ -118,9 +118,9 @@ function formatHoursMins(val) {
   }
   const decimalHours = Number(val);
   if (isNaN(decimalHours) || decimalHours <= 0) return "00 hour 00 mins";
-  const totalSeconds = Math.round(decimalHours * 3600);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
+  const totalMinutes = Math.round(decimalHours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   const hStr = h >= 1000 ? h.toLocaleString("en-IN") : String(h).padStart(2, "0");
   const mStr = String(m).padStart(2, "0");
   const hLabel = h === 1 ? "hour" : "hours";
@@ -216,6 +216,50 @@ function SectionHeader({ icon, title, sub }) {
       </div>
     </div>
   );
+}
+
+/* ═══════════════════════════════════════════════
+   NO DATA FOUND (Modern Animated Component)
+═══════════════════════════════════════════════ */
+function NoDataFound({
+  title = "No Data Found on this period",
+  sub = "No records or activity were found matching the selected timeframe and filter criteria.",
+  height,
+  icon: Icon = FiInbox,
+  badgeText = null,
+  isTableRow = false,
+  colSpan = 1
+}) {
+  const content = (
+    <div className="pa2-no-data-card" style={height ? { minHeight: height, height } : undefined}>
+      <div className="pa2-no-data-glow" />
+      <div className="pa2-no-data-icon-wrap">
+        <div className="pa2-no-data-radar" />
+        <div className="pa2-no-data-icon-orb">
+          <Icon size={24} strokeWidth={2} />
+        </div>
+      </div>
+      <div className="pa2-no-data-title">{title}</div>
+      {sub && <p className="pa2-no-data-sub">{sub}</p>}
+      {badgeText && (
+        <span className="pa2-no-data-badge">
+          <FiCalendar size={11} /> {badgeText}
+        </span>
+      )}
+    </div>
+  );
+
+  if (isTableRow) {
+    return (
+      <tr>
+        <td colSpan={colSpan} className="pa2-no-data-table-cell">
+          {content}
+        </td>
+      </tr>
+    );
+  }
+
+  return content;
 }
 
 /* ═══════════════════════════════════════════════
@@ -364,20 +408,26 @@ function PremiumSelect({ label, value, options, onChange, placeholder = "Select.
         </button>
         {open && !disabled && (
           <div className="pa2-ps-menu">
-            {options.map((opt, idx) => (
-              <button
-                key={opt.value}
-                type="button"
-                ref={el => itemRefs.current[idx] = el}
-                className={`pa2-ps-item ${opt.value === value ? "pa2-ps-item--active" : ""} ${idx === focusedIndex ? "pa2-ps-item--highlighted" : ""}`}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {options.map((opt, idx) => {
+              const isSelected = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  ref={el => itemRefs.current[idx] = el}
+                  className={`pa2-ps-item ${isSelected ? "pa2-ps-item--active" : ""} ${idx === focusedIndex ? "pa2-ps-item--highlighted" : ""}`}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="pa2-ps-item-txt">{opt.label}</span>
+                  {isSelected && (
+                    <FiCheck size={14} className="pa2-ps-check-icon" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -440,7 +490,7 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
   }
 
   return (
-    <div className="pa2-fg" ref={containerRef} style={{ minWidth: '200px' }}>
+    <div className="pa2-fg" ref={containerRef}>
       {label && <label>{label}</label>}
       <div className="pa2-ps-wrap">
         <button
@@ -448,9 +498,8 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
           className={`pa2-ps-trigger ${open ? "pa2-ps-trigger--open" : ""} ${value.length > 0 ? "pa2-ps-trigger--selected" : ""} ${disabled ? "pa2-ps-trigger--disabled" : ""}`}
           onClick={() => !disabled && setOpen(o => !o)}
           disabled={disabled}
-          style={{ width: '100%' }}
         >
-          <span className="pa2-ps-txt" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '145px' }}>
+          <span className="pa2-ps-txt">
             {triggerText}
           </span>
           <svg className="pa2-ps-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -458,9 +507,9 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
           </svg>
         </button>
         {open && !disabled && (
-          <div className="pa2-ps-menu" style={{ width: '220px', padding: '8px', zIndex: 999, minWidth: '220px' }}>
-            <div style={{ position: 'relative', marginBottom: '8px' }}>
-              <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: '#94a3b8' }}>
+          <div className="pa2-ps-menu pa2-ps-menu--multi">
+            <div className="pa2-ps-search-box">
+              <span className="pa2-ps-search-icon">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
@@ -470,49 +519,15 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
                 placeholder="Search..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 26px 6px 26px',
-                  fontSize: '0.75rem',
-                  borderRadius: '6px',
-                  border: '1.5px solid #e2e8f0',
-                  background: '#f8fafc',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  fontFamily: 'Poppins',
-                  transition: 'all 0.2s ease'
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#2d6de8';
-                  e.target.style.background = '#ffffff';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(45, 109, 232, 0.12)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.background = '#f8fafc';
-                  e.target.style.boxShadow = 'none';
-                }}
+                className="pa2-ps-search-input"
               />
               {search && (
                 <button
                   type="button"
+                  className="pa2-ps-search-clear"
                   onClick={(e) => { e.stopPropagation(); setSearch(""); }}
-                  style={{
-                    position: 'absolute',
-                    right: '6px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#94a3b8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '2px'
-                  }}
                 >
-                  <FiX size={10} style={{ strokeWidth: 3 }} />
+                  <FiX size={11} style={{ strokeWidth: 3 }} />
                 </button>
               )}
             </div>
@@ -521,47 +536,17 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
               {!search && (
                 <button
                   type="button"
-                  className={`pa2-ps-item ${allSelected ? "pa2-ps-item--active" : ""}`}
+                  className={`pa2-ps-item pa2-ps-item--check-row ${allSelected ? "pa2-ps-item--active" : ""}`}
                   onClick={() => toggleOption("")}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    width: '100%',
-                    background: allSelected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderRadius: '6px',
-                    fontSize: '0.78rem',
-                    color: allSelected ? '#2d6de8' : '#475569',
-                    fontWeight: allSelected ? 700 : 500,
-                    fontFamily: 'Poppins',
-                    transition: 'all 0.15s ease'
-                  }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '14px',
-                      height: '14px',
-                      borderRadius: '3.5px',
-                      border: allSelected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
-                      background: allSelected ? '#2d6de8' : 'transparent',
-                      transition: 'all 0.18s ease',
-                      flexShrink: 0
-                    }}
-                  >
+                  <div className={`pa2-ps-checkbox ${allSelected ? "pa2-ps-checkbox--checked" : ""}`}>
                     {allSelected && (
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     )}
                   </div>
-                  <span>{options[0]?.label || "All"}</span>
+                  <span className="pa2-ps-item-txt">{options[0]?.label || "All"}</span>
                 </button>
               )}
 
@@ -571,53 +556,23 @@ function PremiumSelectMulti({ label, value, options, onChange, placeholder = "Se
                   <button
                     key={opt.value}
                     type="button"
-                    className={`pa2-ps-item ${selected ? "pa2-ps-item--active" : ""}`}
+                    className={`pa2-ps-item pa2-ps-item--check-row ${selected ? "pa2-ps-item--active" : ""}`}
                     onClick={() => toggleOption(opt.value)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      textAlign: 'left',
-                      padding: '8px 10px',
-                      width: '100%',
-                      background: selected ? 'rgba(45, 109, 232, 0.06)' : 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                      color: selected ? '#2d6de8' : '#475569',
-                      fontWeight: selected ? 700 : 500,
-                      fontFamily: 'Poppins',
-                      transition: 'all 0.15s ease'
-                    }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '14px',
-                        height: '14px',
-                        borderRadius: '3.5px',
-                        border: selected ? '1.5px solid #2d6de8' : '1.5px solid #cbd5e1',
-                        background: selected ? '#2d6de8' : 'transparent',
-                        transition: 'all 0.18s ease',
-                        flexShrink: 0
-                      }}
-                    >
+                    <div className={`pa2-ps-checkbox ${selected ? "pa2-ps-checkbox--checked" : ""}`}>
                       {selected && (
                         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
                     </div>
-                    <span>{opt.label}</span>
+                    <span className="pa2-ps-item-txt">{opt.label}</span>
                   </button>
                 );
               })}
 
               {filteredOpts.length === 0 && search && (
-                <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: 'Poppins' }}>
+                <div className="pa2-ps-no-matches">
                   No matches found
                 </div>
               )}
@@ -701,6 +656,56 @@ export default function ProductionAnalysis() {
   const [filterMacType, setFilterMacType] = useState("");
   const [filterMacGroup, setFilterMacGroup] = useState("");
   const [mounted, setMounted] = useState(false);
+
+  // ── Applied Filters State (Trigger fetches only on Apply) ──
+  const [appliedDateRange, setAppliedDateRange] = useState({ from: _saved.from, to: _saved.to });
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
+  const [appliedFilterMachine, setAppliedFilterMachine] = useState([]);
+  const [appliedFilterShift, setAppliedFilterShift] = useState("");
+  const [appliedFilterOperator, setAppliedFilterOperator] = useState([]);
+  const [appliedFilterMacType, setAppliedFilterMacType] = useState("");
+  const [appliedFilterMacGroup, setAppliedFilterMacGroup] = useState("");
+  const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  const normalizeFilterVal = (val) => {
+    if (!val) return "";
+    if (Array.isArray(val)) return [...val].map(s => String(s).trim()).sort().join(",");
+    return String(val).split(",").map(s => s.trim()).filter(Boolean).sort().join(",");
+  };
+
+  const hasPendingChanges = useMemo(() => {
+    const dFrom = formatDateToYYYYMMDD(dateRange?.from);
+    const dTo = formatDateToYYYYMMDD(dateRange?.to);
+    const aFrom = formatDateToYYYYMMDD(appliedDateRange?.from);
+    const aTo = formatDateToYYYYMMDD(appliedDateRange?.to);
+    if (dFrom !== aFrom || dTo !== aTo) return true;
+    if ((searchQuery || "").trim() !== (appliedSearchQuery || "").trim()) return true;
+    if ((filterShift || "") !== (appliedFilterShift || "")) return true;
+    if ((filterMacType || "") !== (appliedFilterMacType || "")) return true;
+    if ((filterMacGroup || "") !== (appliedFilterMacGroup || "")) return true;
+    if (normalizeFilterVal(filterMachine) !== normalizeFilterVal(appliedFilterMachine)) return true;
+    if (normalizeFilterVal(filterOperator) !== normalizeFilterVal(appliedFilterOperator)) return true;
+    return false;
+  }, [
+    dateRange, appliedDateRange,
+    searchQuery, appliedSearchQuery,
+    filterShift, appliedFilterShift,
+    filterMacType, appliedFilterMacType,
+    filterMacGroup, appliedFilterMacGroup,
+    filterMachine, appliedFilterMachine,
+    filterOperator, appliedFilterOperator
+  ]);
+
+  const handleApplyFilters = useCallback(() => {
+    setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+    setAppliedSearchQuery(searchQuery);
+    setAppliedFilterMachine(Array.isArray(filterMachine) ? [...filterMachine] : filterMachine);
+    setAppliedFilterShift(filterShift);
+    setAppliedFilterOperator(Array.isArray(filterOperator) ? [...filterOperator] : filterOperator);
+    setAppliedFilterMacType(filterMacType);
+    setAppliedFilterMacGroup(filterMacGroup);
+    setFetchTrigger(prev => prev + 1);
+  }, [dateRange, searchQuery, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup]);
 
   // ── Daily Production Details Local Filters ──
   const [dailyPartFilter, setDailyPartFilter] = useState([]);
@@ -1052,6 +1057,15 @@ export default function ProductionAnalysis() {
     setFilterOperator([]);
     setFilterMacType("");
     setFilterMacGroup("");
+
+    setAppliedSearchQuery("");
+    setAppliedFilterMachine([]);
+    setAppliedFilterShift("");
+    setAppliedFilterOperator([]);
+    setAppliedFilterMacType("");
+    setAppliedFilterMacGroup("");
+    setAppliedDateRange({ from: dateRange.from, to: dateRange.to });
+    setFetchTrigger(prev => prev + 1);
   };
 
   const acceptanceRate = kpiValues.totalProductionQty > 0 ? ((kpiValues.okAcceptedQty / kpiValues.totalProductionQty) * 100).toFixed(1) : "0.0";
@@ -1061,9 +1075,150 @@ export default function ProductionAnalysis() {
   const idleHoursPct = kpiValues.totalMachineHours > 0 ? ((kpiValues.idleHours / kpiValues.totalMachineHours) * 100).toFixed(1) : "0.0";
   const settingHoursPct = kpiValues.totalMachineHours > 0 ? ((kpiValues.settingHours / kpiValues.totalMachineHours) * 100).toFixed(1) : "0.0";
   const manEffMeta = kpiValues.manEfficiency > 0 ? `${kpiValues.manEfficiency >= 85 ? "✔ Above" : "↑ Target:"} 85%` : "Target: 85% ↑";
-  const totalAcceptedHrs = idleBreakdown.accepted.total_hours || 0;
-  const totalNonAccepted = idleBreakdown.non_accepted.total_hours || 0;
+  const totalAcceptedSecs = idleBreakdown.accepted.total_seconds !== undefined
+    ? Number(idleBreakdown.accepted.total_seconds)
+    : Math.round(Number(idleBreakdown.accepted.total_hours || 0) * 3600);
+  const totalNonAcceptedSecs = idleBreakdown.non_accepted.total_seconds !== undefined
+    ? Number(idleBreakdown.non_accepted.total_seconds)
+    : Math.round(Number(idleBreakdown.non_accepted.total_hours || 0) * 3600);
+
+  const totalAcceptedHrs = Number(idleBreakdown.accepted.total_hours) || 0;
+  const totalNonAccepted = Number(idleBreakdown.non_accepted.total_hours) || 0;
   const totalLoss = idleBreakdown.non_accepted.total_loss || 0;
+
+  const machineRunningSecs = kpiValues.productionSeconds !== undefined
+    ? Number(kpiValues.productionSeconds)
+    : Math.round(Number(kpiValues.productionHours || 0) * 3600);
+  const machineRunningHrs = Number(kpiValues.productionHours) || 0;
+
+  const totalIdleSecs = (totalAcceptedSecs + totalNonAcceptedSecs) > 0
+    ? (totalAcceptedSecs + totalNonAcceptedSecs)
+    : (kpiValues.idleSeconds !== undefined ? Number(kpiValues.idleSeconds) : Math.round(Number(kpiValues.idleHours || 0) * 3600));
+  const totalIdleHrs = (totalAcceptedHrs + totalNonAccepted) > 0
+    ? (totalAcceptedHrs + totalNonAccepted)
+    : (Number(kpiValues.idleHours) || 0);
+
+  const totProdSeconds = Math.max(0, machineRunningSecs - totalIdleSecs);
+  const totProductionHours = kpiValues.totProductionHoursDisplay || (totProdSeconds / 3600.0);
+
+  // ── Unique option lists for Daily Production Details ──
+  const dailyUniqueParts = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const p = (r.Part || "").trim();
+      if (p && p !== "—" && p !== "-") set.add(p);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyParts = useMemo(() => {
+    if (!dailyPartSearch.trim()) return dailyUniqueParts;
+    const q = dailyPartSearch.toLowerCase().trim();
+    return dailyUniqueParts.filter(p => p.toLowerCase().includes(q));
+  }, [dailyUniqueParts, dailyPartSearch]);
+
+  const dailyUniqueMacs = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const m = (r.Machine || "").trim();
+      if (m && m !== "—" && m !== "-") set.add(m);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyMacs = useMemo(() => {
+    if (!dailyMacSearch.trim()) return dailyUniqueMacs;
+    const q = dailyMacSearch.toLowerCase().trim();
+    return dailyUniqueMacs.filter(m => m.toLowerCase().includes(q));
+  }, [dailyUniqueMacs, dailyMacSearch]);
+
+  const dailyUniqueOperators = useMemo(() => {
+    const set = new Set();
+    tableData.forEach(r => {
+      const op = (r.Operator || "").trim();
+      if (op && op !== "—" && op !== "-") set.add(op);
+    });
+    return Array.from(set).sort();
+  }, [tableData]);
+
+  const filteredDailyOperators = useMemo(() => {
+    if (!dailyOperatorSearch.trim()) return dailyUniqueOperators;
+    const q = dailyOperatorSearch.toLowerCase().trim();
+    return dailyUniqueOperators.filter(op => op.toLowerCase().includes(q));
+  }, [dailyUniqueOperators, dailyOperatorSearch]);
+
+  const filteredTableData = useMemo(() => {
+    return tableData.filter(row => {
+      // 1. Search Query
+      if (appliedSearchQuery) {
+        const q = appliedSearchQuery.toLowerCase();
+        const part = (row.Part || "").toLowerCase();
+        const proc = (row.Process || "").toLowerCase();
+        const oper = (row.Operator || "").toLowerCase();
+        const mac = (row.Machine || "").toLowerCase();
+        if (!part.includes(q) && !proc.includes(q) && !oper.includes(q) && !mac.includes(q)) {
+          return false;
+        }
+      }
+      // 2. Machine Name (Global)
+      if (appliedFilterMachine && appliedFilterMachine.length > 0 && !appliedFilterMachine.includes(row.Machine)) {
+        return false;
+      }
+      // 3. Shift (Global)
+      if (appliedFilterShift && row.Shift !== appliedFilterShift) {
+        return false;
+      }
+      // 4. Operator (Global)
+      if (appliedFilterOperator && appliedFilterOperator.length > 0 && !appliedFilterOperator.includes(row.Operator)) {
+        return false;
+      }
+
+      // ── Local Daily Production Details Filters ──
+      // 5. Part Filter
+      if (dailyPartFilter.length > 0 && !dailyPartFilter.includes(row.Part)) {
+        return false;
+      }
+      // 6. Machine Filter
+      if (dailyMacFilter.length > 0 && !dailyMacFilter.includes(row.Machine)) {
+        return false;
+      }
+      // 7. Operator Filter
+      if (dailyOperatorFilter.length > 0 && !dailyOperatorFilter.includes(row.Operator)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [tableData, appliedSearchQuery, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, dailyPartFilter, dailyMacFilter, dailyOperatorFilter]);
+
+  const dailyTableTotals = useMemo(() => {
+    let totalTarget = 0;
+    let totalOkQty = 0;
+    let totalMatRej = 0;
+    let totalMacRej = 0;
+    let totalRwQty = 0;
+
+    filteredTableData.forEach(row => {
+      totalTarget += Number(row.Target || 0);
+      totalOkQty += Number(row.OKQty || 0);
+
+      const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
+      const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
+      const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
+
+      totalMatRej += Number(matRej || 0);
+      totalMacRej += Number(macRej || 0);
+      totalRwQty += Number(rwQty || 0);
+    });
+
+    return {
+      target: totalTarget,
+      okQty: totalOkQty,
+      matRej: totalMatRej,
+      macRej: totalMacRej,
+      rwQty: totalRwQty
+    };
+  }, [filteredTableData]);
 
   const activeKpiData = [
     {
@@ -1105,7 +1260,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Idle Accepted Hours",
-      value: formatHoursMins(totalAcceptedHrs),
+      value: idleBreakdown.accepted.total_display || formatHoursMins(totalAcceptedHrs),
       unit: "",
       meta: "Of Total Idle Time",
       pos: true
@@ -1120,7 +1275,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Idle Non Accepted Hours",
-      value: formatHoursMins(totalNonAccepted),
+      value: idleBreakdown.non_accepted.total_display || formatHoursMins(totalNonAccepted),
       unit: "",
       meta: "Needs Action",
       pos: false
@@ -1194,7 +1349,7 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot Production Hrs",
-      value: formatHoursMins(kpiValues.totalMachineHours),
+      value: formatHoursMins(totProductionHours),
       unit: "",
       meta: "Scheduled Time",
       pos: false
@@ -1273,131 +1428,18 @@ export default function ProductionAnalysis() {
         </svg>
       ),
       label: "Tot OK Qty",
-      value: kpiValues.okAcceptedQty,
+      value: Math.max(
+        0,
+        (dailyTableTotals.okQty || 0) - (
+          ((dailyTableTotals.matRej || 0) + (dailyTableTotals.macRej || 0)) +
+          Math.max(dailyTableTotals.rwQty || 0, (kpiValues.totReworkQty ?? Math.round((kpiValues.totalProductionQty || 0) * 0.008)) || 0)
+        )
+      ),
       unit: "Units",
       meta: "Accepted Parts",
       pos: true
     },
   ];
-
-  // ── Unique option lists for Daily Production Details ──
-  const dailyUniqueParts = useMemo(() => {
-    const set = new Set();
-    tableData.forEach(r => {
-      const p = (r.Part || "").trim();
-      if (p && p !== "—" && p !== "-") set.add(p);
-    });
-    return Array.from(set).sort();
-  }, [tableData]);
-
-  const filteredDailyParts = useMemo(() => {
-    if (!dailyPartSearch.trim()) return dailyUniqueParts;
-    const q = dailyPartSearch.toLowerCase().trim();
-    return dailyUniqueParts.filter(p => p.toLowerCase().includes(q));
-  }, [dailyUniqueParts, dailyPartSearch]);
-
-  const dailyUniqueMacs = useMemo(() => {
-    const set = new Set();
-    tableData.forEach(r => {
-      const m = (r.Machine || "").trim();
-      if (m && m !== "—" && m !== "-") set.add(m);
-    });
-    return Array.from(set).sort();
-  }, [tableData]);
-
-  const filteredDailyMacs = useMemo(() => {
-    if (!dailyMacSearch.trim()) return dailyUniqueMacs;
-    const q = dailyMacSearch.toLowerCase().trim();
-    return dailyUniqueMacs.filter(m => m.toLowerCase().includes(q));
-  }, [dailyUniqueMacs, dailyMacSearch]);
-
-  const dailyUniqueOperators = useMemo(() => {
-    const set = new Set();
-    tableData.forEach(r => {
-      const op = (r.Operator || "").trim();
-      if (op && op !== "—" && op !== "-") set.add(op);
-    });
-    return Array.from(set).sort();
-  }, [tableData]);
-
-  const filteredDailyOperators = useMemo(() => {
-    if (!dailyOperatorSearch.trim()) return dailyUniqueOperators;
-    const q = dailyOperatorSearch.toLowerCase().trim();
-    return dailyUniqueOperators.filter(op => op.toLowerCase().includes(q));
-  }, [dailyUniqueOperators, dailyOperatorSearch]);
-
-  const filteredTableData = useMemo(() => {
-    return tableData.filter(row => {
-      // 1. Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const part = (row.Part || "").toLowerCase();
-        const proc = (row.Process || "").toLowerCase();
-        const oper = (row.Operator || "").toLowerCase();
-        const mac = (row.Machine || "").toLowerCase();
-        if (!part.includes(q) && !proc.includes(q) && !oper.includes(q) && !mac.includes(q)) {
-          return false;
-        }
-      }
-      // 2. Machine Name (Global)
-      if (filterMachine && filterMachine.length > 0 && !filterMachine.includes(row.Machine)) {
-        return false;
-      }
-      // 3. Shift (Global)
-      if (filterShift && row.Shift !== filterShift) {
-        return false;
-      }
-      // 4. Operator (Global)
-      if (filterOperator && filterOperator.length > 0 && !filterOperator.includes(row.Operator)) {
-        return false;
-      }
-
-      // ── Local Daily Production Details Filters ──
-      // 5. Part Filter
-      if (dailyPartFilter.length > 0 && !dailyPartFilter.includes(row.Part)) {
-        return false;
-      }
-      // 6. Machine Filter
-      if (dailyMacFilter.length > 0 && !dailyMacFilter.includes(row.Machine)) {
-        return false;
-      }
-      // 7. Operator Filter
-      if (dailyOperatorFilter.length > 0 && !dailyOperatorFilter.includes(row.Operator)) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [tableData, searchQuery, filterMachine, filterShift, filterOperator, dailyPartFilter, dailyMacFilter, dailyOperatorFilter]);
-
-  const dailyTableTotals = useMemo(() => {
-    let totalTarget = 0;
-    let totalOkQty = 0;
-    let totalMatRej = 0;
-    let totalMacRej = 0;
-    let totalRwQty = 0;
-
-    filteredTableData.forEach(row => {
-      totalTarget += Number(row.Target || 0);
-      totalOkQty += Number(row.OKQty || 0);
-
-      const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
-      const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
-      const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
-
-      totalMatRej += Number(matRej || 0);
-      totalMacRej += Number(macRej || 0);
-      totalRwQty += Number(rwQty || 0);
-    });
-
-    return {
-      target: totalTarget,
-      okQty: totalOkQty,
-      matRej: totalMatRej,
-      macRej: totalMacRej,
-      rwQty: totalRwQty
-    };
-  }, [filteredTableData]);
 
   const sortedTableData = useMemo(() => {
     if (!dailySortField) return filteredTableData;
@@ -1542,7 +1584,11 @@ export default function ProductionAnalysis() {
       return allMachinesList.map(m => ({
         machine: m.name,
         prodQty: m.prodQty || 0,
-        rejQty: m.rejQty || 0,
+        macRejQty: m.macRejQty ?? 0,
+        matRejQty: m.matRejQty ?? 0,
+        rejQty: (m.macRejQty !== undefined || m.matRejQty !== undefined)
+          ? ((m.macRejQty || 0) + (m.matRejQty || 0))
+          : (m.rejQty || 0),
         rwQty: m.rwQty || 0,
         rejPct: m.rejPct || 0,
         rwPct: m.rwPct || 0
@@ -1551,14 +1597,20 @@ export default function ProductionAnalysis() {
 
     return Object.entries(macDetailData).map(([macName, details]) => {
       const okQtySum = details.runs.reduce((sum, run) => sum + (run.okQty || 0), 0);
-      const rej = details.rejQty || 0;
-      const rw = details.rwQty || 0;
+      const macRej = details.total_mac_rej_qty ?? details.macRejQty ?? 0;
+      const matRej = details.total_mat_rej_qty ?? details.matRejQty ?? 0;
+      const rej = (details.total_mac_rej_qty !== undefined || details.total_mat_rej_qty !== undefined)
+        ? (macRej + matRej)
+        : (details.rejQty || 0);
+      const rw = details.total_rework_qty ?? details.rwQty ?? 0;
       const prodQty = okQtySum + rej + rw;
       const rejPct = prodQty > 0 ? parseFloat(((rej / prodQty) * 100).toFixed(1)) : 0.0;
       const rwPct = prodQty > 0 ? parseFloat(((rw / prodQty) * 100).toFixed(1)) : 0.0;
       return {
         machine: macName,
         prodQty,
+        macRejQty: macRej,
+        matRejQty: matRej,
         rejQty: rej,
         rwQty: rw,
         rejPct,
@@ -1689,37 +1741,37 @@ export default function ProductionAnalysis() {
 
   // ✅ Persist date range to sessionStorage on every change
   useEffect(() => {
-    writeFilterSession("ba_filter_production", { from: dateRange.from, to: dateRange.to });
-  }, [dateRange.from, dateRange.to]);
+    writeFilterSession("ba_filter_production", { from: appliedDateRange.from, to: appliedDateRange.to });
+  }, [appliedDateRange.from, appliedDateRange.to]);
 
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
+    if (!appliedDateRange.from || !appliedDateRange.to) return;
     setPageLoading(true);
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
-    if (filterMachine && filterMachine.length > 0) {
-      params.append("machine", filterMachine.join(","));
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
+    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
+      params.append("machine", appliedFilterMachine.join(","));
     }
-    if (filterShift) {
-      params.append("shift", filterShift);
+    if (appliedFilterShift) {
+      params.append("shift", appliedFilterShift);
     }
-    if (filterOperator && filterOperator.length > 0) {
-      params.append("operator", filterOperator.join(","));
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
+      params.append("operator", appliedFilterOperator.join(","));
     }
-    if (filterMacType) {
-      params.append("mac_type", filterMacType);
+    if (appliedFilterMacType) {
+      params.append("mac_type", appliedFilterMacType);
     }
-    if (filterMacGroup) {
-      params.append("mac_group", filterMacGroup);
+    if (appliedFilterMacGroup) {
+      params.append("mac_group", appliedFilterMacGroup);
     }
-    if (searchQuery) {
-      params.append("search", searchQuery);
+    if (appliedSearchQuery) {
+      params.append("search", appliedSearchQuery);
     }
     fetch(`${API_BASE}/production-analysis-report/?${params}`, { credentials: "include" })
       .then(async (res) => { const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data?.error || "Failed to load production analysis report"); return data; })
       .then(data => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
-          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
+          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
           if (d.machines && Array.isArray(d.machines)) {
             setMachines(d.machines);
           }
@@ -1744,19 +1796,33 @@ export default function ProductionAnalysis() {
       .finally(() => {
         setTimeout(() => setPageLoading(false), 700);
       });
-  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
 
-  const handleMachineClick = (m) => {
-    setSelectedMachine(m);
+  const fetchMachineCardData = useCallback((macName) => {
+    if (!macName) return;
     setCardLoading(true);
-    setCardData(null);
-    const fromStr = dateRange.from ? formatDateToYYYYMMDD(dateRange.from) : formatDateToYYYYMMDD(new Date());
-    const toStr = dateRange.to ? formatDateToYYYYMMDD(dateRange.to) : formatDateToYYYYMMDD(new Date());
+    const fromStr = appliedDateRange.from ? formatDateToYYYYMMDD(appliedDateRange.from) : formatDateToYYYYMMDD(new Date());
+    const toStr = appliedDateRange.to ? formatDateToYYYYMMDD(appliedDateRange.to) : formatDateToYYYYMMDD(new Date());
     const params = new URLSearchParams({
       from: fromStr,
       to: toStr,
     });
-    fetch(`${API_BASE}/machines/${encodeURIComponent(m.name)}/card/?${params}`, { credentials: "include" })
+    if (appliedFilterShift) {
+      params.append("shift", appliedFilterShift);
+    }
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
+      params.append("operator", appliedFilterOperator.join(","));
+    }
+    if (appliedFilterMacType) {
+      params.append("mac_type", appliedFilterMacType);
+    }
+    if (appliedFilterMacGroup) {
+      params.append("mac_group", appliedFilterMacGroup);
+    }
+    if (appliedSearchQuery) {
+      params.append("search", appliedSearchQuery);
+    }
+    fetch(`${API_BASE}/machines/${encodeURIComponent(macName)}/card/?${params}`, { credentials: "include" })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.message || "Failed to fetch machine card data");
@@ -1771,88 +1837,104 @@ export default function ProductionAnalysis() {
       .finally(() => {
         setCardLoading(false);
       });
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery]);
+
+  const handleMachineClick = (m) => {
+    if (selectedMachine && selectedMachine.name === m.name) {
+      fetchMachineCardData(m.name);
+    } else {
+      setSelectedMachine(m);
+    }
   };
+
+  useEffect(() => {
+    if (selectedMachine && selectedMachine.name) {
+      fetchMachineCardData(selectedMachine.name);
+    } else {
+      setCardData(null);
+    }
+  }, [selectedMachine?.name, fetchMachineCardData, fetchTrigger]);
 
   /* ── Production Value chart fetch ───────────────── */
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
-    if (filterMachine && filterMachine.length > 0) {
-      params.append("machine", filterMachine.join(","));
+    if (!appliedDateRange.from || !appliedDateRange.to) return;
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
+    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
+      params.append("machine", appliedFilterMachine.join(","));
     }
-    if (filterShift) {
-      params.append("shift", filterShift);
+    if (appliedFilterShift) {
+      params.append("shift", appliedFilterShift);
     }
-    if (filterOperator && filterOperator.length > 0) {
-      params.append("operator", filterOperator.join(","));
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
+      params.append("operator", appliedFilterOperator.join(","));
     }
-    if (filterMacType) {
-      params.append("mac_type", filterMacType);
+    if (appliedFilterMacType) {
+      params.append("mac_type", appliedFilterMacType);
     }
-    if (filterMacGroup) {
-      params.append("mac_group", filterMacGroup);
+    if (appliedFilterMacGroup) {
+      params.append("mac_group", appliedFilterMacGroup);
     }
-    if (searchQuery) {
-      params.append("search", searchQuery);
+    if (appliedSearchQuery) {
+      params.append("search", appliedSearchQuery);
     }
     fetch(`${API_BASE}/production-value-report/?${params}`, { credentials: "include" })
       .then(r => r.json().catch(() => ({})))
       .then(data => { if (data && data.status === "success" && data.data) setPvChartData(data.data); })
       .catch(err => console.error("Production value report error:", err));
-  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
 
   /* ── Idle Breakdown fetch ───────────────────── */
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
+    if (!appliedDateRange.from || !appliedDateRange.to) return;
     const params = new URLSearchParams({
-      from: formatDateToYYYYMMDD(dateRange.from),
-      to: formatDateToYYYYMMDD(dateRange.to)
+      from: formatDateToYYYYMMDD(appliedDateRange.from),
+      to: formatDateToYYYYMMDD(appliedDateRange.to)
     });
-    if (filterMachine && filterMachine.length > 0) {
-      params.append("machine", filterMachine.join(","));
+    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
+      params.append("machine", appliedFilterMachine.join(","));
     }
-    if (filterShift) {
-      params.append("shift", filterShift);
+    if (appliedFilterShift) {
+      params.append("shift", appliedFilterShift);
     }
-    if (filterOperator && filterOperator.length > 0) {
-      params.append("operator", filterOperator.join(","));
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
+      params.append("operator", appliedFilterOperator.join(","));
     }
-    if (filterMacType) {
-      params.append("mac_type", filterMacType);
+    if (appliedFilterMacType) {
+      params.append("mac_type", appliedFilterMacType);
     }
-    if (filterMacGroup) {
-      params.append("mac_group", filterMacGroup);
+    if (appliedFilterMacGroup) {
+      params.append("mac_group", appliedFilterMacGroup);
     }
-    if (searchQuery) {
-      params.append("search", searchQuery);
+    if (appliedSearchQuery) {
+      params.append("search", appliedSearchQuery);
     }
     fetch(`${API_BASE}/production-idle-breakdown/?${params}`, { credentials: "include" })
       .then(r => r.json().catch(() => ({})))
       .then(data => { if (data && data.status === "success") setIdleBreakdown({ accepted: data.accepted || _IDLE_BREAKDOWN_EMPTY.accepted, non_accepted: data.non_accepted || _IDLE_BREAKDOWN_EMPTY.non_accepted, summary: data.summary || _IDLE_BREAKDOWN_EMPTY.summary }); })
       .catch(err => console.error("Idle breakdown error:", err));
-  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
 
   /* ── Daily Production Details fetch ─────────── */
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(dateRange.from), to: formatDateToYYYYMMDD(dateRange.to) });
-    if (filterMachine && filterMachine.length > 0) {
-      params.append("machine", filterMachine.join(","));
+    if (!appliedDateRange.from || !appliedDateRange.to) return;
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
+    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
+      params.append("machine", appliedFilterMachine.join(","));
     }
-    if (filterShift) {
-      params.append("shift", filterShift);
+    if (appliedFilterShift) {
+      params.append("shift", appliedFilterShift);
     }
-    if (filterOperator && filterOperator.length > 0) {
-      params.append("operator", filterOperator.join(","));
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
+      params.append("operator", appliedFilterOperator.join(","));
     }
-    if (filterMacType) {
-      params.append("mac_type", filterMacType);
+    if (appliedFilterMacType) {
+      params.append("mac_type", appliedFilterMacType);
     }
-    if (filterMacGroup) {
-      params.append("mac_group", filterMacGroup);
+    if (appliedFilterMacGroup) {
+      params.append("mac_group", appliedFilterMacGroup);
     }
-    if (searchQuery) {
-      params.append("search", searchQuery);
+    if (appliedSearchQuery) {
+      params.append("search", appliedSearchQuery);
     }
     setTableLoading(true);
     fetch(`${API_BASE}/production-analysis/daily-details/?${params}`, { credentials: "include" })
@@ -1866,7 +1948,7 @@ export default function ProductionAnalysis() {
       })
       .catch(err => { console.error("Daily production details error:", err); setTableData([]); })
       .finally(() => setTableLoading(false));
-  }, [dateRange.from, dateRange.to, filterMachine, filterShift, filterOperator, filterMacType, filterMacGroup, searchQuery]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
 
 
 
@@ -2116,7 +2198,7 @@ export default function ProductionAnalysis() {
       data: {
         labels: labels,
         datasets: [{
-          label: "Setup Time (hrs)",
+          label: "Setting Time",
           data: setTimeData,
           backgroundColor: gradient,
           borderColor: primaryColor,
@@ -2140,7 +2222,7 @@ export default function ProductionAnalysis() {
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: ctx => ` Setup: ${ctx.parsed.y} hrs` } },
+          tooltip: { callbacks: { label: ctx => ` Setting: ${formatHoursMins(ctx.parsed.y)}` } },
           datalabels: {
             display: true,
             anchor: "end",
@@ -2153,7 +2235,7 @@ export default function ProductionAnalysis() {
             padding: { top: 3, bottom: 3, left: 6, right: 6 },
             shadowColor: "rgba(0, 0, 0, 0.04)",
             shadowBlur: 3,
-            formatter: v => `${v}h`,
+            formatter: v => formatHoursMins(v),
             font: { size: 10, weight: "700", family: "'Plus Jakarta Sans',sans-serif" },
             color: primaryColor
           }
@@ -2166,7 +2248,7 @@ export default function ProductionAnalysis() {
           y: {
             beginAtZero: true,
             grace: "15%",
-            ticks: { callback: v => `${v}h`, font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } },
+            ticks: { callback: v => formatHoursMins(v), font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } },
             grid: { color: "#f1f5f9" }
           }
         }
@@ -2700,6 +2782,11 @@ export default function ProductionAnalysis() {
                 placeholder={isGlobalLoading ? "Loading..." : "Search Partno"}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !isGlobalLoading) {
+                    handleApplyFilters();
+                  }
+                }}
                 disabled={isGlobalLoading}
                 style={{
                   cursor: isGlobalLoading ? "not-allowed" : "text",
@@ -2763,7 +2850,25 @@ export default function ProductionAnalysis() {
             options={macGroupOptions}
             disabled={isGlobalLoading}
           />
-          <div className="pa2-fg-reset">
+          <div className="pa2-fg-actions" data-spotlight="pda-filter-actions">
+            <button
+              type="button"
+              className={`pa2-filter-apply-btn ${hasPendingChanges ? "pa2-filter-apply-btn--pending" : ""}`}
+              onClick={() => !isGlobalLoading && handleApplyFilters()}
+              disabled={isGlobalLoading}
+              title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
+            >
+              {isGlobalLoading ? (
+                <FiLoader className="pa2-spin" size={14} />
+              ) : (
+                <FiFilter size={14} className="pa2-apply-icon" />
+              )}
+              <span>{isGlobalLoading ? "Applying..." : "Apply Filter"}</span>
+              {hasPendingChanges && !isGlobalLoading && (
+                <span className="pa2-apply-pulse-dot" />
+              )}
+            </button>
+
             <button
               type="button"
               className="pa2-filter-reset-btn"
@@ -2946,11 +3051,12 @@ export default function ProductionAnalysis() {
               })}
             </div>
           ) : (
-            <div className="pa2-macdetail-empty">
-              <div className="pa2-macdetail-empty-icon">🔍</div>
-              <div className="pa2-macdetail-empty-title">No machines found</div>
-              <div className="pa2-macdetail-empty-sub">Try adjusting your filters or search query</div>
-            </div>
+            <NoDataFound
+              title="No Data Found on this period"
+              sub="No active machines or logs found for this period."
+              height={190}
+              icon={FiCpu}
+            />
           )}
         </div>
       </div>
@@ -3032,6 +3138,7 @@ export default function ProductionAnalysis() {
                       <thead>
                         <tr>
                           <th style={{ width: "115px" }}>Date</th>
+                          <th style={{ width: "95px" }}>Shift</th>
                           <th style={{ minWidth: "170px" }}>Operator</th>
                           <th style={{ minWidth: "150px" }}>Part No.</th>
                           <th style={{ minWidth: "170px" }}>Process</th>
@@ -3044,6 +3151,9 @@ export default function ProductionAnalysis() {
                           <tr key={idx}>
                             <td className="pa2-modal-td-date">
                               <span>{formatShiftLogDate(r.date || r.entry_date || r.EntryDate || r.shift_date)}</span>
+                            </td>
+                            <td className="pa2-modal-td-shift">
+                              <span>{r.shift || r.Shift || "—"}</span>
                             </td>
                             <td className="pa2-modal-td-operator">
                               <div className="pa2-modal-op-inner">
@@ -3059,7 +3169,7 @@ export default function ProductionAnalysis() {
                         ))}
                         {shiftLogs.length === 0 && (
                           <tr>
-                            <td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: "20px" }}>No shift logs found for this machine</td>
+                            <td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "20px" }}>No shift logs found for this machine</td>
                           </tr>
                         )}
                       </tbody>
@@ -3189,6 +3299,13 @@ export default function ProductionAnalysis() {
                 <span>Loading Production Values...</span>
               </div>
             </div>
+          ) : (!pvChartData || !pvChartData.machine_data || pvChartData.machine_data.labels.length === 0 || pvChartData.machine_data.achieved.every(v => v === 0)) ? (
+            <NoDataFound
+              title="No Data Found on this period"
+              sub="No machine production values recorded for this period."
+              height={340}
+              icon={FiDollarSign}
+            />
           ) : (
             <canvas key={pvMode + pvChartType} ref={pvChartRef} />
           )}
@@ -3384,6 +3501,13 @@ export default function ProductionAnalysis() {
                 <span>Loading MHR cost trends...</span>
               </div>
             </div>
+          ) : (!mhrTrendChartData || !mhrTrendChartData.labels || mhrTrendChartData.labels.length === 0 || mhrTrendChartData.datasets[0].data.every(v => v === 0)) ? (
+            <NoDataFound
+              title="No Data Found on this period"
+              sub="No machine hour rate records found for this period."
+              height={320}
+              icon={FiClock}
+            />
           ) : (
             <canvas ref={mhrChartRef} />
           )}
@@ -3679,16 +3803,23 @@ export default function ProductionAnalysis() {
                 <span>Loading OEE Performance...</span>
               </div>
             </div>
+          ) : (oeeMode === "month" ? (!oeeTrend.labels || oeeTrend.labels.length === 0 || oeeTrend.data.every(v => v === 0)) : (allMachinesList.length === 0 || allMachinesList.every(m => !m.oee))) ? (
+            <NoDataFound
+              title="No Data Found on this period"
+              sub="No OEE performance metrics available for this period."
+              height={260}
+              icon={FiTrendingUp}
+            />
           ) : (
             <canvas key={oeeMode + oeeChartType} ref={oeeChartRef} />
           )}
         </div>
       </div>
 
-      {/* ── SETUP TIME MACHINE-WISE SINGLE GRAPH + TABLE ── */}
+      {/* ── SETTING TIME MACHINE-WISE SINGLE GRAPH + TABLE ── */}
       <div className="pa2-card pa2-anim" data-spotlight="pda-setup-time" style={{ "--d": "120ms", marginTop: "18px", marginBottom: "18px", overflow: "visible" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
-          <SectionHeader icon={<FiClock size={16} />} title="Setup Time Machine-Wise" sub={`Setup / setting hours comparison grouped by ${setupFilterMode}`} />
+          <SectionHeader icon={<FiClock size={16} />} title="Setting Time Machine-Wise" sub={`Setting hours comparison grouped by ${setupFilterMode}`} />
 
           {/* Custom Premium Dropdown Filter & Part Filter */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -3861,7 +3992,7 @@ export default function ProductionAnalysis() {
                   <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
                   <div className="pa2-skeleton-spinner">
                     <FiLoader className="pa2-spinner-icon" />
-                    <span>Loading Setup Times...</span>
+                    <span>Loading Setting Times...</span>
                   </div>
                 </div>
               ) : setupFilterMode === "part" && setupSelectedParts.length === 0 ? (
@@ -3898,26 +4029,12 @@ export default function ProductionAnalysis() {
                   </div>
                 </div>
               ) : setupChartData.labels.length === 0 ? (
-                <div style={{
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(248, 250, 252, 0.5)",
-                  border: "1.5px dashed rgba(45, 109, 232, 0.12)",
-                  borderRadius: "12px",
-                  color: "#94a3b8",
-                  gap: "8px",
-                  padding: "20px",
-                  textAlign: "center"
-                }}>
-                  <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "rgba(100,116,139,0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>
-                    <FiClock size={20} />
-                  </div>
-                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#475569", fontFamily: "'Poppins', sans-serif" }}>No Setup Data Available</div>
-                  <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Poppins', sans-serif" }}>No setting time records found for this period.</div>
-                </div>
+                <NoDataFound
+                  title="No Data Found on this period"
+                  sub="No setting time records found for this period."
+                  height="100%"
+                  icon={FiClock}
+                />
               ) : (
                 <canvas key={setupFilterMode + setupChartType} ref={setChartRef} />
               )}
@@ -3975,17 +4092,13 @@ export default function ProductionAnalysis() {
                       </td>
                     </tr>
                   ) : sortedSettingTableData.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: "48px 20px", color: "#94a3b8" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "rgba(100,116,139,0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>
-                            <FiClock size={18} />
-                          </div>
-                          <div style={{ fontWeight: 700, fontSize: "13px", color: "#475569", fontFamily: "'Poppins', sans-serif" }}>No Setup Records Found</div>
-                          <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Poppins', sans-serif" }}>No setting time data for the selected date range and filters.</div>
-                        </div>
-                      </td>
-                    </tr>
+                    <NoDataFound
+                      isTableRow={true}
+                      colSpan={10}
+                      title="No Data Found on this period"
+                      sub="No setting time records found for this period."
+                      icon={FiClock}
+                    />
                   ) : (
                     sortedSettingTableData.map((row, i) => {
                       const effColor = row.effectiveness >= 100 ? "#10b981" : row.effectiveness >= 80 ? "#3b82f6" : "#ef4444";
@@ -4000,8 +4113,8 @@ export default function ProductionAnalysis() {
                           <td className="pa2-td-part" style={{ maxWidth: "130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.partNo}>{row.partNo}</td>
                           <td>{row.process}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{row.operatorName}</td>
-                          <td style={{ textAlign: "right", fontWeight: "600" }}>{row.settingTime} h</td>
-                          <td style={{ textAlign: "right", fontWeight: "500", color: "#64748b" }}>{row.defaultSettingTime} h</td>
+                          <td style={{ textAlign: "right", fontWeight: "600" }}>{formatHoursMins(row.settingTime)}</td>
+                          <td style={{ textAlign: "right", fontWeight: "500", color: "#64748b" }}>{formatHoursMins(row.defaultSettingTime)}</td>
                           <td>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                               <span className="pa2-badge" style={{ background: effBg, color: effColor, border: `1px solid ${effColor}22`, fontWeight: "800", fontSize: "10.5px", padding: "2px 6px" }}>{row.effectiveness}%</span>
@@ -4310,6 +4423,13 @@ export default function ProductionAnalysis() {
                 <span>Loading Utilization Index...</span>
               </div>
             </div>
+          ) : (!utilChartData || !utilChartData.labels || utilChartData.labels.length === 0 || utilChartData.data.every(v => v === 0)) ? (
+            <NoDataFound
+              title="No Data Found on this period"
+              sub="No machine running hours or utilization data found for this period."
+              height={280}
+              icon={FiActivity}
+            />
           ) : (
             <canvas key={utilFilterMode + utilChartType} ref={utilChartRef} />
           )}
@@ -4330,6 +4450,13 @@ export default function ProductionAnalysis() {
                     <span>Loading Quality Analysis...</span>
                   </div>
                 </div>
+              ) : (!sortedQualityData || sortedQualityData.length === 0 || sortedQualityData.every(r => (r.prodQty || 0) === 0)) ? (
+                <NoDataFound
+                  title="No Data Found on this period"
+                  sub="No rejection or rework data recorded for this period."
+                  height={290}
+                  icon={FiAlertCircle}
+                />
               ) : (
                 <canvas ref={qualityChartRef} />
               )}
@@ -4347,8 +4474,11 @@ export default function ProductionAnalysis() {
                     <th onClick={() => handleQualitySort("prodQty")} style={{ cursor: "pointer", userSelect: "none", textAlign: "right" }}>
                       Total Prod <SortIcon active={qualitySortField === "prodQty"} direction={qualitySortDirection} />
                     </th>
-                    <th onClick={() => handleQualitySort("rejQty")} style={{ cursor: "pointer", userSelect: "none", textAlign: "right" }}>
-                      Rej Qty <SortIcon active={qualitySortField === "rejQty"} direction={qualitySortDirection} />
+                    <th onClick={() => handleQualitySort("macRejQty")} style={{ cursor: "pointer", userSelect: "none", textAlign: "right" }}>
+                      Mac Rej <SortIcon active={qualitySortField === "macRejQty"} direction={qualitySortDirection} />
+                    </th>
+                    <th onClick={() => handleQualitySort("matRejQty")} style={{ cursor: "pointer", userSelect: "none", textAlign: "right" }}>
+                      Mat Rej Qty <SortIcon active={qualitySortField === "matRejQty"} direction={qualitySortDirection} />
                     </th>
                     <th onClick={() => handleQualitySort("rejPct")} style={{ cursor: "pointer", userSelect: "none", textAlign: "right" }}>
                       Rej % <SortIcon active={qualitySortField === "rejPct"} direction={qualitySortDirection} />
@@ -4365,11 +4495,19 @@ export default function ProductionAnalysis() {
                   {pageLoading ? (
                     Array.from({ length: 4 }).map((_, idx) => (
                       <tr key={idx}>
-                        {Array.from({ length: 7 }).map((__, tdIdx) => (
+                        {Array.from({ length: 8 }).map((__, tdIdx) => (
                           <td key={tdIdx}><div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : "45px", height: "12px" }} /></td>
                         ))}
                       </tr>
                     ))
+                  ) : (!sortedQualityData || sortedQualityData.length === 0 || sortedQualityData.every(r => (r.prodQty || 0) === 0)) ? (
+                    <NoDataFound
+                      isTableRow={true}
+                      colSpan={8}
+                      title="No Data Found on this period"
+                      sub="No machine rejection records found for this period."
+                      icon={FiAlertCircle}
+                    />
                   ) : (
                     sortedQualityData.map((row, i) => (
                       <tr key={i} className="pa2-anim" style={{ "--d": `${i * 30}ms` }}>
@@ -4378,7 +4516,8 @@ export default function ProductionAnalysis() {
                           <span className="pa2-machine-chip" style={{ fontWeight: "700" }}>{row.machine}</span>
                         </td>
                         <td style={{ textAlign: "right", fontWeight: "600" }}>{row.prodQty}</td>
-                        <td style={{ textAlign: "right", fontWeight: "600", color: "#ef4444" }}>{row.rejQty}</td>
+                        <td style={{ textAlign: "right", fontWeight: "600", color: "#ef4444" }}>{row.macRejQty ?? 0}</td>
+                        <td style={{ textAlign: "right", fontWeight: "600", color: "#f97316" }}>{row.matRejQty ?? 0}</td>
                         <td style={{ textAlign: "right" }}>
                           <span className="pa2-badge" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.15)", fontWeight: "800" }}>
                             {row.rejPct}%
@@ -4426,6 +4565,14 @@ export default function ProductionAnalysis() {
                     ))}
                   </tr>
                 ))
+              ) : (!topUtilizationData || topUtilizationData.length === 0 || topUtilizationData.every(r => (r.utilization || 0) === 0)) ? (
+                <NoDataFound
+                  isTableRow={true}
+                  colSpan={6}
+                  title="No Data Found on this period"
+                  sub="No machine utilization rankings found for this period."
+                  icon={FiActivity}
+                />
               ) : (
                 topUtilizationData.map((row, i) => {
                   const statusColor = row.utilization >= 85 ? "#10b981" : row.utilization >= 75 ? "#3b82f6" : "#f59e0b";
@@ -4506,6 +4653,8 @@ export default function ProductionAnalysis() {
                       <td><div className="pa2-skeleton" style={{ width: "30px", height: "12px", marginLeft: "auto" }} /></td>
                     </tr>
                   ))
+                ) : !topOeeData || topOeeData.length === 0 ? (
+                  <NoDataFound isTableRow={true} colSpan={3} title="No Data Found on this period" sub="No OEE leader records for this period." icon={FiAward} />
                 ) : (
                   topOeeData.map((row, idx) => (
                     <tr key={idx}>
@@ -4550,6 +4699,8 @@ export default function ProductionAnalysis() {
                       <td><div className="pa2-skeleton" style={{ width: "30px", height: "12px", marginLeft: "auto" }} /></td>
                     </tr>
                   ))
+                ) : !leastOeeData || leastOeeData.length === 0 ? (
+                  <NoDataFound isTableRow={true} colSpan={3} title="No Data Found on this period" sub="No OEE laggard records for this period." icon={FiAward} />
                 ) : (
                   leastOeeData.map((row, idx) => (
                     <tr key={idx}>
@@ -4587,6 +4738,8 @@ export default function ProductionAnalysis() {
                   <span>Loading Trend...</span>
                 </div>
               </div>
+            ) : (!macAddedTrend || !macAddedTrend.labels || macAddedTrend.labels.length === 0) ? (
+              <NoDataFound title="No Data Found on this period" sub="No machine additions found for this period." height={230} icon={FiPlus} />
             ) : (
               <canvas ref={macAddedChartRef} />
             )}
@@ -4603,6 +4756,8 @@ export default function ProductionAnalysis() {
                   <span>Loading Trend Index...</span>
                 </div>
               </div>
+            ) : (!macEffTrend || !macEffTrend.labels || macEffTrend.labels.length === 0) ? (
+              <NoDataFound title="No Data Found on this period" sub="No efficiency trend data found for this period." height={230} icon={FiActivity} />
             ) : (
               <canvas ref={macEffTrendChartRef} />
             )}
@@ -4623,11 +4778,12 @@ export default function ProductionAnalysis() {
                   ))}
                 </div>
               </>
+            ) : (!idleBreakdown.accepted.reasons || idleBreakdown.accepted.reasons.length === 0) ? (
+              <NoDataFound title="No Data Found on this period" sub="No accepted idle hours recorded for this period." height={180} icon={FiCheckCircle} />
             ) : (
               <>
                 <DonutChart data={idleBreakdown.accepted.reasons.length >= 2 ? idleBreakdown.accepted.reasons : idleBreakdown.accepted.reasons.length === 1 ? [...idleBreakdown.accepted.reasons, { hours: 0.001, color: "#e2e8f0" }] : [{ hours: 0.6, color: "#2563eb" }, { hours: 0.4, color: "#e2e8f0" }]} total={totalAcceptedHrs > 0 ? totalAcceptedHrs : 0} />
                 <div className="pa2-idle-list">
-                  {idleBreakdown.accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No accepted idle data for this period</div>}
                   {idleBreakdown.accepted.reasons.map((r, i) => (
                     <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
                       <span className="pa2-idle-dot" style={{ background: r.color }} />
@@ -4653,11 +4809,12 @@ export default function ProductionAnalysis() {
                   ))}
                 </div>
               </>
+            ) : (!idleBreakdown.non_accepted.reasons || idleBreakdown.non_accepted.reasons.length === 0) ? (
+              <NoDataFound title="No Data Found on this period" sub="No non-accepted idle hours recorded for this period." height={180} icon={FiAlertCircle} />
             ) : (
               <>
                 <DonutChart data={idleBreakdown.non_accepted.reasons.length >= 2 ? idleBreakdown.non_accepted.reasons : idleBreakdown.non_accepted.reasons.length === 1 ? [...idleBreakdown.non_accepted.reasons, { hours: 0.001, color: "#fee2e2" }] : [{ hours: 0.6, color: "#ef4444" }, { hours: 0.4, color: "#fee2e2" }]} total={totalNonAccepted > 0 ? totalNonAccepted : 0} />
                 <div className="pa2-idle-list">
-                  {idleBreakdown.non_accepted.reasons.length === 0 && <div className="pa2-idle-row" style={{ color: "#94a3b8", fontStyle: "italic" }}>No non-accepted idle data for this period</div>}
                   {idleBreakdown.non_accepted.reasons.map((r, i) => (
                     <div key={i} className="pa2-idle-row pa2-anim" style={{ "--d": `${i * 60}ms` }}>
                       <span className="pa2-idle-dot" style={{ background: r.color }} />
@@ -4718,6 +4875,8 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     <td><div className="pa2-skeleton" style={{ width: "50px", height: "14px", borderRadius: "4px" }} /></td>
                   </tr>
                 ))
+              ) : (!idleBreakdown.non_accepted.reasons || idleBreakdown.non_accepted.reasons.length === 0) ? (
+                <NoDataFound isTableRow={true} colSpan={6} title="No Data Found on this period" sub="No unplanned downtime or production loss found for this period." icon={FiTrendingDown} />
               ) : (
                 <>
                   {idleBreakdown.non_accepted.reasons.map((r, i) => {
@@ -5117,7 +5276,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     <tr><td colSpan={15} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>Loading production data…</td></tr>
                   )}
                   {!tableLoading && filteredTableData.length === 0 && (
-                    <tr><td colSpan={15} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>No production records found matching the filters.</td></tr>
+                    <NoDataFound isTableRow={true} colSpan={15} title="No Data Found on this period" sub="No shift production records found matching the selected period and filters." icon={FiTable} />
                   )}
                   {!tableLoading && sortedTableData.map((row, i) => {
                     const isRejected = row.Status === "Rejected";

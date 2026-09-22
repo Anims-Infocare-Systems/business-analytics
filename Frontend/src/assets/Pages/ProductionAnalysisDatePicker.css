@@ -24,7 +24,7 @@
     --padp-radius:     12px;
     --padp-tr:         .22s cubic-bezier(.23,1,.32,1);
 
-    font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
     color: var(--padp-text);
 }

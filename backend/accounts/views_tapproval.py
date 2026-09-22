@@ -165,14 +165,23 @@ _JOB_DISPLAY_AMOUNT_SQL = """
 """
 
 _RET_DC_IN_SCOPE_SQL = """
-    ISNULL(CAST(R.IsReturnable AS INT), 0) <> 0
+    1=1
 """
 
 _CANON_RET_DC_TYPE_SQL = """
     CASE
-        WHEN LTRIM(RTRIM(ISNULL(R.dtype, N''))) <> N''
-          THEN N'Returnable DC - ' + LTRIM(RTRIM(R.dtype))
-        ELSE N'Returnable DC - Material Issue'
+        WHEN ISNULL(CAST(R.IsReturnable AS INT), 0) = 0 THEN
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(R.dtype, N''))) <> N''
+                  THEN N'Non Returnable DC - ' + LTRIM(RTRIM(R.dtype))
+                ELSE N'Non Returnable DC - Material Issue'
+            END
+        ELSE
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(R.dtype, N''))) <> N''
+                  THEN N'Returnable DC - ' + LTRIM(RTRIM(R.dtype))
+                ELSE N'Returnable DC - Material Issue'
+            END
     END
 """
 
@@ -309,7 +318,7 @@ def _combined_docs_cte_sql(is_trns_apl: int = 0) -> str:
                 OR LOWER(LTRIM(RTRIM(ISNULL(R.dtype, N'')))) = N'general'
             )
         """
-        rdc_canon_expr = "N'Returnable DC - Material Issue'"
+        rdc_canon_expr = _CANON_RET_DC_TYPE_SQL.strip()
     else:
         rdc_filter_clause = ""
         rdc_canon_expr = _CANON_RET_DC_TYPE_SQL.strip()
@@ -1229,12 +1238,15 @@ def tapproval_approve(request):
                     doc_date = d_row[0]
                     doc_type = _canonical_dc_type(d_row[1]) or "DC - General"
             elif doc_kind == "ret_dc":
-                cursor.execute("SELECT retissdt, dtype FROM ReturnableDcIss_Mas WHERE ISNULL(deleted, 0) = 0 AND retissno = ?", [doc_no])
+                cursor.execute("SELECT retissdt, dtype, ISNULL(CAST(IsReturnable AS INT), 0) FROM ReturnableDcIss_Mas WHERE ISNULL(deleted, 0) = 0 AND retissno = ?", [doc_no])
                 d_row = cursor.fetchone()
                 if d_row:
                     doc_date = d_row[0]
                     ret_dtype = (d_row[1] or "").strip()
-                    doc_type = f"Returnable DC - {ret_dtype}" if ret_dtype else "Returnable DC - Material Issue"
+                    is_ret = int(d_row[2]) if len(d_row) > 2 and d_row[2] is not None else 1
+                    prefix = "Returnable DC" if is_ret != 0 else "Non Returnable DC"
+                    doc_type = f"{prefix} - {ret_dtype}" if ret_dtype else f"{prefix} - Material Issue"
+                    doc_label = prefix
             else:
                 cursor.execute("SELECT invdt, btype FROM Bill_Mas WHERE ISNULL(deleted, 0) = 0 AND invno = ?", [doc_no])
                 d_row = cursor.fetchone()

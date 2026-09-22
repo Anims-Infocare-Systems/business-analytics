@@ -356,7 +356,17 @@ window.fetch = async (...args) => {
         localStorage.removeItem("ba_settings_profile");
         localStorage.removeItem("ba_nav");
         sessionStorage.clear();
-        sessionStorage.setItem("ba_logout_reason", "concurrent_login");
+
+        // Only set concurrent_login banner if server specifically reported concurrent login / superseded session
+        try {
+          const body = await res.clone().json().catch(() => null);
+          const errText = String(body?.error || body?.reason || body?.code || "").toLowerCase();
+          if (errText.includes("another device") || body?.code === "concurrent_login" || errText.includes("superseded")) {
+            sessionStorage.setItem("ba_logout_reason", "concurrent_login");
+          }
+        } catch {
+          /* ignore json clone error */
+        }
       } catch (e) {
         console.error("Storage clear failed:", e);
       }

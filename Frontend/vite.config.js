@@ -10,7 +10,7 @@ function viteApiProxy(mode) {
   let target =
     env.VITE_DEV_BACKEND_URL ||
     env.VITE_BACKEND_PROXY_TARGET ||
-    'http://localhost:8000'
+    'http://127.0.0.1:8000'
   target = String(target).trim().replace(/\/+$/, '').replace(/\/api\/?$/i, '')
   if (!/^https?:\/\//i.test(target)) target = `http://${target}`
 
@@ -23,7 +23,13 @@ function viteApiProxy(mode) {
       timeout: 300_000,
       proxyTimeout: 300_000,
       configure(proxy) {
-        proxy.on('error', (err) => console.error('[vite proxy /api]', err.message))
+        proxy.on('error', (err, _req, res) => {
+          console.warn(`[vite proxy /api] Backend unreachable at ${target} (${err.code || err.message})`)
+          if (res && !res.headersSent && typeof res.writeHead === 'function') {
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'Backend server is not reachable', code: 'backend_offline' }))
+          }
+        })
       },
     },
   }

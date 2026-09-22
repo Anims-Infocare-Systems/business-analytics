@@ -2,12 +2,17 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from datetime import datetime
 from typing import Any
+import logging
+logger = logging.getLogger(__name__)
 from .views import get_tenant_connection, table_exists, find_first_column
-from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
+from .views_idle_time_report import (
+    _build_accepted_vs_non_accepted_branches,
+    _parse_machine,
+    _parse_shift,
+    _resolve_shift_db_name,
+)
 
 def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
-    from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
-
     machine_raw = request.query_params.get("machine", "")
     shift_raw = request.query_params.get("shift", "")
     operator_raw = request.query_params.get("operator", "")
@@ -21,92 +26,17 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     cursor = conn.cursor()
     try:
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
-        has_prod_idle = table_exists(cursor, "Prod_IdleEntry")
+        branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=False)
     finally:
         cursor.close()
 
-    idle_subqueries = []
-    idle_params = []
+    if not branches:
+        return "SELECT NULL AS EntryDate, NULL AS Shift, NULL AS MacNo, NULL AS Reason, 0 AS IdleSeconds, NULL AS IsEffCalc WHERE 1=0", "", []
 
-    # 1. Machine_IdleEntryDet
-    idle_subqueries.append("""
-    SELECT M.proddate AS EntryDate, D.Shift, LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) AS MacNo,
-           ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-           DATEDIFF(SECOND, '1900-01-01 00:00:00', D.tottime) AS IdleSeconds,
-           CAST(ISNULL(IR.IsAccept, 0) AS INT) AS IsEffCalc
-    FROM Machine_IdleEntryDet D
-    INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
-    LEFT JOIN IdleReasons IR ON LTRIM(RTRIM(CAST(D.reasons AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512)))) AND ISNULL(IR.deleted, 0) = 0
-    WHERE M.proddate BETWEEN ? AND ? AND M.deleted = 0 AND D.deleted = 0
-    """)
-    idle_params.extend([from_date, to_date])
-
-    # 2. Prod_IdleEntry (reasons and IsEffCalc) / ProductionEntry
-    if has_prod_idle:
-        idle_subqueries.append("""
-        SELECT P.proddate AS EntryDate, P.shift AS Shift, LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
-               ISNULL(I.reasons, N'Production Idle Time') AS Reason,
-               DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL(I.tottime, '1900-01-01 00:00:00')) AS IdleSeconds,
-               CAST(ISNULL(I.IsEffCalc, 0) AS INT) AS IsEffCalc
-        FROM Prod_IdleEntry I
-        INNER JOIN ProductionEntry P ON I.prodid = P.prodid
-        WHERE P.proddate BETWEEN ? AND ? AND P.deleted = 0 AND I.deleted = 0
-        """)
-        idle_params.extend([from_date, to_date])
-
-        # Fallback for any orphan ProductionEntry without Prod_IdleEntry records
-        idle_subqueries.append("""
-        SELECT P.proddate AS EntryDate, P.shift AS Shift, LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
-               N'Production Idle Time' AS Reason,
-               CASE WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) > 0 THEN DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) END AS IdleSeconds,
-               0 AS IsEffCalc
-        FROM ProductionEntry P
-        WHERE P.proddate BETWEEN ? AND ? AND P.deleted = 0
-          AND (
-              (P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) > 0)
-              OR (ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) > 0)
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM Prod_IdleEntry I2 WHERE I2.prodid = P.prodid AND I2.deleted = 0
-          )
-        """)
-        idle_params.extend([from_date, to_date])
-    else:
-        idle_subqueries.append("""
-        SELECT P.proddate AS EntryDate, P.shift AS Shift, LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
-               N'Production Idle Time' AS Reason,
-               CASE WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) > 0 THEN DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) END AS IdleSeconds,
-               0 AS IsEffCalc
-        FROM ProductionEntry P
-        WHERE P.proddate BETWEEN ? AND ? AND P.deleted = 0
-        """)
-        idle_params.extend([from_date, to_date])
-
-    # 3. ConvProductionEntry
-    idle_subqueries.append("""
-    SELECT C.entrydate AS EntryDate, C.shift AS Shift, LTRIM(RTRIM(CAST(C.macno AS NVARCHAR(512)))) AS MacNo,
-           N'Conv Production Idle Time' AS Reason,
-           DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL(C.IdleTime, '1900-01-01 00:00:00')) AS IdleSeconds,
-           0 AS IsEffCalc
-    FROM ConvProductionEntry C
-    WHERE C.entrydate BETWEEN ? AND ? AND C.deleted = 0
-    """)
-    idle_params.extend([from_date, to_date])
-
-    # 4. ConvProductionEntryRod
-    idle_subqueries.append("""
-    SELECT R.entrydate AS EntryDate, R.shift AS Shift, LTRIM(RTRIM(CAST(R.macno AS NVARCHAR(512)))) AS MacNo,
-           N'Conv Rod Idle Time' AS Reason,
-           DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL(R.IdleTime, '1900-01-01 00:00:00')) AS IdleSeconds,
-           0 AS IsEffCalc
-    FROM ConvProductionEntryRod R
-    WHERE R.entrydate BETWEEN ? AND ? AND R.deleted = 0
-    """)
-    idle_params.extend([from_date, to_date])
-
-    idle_union_sql = "\n    UNION ALL\n".join(idle_subqueries)
+    idle_union_sql = "\n    UNION ALL\n".join(branches)
 
     idle_outer_filters = []
+    idle_params = list(branch_params)
 
     if machine:
         placeholders = ",".join(["?"] * len(machine))
@@ -125,7 +55,7 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
                 AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
                     SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
                     FROM ProductionEntry
-                    WHERE proddate BETWEEN ? AND ? AND deleted = 0
+                    WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
                       AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
                 )
             """)
@@ -134,7 +64,7 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     if mac_type:
         if mac_type == "CNC":
             idle_outer_filters.append("AND MM.cnc = 1")
-        elif mac_type == "CON":
+        elif mac_type in ("CON", "CONV"):
             idle_outer_filters.append("AND (MM.cnc = 0 OR MM.cnc IS NULL)")
 
     if mac_group:
@@ -147,7 +77,6 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
         idle_params.extend([s_pat, s_pat])
 
     idle_outer_sql = " ".join(idle_outer_filters)
-
     return idle_union_sql, idle_outer_sql, idle_params
 
 
@@ -358,6 +287,120 @@ def _get_quality_rejection_and_rework(cursor, from_date, to_date, machine=None, 
     return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
 
 
+def _get_quality_rejection_and_rework_by_machine(cursor, from_date, to_date, machine=None, shift=None, operator=None, mac_type=None, mac_group=None, search=None):
+    """
+    Calculates machine-wise Material Rejection Qty, Machine Rejection Qty, and Rework Qty
+    using the exact Quality Report / KPI Card logic.
+    Returns a dictionary mapping uppercase machine identifier to:
+      {"mat_rej": int, "mac_rej": int, "rework": int}
+    """
+    machine_map = {}
+    if not table_exists(cursor, "InterInspectionEntry"):
+        return machine_map
+
+    inspdate_col = find_first_column(cursor, "InterInspectionEntry", ["inter_inspdate", "interinspdate", "inspdate", "InspDate"])
+    matrej_col   = find_first_column(cursor, "InterInspectionEntry", ["matrejqty", "MatRejQty"])
+    rej_col      = find_first_column(cursor, "InterInspectionEntry", ["rejqty", "RejQty"])
+    rwk_col      = find_first_column(cursor, "InterInspectionEntry", ["rwqty", "RwQty"])
+    deleted_col  = find_first_column(cursor, "InterInspectionEntry", ["deleted", "Deleted"])
+
+    if not inspdate_col:
+        return machine_map
+
+    if table_exists(cursor, "Insp_RejectionEntry") and table_exists(cursor, "Rejection"):
+        mat_expr = """CAST(CASE 
+            WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+            THEN ISNULL((
+                SELECT SUM(ISNULL(r.qty, 0))
+                FROM Insp_RejectionEntry r
+                LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                WHERE r.inter_inspno = i.inter_inspno
+                  AND ISNULL(r.deleted, 0) = 0
+                  AND ISNULL(rej.matrej, 0) = 1
+            ), 0)
+            ELSE ISNULL(i.matrejqty, 0)
+        END AS INT)"""
+        mac_expr = """CAST(CASE 
+            WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+            THEN ISNULL((
+                SELECT SUM(ISNULL(r.qty, 0))
+                FROM Insp_RejectionEntry r
+                LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                WHERE r.inter_inspno = i.inter_inspno
+                  AND ISNULL(r.deleted, 0) = 0
+                  AND ISNULL(rej.matrej, 0) = 0
+            ), 0)
+            ELSE ISNULL(i.rejqty, 0)
+        END AS INT)"""
+    else:
+        mat_expr = f"CAST(ISNULL(i.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
+        mac_expr = f"CAST(ISNULL(i.[{rej_col}], 0) AS INT)" if rej_col else "0"
+
+    rwk_expr = f"CAST(ISNULL(i.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
+
+    where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+    params_inter = [from_date, to_date]
+    if deleted_col:
+        where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
+
+    inter_join = ""
+    if mac_type or mac_group:
+        inter_join = "LEFT JOIN MacMaster MM ON i.macno = MM.macno AND MM.deleted = 0"
+
+    if machine:
+        placeholders = ",".join(["?"] * len(machine))
+        where_inter.append(f"LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) IN ({placeholders})")
+        params_inter.extend(machine)
+    if shift:
+        where_inter.append("LTRIM(RTRIM(CAST(i.shift AS NVARCHAR(128)))) = ?")
+        params_inter.append(shift)
+    if operator:
+        placeholders = ",".join(["?"] * len(operator))
+        where_inter.append(f"LTRIM(RTRIM(CAST(i.oprname AS NVARCHAR(512)))) IN ({placeholders})")
+        params_inter.extend(operator)
+    if mac_type:
+        if mac_type == "CNC":
+            where_inter.append("MM.cnc = 1")
+        elif mac_type == "CON":
+            where_inter.append("(MM.cnc = 0 OR MM.cnc IS NULL)")
+    if mac_group:
+        where_inter.append("MM.MacGroup = ?")
+        params_inter.append(mac_group)
+    if search:
+        where_inter.append("(i.partno LIKE ? OR i.description LIKE ? OR i.process LIKE ? OR i.oprname LIKE ? OR i.macno LIKE ? OR i.inter_inspno LIKE ?)")
+        s_pat = f"%{search}%"
+        params_inter.extend([s_pat] * 6)
+
+    where_inter.append("i.macno IS NOT NULL AND LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) <> ''")
+
+    query = f"""
+        SELECT
+            LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) AS macno,
+            SUM({mat_expr}) AS MatRejQty,
+            SUM({mac_expr}) AS MacRejQty,
+            SUM({rwk_expr}) AS ReworkQty
+        FROM InterInspectionEntry i
+        {inter_join}
+        WHERE {" AND ".join(where_inter)}
+        GROUP BY LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512))))
+    """
+    try:
+        cursor.execute(query, params_inter)
+        rows = cursor.fetchall()
+        for row in rows or []:
+            m_name = str(row[0] or "").strip()
+            if m_name:
+                machine_map[m_name.upper()] = {
+                    "mat_rej": int(row[1] or 0),
+                    "mac_rej": int(row[2] or 0),
+                    "rework": int(row[3] or 0),
+                }
+    except Exception as e:
+        logger.warning(f"Error querying machine-wise quality rejection: {e}")
+
+    return machine_map
+
+
 @api_view(["GET"])
 def production_analysis_report(request):
     """
@@ -526,17 +569,54 @@ def production_analysis_report(request):
         row = run_query(oee_query)
         if row and row[0] is not None: result["overallOee"] = round(float(row[0]), 2)
 
-        # ── Query 5: Production Hours ─────────────────────────────────
+        # ── Query 5: Production Hours (Machine Running Hrs) ───────────
         hours_query = """
-        SELECT CAST(SUM(TotalRunSeconds) / 3600.0 AS DECIMAL(18,2)) AS TotalHours
+        SELECT COALESCE(SUM(TotalRunSeconds), 0) AS TotalRunSeconds
         FROM (
-            SELECT CASE WHEN runto < runfrom THEN DATEDIFF(SECOND, runfrom, DATEADD(DAY,1,runto)) ELSE DATEDIFF(SECOND, runfrom, runto) END AS TotalRunSeconds FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND runfrom IS NOT NULL AND runto IS NOT NULL
-            UNION ALL SELECT CASE WHEN endtime < starttime THEN DATEDIFF(SECOND, starttime, DATEADD(DAY,1,endtime)) ELSE DATEDIFF(SECOND, starttime, endtime) END AS TotalRunSeconds FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND starttime IS NOT NULL AND endtime IS NOT NULL
-            UNION ALL SELECT CASE WHEN endtime < starttime THEN DATEDIFF(SECOND, starttime, DATEADD(DAY,1,endtime)) ELSE DATEDIFF(SECOND, starttime, endtime) END AS TotalRunSeconds FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND starttime IS NOT NULL AND endtime IS NOT NULL
+            SELECT 
+                CASE 
+                    WHEN PE.runto >= PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, PE.runto) 
+                    ELSE DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) 
+                END AS TotalRunSeconds 
+            FROM ProductionEntry PE 
+            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
+              AND PE.deleted = 0
+              AND PE.runfrom IS NOT NULL 
+              AND PE.runto IS NOT NULL
+
+            UNION ALL 
+
+            SELECT 
+                CASE 
+                    WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                    ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+                END AS TotalRunSeconds 
+            FROM ConvProductionEntry CPE 
+            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
+              AND CPE.deleted = 0
+              AND CPE.starttime IS NOT NULL 
+              AND CPE.endtime IS NOT NULL
+
+            UNION ALL 
+
+            SELECT 
+                CASE 
+                    WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                    ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+                END AS TotalRunSeconds 
+            FROM ConvProductionEntryRod CPR 
+            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
+              AND CPR.deleted = 0
+              AND CPR.starttime IS NOT NULL 
+              AND CPR.endtime IS NOT NULL
         ) A
         """
         row = run_query(hours_query)
-        if row and row[0] is not None: result["productionHours"] = float(row[0])
+        run_seconds = 0
+        if row and row[0] is not None:
+            run_seconds = int(row[0])
+            result["productionHours"] = float(row[0]) / 3600.0
+            result["productionSeconds"] = run_seconds
 
         # ── Query 6: Total Machine Hours ──────────────────────────────
         total_machine_hours_query = f"""
@@ -558,7 +638,7 @@ def production_analysis_report(request):
         # ── Query 7: Total Idle Hours ─────────────────────────────────
         idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date)
         idle_hours_query = f"""
-        SELECT CAST(SUM(A.IdleSeconds) / 3600.0 AS DECIMAL(18,2)) AS TotalIdleHours
+        SELECT COALESCE(SUM(A.IdleSeconds), 0) AS TotalIdleSeconds
         FROM (
             {idle_union_sql}
         ) A
@@ -566,19 +646,62 @@ def production_analysis_report(request):
         WHERE 1 = 1 {idle_outer_sql}
         """
         row = run_query(idle_hours_query, idle_params)
-        if row and row[0] is not None: result["idleHours"] = float(row[0])
+        idle_seconds = int(row[0] or 0) if row and row[0] is not None else 0
+        result["idleSeconds"] = idle_seconds
+        result["idleHours"] = round(idle_seconds / 3600.0, 2)
+
+        # Tot Production Hrs = Machine Running Hrs - (Idle Accepted Hours + Idle Non Accepted Hours)
+        net_prod_seconds = max(0, run_seconds - idle_seconds)
+        result["totProductionSeconds"] = net_prod_seconds
+        result["totProductionHours"] = net_prod_seconds / 3600.0
+        result["totProductionHoursDisplay"] = _pa_fmt_hms(net_prod_seconds)
+        result["totalMachineHours"] = result["totProductionHours"]
 
         # ── Query 8: Total Setting Hours ──────────────────────────────
         setting_hours_query = """
-        SELECT CAST(SUM(SettingSeconds) / 3600.0 AS DECIMAL(18,2)) AS TotalSettingHours
+        SELECT COALESCE(SUM(SettingSeconds), 0) AS TotalSettingSeconds
         FROM (
-            SELECT CASE WHEN setto < setfrom THEN DATEDIFF(SECOND, setfrom, DATEADD(DAY,1,setto)) ELSE DATEDIFF(SECOND, setfrom, setto) END AS SettingSeconds FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND setfrom IS NOT NULL AND setto IS NOT NULL
-            UNION ALL SELECT CASE WHEN setto < setfrom THEN DATEDIFF(SECOND, setfrom, DATEADD(DAY,1,setto)) ELSE DATEDIFF(SECOND, setfrom, setto) END AS SettingSeconds FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND setfrom IS NOT NULL AND setto IS NOT NULL
-            UNION ALL SELECT CASE WHEN setto < setfrom THEN DATEDIFF(SECOND, setfrom, DATEADD(DAY,1,setto)) ELSE DATEDIFF(SECOND, setfrom, setto) END AS SettingSeconds FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND setfrom IS NOT NULL AND setto IS NOT NULL
+            SELECT 
+                CASE 
+                    WHEN PE.setto >= PE.setfrom THEN DATEDIFF(SECOND, PE.setfrom, PE.setto) 
+                    ELSE DATEDIFF(SECOND, PE.setfrom, DATEADD(DAY, 1, PE.setto)) 
+                END AS SettingSeconds 
+            FROM ProductionEntry PE 
+            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
+              AND PE.deleted = 0
+              AND PE.setfrom IS NOT NULL 
+              AND PE.setto IS NOT NULL
+
+            UNION ALL 
+
+            SELECT 
+                CASE 
+                    WHEN CPE.setto >= CPE.setfrom THEN DATEDIFF(SECOND, CPE.setfrom, CPE.setto) 
+                    ELSE DATEDIFF(SECOND, CPE.setfrom, DATEADD(DAY, 1, CPE.setto)) 
+                END AS SettingSeconds 
+            FROM ConvProductionEntry CPE 
+            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
+              AND CPE.deleted = 0
+              AND CPE.setfrom IS NOT NULL 
+              AND CPE.setto IS NOT NULL
+
+            UNION ALL 
+
+            SELECT 
+                CASE 
+                    WHEN CPR.setto >= CPR.setfrom THEN DATEDIFF(SECOND, CPR.setfrom, CPR.setto) 
+                    ELSE DATEDIFF(SECOND, CPR.setfrom, DATEADD(DAY, 1, CPR.setto)) 
+                END AS SettingSeconds 
+            FROM ConvProductionEntryRod CPR 
+            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
+              AND CPR.deleted = 0
+              AND CPR.setfrom IS NOT NULL 
+              AND CPR.setto IS NOT NULL
         ) A
         """
         row = run_query(setting_hours_query)
-        if row and row[0] is not None: result["settingHours"] = float(row[0])
+        if row and row[0] is not None:
+            result["settingHours"] = float(row[0]) / 3600.0
 
         # ── Query 9: Man Efficiency (Operator Eff: PE.OPREFF, CPE.eff, CPR.eff) ──
         man_efficiency_query = """
@@ -780,7 +903,8 @@ def production_analysis_report(request):
             COALESCE(MQ.RejQty, 0) AS RejQty,
             COALESCE(MQ.RwkQty, 0) AS RwkQty,
             COALESCE(MU.RunningHrs, 0.0) AS RunningHrs,
-            COALESCE(MU.IdleHrs, 0.0) AS IdleHrs
+            COALESCE(MU.IdleHrs, 0.0) AS IdleHrs,
+            COALESCE(MQ.OkQty, 0) AS OkQty
         FROM MacMaster M
         LEFT JOIN MachineMetrics MM ON M.macno = MM.macno
         LEFT JOIN MachineUtilizations MU ON M.macno = MU.macno
@@ -791,13 +915,43 @@ def production_analysis_report(request):
         cur = conn.cursor()
         machines = []
         try:
+            # Query machine quality rejection breakdown as per KPI Card logic
+            mac_quality_map = {}
+            try:
+                mac_quality_map = _get_quality_rejection_and_rework_by_machine(
+                    cur, from_date, to_date,
+                    machine=machine, shift=shift, operator=operator,
+                    mac_type=mac_type, mac_group=mac_group, search=search
+                )
+            except Exception as q_err:
+                logger.warning(f"Error fetching machine quality rejection breakdown: {q_err}")
+
             cur.execute(machines_query, mac_filter_params)
             rows = cur.fetchall()
             COLORS = ["#2563eb", "#059669", "#7c3aed", "#ea580c", "#0891b2", "#be185d", "#b45309", "#1d4ed8", "#065f46", "#6d28d9", "#0f766e", "#9f1239"]
             for idx, r in enumerate(rows or []):
-                prod_qty = int(r[6] or 0)
-                rej_qty = int(r[7] or 0)
+                mac_key = str(r[0] or "").strip().upper()
+                macname_key = str(r[1] or "").strip().upper()
+                q_entry = mac_quality_map.get(mac_key) or mac_quality_map.get(macname_key) or {}
+
+                ok_qty = int(r[11] or 0)
                 rw_qty = int(r[8] or 0)
+
+                mac_rej = int(q_entry.get("mac_rej", 0))
+                mat_rej = int(q_entry.get("mat_rej", 0))
+
+                if q_entry:
+                    rej_qty = mac_rej + mat_rej
+                    prod_qty = ok_qty + rej_qty + rw_qty
+                else:
+                    rej_qty = int(r[7] or 0)
+                    mac_rej = rej_qty
+                    mat_rej = 0
+                    prod_qty = int(r[6] or 0)
+
+                if prod_qty == 0 and int(r[6] or 0) > 0:
+                    prod_qty = int(r[6] or 0)
+
                 rej_pct = round((rej_qty / prod_qty * 100.0), 2) if prod_qty > 0 else 0.0
                 rw_pct = round((rw_qty / prod_qty * 100.0), 2) if prod_qty > 0 else 0.0
                 machines.append({
@@ -810,6 +964,8 @@ def production_analysis_report(request):
                     "utilization": round(float(r[5] or 0.0), 2),
                     "prodQty": prod_qty,
                     "rejQty": rej_qty,
+                    "macRejQty": mac_rej,
+                    "matRejQty": mat_rej,
                     "rwQty": rw_qty,
                     "rejPct": rej_pct,
                     "rwPct": rw_pct,
@@ -1066,7 +1222,7 @@ def _prepare_filtered_temp_tables(cursor, request, from_date, to_date):
 
     pe_sql = """
     INSERT INTO #FilteredPE (prodid)
-    SELECT PE.prodid
+    SELECT DISTINCT PE.prodid
     FROM ProductionEntry PE
     LEFT JOIN ProgramNo PN ON PE.prgno = PN.prgno AND PE.macno = PN.macno AND PN.deleted = 0
     LEFT JOIN ProcessDet PD ON PN.process = PD.pcode AND PD.deleted = 0
@@ -1104,7 +1260,7 @@ def _prepare_filtered_temp_tables(cursor, request, from_date, to_date):
 
     cpe_sql = """
     INSERT INTO #FilteredCPE (entryno)
-    SELECT CPE.entryno
+    SELECT DISTINCT CPE.entryno
     FROM ConvProductionEntry CPE
     LEFT JOIN ProcessDet PD ON CPE.process = PD.pcode AND PD.deleted = 0
     LEFT JOIN MacMaster MM ON CPE.macno = MM.macno AND MM.deleted = 0
@@ -1141,7 +1297,7 @@ def _prepare_filtered_temp_tables(cursor, request, from_date, to_date):
 
     cpr_sql = """
     INSERT INTO #FilteredCPR (entryno)
-    SELECT CPR.entryno
+    SELECT DISTINCT CPR.entryno
     FROM ConvProductionEntryRod CPR
     LEFT JOIN ProcessDet PD ON CPR.process = PD.pcode AND PD.deleted = 0
     LEFT JOIN MacMaster MM ON CPR.macno = MM.macno AND MM.deleted = 0
@@ -1295,9 +1451,6 @@ def production_value_report(request):
 # Mirrors _fetch_accepted_vs_non_accepted logic from views_idle_time_report.py
 # ─────────────────────────────────────────────────────────────────────────────
 _PA_IDLE_UNION_SQL = """
-SELECT M.proddate AS EntryDate, D.Shift, D.MacNo, ISNULL(D.reasons, N'Machine Idle Entry') AS Reason, DATEDIFF(SECOND, '1900-01-01 00:00:00', D.tottime) AS IdleSeconds
-FROM Machine_IdleEntryDet D INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid WHERE M.proddate BETWEEN ? AND ? AND M.deleted = 0 AND D.deleted = 0
-UNION ALL
 SELECT P.proddate, P.shift, P.macno, N'Production Idle Time', CASE WHEN P.idlTime IS NOT NULL AND DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) > 0 THEN DATEDIFF(SECOND, '1900-01-01 00:00:00', P.idlTime) ELSE ISNULL(P.accidletimesecs, 0) + ISNULL(P.nonaccidletimesecs, 0) END
 FROM ProductionEntry P WHERE P.proddate BETWEEN ? AND ? AND P.deleted = 0
 UNION ALL
@@ -1370,24 +1523,38 @@ def production_idle_breakdown(request):
         )
         """
 
-        # Step 1: Classify idle seconds via IsEffCalc / IdleReasons.IsAccept
-        if has_idle_reasons:
-            classify_sql = cte_sql + """
-            SELECT
-                ISNULL(SUM(CASE WHEN F.IsEffCalc = 1 OR (IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1) THEN F.IdleSeconds ELSE 0 END), 0) AS AccSecs,
-                ISNULL(SUM(CASE WHEN (F.IsEffCalc = 0 OR F.IsEffCalc IS NULL) AND (IR.IdleID IS NULL OR ISNULL(IR.IsAccept, 0) = 0) THEN F.IdleSeconds ELSE 0 END), 0) AS NaSecs
-            FROM FilteredIdle F
+        # Step 1: Classify idle seconds via IsEffCalc / IdleReasons.IsAccept (exact logic of Idle Time report)
+        join_idle_reasons = """
             LEFT JOIN IdleReasons IR
-                ON LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+                ON LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512))))
+                 = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
                 AND ISNULL(IR.deleted, 0) = 0
-            """
-        else:
-            classify_sql = cte_sql + """
-            SELECT
-                ISNULL(SUM(CASE WHEN F.IsEffCalc = 1 THEN F.IdleSeconds ELSE 0 END), 0) AS AccSecs,
-                ISNULL(SUM(CASE WHEN F.IsEffCalc = 0 OR F.IsEffCalc IS NULL THEN F.IdleSeconds ELSE 0 END), 0) AS NaSecs
-            FROM FilteredIdle F
-            """
+        """ if has_idle_reasons else ""
+
+        ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+
+        classify_sql = f"""
+        {cte_sql}
+        SELECT
+            ISNULL(SUM(
+                CASE
+                    WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
+                    WHEN F.IsEffCalc = 0 THEN 0
+                    WHEN {ir_accept_check} THEN F.IdleSeconds
+                    ELSE 0
+                END
+            ), 0) AS AccSecs,
+            ISNULL(SUM(
+                CASE
+                    WHEN F.IsEffCalc = 1 THEN 0
+                    WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
+                    WHEN {ir_accept_check} THEN 0
+                    ELSE F.IdleSeconds
+                END
+            ), 0) AS NaSecs
+        FROM FilteredIdle F
+        {join_idle_reasons}
+        """
 
         cursor.execute(classify_sql, idle_params)
         row = cursor.fetchone()
@@ -1395,26 +1562,36 @@ def production_idle_breakdown(request):
         na_secs  = int(row[1] or 0) if row else 0
         total_secs = acc_secs + na_secs
 
-        # Step 2: Fetch RatePerHr & per-machine idle for loss calculation
+        # Step 2: Fetch RatePerHr for loss calculation
         mac_rate = {}
-        mac_idle = {}
         if has_mac_master:
             try:
                 cursor.execute("SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))), ISNULL(RatePerHr, 0) FROM MacMaster WHERE ISNULL(deleted, 0) = 0")
                 for mn, rate in (cursor.fetchall() or []):
                     if mn: mac_rate[str(mn).strip()] = float(rate or 0)
-            except: pass
-            try:
-                mac_idle_sql = cte_sql + "SELECT LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512)))), SUM(F.IdleSeconds) FROM FilteredIdle F WHERE LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512)))) <> N'' GROUP BY LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512))))"
-                cursor.execute(mac_idle_sql, idle_params)
-                for mn, secs in (cursor.fetchall() or []):
-                    if mn: mac_idle[str(mn).strip()] = int(secs or 0)
-            except: pass
+            except Exception:
+                pass
 
         # Step 3: Get reason-level breakdown and compute loss per machine
-        reason_mac_sql = cte_sql + """
-        SELECT LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))), LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512)))), SUM(F.IdleSeconds), MAX(CAST(F.IsEffCalc AS INT))
+        reason_mac_sql = f"""
+        {cte_sql}
+        SELECT
+            LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))),
+            LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512)))),
+            SUM(CASE
+                WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
+                WHEN F.IsEffCalc = 0 THEN 0
+                WHEN {ir_accept_check} THEN F.IdleSeconds
+                ELSE 0
+            END) AS AccSecs,
+            SUM(CASE
+                WHEN F.IsEffCalc = 1 THEN 0
+                WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
+                WHEN {ir_accept_check} THEN 0
+                ELSE F.IdleSeconds
+            END) AS NaSecs
         FROM FilteredIdle F
+        {join_idle_reasons}
         WHERE LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))) <> N''
         GROUP BY LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))), LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512))))
         """
@@ -1422,61 +1599,65 @@ def production_idle_breakdown(request):
         reason_mac_rows = cursor.fetchall() or []
 
         from collections import defaultdict
-        reason_secs_dict = defaultdict(int)
-        reason_loss_dict = defaultdict(float)
-        reason_eff_dict = defaultdict(int)
+        reason_acc_secs = defaultdict(int)
+        reason_na_secs  = defaultdict(int)
+        reason_na_loss  = defaultdict(float)
 
         for r_row in reason_mac_rows:
             reason_raw = r_row[0]
             mac_raw = r_row[1]
-            secs = int(r_row[2] or 0)
-            is_eff = int(r_row[3] or 0) if len(r_row) > 3 and r_row[3] is not None else 0
+            r_acc_s = int(r_row[2] or 0)
+            r_na_s  = int(r_row[3] or 0)
 
             r = (str(reason_raw).strip() if reason_raw else "") or "(blank)"
             mn = str(mac_raw).strip() if mac_raw else ""
-            reason_secs_dict[r] += secs
-            if is_eff == 1:
-                reason_eff_dict[r] = 1
             rate = mac_rate.get(mn, 0.0)
-            reason_loss_dict[r] += (secs / 3600.0) * rate
 
-        # Map reasons to IsAccept flag
-        reason_map = {}
-        if has_idle_reasons:
-            cursor.execute("SELECT LTRIM(RTRIM(CAST(IdleReasons AS NVARCHAR(512)))), ISNULL(IsAccept, 0) FROM IdleReasons WHERE ISNULL(deleted, 0) = 0")
-            for r, acc in (cursor.fetchall() or []):
-                if r: reason_map[str(r).strip()] = int(acc or 0)
+            if r_acc_s > 0:
+                reason_acc_secs[r] += r_acc_s
+            if r_na_s > 0:
+                reason_na_secs[r] += r_na_s
+                reason_na_loss[r] += (r_na_s / 3600.0) * rate
 
-        # Sort reasons by total seconds descending
-        sorted_reasons = sorted(reason_secs_dict.items(), key=lambda x: -x[1])
+        # Build sorted lists for accepted and non_accepted reasons
+        sorted_acc_reasons = sorted(reason_acc_secs.items(), key=lambda x: -x[1])
+        sorted_na_reasons  = sorted(reason_na_secs.items(),  key=lambda x: -x[1])
 
         accepted_reasons = []
-        non_accepted_reasons = []
-
-        for r, s in sorted_reasons:
-            is_acc = (reason_eff_dict.get(r, 0) == 1) or (reason_map.get(r, 0) == 1)
+        for r, s in sorted_acc_reasons:
             hours = round(s / 3600.0, 2)
             display = _pa_fmt_hms(s)
-            entry = {"reason": r, "hours": hours, "display": display, "pct": 0.0}
+            accepted_reasons.append({
+                "reason": r,
+                "hours": hours,
+                "display": display,
+                "pct": 0.0,
+            })
 
-            if is_acc:
-                accepted_reasons.append(entry)
-            else:
-                loss_val = reason_loss_dict[r]
-                rate_val = (loss_val / (s / 3600.0)) if s > 0 else 0.0
-                entry["rate_per_hr"] = round(rate_val, 2)
-                entry["loss_value"] = round(loss_val)
-                non_accepted_reasons.append(entry)
+        non_accepted_reasons = []
+        for r, s in sorted_na_reasons:
+            hours = round(s / 3600.0, 2)
+            display = _pa_fmt_hms(s)
+            loss_val = reason_na_loss[r]
+            rate_val = (loss_val / (s / 3600.0)) if s > 0 else 0.0
+            non_accepted_reasons.append({
+                "reason": r,
+                "hours": hours,
+                "display": display,
+                "pct": 0.0,
+                "rate_per_hr": round(rate_val, 2),
+                "loss_value": round(loss_val),
+            })
 
         # Calculate totals & percentages
-        acc_total = sum(reason_secs_dict[r["reason"]] for r in accepted_reasons)
-        na_total  = sum(reason_secs_dict[r["reason"]] for r in non_accepted_reasons)
+        acc_total = sum(reason_acc_secs[r["reason"]] for r in accepted_reasons)
+        na_total  = sum(reason_na_secs[r["reason"]] for r in non_accepted_reasons)
         for i, r in enumerate(accepted_reasons):
-            s_val = reason_secs_dict[r["reason"]]
+            s_val = reason_acc_secs[r["reason"]]
             r["pct"] = round((s_val / acc_total * 100), 1) if acc_total > 0 else 0.0
             r["color"] = _PA_IDLE_COLORS[i % len(_PA_IDLE_COLORS)]
         for i, r in enumerate(non_accepted_reasons):
-            s_val = reason_secs_dict[r["reason"]]
+            s_val = reason_na_secs[r["reason"]]
             r["pct"] = round((s_val / na_total * 100), 1) if na_total > 0 else 0.0
             r["color"] = _PA_NON_ACC_COLORS[i % len(_PA_NON_ACC_COLORS)]
 
@@ -1487,11 +1668,13 @@ def production_idle_breakdown(request):
         return Response({
             "status": "success",
             "accepted": {
+                "total_seconds": acc_secs,
                 "total_hours": round(acc_secs / 3600.0, 2),
                 "total_display": _pa_fmt_hms(acc_secs),
                 "reasons": accepted_reasons
             },
             "non_accepted": {
+                "total_seconds": na_secs,
                 "total_hours": round(na_secs / 3600.0, 2),
                 "total_display": _pa_fmt_hms(na_secs),
                 "total_loss": round(total_loss),
@@ -1830,6 +2013,9 @@ def machine_card_data(request, macno):
 
         shift_raw = request.query_params.get("shift", "")
         operator_raw = request.query_params.get("operator", "")
+        mac_type = request.query_params.get("mac_type", "").strip()
+        mac_group = request.query_params.get("mac_group", "").strip()
+        search = request.query_params.get("search", "").strip()
         from .views_idle_time_report import _parse_shift, _resolve_shift_db_name
 
         cursor = conn.cursor()
@@ -1852,6 +2038,7 @@ def machine_card_data(request, macno):
             rod_extra_where += " AND CR.shift = ?"
             extra_rod_params.append(shift)
 
+        ops = None
         if operator_raw:
             op_val = operator_raw.strip()
             if op_val and op_val.lower() != "all operators":
@@ -1864,6 +2051,33 @@ def machine_card_data(request, macno):
                     extra_conv_params.extend(ops)
                     rod_extra_where += f" AND CR.oprname IN ({placeholders})"
                     extra_rod_params.extend(ops)
+
+        if search:
+            search_pat = f"%{search}%"
+            cnc_extra_where += " AND (PN.partno LIKE ? OR PD.process LIKE ? OR PE.oprname LIKE ?)"
+            extra_cnc_params.extend([search_pat, search_pat, search_pat])
+            conv_extra_where += " AND (CE.partno LIKE ? OR CE.process LIKE ? OR CE.oprname LIKE ?)"
+            extra_conv_params.extend([search_pat, search_pat, search_pat])
+            rod_extra_where += " AND (CR.partno LIKE ? OR CR.process LIKE ? OR CR.oprname LIKE ?)"
+            extra_rod_params.extend([search_pat, search_pat, search_pat])
+
+        if mac_type:
+            if mac_type == "CNC":
+                cnc_extra_where += " AND MM.cnc = 1"
+                conv_extra_where += " AND 1 = 0"
+                rod_extra_where += " AND 1 = 0"
+            elif mac_type in ("CON", "CONV"):
+                cnc_extra_where += " AND 1 = 0"
+                conv_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
+                rod_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
+
+        if mac_group:
+            cnc_extra_where += " AND MM.MacGroup = ?"
+            extra_cnc_params.append(mac_group)
+            conv_extra_where += " AND MM.MacGroup = ?"
+            extra_conv_params.append(mac_group)
+            rod_extra_where += " AND MM.MacGroup = ?"
+            extra_rod_params.append(mac_group)
 
         query = f"""
         WITH LatestProgram AS
@@ -1899,9 +2113,11 @@ def machine_card_data(request, macno):
                 ON PE.prgno = PN.prgno AND PE.macno = PN.macno AND PN.rn = 1
             LEFT JOIN ProcessDet PD
                 ON PN.process = PD.pcode AND PD.deleted = 0
+            LEFT JOIN MacMaster MM
+                ON PE.macno = MM.macno AND MM.deleted = 0
             WHERE PE.deleted = 0
               AND PE.macno = ?
-              AND PE.proddate BETWEEN ? AND ? {cnc_extra_where}
+              AND PE.proddate >= ? AND PE.proddate < DATEADD(DAY, 1, ?) {cnc_extra_where}
         ),
         ConvEntries AS
         (
@@ -1925,9 +2141,11 @@ def machine_card_data(request, macno):
                 COALESCE(CE.OAEFF, CE.eff, 0)                                   AS OEE,
                 CE.eff                                                          AS OperEff
             FROM ConvProductionEntry CE
+            LEFT JOIN MacMaster MM
+                ON CE.macno = MM.macno AND MM.deleted = 0
             WHERE CE.deleted = 0
               AND CE.macno = ?
-              AND CE.entrydate BETWEEN ? AND ? {conv_extra_where}
+              AND CE.entrydate >= ? AND CE.entrydate < DATEADD(DAY, 1, ?) {conv_extra_where}
         ),
         RodEntries AS
         (
@@ -1951,9 +2169,11 @@ def machine_card_data(request, macno):
                 COALESCE(CR.OAEFF, CR.eff, 0)                                   AS OEE,
                 CR.eff                                                          AS OperEff
             FROM ConvProductionEntryRod CR
+            LEFT JOIN MacMaster MM
+                ON CR.macno = MM.macno AND MM.deleted = 0
             WHERE CR.deleted = 0
               AND CR.macno = ?
-              AND CR.entrydate BETWEEN ? AND ? {rod_extra_where}
+              AND CR.entrydate >= ? AND CR.entrydate < DATEADD(DAY, 1, ?) {rod_extra_where}
         ),
         AllEntries AS
         (
@@ -2022,12 +2242,133 @@ def machine_card_data(request, macno):
                     shift_logs.append({
                         "date": date_str,
                         "entry_date": date_str,
+                        "shift": str(r[11] or "").strip() if r[11] is not None else "",
                         "operator": r[15] if r[15] is not None else "",
                         "part_no": r[13] if r[13] is not None else "",
                         "process": r[14] if r[14] is not None else "",
                         "hrs": float(r[21] or 0.0),
                         "ok_qty": int(r[18] or 0)
                     })
+
+            # ── Machine-wise Idle Hours via Idle Accepted & Idle Non-Accepted KPI logic ──
+            try:
+                branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=False)
+                if branches:
+                    idle_union_sql = "\n    UNION ALL\n".join(branches)
+                    has_idle_reasons = table_exists(cursor, "IdleReasons")
+                    join_idle_reasons = """
+                        LEFT JOIN IdleReasons IR
+                            ON LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512))))
+                             = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+                            AND ISNULL(IR.deleted, 0) = 0
+                    """ if has_idle_reasons else ""
+                    ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+
+                    mac_idle_where = ["LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = ?"]
+                    mac_idle_params = list(branch_params) + [macno.strip()]
+
+                    if shift:
+                        mac_idle_where.append("LTRIM(RTRIM(CAST(A.Shift AS NVARCHAR(128)))) = ?")
+                        mac_idle_params.append(shift)
+
+                    if operator_raw:
+                        op_val = operator_raw.strip()
+                        if op_val and op_val.lower() != "all operators":
+                            ops = [x.strip() for x in op_val.split(",") if x.strip()]
+                            if ops:
+                                placeholders = ",".join(["?"] * len(ops))
+                                mac_idle_where.append(f"""
+                                    LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM ProductionEntry
+                                        WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    )
+                                """)
+                                mac_idle_params.extend([from_date, to_date] + ops)
+
+                    if mac_type:
+                        if mac_type == "CNC":
+                            mac_idle_where.append("MM.cnc = 1")
+                        elif mac_type in ("CON", "CONV"):
+                            mac_idle_where.append("(MM.cnc = 0 OR MM.cnc IS NULL)")
+
+                    if mac_group:
+                        mac_idle_where.append("MM.MacGroup = ?")
+                        mac_idle_params.append(mac_group)
+
+                    if search:
+                        mac_idle_where.append("(LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) LIKE ? OR LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512)))) LIKE ?)")
+                        s_pat = f"%{search}%"
+                        mac_idle_params.extend([s_pat, s_pat])
+
+                    where_clause = " AND ".join(mac_idle_where)
+
+                    mac_classify_sql = f"""
+                    WITH FilteredIdle AS (
+                        SELECT
+                            A.EntryDate,
+                            A.Shift,
+                            A.MacNo,
+                            A.Reason,
+                            A.IdleSeconds,
+                            A.IsEffCalc
+                        FROM ({idle_union_sql}) A
+                        LEFT JOIN MacMaster MM ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512)))) AND MM.deleted = 0
+                        WHERE {where_clause}
+                    )
+                    SELECT
+                        ISNULL(SUM(
+                            CASE
+                                WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
+                                WHEN F.IsEffCalc = 0 THEN 0
+                                WHEN {ir_accept_check} THEN F.IdleSeconds
+                                ELSE 0
+                            END
+                        ), 0) AS AccSecs,
+                        ISNULL(SUM(
+                            CASE
+                                WHEN F.IsEffCalc = 1 THEN 0
+                                WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
+                                WHEN {ir_accept_check} THEN 0
+                                ELSE F.IdleSeconds
+                            END
+                        ), 0) AS NaSecs
+                    FROM FilteredIdle F
+                    {join_idle_reasons}
+                    """
+
+                    cursor.execute(mac_classify_sql, mac_idle_params)
+                    row_idle = cursor.fetchone()
+                    if row_idle:
+                        mac_acc_secs = int(row_idle[0] or 0)
+                        mac_na_secs = int(row_idle[1] or 0)
+                        total_mac_idle_secs = mac_acc_secs + mac_na_secs
+                        card["idle_hrs"] = round(total_mac_idle_secs / 3600.0, 2)
+                        card["idle_acc_hrs"] = round(mac_acc_secs / 3600.0, 2)
+                        card["idle_na_hrs"] = round(mac_na_secs / 3600.0, 2)
+            except Exception as ie:
+                import logging
+                logging.getLogger(__name__).warning(f"Error computing machine idle hours from idle breakdown: {ie}")
+
+            # ── Machine-wise Rejection & Rework via KPI card logic ──
+            try:
+                tot_mat_rej, tot_mac_rej, tot_rework = _get_quality_rejection_and_rework(
+                    cursor, from_date, to_date,
+                    machine=[macno],
+                    shift=shift,
+                    operator=ops,
+                    mac_type=mac_type if mac_type else None,
+                    mac_group=mac_group if mac_group else None,
+                    search=search if search else None
+                )
+                card["total_rej_qty"] = tot_mat_rej + tot_mac_rej
+                card["total_rework_qty"] = tot_rework
+                card["total_mat_rej_qty"] = tot_mat_rej
+                card["total_mac_rej_qty"] = tot_mac_rej
+            except Exception as qe:
+                import logging
+                logging.getLogger(__name__).warning(f"Error computing machine rejection and rework via KPI logic: {qe}")
         except Exception as q_err:
             import logging
             logging.getLogger(__name__).warning(f"Error executing machine card query: {q_err}")

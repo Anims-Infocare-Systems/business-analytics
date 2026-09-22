@@ -1295,39 +1295,44 @@ export default function EfficiencyReport() {
                     </div>
 
                     {/* Apply Filter Button with Modern UI & Premium Animation */}
-                    <button
-                        type="button"
-                        className={`er-btn-apply ${hasPendingChanges ? "er-btn-apply--pending" : ""}`}
-                        onClick={handleApplyFilters}
-                        disabled={loading}
-                        title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
-                    >
-                        {loading ? (
-                            <Loader2 size={13} className="er-spin" />
-                        ) : (
-                            <Filter size={13} className="er-apply-icon" />
-                        )}
-                        <span>{loading ? "Applying..." : "Apply Filter"}</span>
-                        {hasPendingChanges && !loading && (
-                            <span className="er-apply-pulse-dot" />
-                        )}
-                    </button>
+                    <div className="er-fgroup er-fgroup--col er-fgroup--actions" data-spotlight="er-filter-apply">
+                        <span className="er-flabel er-flabel--spacer" aria-hidden="true">&nbsp;</span>
+                        <div className="er-filter-btn-row">
+                            <button
+                                type="button"
+                                className={`er-btn-apply ${hasPendingChanges ? "er-btn-apply--pending" : ""}`}
+                                onClick={handleApplyFilters}
+                                disabled={loading}
+                                title={hasPendingChanges ? "Click to apply pending filter changes" : "Apply current filters"}
+                            >
+                                {loading ? (
+                                    <Loader2 size={13} className="er-spin" />
+                                ) : (
+                                    <Filter size={13} className="er-apply-icon" />
+                                )}
+                                <span>{loading ? "Applying..." : "Apply Filter"}</span>
+                                {hasPendingChanges && !loading && (
+                                    <span className="er-apply-pulse-dot" />
+                                )}
+                            </button>
 
-                    {/* Quick Reset All Filters Button */}
-                    {hasActiveFilters && (
-                        <button
-                            type="button"
-                            className="er-btn-reset-filters"
-                            onClick={handleResetFilters}
-                            title="Clear all active Machine, Operator, and Mac Type filters"
-                        >
-                            <RotateCcw size={12} className="er-reset-icon" />
-                            <span>Reset Filters</span>
-                            <span className="er-reset-badge">
-                                {activeFiltersCount}
-                            </span>
-                        </button>
-                    )}
+                            {/* Quick Reset All Filters Button */}
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    className="er-btn-reset-filters"
+                                    onClick={handleResetFilters}
+                                    title="Clear all active Machine, Operator, and Mac Type filters"
+                                >
+                                    <RotateCcw size={12} className="er-reset-icon" />
+                                    <span>Reset Filters</span>
+                                    <span className="er-reset-badge">
+                                        {activeFiltersCount}
+                                    </span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
                     {/* <div className="er-fgroup">
                         <span className="er-flabel">Efficiency Type</span>

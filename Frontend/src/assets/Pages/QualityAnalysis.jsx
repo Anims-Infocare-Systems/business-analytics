@@ -2294,6 +2294,19 @@ export default function QualityAnalysis() {
     const rejectionReasonRef = useRef(null);
     const [rejectionReasonSectionOpen, setRejectionReasonSectionOpen] = useState(false);
     const rejectionReasonSectionRef = useRef(null);
+
+    // Machine (Mac) Filter
+    const [selectedMachines, setSelectedMachines] = useState([]);
+    const [machineDropdownOpen, setMachineDropdownOpen] = useState(false);
+    const [machineSearch, setMachineSearch] = useState("");
+    const machineRef = useRef(null);
+
+    // Process Filter
+    const [selectedProcesses, setSelectedProcesses] = useState([]);
+    const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
+    const [processSearch, setProcessSearch] = useState("");
+    const processRef = useRef(null);
+
     const [selectedType, setSelectedType] = useState("ALL");
     const [tableInspNoSearch, setTableInspNoSearch] = useState("");
     const [tableCustomerSearch, setTableCustomerSearch] = useState("");
@@ -2705,6 +2718,114 @@ export default function QualityAnalysis() {
         setSelectedRejectionReasons([]);
     };
 
+    // ── Machine Filter Lists & Helpers ──
+    const DEFAULT_MACHINES = [
+        "TC-59", "TC-60", "TC 50", "TC 43 L", "VMC-07", "VMC 18",
+        "SPM-04", "BROACHING-1", "M/C-09", "M/C-10", "M/C-11", "M/C-12"
+    ];
+
+    const uniqueMachineNames = useMemo(() => {
+        const set = new Set();
+        (recordsData?.inspection_records || []).forEach(r => {
+            const m = (r.machineNo || r.machine || "").trim();
+            if (m && m !== "—" && m !== "-" && m !== "null" && m !== "None") set.add(m);
+        });
+        (recordsData?.rejection_rows || []).forEach(r => {
+            const m = (r.machineNo || r.machine || "").trim();
+            if (m && m !== "—" && m !== "-" && m !== "null" && m !== "None") set.add(m);
+        });
+        if (set.size === 0) {
+            DEFAULT_MACHINES.forEach(m => set.add(m));
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    }, [recordsData]);
+
+    const filteredDropdownMachines = useMemo(() => {
+        if (!machineSearch.trim()) return uniqueMachineNames;
+        const q = machineSearch.toLowerCase().trim();
+        return uniqueMachineNames.filter(m => m.toLowerCase().includes(q));
+    }, [uniqueMachineNames, machineSearch]);
+
+    const machineCountMap = useMemo(() => {
+        const map = {};
+        (recordsData?.inspection_records || []).forEach(r => {
+            const m = (r.machineNo || r.machine || "").trim();
+            if (m && m !== "—" && m !== "-") {
+                map[m] = (map[m] || 0) + 1;
+            }
+        });
+        return map;
+    }, [recordsData]);
+
+    const handleMachineToggle = (mac) => {
+        setSelectedMachines(prev =>
+            prev.includes(mac) ? prev.filter(m => m !== mac) : [...prev, mac]
+        );
+    };
+
+    const handleSelectAllMachines = () => {
+        setSelectedMachines([...uniqueMachineNames]);
+    };
+
+    const handleClearAllMachines = () => {
+        setSelectedMachines([]);
+    };
+
+    // ── Process Filter Lists & Helpers ──
+    const DEFAULT_PROCESSES = [
+        "Turning", "Facing", "Boring", "Chamfering", "Internal Turning",
+        "Thread Cutting", "Grooving", "Face Milling", "Pocket Milling",
+        "Slot Milling", "Drilling", "Drilling & Tapping", "Reaming",
+        "Keyway Broaching", "Conventional Turn", "Conventional Mill",
+        "Knurling", "Special Process", "Deburring", "Inspection"
+    ];
+
+    const uniqueProcessNames = useMemo(() => {
+        const set = new Set();
+        (recordsData?.inspection_records || []).forEach(r => {
+            const p = (r.process || "").trim();
+            if (p && p !== "—" && p !== "-" && p !== "null" && p !== "None") set.add(p);
+        });
+        (recordsData?.rejection_rows || []).forEach(r => {
+            const p = (r.process || "").trim();
+            if (p && p !== "—" && p !== "-" && p !== "null" && p !== "None") set.add(p);
+        });
+        if (set.size === 0) {
+            DEFAULT_PROCESSES.forEach(p => set.add(p));
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [recordsData]);
+
+    const filteredDropdownProcesses = useMemo(() => {
+        if (!processSearch.trim()) return uniqueProcessNames;
+        const q = processSearch.toLowerCase().trim();
+        return uniqueProcessNames.filter(p => p.toLowerCase().includes(q));
+    }, [uniqueProcessNames, processSearch]);
+
+    const processCountMap = useMemo(() => {
+        const map = {};
+        (recordsData?.inspection_records || []).forEach(r => {
+            const p = (r.process || "").trim();
+            if (p && p !== "—" && p !== "-") {
+                map[p] = (map[p] || 0) + 1;
+            }
+        });
+        return map;
+    }, [recordsData]);
+
+    const handleProcessToggle = (proc) => {
+        setSelectedProcesses(prev =>
+            prev.includes(proc) ? prev.filter(p => p !== proc) : [...prev, proc]
+        );
+    };
+
+    const handleSelectAllProcesses = () => {
+        setSelectedProcesses([...uniqueProcessNames]);
+    };
+
+    const handleClearAllProcesses = () => {
+        setSelectedProcesses([]);
+    };
 
     // hasNoData = true only when there's genuinely no data AND no search query is active.
     // When a search query is active, even total_inspected=0 is a valid "no results" state
@@ -2735,6 +2856,20 @@ export default function QualityAnalysis() {
             });
         }
 
+        if (selectedMachines.length > 0) {
+            raw = raw.filter(r => {
+                const mac = (r.machineNo || r.machine || "").trim();
+                return selectedMachines.includes(mac);
+            });
+        }
+
+        if (selectedProcesses.length > 0) {
+            raw = raw.filter(r => {
+                const proc = (r.process || "").trim();
+                return selectedProcesses.includes(proc);
+            });
+        }
+
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -2746,7 +2881,7 @@ export default function QualityAnalysis() {
             (r.result && r.result.toLowerCase().includes(q)) ||
             (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
         );
-    }, [recordsData, hasNoData, searchQuery, selectedCustomers]);
+    }, [recordsData, hasNoData, searchQuery, selectedCustomers, selectedMachines, selectedProcesses]);
 
     const activeRejectionTrendData = useMemo(() => {
         const trendLabels = chartsData?.trend?.labels || [];
@@ -3106,6 +3241,12 @@ export default function QualityAnalysis() {
             if (rejectionReasonRef.current && !rejectionReasonRef.current.contains(event.target)) {
                 setRejectionReasonDropdownOpen(false);
             }
+            if (machineRef.current && !machineRef.current.contains(event.target)) {
+                setMachineDropdownOpen(false);
+            }
+            if (processRef.current && !processRef.current.contains(event.target)) {
+                setProcessDropdownOpen(false);
+            }
             if (rejectionReasonSectionRef.current && !rejectionReasonSectionRef.current.contains(event.target)) {
                 setRejectionReasonSectionOpen(false);
             }
@@ -3135,6 +3276,8 @@ export default function QualityAnalysis() {
             setCustomerDropdownOpen(false);
             setRejectionReasonDropdownOpen(false);
             setRejectionReasonSectionOpen(false);
+            setMachineDropdownOpen(false);
+            setProcessDropdownOpen(false);
             setInspTypeDropdownOpen(false);
             setTraceTypeDropdownOpen(false);
             setTrendRejCustDropdownOpen(false);
@@ -4043,6 +4186,8 @@ export default function QualityAnalysis() {
         setDateRange({ from: dfltRange.from, to: dfltRange.to });
         setSelectedCustomers([]);
         setSelectedRejectionReasons([]);
+        setSelectedMachines([]);
+        setSelectedProcesses([]);
         setSearchQuery("");
         setFilters({
             fromDate: formatYmd(dfltRange.from),
@@ -4269,7 +4414,19 @@ export default function QualityAnalysis() {
 
     const searchFilteredRejectionRows = useMemo(() => {
         if (hasNoData) return [];
-        const raw = recordsData?.rejection_rows || [];
+        let raw = recordsData?.rejection_rows || [];
+        if (selectedMachines.length > 0) {
+            raw = raw.filter(r => {
+                const m = (r.machineNo || r.machine || "").trim();
+                return !m || selectedMachines.includes(m);
+            });
+        }
+        if (selectedProcesses.length > 0) {
+            raw = raw.filter(r => {
+                const p = (r.process || "").trim();
+                return !p || selectedProcesses.includes(p);
+            });
+        }
         if (!searchQuery) return raw;
         const q = searchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -4279,7 +4436,7 @@ export default function QualityAnalysis() {
             (r.defect && r.defect.toLowerCase().includes(q)) ||
             (r.disp && r.disp.toLowerCase().includes(q))
         );
-    }, [recordsData, hasNoData, searchQuery]);
+    }, [recordsData, hasNoData, searchQuery, selectedMachines, selectedProcesses]);
 
     const reasonFilteredRejectionRows = useMemo(() => {
         if (!selectedRejectionReasons || selectedRejectionReasons.length === 0) {
@@ -4983,6 +5140,316 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
+                    {/* Machine Filter Dropdown */}
+                    <div className="qa2-fg" style={{ width: '220px', flex: '0 0 auto', position: 'relative' }} ref={machineRef}>
+                        <label className="qa2-fl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Machine (Mac)</span>
+                            {selectedMachines.length > 0 && (
+                                <span style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 600 }}>
+                                    {selectedMachines.length} active
+                                </span>
+                            )}
+                        </label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                disabled={isGlobalLoading}
+                                className={`qa2-mac-trigger${machineDropdownOpen ? " active" : ""}${selectedMachines.length > 0 ? " has-filter" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setMachineDropdownOpen(!machineDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Machine"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
+                            >
+                                <Cpu size={14} className="qa2-mac-trigger-icon" />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedMachines.length === 0
+                                        ? "All Machines"
+                                        : selectedMachines.length === 1
+                                            ? selectedMachines[0]
+                                            : `${selectedMachines.length} Machines Selected`}
+                                </span>
+                                {selectedMachines.length > 0 && (
+                                    <span className="qa2-mac-count-badge">{selectedMachines.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${machineDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {machineDropdownOpen && !isGlobalLoading && (
+                                <div className="qa2-mac-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search machines..."
+                                            className="qa2-cust-search-input"
+                                            value={machineSearch}
+                                            onChange={(e) => setMachineSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {machineSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setMachineSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    <div className="qa2-reason-quick-actions">
+                                        <span className="qa2-reason-action-info">
+                                            {selectedMachines.length === 0
+                                                ? "All machines included"
+                                                : `${selectedMachines.length} of ${uniqueMachineNames.length} selected`}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                className="qa2-mac-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectAllMachines();
+                                                }}
+                                            >
+                                                Select All
+                                            </button>
+                                            {selectedMachines.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="qa2-mac-action-btn danger"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClearAllMachines();
+                                                    }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Machines Option */}
+                                        <div
+                                            className={`qa2-mac-item${selectedMachines.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedMachines([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-mac-check-box${selectedMachines.length === 0 ? " checked" : ""}`}>
+                                                {selectedMachines.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Machines</span>
+                                            <span className="qa2-cust-item-meta">{uniqueMachineNames.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownMachines.length === 0 ? (
+                                            <div className="qa2-cust-empty">No machines found</div>
+                                        ) : (
+                                            filteredDropdownMachines.map((mac) => {
+                                                const isSelected = selectedMachines.includes(mac);
+                                                const count = machineCountMap[mac] || 0;
+                                                return (
+                                                    <div
+                                                        key={mac}
+                                                        className={`qa2-mac-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleMachineToggle(mac);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-mac-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={mac}>{mac}</span>
+                                                        {count > 0 && (
+                                                            <span className="qa2-mac-pill-count">{count}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedMachines.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-mac-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedMachines([]);
+                                                }}
+                                            >
+                                                Reset to All Machines
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Process Filter Dropdown */}
+                    <div className="qa2-fg" style={{ width: '220px', flex: '0 0 auto', position: 'relative' }} ref={processRef}>
+                        <label className="qa2-fl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Process</span>
+                            {selectedProcesses.length > 0 && (
+                                <span style={{ fontSize: '0.68rem', color: '#0d9488', fontWeight: 600 }}>
+                                    {selectedProcesses.length} active
+                                </span>
+                            )}
+                        </label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                disabled={isGlobalLoading}
+                                className={`qa2-proc-trigger${processDropdownOpen ? " active" : ""}${selectedProcesses.length > 0 ? " has-filter" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setProcessDropdownOpen(!processDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Process"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
+                            >
+                                <Layers size={14} className="qa2-proc-trigger-icon" />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedProcesses.length === 0
+                                        ? "All Processes"
+                                        : selectedProcesses.length === 1
+                                            ? selectedProcesses[0]
+                                            : `${selectedProcesses.length} Processes Selected`}
+                                </span>
+                                {selectedProcesses.length > 0 && (
+                                    <span className="qa2-proc-count-badge">{selectedProcesses.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${processDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {processDropdownOpen && !isGlobalLoading && (
+                                <div className="qa2-proc-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search processes..."
+                                            className="qa2-cust-search-input"
+                                            value={processSearch}
+                                            onChange={(e) => setProcessSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {processSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setProcessSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    <div className="qa2-reason-quick-actions">
+                                        <span className="qa2-reason-action-info">
+                                            {selectedProcesses.length === 0
+                                                ? "All processes included"
+                                                : `${selectedProcesses.length} of ${uniqueProcessNames.length} selected`}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                className="qa2-proc-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectAllProcesses();
+                                                }}
+                                            >
+                                                Select All
+                                            </button>
+                                            {selectedProcesses.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="qa2-proc-action-btn danger"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClearAllProcesses();
+                                                    }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Processes Option */}
+                                        <div
+                                            className={`qa2-proc-item${selectedProcesses.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedProcesses([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-proc-check-box${selectedProcesses.length === 0 ? " checked" : ""}`}>
+                                                {selectedProcesses.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Processes</span>
+                                            <span className="qa2-cust-item-meta">{uniqueProcessNames.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownProcesses.length === 0 ? (
+                                            <div className="qa2-cust-empty">No processes found</div>
+                                        ) : (
+                                            filteredDropdownProcesses.map((proc) => {
+                                                const isSelected = selectedProcesses.includes(proc);
+                                                const count = processCountMap[proc] || 0;
+                                                return (
+                                                    <div
+                                                        key={proc}
+                                                        className={`qa2-proc-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleProcessToggle(proc);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-proc-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={proc}>{proc}</span>
+                                                        {count > 0 && (
+                                                            <span className="qa2-proc-pill-count">{count}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedProcesses.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-proc-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedProcesses([]);
+                                                }}
+                                            >
+                                                Reset to All Processes
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="qa2-fg" style={{ width: '240px', flex: '0 0 auto' }}>
                         <label className="qa2-fl">Search Records</label>
                         <div className="qa2-search-input-wrapper" style={{ position: 'relative', width: '100%' }}>
@@ -5024,7 +5491,7 @@ export default function QualityAnalysis() {
                         </div>
                     </div>
 
-                    {(selectedCustomers.length > 0 || selectedRejectionReasons.length > 0 || searchQuery) && (
+                    {(selectedCustomers.length > 0 || selectedRejectionReasons.length > 0 || selectedMachines.length > 0 || selectedProcesses.length > 0 || searchQuery) && (
                         <div className="qa2-fg" style={{ flex: '0 0 auto' }}>
                             <button
                                 type="button"

@@ -842,7 +842,12 @@ export default function DashboardLayout() {
             ? { ...item, tourContext }
             : (item.tourContext ? item : { ...item });
         setActiveSpotlightTarget(targetWithContext);
+        try { sessionStorage.setItem("ba_spotlight_target", JSON.stringify(targetWithContext)); } catch { }
         window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: targetWithContext }));
+        // Re-dispatch after mount delay to ensure newly mounted pages receive the event reliably
+        setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("spotlight-section-selected", { detail: targetWithContext }));
+        }, 120);
     }, [isMobile]);
 
     // Global hotkey: Ctrl+K, Cmd+K, or "/" & custom open-spotlight event
@@ -1125,9 +1130,15 @@ export default function DashboardLayout() {
             fetch(`${API}/heartbeat/`, {
                 method: "GET",
                 credentials: "include",
-            }).then(res => {
+            }).then(async res => {
                 if (res.status === 401) {
-                    try { sessionStorage.setItem("ba_logout_reason", "concurrent_login"); } catch {}
+                    try {
+                        const data = await res.clone().json().catch(() => ({}));
+                        const err = String(data?.error || data?.reason || "").toLowerCase();
+                        if (err.includes("another device") || data?.code === "concurrent_login") {
+                            sessionStorage.setItem("ba_logout_reason", "concurrent_login");
+                        }
+                    } catch {}
                     handleLogout();
                 }
             }).catch(() => { });

@@ -80,6 +80,12 @@ const TYPE_ORDER = [
     "Returnable DC - service issue",
     "Returnable DC - Rework Issue",
     "Returnable DC - General",
+    "Non Returnable DC - Material Issue",
+    "Non Returnable DC - Party Material Return",
+    "Non Returnable DC - Calibration Issue",
+    "Non Returnable DC - Service Issue",
+    "Non Returnable DC - Rework Issue",
+    "Non Returnable DC - General",
     "Job Order Issue - Job Order",
     "Job Order Issue - Rework",
     "Job Order Issue - Job Order Raw Material",
@@ -168,6 +174,13 @@ const TYPE_ICONS = {
             <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
     ),
+    "Non Returnable DC - Material Issue": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+    ),
 };
 
 function getTypeIcon(type) {
@@ -182,7 +195,7 @@ function getTypeIcon(type) {
             </svg>
         );
     }
-    if (type.startsWith("Returnable DC")) {
+    if (type.startsWith("Returnable DC") || type.startsWith("Non Returnable DC")) {
         return (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -331,11 +344,12 @@ function docLabels(card) {
         };
     }
     if (k === "ret_dc") {
+        const isNonRet = (card?.type || "").toLowerCase().includes("non returnable");
         return {
-            docNoLabel: "Ret. Issue No",
+            docNoLabel: isNonRet ? "Issue No" : "Ret. Issue No",
             docDateLabel: "Issue Date",
-            docTitle: card?.type || "Returnable DC",
-            approveLabel: `Approve ${card?.type || "Returnable DC"}`,
+            docTitle: card?.type || (isNonRet ? "Non Returnable DC" : "Returnable DC"),
+            approveLabel: `Approve ${card?.type || (isNonRet ? "Non Returnable DC" : "Returnable DC")}`,
         };
     }
     if (k === "dc") {
@@ -997,7 +1011,7 @@ export default function TApproval() {
         const cacheKey = card.id || `${docKind}:${invno}`;
         const docLabel = (card?.docKind || "").toLowerCase().includes("job")
             ? (card?.type || "Job Order Issue")
-            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice");
+            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? (card?.type || "DC") : "Invoice");
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "approve" });
         try {
@@ -1035,7 +1049,7 @@ export default function TApproval() {
         const cacheKey = card.id || `${docKind}:${invno}`;
         const docLabel = (card?.docKind || "").toLowerCase().includes("job")
             ? (card?.type || "Job Order Issue")
-            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : "Invoice");
+            : (docKind === "dc" ? "DC" : docKind === "ret_dc" ? (card?.type || "DC") : "Invoice");
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "modify" });
         try {

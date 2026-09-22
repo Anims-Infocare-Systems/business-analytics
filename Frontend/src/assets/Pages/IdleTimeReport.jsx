@@ -20,6 +20,8 @@ import {
   FiList,
   FiLoader,
   FiUser,
+  FiUsers,
+  FiChevronDown,
   FiPieChart,
   FiX,
   FiFilter
@@ -261,6 +263,19 @@ const CONTINUOUS = [
   { machine: "VTL-03", reason: "NO LOAD", hours: "4:45", shifts: 2, status: "HIGH" },
   { machine: "TC-02", reason: "NO PLAN", hours: "5:30", shifts: 3, status: "CRITICAL" },
   { machine: "TC-20", reason: "MACHINE CLEANING", hours: "4:10", shifts: 1, status: "MEDIUM" },
+];
+
+const DEFAULT_OPERATOR_DATA = [
+  { name: "Rajesh Kumar", hours: "1446:08", pct: 72.6 },
+  { name: "Suresh M.", hours: "1142:34", pct: 57.4 },
+  { name: "Amit P.", hours: "1023:21", pct: 51.3 },
+  { name: "Pradeep S.", hours: "934:25", pct: 46.9 },
+  { name: "Vijay R.", hours: "853:31", pct: 42.8 },
+  { name: "Mohan K.", hours: "721:10", pct: 36.2 },
+  { name: "Ravi T.", hours: "640:45", pct: 32.1 },
+  { name: "Sanjay G.", hours: "512:00", pct: 25.7 },
+  { name: "Ramesh B.", hours: "430:18", pct: 21.6 },
+  { name: "Santosh D.", hours: "318:50", pct: 16.0 },
 ];
 
 const DEFAULT_NOT_ENTERED = {
@@ -935,6 +950,213 @@ function SearchableMultiSelect({ value, options, onChange, placeholder = "Search
   );
 }
 
+function OperatorMultiSelectFilter({
+  operators = [],
+  selected = [],
+  onChange,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const totalCount = operators.length;
+  const isNone = selected.length === 1 && selected[0] === "__NONE__";
+  const isAll = selected.length === 0;
+  const activeCount = isAll ? totalCount : (isNone ? 0 : selected.length);
+
+  const toggleOperator = (name) => {
+    if (isAll) {
+      const next = operators.filter(o => o.name !== name).map(o => o.name);
+      onChange(next.length === 0 ? ["__NONE__"] : next);
+    } else if (isNone) {
+      onChange([name]);
+    } else {
+      const exists = selected.includes(name);
+      if (exists) {
+        const next = selected.filter(n => n !== name);
+        onChange(next.length === 0 ? ["__NONE__"] : next);
+      } else {
+        const next = [...selected, name];
+        if (next.length === totalCount) {
+          onChange([]);
+        } else {
+          onChange(next);
+        }
+      }
+    }
+  };
+
+  const handleSelectAll = () => {
+    onChange([]);
+  };
+
+  const handleClearAll = () => {
+    onChange(["__NONE__"]);
+  };
+
+  const filteredOperators = operators.filter(op =>
+    op.name.toLowerCase().includes(search.toLowerCase().trim())
+  );
+
+  const aBg = ["#dbeafe", "#fce7f3", "#dcfce7", "#fef3c7", "#ede9fe", "#fff7ed", "#ecfeff", "#fdf4ff", "#f0fdf4", "#fff1f2"];
+  const aCl = ["#2563eb", "#db2777", "#16a34a", "#d97706", "#7c3aed", "#f97316", "#0891b2", "#9333ea", "#15803d", "#e11d48"];
+  const bc = (p) => p >= 60 ? "#dc2626" : p >= 40 ? "#f97316" : p >= 25 ? "#d97706" : "#16a34a";
+
+  let triggerLabel = "All Operators";
+  if (!isAll) {
+    if (isNone) {
+      triggerLabel = "None Selected";
+    } else if (selected.length === 1) {
+      triggerLabel = selected[0];
+    } else {
+      triggerLabel = `${selected.length} Selected`;
+    }
+  }
+
+  return (
+    <div className="itr-op-filter-container" ref={dropdownRef}>
+      <button
+        type="button"
+        className={`itr-op-filter-trigger ${isOpen ? "itr-op-filter-trigger--open" : ""} ${!isAll ? "itr-op-filter-trigger--active" : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+        title="Filter operators by multiple selection"
+      >
+        <FiUsers size={13} style={{ color: !isAll ? "#16a34a" : "#64748b" }} />
+        <span style={{ maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {triggerLabel}
+        </span>
+        <span className="itr-op-filter-badge">
+          {activeCount}
+        </span>
+        {!isAll && (
+          <span
+            className="itr-op-filter-reset-icon"
+            title="Reset to All Operators"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange([]);
+            }}
+          >
+            <FiX size={10} />
+          </span>
+        )}
+        <span className="itr-op-filter-arrow">
+          <FiChevronDown size={12} />
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="itr-op-filter-dropdown">
+          <div className="itr-op-filter-search">
+            <span className="itr-op-filter-search-icon">
+              <FiSearch size={12} />
+            </span>
+            <input
+              type="text"
+              className="itr-op-filter-search-input"
+              placeholder="Search operator..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                className="itr-op-filter-search-clear"
+                onClick={() => setSearch("")}
+                title="Clear search"
+              >
+                <FiX size={11} />
+              </button>
+            )}
+          </div>
+
+          <div className="itr-op-filter-actions-bar">
+            <span className="itr-op-filter-count-label">
+              {activeCount} of {totalCount} selected
+            </span>
+            <div className="itr-op-filter-btn-group">
+              <button
+                type="button"
+                className="itr-op-filter-action-btn"
+                onClick={handleSelectAll}
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                className="itr-op-filter-action-btn itr-op-filter-action-btn--clear"
+                onClick={handleClearAll}
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <div className="itr-op-filter-items-list">
+            {filteredOperators.map((op, i) => {
+              const isSelected = isAll || (!isNone && selected.includes(op.name));
+              const ini = op.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+              const col = bc(op.pct);
+              return (
+                <button
+                  key={op.name}
+                  type="button"
+                  className={`itr-op-filter-option ${isSelected ? "itr-op-filter-option--selected" : ""}`}
+                  onClick={() => toggleOperator(op.name)}
+                >
+                  <div className="itr-op-filter-checkbox">
+                    {isSelected && (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <div
+                    className="itr-op-filter-opt-avatar"
+                    style={{ background: aBg[i % 10], color: aCl[i % 10] }}
+                  >
+                    {ini}
+                  </div>
+                  <span className="itr-op-filter-opt-name" title={op.name}>
+                    {op.name}
+                  </span>
+                  <div className="itr-op-filter-opt-meta">
+                    <span className="itr-op-filter-opt-hours">{op.hours}</span>
+                    <span
+                      className="itr-op-filter-opt-pct"
+                      style={{ background: `${col}18`, color: col }}
+                    >
+                      {op.pct}%
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+
+            {filteredOperators.length === 0 && (
+              <div style={{ textAlign: "center", padding: "16px 8px", color: "#94a3b8", fontSize: "0.75rem", fontFamily: "var(--itr-sans)" }}>
+                No operators matching &quot;{search}&quot;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════ */
@@ -1010,6 +1232,8 @@ export default function IdleTimeReport() {
   const [costMachineData, setCostMachineData] = useState({ labels: [], hours: [], cost: [], hours_display: [], summary: {} });
   const [pctMachineData, setPctMachineData] = useState({ labels: [], data: [], idle_hours: [], prod_hours: [] });
   const [continuousIdle, setContinuousIdle] = useState([]);
+  const [operatorWiseData, setOperatorWiseData] = useState(DEFAULT_OPERATOR_DATA);
+  const [selectedOperators, setSelectedOperators] = useState([]);
   const [idleTimeNotEntered, setIdleTimeNotEntered] = useState({ rows: [], summary: { not_entered: 0, partial_entry: 0, completed: 0 } });
   const [reasonMachineDetail, setReasonMachineDetail] = useState({ column_headers: [], rows: [], footer: { cols: [], total: "0:00", pct: "0" } });
   const [isLoading, setIsLoading] = useState(true);
@@ -1180,6 +1404,11 @@ export default function IdleTimeReport() {
           });
         } else {
           setReasonMachineDetail({ column_headers: [], rows: [], footer: { cols: [], total: "0:00", pct: "0" } });
+        }
+        if (Array.isArray(data?.operator_wise_idle) && data.operator_wise_idle.length > 0) {
+          setOperatorWiseData(data.operator_wise_idle);
+        } else {
+          setOperatorWiseData(DEFAULT_OPERATOR_DATA);
         }
       })
       .catch((err) => console.error("idle-time-report:", err))
@@ -2701,48 +2930,80 @@ export default function IdleTimeReport() {
             data-spotlight="itr-operator-wise"
             title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiUser size={16} /> Operator Wise Idle Hours</span>}
             badge="With %" badgeBg="#f0fdf4" badgeColor="#16a34a" accentColor="#16a34a"
+            extra={
+              <OperatorMultiSelectFilter
+                operators={operatorWiseData}
+                selected={selectedOperators}
+                onChange={setSelectedOperators}
+              />
+            }
           >
             {(() => {
-              const opData = [
-                { name: "Rajesh Kumar", hours: "1446:08", pct: 72.6 },
-                { name: "Suresh M.", hours: "1142:34", pct: 57.4 },
-                { name: "Amit P.", hours: "1023:21", pct: 51.3 },
-                { name: "Pradeep S.", hours: "934:25", pct: 46.9 },
-                { name: "Vijay R.", hours: "853:31", pct: 42.8 },
-                { name: "Mohan K.", hours: "721:10", pct: 36.2 },
-                { name: "Ravi T.", hours: "640:45", pct: 32.1 },
-                { name: "Sanjay G.", hours: "512:00", pct: 25.7 },
-                { name: "Ramesh B.", hours: "430:18", pct: 21.6 },
-                { name: "Santosh D.", hours: "318:50", pct: 16.0 },
-              ];
-              const mx = Math.max(...opData.map(o => o.pct));
+              const isNone = selectedOperators.length === 1 && selectedOperators[0] === "__NONE__";
+              const isAll = selectedOperators.length === 0;
+              const displayed = isNone
+                ? []
+                : isAll
+                  ? operatorWiseData
+                  : operatorWiseData.filter(op => selectedOperators.includes(op.name));
+
+              if (displayed.length === 0) {
+                return (
+                  <div style={{ textAlign: "center", padding: "36px 16px", color: "var(--itr-muted)" }}>
+                    <FiUsers size={28} style={{ opacity: 0.35, marginBottom: 8, color: "#16a34a" }} />
+                    <div style={{ fontSize: "0.86rem", fontWeight: 700, color: "var(--itr-text)" }}>No operators selected</div>
+                    <div style={{ fontSize: "0.76rem", color: "var(--itr-muted)", marginTop: 4 }}>
+                      Select one or more operators from the filter above
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOperators([])}
+                      style={{
+                        marginTop: 12,
+                        padding: "5px 14px",
+                        fontSize: "0.76rem",
+                        fontWeight: 700,
+                        background: "#f0fdf4",
+                        color: "#16a34a",
+                        border: "1px solid #bbf7d0",
+                        borderRadius: 20,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Show All Operators
+                    </button>
+                  </div>
+                );
+              }
+
+              const mx = Math.max(...displayed.map(o => o.pct), 1);
               const bc = (p) => p >= 60 ? "#dc2626" : p >= 40 ? "#f97316" : p >= 25 ? "#d97706" : "#16a34a";
               const aBg = ["#dbeafe", "#fce7f3", "#dcfce7", "#fef3c7", "#ede9fe", "#fff7ed", "#ecfeff", "#fdf4ff", "#f0fdf4", "#fff1f2"];
               const aCl = ["#2563eb", "#db2777", "#16a34a", "#d97706", "#7c3aed", "#f97316", "#0891b2", "#9333ea", "#15803d", "#e11d48"];
               return (
                 <div className="itr-op-list">
-                  {opData.map((op, i) => {
-                    const ini = op.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                    const col = bc(op.pct);
-                    return (
-                      <div key={i} className="itr-op-row" style={{ animationDelay: `${i * 60}ms` }}>
-                        <div className="itr-op-avatar" style={{ background: aBg[i % 10], color: aCl[i % 10] }}>{ini}</div>
-                        <div className="itr-op-body">
-                          <div className="itr-op-top-row">
-                            <span className="itr-op-name">{op.name}</span>
-                            <div className="itr-op-meta">
-                              <span className="itr-op-hours" style={{ color: col }}>{op.hours}</span>
-                              <span className="itr-op-pct-badge" style={{ background: `${col}18`, color: col, border: `1px solid ${col}30` }}>{op.pct}%</span>
+                  {displayed.map((op, i) => {
+                      const ini = op.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                      const col = bc(op.pct);
+                      return (
+                        <div key={op.name || i} className="itr-op-row" style={{ animationDelay: `${i * 45}ms` }}>
+                          <div className="itr-op-avatar" style={{ background: aBg[i % 10], color: aCl[i % 10] }}>{ini}</div>
+                          <div className="itr-op-body">
+                            <div className="itr-op-top-row">
+                              <span className="itr-op-name" title={op.name}>{op.name}</span>
+                              <div className="itr-op-meta">
+                                <span className="itr-op-hours" style={{ color: col }}>{op.hours}</span>
+                                <span className="itr-op-pct-badge" style={{ background: `${col}18`, color: col, border: `1px solid ${col}30` }}>{op.pct}%</span>
+                              </div>
+                            </div>
+                            <div className="itr-op-track">
+                              <div className="itr-op-fill" style={{ width: `${Math.min(100, (op.pct / mx) * 100)}%`, background: `linear-gradient(90deg,${col}99,${col})`, animationDelay: `${i * 45 + 100}ms` }} />
                             </div>
                           </div>
-                          <div className="itr-op-track">
-                            <div className="itr-op-fill" style={{ width: `${(op.pct / mx) * 100}%`, background: `linear-gradient(90deg,${col}99,${col})`, animationDelay: `${i * 60 + 150}ms` }} />
-                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
               );
             })()}
           </Card>
