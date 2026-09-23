@@ -83,50 +83,13 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
 def _get_quality_rejection_and_rework(cursor, from_date, to_date, machine=None, shift=None, operator=None, mac_type=None, mac_group=None, search=None):
     """
     Calculates Material Rejection Qty, Machine Rejection Qty, and Rework Qty
-    using the exact Quality Report logic, taking active filters into account.
+    for Production Analysis using ONLY InterInspectionEntry and its related tables
+    (Insp_RejectionEntry, Rejection), strictly excluding Job Order (InJob) and Final Inspection (FinalInspectionEntry).
     """
     union_queries = []
     union_params = []
 
-    has_machine_filters = bool(machine or shift or operator or mac_type or mac_group)
-
-    # 1. InJob (only include if no machine/shift/operator specific filter is applied)
-    if not has_machine_filters and table_exists(cursor, "InJob_Mas") and table_exists(cursor, "InJob_Det"):
-        inspdate_col = find_first_column(cursor, "InJob_Mas", ["inspdate", "InspDate", "INSPDATE"])
-        matrej_col   = find_first_column(cursor, "InJob_Det", ["matrej", "MatRej", "mat_rej"])
-        macrej_col   = find_first_column(cursor, "InJob_Det", ["macrej", "MacRej", "mac_rej"])
-        rwqty_col    = find_first_column(cursor, "InJob_Det", ["rwqty", "RwQty", "rw_qty"])
-        deleted_mas  = find_first_column(cursor, "InJob_Mas", ["deleted", "Deleted"])
-        deleted_det  = find_first_column(cursor, "InJob_Det", ["deleted", "Deleted"])
-
-        if inspdate_col:
-            mat_expr = f"CAST(ISNULL(d.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
-            mac_expr = f"CAST(ISNULL(d.[{macrej_col}], 0) AS INT)" if macrej_col else "0"
-            rwk_expr = f"CAST(ISNULL(d.[{rwqty_col}], 0) AS INT)" if rwqty_col else "0"
-
-            where_injob = [f"CAST(m.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
-            params_injob = [from_date, to_date]
-            if deleted_mas:
-                where_injob.append(f"ISNULL(m.[{deleted_mas}], 0) = 0")
-            if deleted_det:
-                where_injob.append(f"ISNULL(d.[{deleted_det}], 0) = 0")
-            if search:
-                where_injob.append("(d.partno LIKE ? OR d.description LIKE ? OR d.process LIKE ? OR m.inspno LIKE ?)")
-                s_pat = f"%{search}%"
-                params_injob.extend([s_pat, s_pat, s_pat, s_pat])
-
-            union_queries.append(f"""
-                SELECT
-                    {mat_expr} AS MatRejQty,
-                    {mac_expr} AS MacRejQty,
-                    {rwk_expr} AS ReworkQty
-                FROM InJob_Mas m
-                INNER JOIN InJob_Det d ON m.inspno = d.inspno
-                WHERE {" AND ".join(where_injob)}
-            """)
-            union_params.extend(params_injob)
-
-    # 2. InterInspectionEntry
+    # InterInspectionEntry (only inspection source for Production Analysis rejection & rework)
     if table_exists(cursor, "InterInspectionEntry"):
         inspdate_col = find_first_column(cursor, "InterInspectionEntry", ["inter_inspdate", "interinspdate", "inspdate", "InspDate"])
         matrej_col   = find_first_column(cursor, "InterInspectionEntry", ["matrejqty", "MatRejQty"])
@@ -209,66 +172,6 @@ def _get_quality_rejection_and_rework(cursor, from_date, to_date, machine=None, 
                 WHERE {" AND ".join(where_inter)}
             """)
             union_params.extend(params_inter)
-
-    # 3. FinalInspectionEntry (only include if no machine/shift/operator specific filter is applied)
-    if not has_machine_filters and table_exists(cursor, "FinalInspectionEntry"):
-        finspdate_col = find_first_column(cursor, "FinalInspectionEntry", ["finspdate", "FinSpDate"])
-        deleted_col   = find_first_column(cursor, "FinalInspectionEntry", ["deleted", "Deleted"])
-        matrej_col    = find_first_column(cursor, "FinalInspectionEntry", ["matrejqty", "MatRejQty"])
-        rej_col       = find_first_column(cursor, "FinalInspectionEntry", ["rejqty", "RejQty"])
-        rwk_col       = find_first_column(cursor, "FinalInspectionEntry", ["rwqty", "RwQty"])
-
-        if finspdate_col:
-            if table_exists(cursor, "FinalInspRejectionEntryOrg") and table_exists(cursor, "Rejection"):
-                mat_expr = """CAST(ISNULL((
-                    SELECT SUM(ISNULL(fr.qty, 0))
-                    FROM FinalInspRejectionEntryOrg fr
-                    LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
-                    WHERE fr.finspno = f.finspno
-                      AND ISNULL(fr.deleted, 0) = 0
-                      AND ISNULL(rej.matrej, 0) = 1
-                ), 0) AS INT)"""
-                mac_expr = """CAST(ISNULL((
-                    SELECT SUM(ISNULL(fr.qty, 0))
-                    FROM FinalInspRejectionEntryOrg fr
-                    LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
-                    WHERE fr.finspno = f.finspno
-                      AND ISNULL(fr.deleted, 0) = 0
-                      AND ISNULL(rej.matrej, 0) = 0
-                ), 0) AS INT)"""
-            else:
-                mat_expr = f"CAST(ISNULL(f.[{matrej_col}], 0) AS INT)" if matrej_col else "0"
-                mac_expr = f"CAST(ISNULL(f.[{rej_col}], 0) AS INT)" if rej_col else "0"
-
-            if table_exists(cursor, "FinalInspReworkEntryOrg"):
-                rwk_expr = """CAST(ISNULL((
-                    SELECT SUM(ISNULL(frw.qty, 0))
-                    FROM FinalInspReworkEntryOrg frw
-                    WHERE frw.finspno = f.finspno
-                      AND frw.partno = f.partno
-                      AND ISNULL(frw.deleted, 0) = 0
-                ), 0) AS INT)"""
-            else:
-                rwk_expr = f"CAST(ISNULL(f.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
-
-            where_final = [f"CAST(f.[{finspdate_col}] AS DATE) BETWEEN ? AND ?"]
-            params_final = [from_date, to_date]
-            if deleted_col:
-                where_final.append(f"ISNULL(f.[{deleted_col}], 0) = 0")
-            if search:
-                where_final.append("(f.partno LIKE ? OR f.description LIKE ? OR f.process LIKE ? OR f.finspno LIKE ?)")
-                s_pat = f"%{search}%"
-                params_final.extend([s_pat] * 4)
-
-            union_queries.append(f"""
-                SELECT
-                    {mat_expr} AS MatRejQty,
-                    {mac_expr} AS MacRejQty,
-                    {rwk_expr} AS ReworkQty
-                FROM FinalInspectionEntry f
-                WHERE {" AND ".join(where_final)}
-            """)
-            union_params.extend(params_final)
 
     if not union_queries:
         return 0, 0, 0
@@ -375,14 +278,21 @@ def _get_quality_rejection_and_rework_by_machine(cursor, from_date, to_date, mac
 
     query = f"""
         SELECT
-            LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) AS macno,
-            SUM({mat_expr}) AS MatRejQty,
-            SUM({mac_expr}) AS MacRejQty,
-            SUM({rwk_expr}) AS ReworkQty
-        FROM InterInspectionEntry i
-        {inter_join}
-        WHERE {" AND ".join(where_inter)}
-        GROUP BY LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512))))
+            macno,
+            SUM(MatRejQty) AS MatRejQty,
+            SUM(MacRejQty) AS MacRejQty,
+            SUM(ReworkQty) AS ReworkQty
+        FROM (
+            SELECT
+                LTRIM(RTRIM(CAST(i.macno AS NVARCHAR(512)))) AS macno,
+                {mat_expr} AS MatRejQty,
+                {mac_expr} AS MacRejQty,
+                {rwk_expr} AS ReworkQty
+            FROM InterInspectionEntry i
+            {inter_join}
+            WHERE {" AND ".join(where_inter)}
+        ) Sub
+        GROUP BY macno
     """
     try:
         cursor.execute(query, params_inter)
@@ -451,7 +361,14 @@ def production_analysis_report(request):
             "productionHours": 0.0,
             "totalMachineHours": 0.0,
             "idleHours": 0.0,
+            "idleSeconds": 0,
+            "idleAcceptedHours": 0.0,
+            "idleAcceptedSeconds": 0,
             "settingHours": 0.0,
+            "settingSeconds": 0,
+            "totProductionHours": 0.0,
+            "totProductionSeconds": 0,
+            "totProductionHoursDisplay": "00 hour 00 mins",
             "manEfficiency": 0.0,
             # Daily Production Summary
             "totalShifts": 0,
@@ -635,27 +552,46 @@ def production_analysis_report(request):
         row = run_query(total_machine_hours_query, [from_date, to_date] + mac_filter_params + shift_filter_params)
         if row and row[0] is not None: result["totalMachineHours"] = float(row[0])
 
-        # ── Query 7: Total Idle Hours ─────────────────────────────────
+        # ── Query 7: Total Idle Hours & Idle Accepted Hours ───────────
         idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date)
+        cur_ir = conn.cursor()
+        try:
+            has_idle_reasons = table_exists(cur_ir, "IdleReasons")
+        finally:
+            cur_ir.close()
+        join_idle_reasons = """
+            LEFT JOIN IdleReasons IR
+                ON LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512))))
+                 = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+                AND ISNULL(IR.deleted, 0) = 0
+        """ if has_idle_reasons else ""
+        ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+
         idle_hours_query = f"""
-        SELECT COALESCE(SUM(A.IdleSeconds), 0) AS TotalIdleSeconds
+        SELECT 
+            COALESCE(SUM(A.IdleSeconds), 0) AS TotalIdleSeconds,
+            COALESCE(SUM(
+                CASE
+                    WHEN A.IsEffCalc = 1 THEN A.IdleSeconds
+                    WHEN A.IsEffCalc = 0 THEN 0
+                    WHEN {ir_accept_check} THEN A.IdleSeconds
+                    ELSE 0
+                END
+            ), 0) AS AcceptedIdleSeconds
         FROM (
             {idle_union_sql}
         ) A
         LEFT JOIN MacMaster MM ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512)))) AND MM.deleted = 0
+        {join_idle_reasons}
         WHERE 1 = 1 {idle_outer_sql}
         """
         row = run_query(idle_hours_query, idle_params)
         idle_seconds = int(row[0] or 0) if row and row[0] is not None else 0
+        idle_accepted_seconds = int(row[1] or 0) if row and len(row) > 1 and row[1] is not None else 0
         result["idleSeconds"] = idle_seconds
         result["idleHours"] = round(idle_seconds / 3600.0, 2)
-
-        # Tot Production Hrs = Machine Running Hrs - (Idle Accepted Hours + Idle Non Accepted Hours)
-        net_prod_seconds = max(0, run_seconds - idle_seconds)
-        result["totProductionSeconds"] = net_prod_seconds
-        result["totProductionHours"] = net_prod_seconds / 3600.0
-        result["totProductionHoursDisplay"] = _pa_fmt_hms(net_prod_seconds)
-        result["totalMachineHours"] = result["totProductionHours"]
+        result["idleAcceptedSeconds"] = idle_accepted_seconds
+        result["idleAcceptedHours"] = round(idle_accepted_seconds / 3600.0, 2)
 
         # ── Query 8: Total Setting Hours ──────────────────────────────
         setting_hours_query = """
@@ -673,7 +609,6 @@ def production_analysis_report(request):
               AND PE.setto IS NOT NULL
 
             UNION ALL 
-
             SELECT 
                 CASE 
                     WHEN CPE.setto >= CPE.setfrom THEN DATEDIFF(SECOND, CPE.setfrom, CPE.setto) 
@@ -686,7 +621,6 @@ def production_analysis_report(request):
               AND CPE.setto IS NOT NULL
 
             UNION ALL 
-
             SELECT 
                 CASE 
                     WHEN CPR.setto >= CPR.setfrom THEN DATEDIFF(SECOND, CPR.setfrom, CPR.setto) 
@@ -700,8 +634,18 @@ def production_analysis_report(request):
         ) A
         """
         row = run_query(setting_hours_query)
+        setting_seconds = 0
         if row and row[0] is not None:
+            setting_seconds = int(row[0])
+            result["settingSeconds"] = setting_seconds
             result["settingHours"] = float(row[0]) / 3600.0
+
+        # Tot Production Hrs = Machine Running Hrs - (Tot Setting Hrs + Idle Accepted Hours)
+        net_prod_seconds = max(0, run_seconds - (setting_seconds + idle_accepted_seconds))
+        result["totProductionSeconds"] = net_prod_seconds
+        result["totProductionHours"] = net_prod_seconds / 3600.0
+        result["totProductionHoursDisplay"] = _pa_fmt_hms(net_prod_seconds)
+        result["totalMachineHours"] = result["totProductionHours"]
 
         # ── Query 9: Man Efficiency (Operator Eff: PE.OPREFF, CPE.eff, CPR.eff) ──
         man_efficiency_query = """
@@ -1038,7 +982,74 @@ def production_analysis_report(request):
             result["machineUtilization"] = round(float(row[0]), 2)
         else:
             result["machineUtilization"] = 0.0
-        mac_eff_query = """SELECT CAST(AVG(ISNULL(OAEFF,0)) AS DECIMAL(18,2)) AS MachineEfficiency FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND OAEFF IS NOT NULL"""
+        # ── Query 11b: Machine Efficiency ─────────────────────────────
+        # Formula logic: sum(machine Utilization as per the record entry) / count of the record entry
+        # in three production tables: ProductionEntry (prodid), ConvProductionEntry (entryno), and ConvProductionEntryRod (entryno)
+        mac_eff_query = """
+        WITH RecordEntries AS
+        (
+            SELECT 
+                PE.prodid AS EntryID,
+                MAX(CASE WHEN PE.runto < PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) ELSE DATEDIFF(SECOND, PE.runfrom, PE.runto) END) AS RunTimeSecs,
+                MAX(CASE WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) END) AS IdleTimeSecs
+            FROM ProductionEntry PE
+            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE)
+            GROUP BY PE.prodid
+            
+            UNION ALL
+            
+            SELECT 
+                CPE.entryno AS EntryID,
+                MAX(CASE 
+                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
+                    WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                    ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProductionEntry CPE
+            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE)
+            GROUP BY CPE.entryno
+            
+            UNION ALL
+            
+            SELECT 
+                CPR.entryno AS EntryID,
+                MAX(CASE 
+                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
+                    WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                    ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProductionEntryRod CPR
+            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
+            GROUP BY CPR.entryno
+        ),
+        RecordUtilization AS
+        (
+            SELECT 
+                EntryID,
+                CASE 
+                    WHEN RunTimeSecs > 0 
+                    THEN (
+                        CASE 
+                            WHEN RunTimeSecs - IdleTimeSecs >= RunTimeSecs THEN 100.0
+                            WHEN RunTimeSecs - IdleTimeSecs > 0 
+                            THEN ((CAST(RunTimeSecs AS FLOAT) - CAST(IdleTimeSecs AS FLOAT)) / CAST(RunTimeSecs AS FLOAT)) * 100.0
+                            ELSE 0.0 
+                        END
+                    )
+                    ELSE 0.0 
+                END AS MachineUtilization
+            FROM RecordEntries
+        )
+        SELECT 
+            CASE 
+                WHEN COUNT(*) > 0 
+                THEN CAST(ROUND(SUM(MachineUtilization) / CAST(COUNT(*) AS FLOAT), 2) AS DECIMAL(18,2))
+                ELSE 0.00 
+            END AS MachineEfficiency
+        FROM RecordUtilization
+        """
         row = run_query(mac_eff_query)
         if row and row[0] is not None: result["machineEfficiency"] = float(row[0])
         result["operatorEfficiency"] = result["manEfficiency"]
@@ -1132,16 +1143,72 @@ def production_analysis_report(request):
 
         result["macAddedTrend"] = mac_added_trend
 
-        # ── Query 14: Machine Efficiency% Trend (based on Operator Efficiency / EFF) ──
+        # ── Query 14: Machine Efficiency% Trend (based on Record Entry Machine Utilization) ──
         eff_trend_query = """
+        WITH RecordEntries AS
+        (
+            SELECT 
+                PE.prodid AS EntryID,
+                PE.proddate AS entrydate,
+                MAX(CASE WHEN PE.runto < PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) ELSE DATEDIFF(SECOND, PE.runfrom, PE.runto) END) AS RunTimeSecs,
+                MAX(CASE WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) END) AS IdleTimeSecs
+            FROM ProductionEntry PE
+            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE)
+            GROUP BY PE.prodid, PE.proddate
+            
+            UNION ALL
+            
+            SELECT 
+                CPE.entryno AS EntryID,
+                CPE.entrydate,
+                MAX(CASE 
+                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
+                    WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                    ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProductionEntry CPE
+            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE)
+            GROUP BY CPE.entryno, CPE.entrydate
+            
+            UNION ALL
+            
+            SELECT 
+                CPR.entryno AS EntryID,
+                CPR.entrydate,
+                MAX(CASE 
+                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
+                    WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                    ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProductionEntryRod CPR
+            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
+            GROUP BY CPR.entryno, CPR.entrydate
+        ),
+        RecordUtilization AS
+        (
+            SELECT 
+                entrydate,
+                EntryID,
+                CASE 
+                    WHEN RunTimeSecs > 0 
+                    THEN (
+                        CASE 
+                            WHEN RunTimeSecs - IdleTimeSecs >= RunTimeSecs THEN 100.0
+                            WHEN RunTimeSecs - IdleTimeSecs > 0 
+                            THEN ((CAST(RunTimeSecs AS FLOAT) - CAST(IdleTimeSecs AS FLOAT)) / CAST(RunTimeSecs AS FLOAT)) * 100.0
+                            ELSE 0.0 
+                        END
+                    )
+                    ELSE 0.0 
+                END AS MachineUtilization
+            FROM RecordEntries
+        )
         SELECT FORMAT(A.entrydate, 'MMM yy') AS MonthLabel,
                DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth,
-               AVG(CAST(A.OperEff AS FLOAT)) AS AvgEff
-        FROM (
-            SELECT proddate AS entrydate, OPREFF AS OperEff FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND OPREFF IS NOT NULL
-            UNION ALL SELECT entrydate, eff AS OperEff FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND eff IS NOT NULL
-            UNION ALL SELECT entrydate, eff AS OperEff FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND eff IS NOT NULL
-        ) A
+               CAST(ROUND(SUM(A.MachineUtilization) / CAST(COUNT(*) AS FLOAT), 2) AS DECIMAL(18,2)) AS AvgEff
+        FROM RecordUtilization A
         GROUP BY FORMAT(A.entrydate, 'MMM yy'), DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate)
         ORDER BY YearMonth
         """

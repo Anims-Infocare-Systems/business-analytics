@@ -1479,7 +1479,10 @@ export default function EfficiencyReport() {
                                     accentGrad="blue"
                                     animKey={`op-${tab}-${filtered.length}`}
                                     filterValue={opFilter}
-                                    onFilterChange={setOpFilter}
+                                    onFilterChange={(val) => {
+                                        setOpFilter(val);
+                                        setAppliedOpFilter(val);
+                                    }}
                                     filterOptions={uniqueOperators}
                                     filterPlaceholder="All Operators"
                                     isFullWidth={true}
@@ -1497,7 +1500,10 @@ export default function EfficiencyReport() {
                                     accentGrad="green"
                                     animKey={`mac-${tab}-${filtered.length}`}
                                     filterValue={macFilter}
-                                    onFilterChange={setMacFilter}
+                                    onFilterChange={(val) => {
+                                        setMacFilter(val);
+                                        setAppliedMacFilter(val);
+                                    }}
                                     filterOptions={uniqueMachines}
                                     filterPlaceholder="All Machines"
                                     isFullWidth={true}

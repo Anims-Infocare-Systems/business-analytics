@@ -34,13 +34,19 @@ def _mac_expr(mac_col):
 
 
 def _idle_hours_expr(idle_col, acc_col, nonacc_col, kind="prod"):
-    if kind == "prod" and (acc_col or nonacc_col):
+    if kind == "prod":
         acc = f"ISNULL(CAST([{acc_col}] AS FLOAT), 0)" if acc_col else "0"
         nonacc = f"ISNULL(CAST([{nonacc_col}] AS FLOAT), 0)" if nonacc_col else "0"
+        if idle_col:
+            return (
+                f"CAST((CASE WHEN [{idle_col}] IS NOT NULL AND DATEDIFF(SECOND, 0, [{idle_col}]) > 0 "
+                f"THEN DATEDIFF(SECOND, 0, [{idle_col}]) "
+                f"ELSE {acc} + {nonacc} END) / 3600.0 AS FLOAT)"
+            )
         return f"CAST(({acc} + {nonacc}) / 3600.0 AS FLOAT)"
     if idle_col:
         return (
-            f"CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', [{idle_col}]) "
+            f"CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL([{idle_col}], '1900-01-01 00:00:00')) "
             f"/ 3600.0 AS FLOAT)"
         )
     if acc_col or nonacc_col:
@@ -204,7 +210,7 @@ def _legacy_union_branches(include_cnc, include_conv, include_prod_date=False):
                 {date_cols_cnc}
                 CAST(OAEFF AS FLOAT) AS OAEFF,
                 CAST(OPREFF AS FLOAT) AS OPREFF,
-                CAST((ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0)) / 3600.0 AS FLOAT) AS IdleHrs
+                CAST((CASE WHEN idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, idlTime) > 0 THEN DATEDIFF(SECOND, 0, idlTime) ELSE ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0) END) / 3600.0 AS FLOAT) AS IdleHrs
             FROM ProductionEntry
             WHERE CAST(proddate AS DATE) BETWEEN ? AND ?
               AND deleted = 0
@@ -219,7 +225,7 @@ def _legacy_union_branches(include_cnc, include_conv, include_prod_date=False):
                     {date_cols_conv}
                     CAST(OAEFF AS FLOAT) AS OAEFF,
                     CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
-                    CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', IdleTime) / 3600.0 AS FLOAT) AS IdleHrs
+                    CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL(IdleTime, '1900-01-01 00:00:00')) / 3600.0 AS FLOAT) AS IdleHrs
                 FROM {tbl}
                 WHERE CAST(entrydate AS DATE) BETWEEN ? AND ?
                   AND deleted = 0
@@ -320,11 +326,11 @@ def _aggregate_sql(union_sql, group_by_machine, dept_join=None):
 
 def _oaeff_combined_cte_sql(include_cnc=True, include_conv=True):
     """
-    Combined OAEFF CTE matching Plant Performance OAEFF Calculation logic:
-    1. Production table rows determine the OAEFF record count.
+    Combined OAEFF & Efficiency CTE matching Production Analysis / Plant Performance:
+    1. Production table rows determine the record count.
     2. Employee / Department tables are ONLY lookup information.
     3. OUTER APPLY (TOP 1) guarantees zero row duplication.
-    4. ONLY OAEFF is taken from all three production tables.
+    4. OAEFF, OPREFF, QFEFF, IdleHrs, and RejPct are calculated from the production tables.
     """
     sub_ctes = []
     select_parts = []
@@ -337,6 +343,10 @@ BasePE AS (
         LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
         CAST(proddate AS DATE) AS EntryDate,
         CAST(OAEFF AS FLOAT) AS OAEFF,
+        CAST(OPREFF AS FLOAT) AS OPREFF,
+        CAST(CASE WHEN QFNEW IS NOT NULL THEN (CASE WHEN QFNEW <= 1.0 AND QFNEW > 0 THEN QFNEW * 100.0 ELSE QFNEW END) ELSE 100.0 END AS FLOAT) AS QFEFF,
+        CAST((CASE WHEN idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, idlTime) > 0 THEN DATEDIFF(SECOND, 0, idlTime) ELSE ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0) END) / 3600.0 AS FLOAT) AS IdleHrs,
+        CAST(CASE WHEN (ISNULL(okqty, 0) + ISNULL(insprejqty, 0)) > 0 THEN (CAST(ISNULL(insprejqty, 0) AS FLOAT) / (ISNULL(okqty, 0) + ISNULL(insprejqty, 0))) * 100.0 ELSE 0.0 END AS FLOAT) AS RejPct,
         N'CNC' AS MachineType,
         N'ProductionEntry' AS SourceTable
     FROM ProductionEntry
@@ -344,7 +354,7 @@ BasePE AS (
       AND CAST(proddate AS DATE) BETWEEN ? AND ?
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
-      AND OAEFF IS NOT NULL
+      AND (OAEFF IS NOT NULL OR OPREFF IS NOT NULL)
 ),
 PE_WithDept AS (
     SELECT
@@ -353,6 +363,10 @@ PE_WithDept AS (
         PE.MachineNo,
         PE.EntryDate,
         PE.OAEFF,
+        PE.OPREFF,
+        PE.QFEFF,
+        PE.IdleHrs,
+        PE.RejPct,
         PE.MachineType,
         PE.SourceTable
     FROM BasePE PE
@@ -367,7 +381,7 @@ PE_WithDept AS (
         ORDER BY E.deptcode
     ) ELookup
 )""")
-        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM PE_WithDept")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, OPREFF, QFEFF, IdleHrs, RejPct, MachineType, SourceTable FROM PE_WithDept")
 
     if include_conv:
         sub_ctes.append("""
@@ -377,6 +391,10 @@ BaseCPE AS (
         LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
         CAST(entrydate AS DATE) AS EntryDate,
         CAST(OAEFF AS FLOAT) AS OAEFF,
+        CAST(eff AS FLOAT) AS OPREFF,
+        CAST(CASE WHEN QFNEW IS NOT NULL THEN (CASE WHEN QFNEW <= 1.0 AND QFNEW > 0 THEN QFNEW * 100.0 ELSE QFNEW END) ELSE 100.0 END AS FLOAT) AS QFEFF,
+        CAST(DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) / 3600.0 AS FLOAT) AS IdleHrs,
+        CAST(0 AS FLOAT) AS RejPct,
         N'Conventional' AS MachineType,
         N'ConvProductionEntry' AS SourceTable
     FROM ConvProductionEntry
@@ -384,7 +402,7 @@ BaseCPE AS (
       AND CAST(entrydate AS DATE) BETWEEN ? AND ?
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
-      AND OAEFF IS NOT NULL
+      AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
 ),
 CPE_WithDept AS (
     SELECT
@@ -393,6 +411,10 @@ CPE_WithDept AS (
         CPE.MachineNo,
         CPE.EntryDate,
         CPE.OAEFF,
+        CPE.OPREFF,
+        CPE.QFEFF,
+        CPE.IdleHrs,
+        CPE.RejPct,
         CPE.MachineType,
         CPE.SourceTable
     FROM BaseCPE CPE
@@ -407,7 +429,7 @@ CPE_WithDept AS (
         ORDER BY E.deptcode
     ) ELookup
 )""")
-        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM CPE_WithDept")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, OPREFF, QFEFF, IdleHrs, RejPct, MachineType, SourceTable FROM CPE_WithDept")
 
         sub_ctes.append("""
 BaseCPR AS (
@@ -416,6 +438,10 @@ BaseCPR AS (
         LTRIM(RTRIM(CAST(ISNULL(macno, N'') AS NVARCHAR(128)))) AS MachineNo,
         CAST(entrydate AS DATE) AS EntryDate,
         CAST(OAEFF AS FLOAT) AS OAEFF,
+        CAST(eff AS FLOAT) AS OPREFF,
+        CAST(CASE WHEN QFNEW IS NOT NULL THEN (CASE WHEN QFNEW <= 1.0 AND QFNEW > 0 THEN QFNEW * 100.0 ELSE QFNEW END) ELSE 100.0 END AS FLOAT) AS QFEFF,
+        CAST(DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) / 3600.0 AS FLOAT) AS IdleHrs,
+        CAST(CASE WHEN (ISNULL(qty, 0) + ISNULL(ScrapQty, 0)) > 0 THEN (CAST(ISNULL(ScrapQty, 0) AS FLOAT) / (ISNULL(qty, 0) + ISNULL(ScrapQty, 0))) * 100.0 ELSE 0.0 END AS FLOAT) AS RejPct,
         N'Conventional' AS MachineType,
         N'ConvProductionEntryRod' AS SourceTable
     FROM ConvProductionEntryRod
@@ -423,7 +449,7 @@ BaseCPR AS (
       AND CAST(entrydate AS DATE) BETWEEN ? AND ?
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
-      AND OAEFF IS NOT NULL
+      AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
 ),
 CPR_WithDept AS (
     SELECT
@@ -432,6 +458,10 @@ CPR_WithDept AS (
         CPR.MachineNo,
         CPR.EntryDate,
         CPR.OAEFF,
+        CPR.OPREFF,
+        CPR.QFEFF,
+        CPR.IdleHrs,
+        CPR.RejPct,
         CPR.MachineType,
         CPR.SourceTable
     FROM BaseCPR CPR
@@ -446,7 +476,7 @@ CPR_WithDept AS (
         ORDER BY E.deptcode
     ) ELookup
 )""")
-        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, MachineType, SourceTable FROM CPR_WithDept")
+        select_parts.append("SELECT OperatorName, Department, MachineNo, EntryDate, OAEFF, OPREFF, QFEFF, IdleHrs, RejPct, MachineType, SourceTable FROM CPR_WithDept")
 
     if not sub_ctes:
         return "", 0
@@ -585,15 +615,15 @@ def _fetch_efficiency_rows(cursor, start_date, end_date, include_cnc, include_co
                 LTRIM(RTRIM(ISNULL(MAX(OperatorName), N''))) AS Operator,
                 LTRIM(RTRIM(ISNULL(MAX(Department), N''))) AS Dept,
                 MachineNo AS MacNo,
-                ROUND(AVG(OAEFF), 2) AS AvgOAEFF,
-                ROUND(AVG(OAEFF), 2) AS AvgOPREFF,
-                CAST(100 AS FLOAT) AS AvgQFEFF,
-                CAST(0 AS FLOAT) AS IdleHrs,
-                CAST(0 AS FLOAT) AS RejPct
+                ROUND(AVG(COALESCE(OAEFF, 0)), 2) AS AvgOAEFF,
+                ROUND(AVG(COALESCE(OPREFF, 0)), 2) AS AvgOPREFF,
+                ROUND(AVG(COALESCE(QFEFF, 100)), 2) AS AvgQFEFF,
+                ROUND(SUM(ISNULL(IdleHrs, 0)), 2) AS IdleHrs,
+                ROUND(AVG(COALESCE(RejPct, 0)), 2) AS RejPct
             FROM CombinedOaeffEntries
             WHERE MachineNo IS NOT NULL AND LTRIM(RTRIM(MachineNo)) <> N''
             GROUP BY MachineNo
-            ORDER BY AVG(OAEFF) DESC, MachineNo ASC;
+            ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, MachineNo ASC;
         """
     else:
         sql = f"""
@@ -602,15 +632,15 @@ def _fetch_efficiency_rows(cursor, start_date, end_date, include_cnc, include_co
                 CASE WHEN OperatorName IS NULL OR LTRIM(RTRIM(OperatorName)) = '' THEN 'Unassigned' ELSE OperatorName END AS Operator,
                 LTRIM(RTRIM(ISNULL(MAX(Department), N''))) AS Dept,
                 MachineNo AS MacNo,
-                ROUND(AVG(OAEFF), 2) AS AvgOAEFF,
-                ROUND(AVG(OAEFF), 2) AS AvgOPREFF,
-                CAST(100 AS FLOAT) AS AvgQFEFF,
-                CAST(0 AS FLOAT) AS IdleHrs,
-                CAST(0 AS FLOAT) AS RejPct
+                ROUND(AVG(COALESCE(OAEFF, 0)), 2) AS AvgOAEFF,
+                ROUND(AVG(COALESCE(OPREFF, 0)), 2) AS AvgOPREFF,
+                ROUND(AVG(COALESCE(QFEFF, 100)), 2) AS AvgQFEFF,
+                ROUND(SUM(ISNULL(IdleHrs, 0)), 2) AS IdleHrs,
+                ROUND(AVG(COALESCE(RejPct, 0)), 2) AS RejPct
             FROM CombinedOaeffEntries
             WHERE MachineNo IS NOT NULL AND LTRIM(RTRIM(MachineNo)) <> N''
             GROUP BY CASE WHEN OperatorName IS NULL OR LTRIM(RTRIM(OperatorName)) = '' THEN 'Unassigned' ELSE OperatorName END, MachineNo
-            ORDER BY AVG(OAEFF) DESC, Operator ASC, MachineNo ASC;
+            ORDER BY AVG(COALESCE(OAEFF, OPREFF, 0)) DESC, Operator ASC, MachineNo ASC;
         """
     cursor.execute(sql, params)
     return cursor.fetchall() or []
@@ -666,7 +696,7 @@ def _fetch_combined_efficiency_rows(
             MachineNo AS MacNo,
             EntryDate,
             OAEFF,
-            OAEFF AS OPREFF,
+            OPREFF,
             MachineType AS MacType,
             SourceTable
         FROM CombinedOaeffEntries
@@ -1064,7 +1094,7 @@ def _get_avg_idle_time(cursor, start_date, end_date):
     sql = """
     WITH IdleData AS
     (
-        SELECT DATEDIFF(SECOND,'19000101',ISNULL(idlTime,'19000101')) AS IdleSeconds
+        SELECT CASE WHEN idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, idlTime) > 0 THEN DATEDIFF(SECOND, 0, idlTime) ELSE ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0) END AS IdleSeconds
         FROM ProductionEntry
         WHERE deleted = 0 AND proddate >= ? AND proddate < DATEADD(DAY,1,?)
         UNION ALL

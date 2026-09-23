@@ -1078,12 +1078,16 @@ export default function ProductionAnalysis() {
   const manEffMeta = kpiValues.manEfficiency > 0 ? `${kpiValues.manEfficiency >= 85 ? "✔ Above" : "↑ Target:"} 85%` : "Target: 85% ↑";
   const totalAcceptedSecs = idleBreakdown.accepted.total_seconds !== undefined
     ? Number(idleBreakdown.accepted.total_seconds)
-    : Math.round(Number(idleBreakdown.accepted.total_hours || 0) * 3600);
+    : (kpiValues.idleAcceptedSeconds !== undefined
+        ? Number(kpiValues.idleAcceptedSeconds)
+        : Math.round(Number(idleBreakdown.accepted.total_hours || 0) * 3600));
   const totalNonAcceptedSecs = idleBreakdown.non_accepted.total_seconds !== undefined
     ? Number(idleBreakdown.non_accepted.total_seconds)
     : Math.round(Number(idleBreakdown.non_accepted.total_hours || 0) * 3600);
 
-  const totalAcceptedHrs = Number(idleBreakdown.accepted.total_hours) || 0;
+  const totalAcceptedHrs = (idleBreakdown.accepted.total_hours !== undefined && idleBreakdown.accepted.total_hours !== null && idleBreakdown.accepted.total_hours !== "")
+    ? Number(idleBreakdown.accepted.total_hours)
+    : (Number(kpiValues.idleAcceptedHours) || 0);
   const totalNonAccepted = Number(idleBreakdown.non_accepted.total_hours) || 0;
   const totalLoss = idleBreakdown.non_accepted.total_loss || 0;
 
@@ -1099,7 +1103,11 @@ export default function ProductionAnalysis() {
     ? (totalAcceptedHrs + totalNonAccepted)
     : (Number(kpiValues.idleHours) || 0);
 
-  const totProdSeconds = Math.max(0, machineRunningSecs - totalIdleSecs);
+  const settingSecs = kpiValues.settingSeconds !== undefined
+    ? Number(kpiValues.settingSeconds)
+    : Math.round(Number(kpiValues.settingHours || 0) * 3600);
+
+  const totProdSeconds = Math.max(0, machineRunningSecs - (settingSecs + totalAcceptedSecs));
   const totProductionHours = kpiValues.totProductionHoursDisplay || (totProdSeconds / 3600.0);
 
   // ── Unique option lists for Daily Production Details ──
@@ -1772,7 +1780,7 @@ export default function ProductionAnalysis() {
       .then(data => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
-          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
+          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, idleAcceptedHours: d.idleAcceptedHours ?? 0.0, idleAcceptedSeconds: d.idleAcceptedSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, settingSeconds: d.settingSeconds ?? 0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
           if (d.machines && Array.isArray(d.machines)) {
             setMachines(d.machines);
           }
