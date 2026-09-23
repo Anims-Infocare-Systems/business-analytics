@@ -50,6 +50,7 @@ const premiumAreaPlugin = {
 };
 
 Chart.register(...registerables, ChartDataLabels, premiumAreaPlugin);
+Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 const API_BASE = resolveApiBase();
 function api(path) {
@@ -168,7 +169,7 @@ const CHART_DEFS = [
     config: {
       type: "line",
       data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: "Efficiency %", data: [74,78,72,80,76,83,81,85,79,84,88,90], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", tension: 0.4, fill: true, pointRadius: 3 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { min: 60, max: 100, ticks: { font: { size: 9 } } } } },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } },
     },
   },
   {
@@ -177,7 +178,7 @@ const CHART_DEFS = [
     config: {
       type: "bar",
       data: { labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], datasets: [{ label: "Efficiency %", data: [74,78,72,80,76,83,81,85,79,84,88,90], backgroundColor: "#06b6d4", borderRadius: 4 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { min: 60, max: 100, ticks: { font: { size: 9 } } } } },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { min: 0, max: 100, ticks: { font: { size: 9 }, callback: val => val + '%' } } } },
     },
   },
   {
@@ -861,7 +862,7 @@ function FilterDropdown({ label, icon: Icon, options, value, onChange }) {
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
-      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 6, top: "auto", left: rect.left } : { top: rect.bottom + 6, bottom: "auto", left: rect.left });
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 6, top: "auto", left: rect.left, transformOrigin: "bottom center" } : { top: rect.bottom + 6, bottom: "auto", left: rect.left, transformOrigin: "top center" });
     };
     calc();
     window.addEventListener("resize", calc);
@@ -917,7 +918,7 @@ function OperatorDropdown({ value, onChange, operators, loading }) {
       const spaceAbove = rect.top;
       const estimatedMenuH = Math.min(operators.length * 34 + 8, 250);
       const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
-      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: Math.max(rect.width, 170), transformOrigin: "bottom center" } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: Math.max(rect.width, 170), transformOrigin: "top center" });
     };
     calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
@@ -929,13 +930,15 @@ function OperatorDropdown({ value, onChange, operators, loading }) {
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
-        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
-          {operators.length === 0 ? (<div style={{ padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>No operators found</div>) : operators.map(opr => (
-            <button key={opr} className={`ch-dd__item ${value === opr ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(opr); setOpen(false); }} type="button">
-              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><User size={12} /></span><span>{opr}</span>
-              {value === opr && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
-            </button>
-          ))}
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="ch-dd__scroll-list">
+            {operators.length === 0 ? (<div className="ch-dd__empty">No operators found</div>) : operators.map(opr => (
+              <button key={opr} className={`ch-dd__item ${value === opr ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(opr); setOpen(false); }} type="button">
+                <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><User size={12} /></span><span>{opr}</span>
+                {value === opr && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              </button>
+            ))}
+          </div>
         </div>, document.body
       )}
     </div>
@@ -999,7 +1002,7 @@ function MachineDropdown({ value, onChange, machines, loading }) {
       const listLen = filteredMachines.length + 2;
       const estimatedMenuH = Math.min(listLen * 34 + 8 + 72, 280);
       const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
-      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "bottom center" } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "top center" });
     };
     calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
@@ -1040,35 +1043,25 @@ function MachineDropdown({ value, onChange, machines, loading }) {
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
-        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "280px", overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "300px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="ch-dd__search-wrap">
             <input 
               type="text" 
               placeholder="Search macno..." 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)}
-              style={{ 
-                width: "100%", 
-                padding: "5px 8px", 
-                fontSize: "12px", 
-                border: "1px solid #cbd5e1", 
-                borderRadius: "4px",
-                outline: "none",
-                backgroundColor: "#ffffff",
-                color: "#1e293b"
-              }} 
+              className="ch-dd__search-input"
               onClick={e => e.stopPropagation()} 
             />
           </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div className="ch-dd__scroll-list">
             <button
               className={`ch-dd__item ${isAll ? "ch-dd__item--active" : ""}`}
               onClick={() => toggleMachine("")}
               type="button"
-              style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", width: "100%" }}
             >
-              <input type="checkbox" checked={isAll} readOnly style={{ accentColor: "#3b82f6", cursor: "pointer", width: 13, height: 13, pointerEvents: "none" }} />
-              <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span>
+              <input type="checkbox" checked={isAll} readOnly className="ch-dd__checkbox" />
+              <span className="ch-dd__item-icon"><Settings size={12} /></span>
               <span style={{ fontWeight: isAll ? 600 : 400 }}>All Machines (Top 10)</span>
             </button>
             {filteredMachines.map(mac => {
@@ -1079,33 +1072,22 @@ function MachineDropdown({ value, onChange, machines, loading }) {
                   className={`ch-dd__item ${checked ? "ch-dd__item--active" : ""}`}
                   onClick={() => toggleMachine(mac)}
                   type="button"
-                  style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", width: "100%" }}
                 >
-                  <input type="checkbox" checked={checked} readOnly style={{ accentColor: "#3b82f6", cursor: "pointer", width: 13, height: 13, pointerEvents: "none" }} />
-                  <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Settings size={12} /></span>
+                  <input type="checkbox" checked={checked} readOnly className="ch-dd__checkbox" />
+                  <span className="ch-dd__item-icon"><Settings size={12} /></span>
                   <span style={{ fontWeight: checked ? 600 : 400 }}>{mac}</span>
                 </button>
               );
             })}
             {filteredMachines.length === 0 && (
-              <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No machines found</div>
+              <div className="ch-dd__empty">No machines found</div>
             )}
           </div>
-          <div style={{ padding: "6px 8px", borderTop: "1px solid #e2e8f0", position: "sticky", bottom: 0, background: "#ffffff", zIndex: 10, display: "flex", justifyContent: "flex-end" }}>
+          <div className="ch-dd__footer">
             <button
               type="button"
               onClick={handleClose}
-              style={{
-                padding: "4px 12px",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "#ffffff",
-                backgroundColor: "#3b82f6",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
-              }}
+              className="ch-dd__apply-btn"
             >
               Apply ({draft.length === 0 ? "Top 10" : `${draft.length} Selected`})
             </button>
@@ -1148,7 +1130,7 @@ function VendorDropdown({ value, onChange, vendors, loading }) {
       const listLen = filteredVendors.length + 1;
       const estimatedMenuH = Math.min(listLen * 34 + 8 + 36, 250);
       const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
-      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "bottom center" } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "top center" });
     };
     calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
@@ -1161,41 +1143,34 @@ function VendorDropdown({ value, onChange, vendors, loading }) {
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
-        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
-          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "260px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="ch-dd__search-wrap">
             <input 
               type="text" 
               placeholder="Search vendor..." 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)}
-              style={{ 
-                width: "100%", 
-                padding: "5px 8px", 
-                fontSize: "12px", 
-                border: "1px solid #cbd5e1", 
-                borderRadius: "4px",
-                outline: "none",
-                backgroundColor: "#ffffff",
-                color: "#1e293b"
-              }} 
+              className="ch-dd__search-input"
               onClick={e => e.stopPropagation()} 
             />
           </div>
-          <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
-            <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
-            <span>All Vendors</span>
-            {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
-          </button>
-          {filteredVendors.map(v => (
-            <button key={v} className={`ch-dd__item ${value === v ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(v); setOpen(false); }} type="button">
+          <div className="ch-dd__scroll-list">
+            <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
               <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
-              <span>{v}</span>
-              {value === v && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              <span>All Vendors</span>
+              {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
             </button>
-          ))}
-          {filteredVendors.length === 0 && (
-            <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No vendors found</div>
-          )}
+            {filteredVendors.map(v => (
+              <button key={v} className={`ch-dd__item ${value === v ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(v); setOpen(false); }} type="button">
+                <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+                <span>{v}</span>
+                {value === v && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              </button>
+            ))}
+            {filteredVendors.length === 0 && (
+              <div className="ch-dd__empty">No vendors found</div>
+            )}
+          </div>
         </div>, document.body
       )}
     </div>
@@ -1234,7 +1209,7 @@ function SupplierDropdown({ value, onChange, suppliers, loading }) {
       const listLen = filteredSuppliers.length + 1;
       const estimatedMenuH = Math.min(listLen * 34 + 8 + 36, 250);
       const openUp = spaceBelow < estimatedMenuH && spaceAbove > spaceBelow;
-      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: rect.width } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: rect.width });
+      setMenuStyle(openUp ? { bottom: window.innerHeight - rect.top + 4, top: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "bottom center" } : { top: rect.bottom + 4, bottom: "auto", left: rect.left, minWidth: Math.max(rect.width, 190), transformOrigin: "top center" });
     };
     calc(); window.addEventListener("resize", calc); window.addEventListener("scroll", calc, true);
     return () => { window.removeEventListener("resize", calc); window.removeEventListener("scroll", calc, true); };
@@ -1247,41 +1222,34 @@ function SupplierDropdown({ value, onChange, suppliers, loading }) {
         <svg className={`ch-dd__caret ${open ? "ch-dd__caret--up" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6,9 12,15 18,9" /></svg>
       </button>
       {open && createPortal(
-        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "250px", overflowY: "auto" }}>
-          <div className="ch-dd__search-wrap" style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", position: "sticky", top: 0, background: "#ffffff", zIndex: 10 }}>
+        <div className="ch-dd__menu ch-dd__menu--compact" ref={menuRef} style={{ ...menuStyle, maxHeight: "260px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="ch-dd__search-wrap">
             <input 
               type="text" 
               placeholder="Search supplier..." 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)}
-              style={{ 
-                width: "100%", 
-                padding: "5px 8px", 
-                fontSize: "12px", 
-                border: "1px solid #cbd5e1", 
-                borderRadius: "4px",
-                outline: "none",
-                backgroundColor: "#ffffff",
-                color: "#1e293b"
-              }} 
+              className="ch-dd__search-input"
               onClick={e => e.stopPropagation()} 
             />
           </div>
-          <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
-            <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
-            <span>All Suppliers</span>
-            {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
-          </button>
-          {filteredSuppliers.map(s => (
-            <button key={s} className={`ch-dd__item ${value === s ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(s); setOpen(false); }} type="button">
+          <div className="ch-dd__scroll-list">
+            <button className={`ch-dd__item ${!value ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(""); setOpen(false); }} type="button">
               <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
-              <span>{s}</span>
-              {value === s && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              <span>All Suppliers</span>
+              {!value && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
             </button>
-          ))}
-          {filteredSuppliers.length === 0 && (
-            <div style={{ padding: "10px 14px", fontSize: 11, color: "#94a3b8", textAlign: "center" }}>No suppliers found</div>
-          )}
+            {filteredSuppliers.map(s => (
+              <button key={s} className={`ch-dd__item ${value === s ? "ch-dd__item--active" : ""}`} onClick={() => { onChange(s); setOpen(false); }} type="button">
+                <span className="ch-dd__item-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={12} /></span>
+                <span>{s}</span>
+                {value === s && (<svg className="ch-dd__check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>)}
+              </button>
+            ))}
+            {filteredSuppliers.length === 0 && (
+              <div className="ch-dd__empty">No suppliers found</div>
+            )}
+          </div>
         </div>, document.body
       )}
     </div>
@@ -1718,7 +1686,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
       {error && !loading && (<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.9)", borderRadius: 12, zIndex: 5, padding: 16 }}><div style={{ display: "flex", alignItems: "center" }}><AlertTriangle size={24} style={{ color: "#ef4444" }} /></div><div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, textAlign: "center" }}>{error}</div></div>)}
       <div className={`ch-canvas-wrap ch-canvas-wrap--${def.type}`} data-category={def.category}><canvas ref={canvasRef} /></div>
       <div className="ch-card__actions">
-        <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr, def.id === "purchase-2" ? selectedSupplier : selectedVendor, selectedMac, setSelectedMac)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
+        <button className="ch-action-btn ch-action-btn--preview" onClick={() => onPreview(def, selectedOpr, def.id === "purchase-2" ? selectedSupplier : selectedVendor, selectedMac, setSelectedMac, setSelectedOpr)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>Preview</button>
         <button className="ch-action-btn ch-action-btn--download" onClick={handleDownload}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7,10 12,15 17,10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>Download</button>
       </div>
     </div>
@@ -1953,7 +1921,7 @@ function ModalTypeDropdown({ value, onChange, allowedTypes = ALL_MODAL_TYPES }) 
 }
 
 // ─── Preview Modal ────────────────────────────────────────────
-function PreviewModal({ def, onClose, initialDateRange, initialOperator, initialVendor, initialMachine, onMachineChange }) {
+function PreviewModal({ def, onClose, initialDateRange, initialOperator, initialVendor, initialMachine, onMachineChange, onOperatorChange }) {
   const [modalDateRange, setModalDateRange] = useState(initialDateRange?.from ? initialDateRange : { from: null, to: null });
   const [modalOperator, setModalOperator] = useState(initialOperator || null);
   const [operators, setOperators] = useState([]);
@@ -1966,6 +1934,11 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
   
   const prevTypeRef = useRef(def.config.type);
   const prevDateRef = useRef(initialDateRange);
+
+  const handleOprChange = (newOpr) => {
+    setModalOperator(newOpr);
+    if (onOperatorChange) onOperatorChange(newOpr);
+  };
 
   // ✅ Machine states for modal
   const [machines, setMachines] = useState([]);
@@ -1990,7 +1963,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
       setOprLoading(true);
       fetch(api("/production/operators/"), { credentials: "include" })
         .then(res => res.json())
-        .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); if (!modalOperator) setModalOperator(data.default || data.operators[0]); } })
+        .then(data => { setOprLoading(false); if (data.operators && data.operators.length > 0) { setOperators(data.operators); if (!modalOperator && !initialOperator) setModalOperator(data.default || data.operators[0]); } })
         .catch(err => { setOprLoading(false); console.error(err); });
     }
     if (def.id === "production-3" || def.id === "production-4") {
@@ -2160,7 +2133,17 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
-              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Operator Efficiency: ${modalOperator || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({
+                ...def.config.options,
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 10 }, callback: val => val + '%' } }
+                },
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Operator Efficiency: ${modalOperator || ''} ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                }
+              }, modalChartType))
             });
           }
           else if (def.id === "production-2") {
@@ -2168,7 +2151,17 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
-              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Overall Operator Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({
+                ...def.config.options,
+                scales: {
+                  ...def.config.options.scales,
+                  y: { min: 0, max: 100, ticks: { font: { size: 10 }, callback: val => val + '%' } }
+                },
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: { display: true, text: `Overall Operator Efficiency ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } }
+                }
+              }, modalChartType))
             });
           }
           else if (def.id === "production-3") {
@@ -2352,7 +2345,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
         <div className="ch-modal__hd" style={{ backgroundColor: "#ffffff" }}>
           <div className="ch-modal__hd-left">{def.tags.map(t => <span key={t} className={`ch-tag ch-tag--${def.category}`}>{t}</span>)}</div>
           <div className="ch-modal__hd-right" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-            {def.id === "production-1" && (<OperatorDropdown value={modalOperator} onChange={setModalOperator} operators={operators} loading={oprLoading} />)}
+            {def.id === "production-1" && (<OperatorDropdown value={modalOperator} onChange={handleOprChange} operators={operators} loading={oprLoading} />)}
             {(def.id === "production-3" || def.id === "production-4") && (<MachineDropdown value={selectedMac} onChange={handleMacChange} machines={machines} loading={macLoading} />)}
             {def.id === "vendor-1" && (<VendorDropdown value={modalVendor} onChange={setModalVendor} vendors={vendors} loading={vendorLoading} />)}
             {def.id === "purchase-2" && (<SupplierDropdown value={modalVendor} onChange={setModalVendor} suppliers={vendors} loading={vendorLoading} />)}
@@ -2429,7 +2422,7 @@ export default function Charts() {
   const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val }));
   const reset = () => { setFilters({ category: "all", type: "all" }); setDateRange({ from: null, to: null }); };
   const isFiltered = filters.category !== "all" || filters.type !== "all" || !!dateRange.from;
-  const handlePreview = (def, operator = null, vendor = null, machine = null, onMachineChange = null) => setPreview({ def, dateRange: effectiveDateRange, operator, vendor, machine, onMachineChange });
+  const handlePreview = (def, operator = null, vendor = null, machine = null, onMachineChange = null, onOperatorChange = null) => setPreview({ def, dateRange: effectiveDateRange, operator, vendor, machine, onMachineChange, onOperatorChange });
 
   // ✅ Persist date range to sessionStorage on every change
   useEffect(() => {
@@ -2466,7 +2459,7 @@ export default function Charts() {
           <button className="ch-filter-bar__reset ch-filter-bar__reset--lg" onClick={reset}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="1,4 1,10 7,10" /><path d="M3.51 15a9 9 0 1 0 .49-3.5" /></svg>Reset Filters</button>
         </div>
       )}
-      {preview && (<PreviewModal def={preview.def} initialDateRange={preview.dateRange} initialOperator={preview.operator} initialVendor={preview.vendor} initialMachine={preview.machine} onMachineChange={preview.onMachineChange} onClose={() => setPreview(null)} />)}
+      {preview && (<PreviewModal def={preview.def} initialDateRange={preview.dateRange} initialOperator={preview.operator} initialVendor={preview.vendor} initialMachine={preview.machine} onMachineChange={preview.onMachineChange} onOperatorChange={preview.onOperatorChange} onClose={() => setPreview(null)} />)}
     </div>
   );
 }

@@ -840,7 +840,11 @@ def quality_analysis_summary(request):
     # Compute additional values
     total_passed = max(0, total_inspected - total_rejected - total_rework)
     pass_rate_pct = round((total_passed / total_inspected) * 100, 1) if total_inspected > 0 else 0.0
-    rej_rate_pct = round((total_rejected / total_inspected) * 100, 1) if total_inspected > 0 else 0.0
+    rej_rate_raw = (total_rejected / total_inspected) * 100 if total_inspected > 0 else 0.0
+    if total_rejected > 0 and rej_rate_raw < 0.1:
+        rej_rate_pct = f"{rej_rate_raw:.2f}"
+    else:
+        rej_rate_pct = f"{round(rej_rate_raw, 1)}"
     rwk_rate_pct = round((total_rework / total_inspected) * 100, 1) if total_inspected > 0 else 0.0
 
     total_scrap = int(total_rejected * 0.35)  # 35% of rejects end up as scrap
@@ -1008,6 +1012,9 @@ def quality_analysis_charts(request):
     db_pareto_success = False
     pareto_labels = []
     pareto_counts = []
+    db_rework_pareto_success = False
+    rework_pareto_labels = []
+    rework_pareto_counts = []
     db_defect_donut_success = False
     total_all_cats = 0
     pct_mat_rej = 0.0
@@ -1583,10 +1590,8 @@ def quality_analysis_charts(request):
                 _q_lower = q.lower()
                 qrows = [r for r in qrows if _q_lower in (str(r[2]) or "").lower()]
 
-            reason_qty_map = {}
-            total_qty = 0
-            critical_qty = 0
-            minor_qty = 0
+            rej_reason_map = {}
+            rwk_reason_map = {}
             for r in qrows:
                 reason_str = str(r[3]).strip() if r[3] else ""
                 type_val = r[4]
@@ -1597,25 +1602,26 @@ def quality_analysis_charts(request):
                     reasons_list = ["Surface defects" if type_val == "Rejection" else "Rework Needed"]
 
                 for rname in reasons_list:
-                    total_qty += qty_val
                     if type_val == "Rejection":
-                        critical_qty += qty_val
+                        rej_reason_map[rname] = rej_reason_map.get(rname, 0) + qty_val
                     else:
-                        minor_qty += qty_val
+                        rwk_reason_map[rname] = rwk_reason_map.get(rname, 0) + qty_val
 
-                    if rname in reason_qty_map:
-                        reason_qty_map[rname] += qty_val
-                    else:
-                        reason_qty_map[rname] = qty_val
-
-            if reason_qty_map:
-                sorted_reasons = sorted(reason_qty_map.items(), key=lambda x: x[1], reverse=True)
-                # Use top 7 for visual consistency with Defect Cause Analysis card
+            if rej_reason_map:
+                sorted_reasons = sorted(rej_reason_map.items(), key=lambda x: x[1], reverse=True)
                 for name, qty in sorted_reasons[:7]:
                     pareto_labels.append(name)
                     pareto_counts.append(qty)
                 if pareto_counts:
                     db_pareto_success = True
+
+            if rwk_reason_map:
+                sorted_rwk = sorted(rwk_reason_map.items(), key=lambda x: x[1], reverse=True)
+                for name, qty in sorted_rwk[:7]:
+                    rework_pareto_labels.append(name)
+                    rework_pareto_counts.append(qty)
+                if rework_pareto_counts:
+                    db_rework_pareto_success = True
         except Exception as ex:
             print("Error executing Pareto database query:", ex)
 
@@ -1868,7 +1874,7 @@ def quality_analysis_charts(request):
         "fy": fy_label
     }
 
-    # 5. Top Defect Causes — Pareto
+    # 5. Top Defect Causes — Pareto (Rejection)
     if not db_pareto_success:
         pareto_labels = []
         pareto_counts = []
@@ -1911,12 +1917,52 @@ def quality_analysis_charts(request):
         ]
     }
 
+    # 5b. Rework Pareto Chart
+    total_rwk_pareto = sum(rework_pareto_counts)
+    rwk_cum_pcts = []
+    rwk_running_sum = 0
+    for cnt in rework_pareto_counts:
+        rwk_running_sum += cnt
+        rwk_cum_pcts.append(round((rwk_running_sum / total_rwk_pareto) * 100, 1) if total_rwk_pareto > 0 else 0.0)
+
+    rwk_colors_palette = ["#f59e0b", "#f97316", "#ea580c", "#d97706", "#b45309", "#ca8a04", "#eab308"]
+    rwk_pareto_colors = [rwk_colors_palette[i % len(rwk_colors_palette)] for i in range(len(rework_pareto_labels))]
+
+    rework_pareto_chart = {
+        "labels": rework_pareto_labels,
+        "datasets": [
+            {
+                "label": "Rework Count",
+                "data": rework_pareto_counts,
+                "backgroundColor": rwk_pareto_colors,
+                "borderRadius": 5,
+                "yAxisID": "y"
+            },
+            {
+                "label": "Cumulative %",
+                "data": rwk_cum_pcts,
+                "type": "line",
+                "borderColor": "#f59e0b",
+                "backgroundColor": "rgba(245,158,11,0.08)",
+                "borderWidth": 2.5,
+                "tension": 0.4,
+                "fill": True,
+                "pointRadius": 4,
+                "pointBackgroundColor": "#f59e0b",
+                "pointBorderColor": "#fff",
+                "pointBorderWidth": 2,
+                "yAxisID": "y2"
+            }
+        ]
+    }
+
     return Response({
         "trend": trend_chart,
         "result_donut": result_donut,
         "defect_donut": defect_donut,
         "mac_rejection_ppm": mac_rejection_ppm,
-        "pareto": pareto_chart
+        "pareto": pareto_chart,
+        "rework_pareto": rework_pareto_chart
     })
 
 
@@ -2173,6 +2219,8 @@ def quality_analysis_defect_causes(request):
 
     processed_causes = []
     class_boxes = []
+    rework_causes = []
+    rework_class_boxes = []
     db_success = False
 
     try:
@@ -2406,10 +2454,10 @@ def quality_analysis_defect_causes(request):
             _q_lower = q.lower()
             qrows = [r for r in qrows if _q_lower in (str(r[2]) or "").lower()]
 
-        reason_qty_map = {}
-        total_qty = 0
-        critical_qty = 0
-        minor_qty = 0
+        rej_reason_map = {}
+        rwk_reason_map = {}
+        total_rej_qty = 0
+        total_rwk_qty = 0
 
         for r in qrows:
             reason_str = str(r[3]).strip() if r[3] else ""
@@ -2422,53 +2470,53 @@ def quality_analysis_defect_causes(request):
                 reasons_list = ["Surface defects" if type_val == "Rejection" else "Rework Needed"]
 
             for rname in reasons_list:
-                total_qty += qty_val
                 if type_val == "Rejection":
-                    critical_qty += qty_val
+                    total_rej_qty += qty_val
+                    rej_reason_map[rname] = rej_reason_map.get(rname, 0) + qty_val
                 else:
-                    minor_qty += qty_val
+                    total_rwk_qty += qty_val
+                    rwk_reason_map[rname] = rwk_reason_map.get(rname, 0) + qty_val
 
-                if rname in reason_qty_map:
-                    reason_qty_map[rname] += qty_val
-                else:
-                    reason_qty_map[rname] = qty_val
+        def _process_causes_list(target_map, colors_palette):
+            sorted_reasons = sorted(target_map.items(), key=lambda x: x[1], reverse=True)
+            top_reasons = sorted_reasons[:7]
+            total_displayed = sum(qty for _, qty in top_reasons)
+            max_qty = top_reasons[0][1] if len(top_reasons) > 0 else 1
 
-        sorted_reasons = sorted(reason_qty_map.items(), key=lambda x: x[1], reverse=True)
-        top_reasons = sorted_reasons[:7]
-        total_displayed_qty = sum(qty for _, qty in top_reasons)
-        max_qty = top_reasons[0][1] if len(top_reasons) > 0 else 1
-        colors_palette = ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#94a3b8", "#06b6d4", "#10b981"]
+            if total_displayed > 0:
+                raw_pcts = [(qty / total_displayed) * 100 for _, qty in top_reasons]
+                rounded_pcts = [round(p, 1) for p in raw_pcts]
+                diff = round(100.0 - sum(rounded_pcts), 1)
+                if diff != 0 and len(rounded_pcts) > 0:
+                    rounded_pcts[0] = round(rounded_pcts[0] + diff, 1)
+                calculated_pcts = rounded_pcts
+            else:
+                calculated_pcts = [0.0] * len(top_reasons)
 
-        calculated_pcts = []
-        if total_displayed_qty > 0:
-            raw_pcts = [(qty / total_displayed_qty) * 100 for _, qty in top_reasons]
-            rounded_pcts = [round(p, 1) for p in raw_pcts]
-            diff = round(100.0 - sum(rounded_pcts), 1)
-            if diff != 0 and len(rounded_pcts) > 0:
-                rounded_pcts[0] = round(rounded_pcts[0] + diff, 1)
-            calculated_pcts = rounded_pcts
-        else:
-            calculated_pcts = [0.0] * len(top_reasons)
+            result = []
+            for idx, (name, qty) in enumerate(top_reasons):
+                pct_val = calculated_pcts[idx]
+                bar_w = int((qty / max_qty) * 100) if max_qty > 0 else 0
+                color = colors_palette[idx % len(colors_palette)]
+                result.append({
+                    "name": name,
+                    "count": str(qty),
+                    "pct": f"{pct_val}%",
+                    "barW": bar_w,
+                    "color": color
+                })
+            return result
 
-        for idx, (name, qty) in enumerate(top_reasons):
-            pct_val = calculated_pcts[idx]
-            bar_w = int((qty / max_qty) * 100) if max_qty > 0 else 0
-            color = colors_palette[idx % len(colors_palette)]
-            processed_causes.append({
-                "name": name,
-                "count": str(qty),
-                "pct": f"{pct_val}%",
-                "barW": bar_w,
-                "color": color
-            })
+        colors_rejection = ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#94a3b8", "#06b6d4", "#10b981"]
+        processed_causes = _process_causes_list(rej_reason_map, colors_rejection)
 
-        crit_box_qty = int(critical_qty * 0.6)
-        major_box_qty = critical_qty - crit_box_qty
-        minor_box_qty = minor_qty
-        box_total = crit_box_qty + major_box_qty + minor_box_qty
-        if box_total == 0:
-            box_total = 1
+        colors_rework = ["#f59e0b", "#f97316", "#ea580c", "#d97706", "#b45309", "#ca8a04", "#eab308"]
+        rework_causes = _process_causes_list(rwk_reason_map, colors_rework)
 
+        crit_box_qty = int(total_rej_qty * 0.6)
+        major_box_qty = int(total_rej_qty * 0.3)
+        minor_box_qty = total_rej_qty - crit_box_qty - major_box_qty
+        box_total = total_rej_qty if total_rej_qty > 0 else 1
         class_boxes = [
             {
                 "bg": "#fee2e2",
@@ -2499,7 +2547,41 @@ def quality_analysis_defect_causes(request):
             }
         ]
 
-        if len(processed_causes) > 0:
+        rw_crit_qty = int(total_rwk_qty * 0.5)
+        rw_major_qty = int(total_rwk_qty * 0.35)
+        rw_minor_qty = total_rwk_qty - rw_crit_qty - rw_major_qty
+        rw_box_total = total_rwk_qty if total_rwk_qty > 0 else 1
+        rework_class_boxes = [
+            {
+                "bg": "#ffedd5",
+                "lbl": "Critical",
+                "val": str(rw_crit_qty),
+                "pct": f"{round((rw_crit_qty/rw_box_total)*100, 1)}%",
+                "lc": "#c2410c",
+                "vc": "#7c2d12",
+                "pc": "#9a3412"
+            },
+            {
+                "bg": "#fef3c7",
+                "lbl": "Major",
+                "val": str(rw_major_qty),
+                "pct": f"{round((rw_major_qty/rw_box_total)*100, 1)}%",
+                "lc": "#b45309",
+                "vc": "#78350f",
+                "pc": "#92400e"
+            },
+            {
+                "bg": "#fef9c3",
+                "lbl": "Minor",
+                "val": str(rw_minor_qty),
+                "pct": f"{round((rw_minor_qty/rw_box_total)*100, 1)}%",
+                "lc": "#854d0e",
+                "vc": "#713f12",
+                "pc": "#854d0e"
+            }
+        ]
+
+        if len(processed_causes) > 0 or len(rework_causes) > 0:
             db_success = True
 
         cursor.close()
@@ -2510,6 +2592,7 @@ def quality_analysis_defect_causes(request):
     # ── FALLBACK ENGINE (Used if query returns empty or database offline) ──
     if not db_success:
         processed_causes = []
+        rework_causes = []
         class_boxes = [
             {
                 "bg": "#fee2e2",
@@ -2539,10 +2622,41 @@ def quality_analysis_defect_causes(request):
                 "pc": "#92400e"
             }
         ]
+        rework_class_boxes = [
+            {
+                "bg": "#ffedd5",
+                "lbl": "Critical",
+                "val": "0",
+                "pct": "0.0%",
+                "lc": "#c2410c",
+                "vc": "#7c2d12",
+                "pc": "#9a3412"
+            },
+            {
+                "bg": "#fef3c7",
+                "lbl": "Major",
+                "val": "0",
+                "pct": "0.0%",
+                "lc": "#b45309",
+                "vc": "#78350f",
+                "pc": "#92400e"
+            },
+            {
+                "bg": "#fef9c3",
+                "lbl": "Minor",
+                "val": "0",
+                "pct": "0.0%",
+                "lc": "#854d0e",
+                "vc": "#713f12",
+                "pc": "#854d0e"
+            }
+        ]
 
     return Response({
         "causes": processed_causes,
-        "classes": class_boxes
+        "classes": class_boxes,
+        "rework_causes": rework_causes,
+        "rework_class_boxes": rework_class_boxes
     })
 
 
@@ -2972,7 +3086,9 @@ def quality_analysis_records(request):
                         Type,
                         Qty,
                         InspType,
-                        Description
+                        Description,
+                        MatRejQty,
+                        MacRejQty
                     FROM
                     (
                         -------------------------------------------------------------------
@@ -2986,7 +3102,9 @@ def quality_analysis_records(request):
                             'Rejection' AS Type,
                             Combined.RejectionQty AS Qty,
                             Combined.InspType,
-                            Combined.Description
+                            Combined.Description,
+                            Combined.MatRejQty,
+                            Combined.MacRejQty
                         FROM
                         (
                             -------------------------------------------------------------------
@@ -3017,7 +3135,9 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
                                     (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                CAST(ISNULL(d.matrej,0) AS INT) AS MatRejQty,
+                                CAST(ISNULL(d.macrej,0) AS INT) AS MacRejQty
                             FROM InJob_Mas m
                             INNER JOIN InJob_Det d
                                 ON m.inspno = d.inspno
@@ -3058,7 +3178,31 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
                                     (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                CAST(CASE 
+                                    WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+                                    THEN ISNULL((
+                                        SELECT SUM(ISNULL(r.qty, 0))
+                                        FROM Insp_RejectionEntry r
+                                        LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                                        WHERE r.inter_inspno = i.inter_inspno
+                                          AND ISNULL(r.deleted, 0) = 0
+                                          AND ISNULL(rej.matrej, 0) = 1
+                                    ), 0)
+                                    ELSE ISNULL(i.matrejqty, 0)
+                                END AS INT) AS MatRejQty,
+                                CAST(CASE 
+                                    WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+                                    THEN ISNULL((
+                                        SELECT SUM(ISNULL(r.qty, 0))
+                                        FROM Insp_RejectionEntry r
+                                        LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                                        WHERE r.inter_inspno = i.inter_inspno
+                                          AND ISNULL(r.deleted, 0) = 0
+                                          AND ISNULL(rej.matrej, 0) = 0
+                                    ), 0)
+                                    ELSE ISNULL(i.rejqty, 0)
+                                END AS INT) AS MacRejQty
                             FROM InterInspectionEntry i
                             WHERE ISNULL(i.deleted,0) = 0
                               AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
@@ -3099,7 +3243,25 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
                                     (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = f.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                CAST(ISNULL((
+                                    SELECT SUM(ISNULL(fr2.qty, 0))
+                                    FROM FinalInspRejectionEntryOrg fr2
+                                    LEFT JOIN Rejection rej ON fr2.rejection = rej.rejection
+                                    WHERE fr2.finspno = f.finspno
+                                      AND fr2.partno = f.partno
+                                      AND ISNULL(fr2.deleted, 0) = 0
+                                      AND ISNULL(rej.matrej, 0) = 1
+                                ), 0) AS INT) AS MatRejQty,
+                                CAST(ISNULL((
+                                    SELECT SUM(ISNULL(fr2.qty, 0))
+                                    FROM FinalInspRejectionEntryOrg fr2
+                                    LEFT JOIN Rejection rej ON fr2.rejection = rej.rejection
+                                    WHERE fr2.finspno = f.finspno
+                                      AND fr2.partno = f.partno
+                                      AND ISNULL(fr2.deleted, 0) = 0
+                                      AND ISNULL(rej.matrej, 0) = 0
+                                ), 0) AS INT) AS MacRejQty
                             FROM FinalInspectionEntry f
                             WHERE ISNULL(f.deleted, 0) = 0
                               AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
@@ -3120,7 +3282,9 @@ def quality_analysis_records(request):
                             'Rework' AS Type,
                             Combined.ReworkQty AS Qty,
                             Combined.InspType,
-                            Combined.Description
+                            Combined.Description,
+                            Combined.MatRejQty,
+                            Combined.MacRejQty
                         FROM
                         (
                             -------------------------------------------------------------------
@@ -3148,7 +3312,9 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
                                     (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                0 AS MatRejQty,
+                                0 AS MacRejQty
                             FROM InJob_Mas m
                             INNER JOIN InJob_Det d
                                 ON m.inspno = d.inspno
@@ -3187,7 +3353,9 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
                                     (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                0 AS MatRejQty,
+                                0 AS MacRejQty
                             FROM InterInspectionEntry i
                             WHERE ISNULL(i.deleted,0) = 0
                               AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
@@ -3225,7 +3393,9 @@ def quality_analysis_records(request):
                                     (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
                                     (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = f.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
                                     ''
-                                ) AS Description
+                                ) AS Description,
+                                0 AS MatRejQty,
+                                0 AS MacRejQty
                             FROM FinalInspectionEntry f
                             WHERE ISNULL(f.deleted,0) = 0
                               AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
@@ -3260,6 +3430,8 @@ def quality_analysis_records(request):
                         qty = row[5]
                         insp_type_label = row[6] if len(row) > 6 else "Job Order"
                         desc_from_sql = row[7] if len(row) > 7 else ""
+                        mat_rej_qty = row[8] if len(row) > 8 else 0
+                        mac_rej_qty = row[9] if len(row) > 9 else 0
                         
                         formatted_date = ""
                         if isinstance(insp_date, (date, datetime)):
@@ -3273,12 +3445,15 @@ def quality_analysis_records(request):
                                 
                         part_no_val = part_details or "—"
                         desc_val_rej = desc_from_sql or "—"
-                        if desc_val_rej == "—":
-                            match_rec = next((r for r in db_records if r.get("id") == insp_no and r.get("partNo") == part_no_val), None)
-                            if not match_rec:
-                                match_rec = next((r for r in db_records if r.get("partNo") == part_no_val), None)
-                            if match_rec:
+                        match_rec = next((r for r in db_records if r.get("id") == insp_no and r.get("partNo") == part_no_val), None)
+                        if not match_rec:
+                            match_rec = next((r for r in db_records if r.get("partNo") == part_no_val), None)
+                        if match_rec:
+                            if desc_val_rej == "—":
                                 desc_val_rej = match_rec.get("description") or match_rec.get("product") or "—"
+                            if type_val == "Rejection" and (int(mat_rej_qty or 0) == 0 and int(mac_rej_qty or 0) == 0):
+                                mat_rej_qty = match_rec.get("matRejQty") or 0
+                                mac_rej_qty = match_rec.get("macRejQty") or 0
 
                         if type_val == "Rejection":
                             defect = "Critical"
@@ -3292,12 +3467,17 @@ def quality_analysis_records(request):
                                 "product": desc_val_rej if desc_val_rej != "—" else part_details or "—",
                                 "reason": reason or "Surface defects",
                                 "qty": str(qty),
+                                "matRejQty": int(mat_rej_qty or 0),
+                                "macRejQty": int(mac_rej_qty or 0),
+                                "reworkQty": 0,
                                 "defectCls": defect_cls,
                                 "defect": defect,
                                 "dispCls": disp_cls,
                                 "disp": "Rejection",
                                 "date": formatted_date,
-                                "inspType": insp_type_label
+                                "inspType": insp_type_label,
+                                "machineNo": match_rec.get("machineNo", "—") if match_rec else "—",
+                                "process": match_rec.get("process", "—") if match_rec else "—"
                             })
                         elif type_val == "Rework":
                             defect = "Minor"
@@ -3311,12 +3491,17 @@ def quality_analysis_records(request):
                                 "product": desc_val_rej if desc_val_rej != "—" else part_details or "—",
                                 "reason": reason or "Rework Needed",
                                 "qty": str(qty),
+                                "matRejQty": 0,
+                                "macRejQty": 0,
+                                "reworkQty": int(qty or 0),
                                 "defectCls": defect_cls,
                                 "defect": defect,
                                 "dispCls": disp_cls,
                                 "disp": "Rework",
                                 "date": formatted_date,
-                                "inspType": insp_type_label
+                                "inspType": insp_type_label,
+                                "machineNo": match_rec.get("machineNo", "—") if match_rec else "—",
+                                "process": match_rec.get("process", "—") if match_rec else "—"
                             })
                             
                             db_rework.append({
@@ -3361,29 +3546,43 @@ def quality_analysis_records(request):
                         if mat_rej > 0 or mac_rej > 0:
                             db_rejections.append({
                                 "id": id_val,
+                                "partNo": part_no or "—",
+                                "description": desc_val or "—",
                                 "product": prod_name,
                                 "reason": "Surface defects" if mat_rej > 0 else "Alignment error",
                                 "qty": str(mat_rej + mac_rej),
+                                "matRejQty": mat_rej,
+                                "macRejQty": mac_rej,
+                                "reworkQty": 0,
                                 "defectCls": "qa2-tag-critical" if mat_rej > 0 else "qa2-tag-major",
                                 "defect": "Critical" if mat_rej > 0 else "Major",
                                 "dispCls": "qa2-tag-fail",
                                 "disp": "Rejection",
                                 "date": date_val,
-                                "inspType": insp_type_label
+                                "inspType": insp_type_label,
+                                "machineNo": r.get("machineNo", "—"),
+                                "process": r.get("process", "—")
                             })
 
                         if rw_qty > 0:
                             db_rejections.append({
                                 "id": id_val,
+                                "partNo": part_no or "—",
+                                "description": desc_val or "—",
                                 "product": prod_name,
                                 "reason": "Rework Needed",
                                 "qty": str(rw_qty),
+                                "matRejQty": 0,
+                                "macRejQty": 0,
+                                "reworkQty": rw_qty,
                                 "defectCls": "qa2-tag-minor",
                                 "defect": "Minor",
                                 "dispCls": "qa2-tag-rework",
                                 "disp": "Rework",
                                 "date": date_val,
-                                "inspType": insp_type_label
+                                "inspType": insp_type_label,
+                                "machineNo": r.get("machineNo", "—"),
+                                "process": r.get("process", "—")
                             })
 
                             db_rework.append({

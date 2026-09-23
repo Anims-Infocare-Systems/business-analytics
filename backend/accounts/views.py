@@ -1807,13 +1807,39 @@ def get_operators(request):
 def operator_efficiency(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
-    oprname = request.GET.get("oprname", "").strip()
-    if not oprname: return Response({"error": "Operator name (oprname) is required."}, status=400)
+    oprname = (request.GET.get("oprname") or request.GET.get("operator") or request.GET.get("name") or request.GET.get("opr") or "").strip()
     start_date, end_date = parse_date_range(request)
     fy_label = get_fy_label(start_date, end_date)
     buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
+        if not oprname:
+            try:
+                name_slices = _operator_name_slices(cursor)
+                parts = []
+                for s in name_slices:
+                    o = s["opr"]
+                    parts.append(
+                        f"SELECT DISTINCT LTRIM(RTRIM(CAST([{o}] AS NVARCHAR(512)))) AS v FROM {s['q']} "
+                        f"WHERE {s['del']} AND [{o}] IS NOT NULL AND LTRIM(RTRIM(CAST([{o}] AS NVARCHAR(512)))) <> N''"
+                    )
+                if parts:
+                    cursor.execute(f"SELECT TOP 1 v FROM ({' UNION ALL '.join(parts)}) AS U ORDER BY v")
+                    r = cursor.fetchone()
+                    if r and r[0]:
+                        oprname = str(r[0]).strip()
+                if not oprname:
+                    cursor.execute(_LEGACY_OPERATORS_SQL)
+                    r = cursor.fetchone()
+                    if r and r[0]:
+                        oprname = str(r[0]).strip()
+            except Exception:
+                pass
+        if not oprname:
+            cursor.close()
+            conn.close()
+            return Response({"error": "Operator name (oprname) is required."}, status=400)
+
         slices = _operator_table_slices(cursor)
         branches, params = [], []
         for s in slices:
@@ -1823,7 +1849,7 @@ def operator_efficiency(request):
                 f"SELECT YEAR([{s['d']}]) AS YrNum, MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
                 f"ISNULL(CAST([{s['qty']}] AS FLOAT), 0) AS Qty FROM {s['q']} WHERE {s['del']} "
                 f"AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ? "
-                f"AND LTRIM(RTRIM(CAST([{s['opr']}] AS NVARCHAR(512)))) = LTRIM(RTRIM(?))"
+                f"AND UPPER(LTRIM(RTRIM(CAST([{s['opr']}] AS NVARCHAR(512))))) = UPPER(LTRIM(RTRIM(?)))"
             )
             params.extend([start_date, end_date, oprname])
         if branches:
@@ -1834,7 +1860,7 @@ def operator_efficiency(request):
             )
             cursor.execute(sql, params)
         else:
-            sql = """WITH AllEfficiency AS (SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?)) UNION ALL SELECT oprname, YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?)) UNION ALL SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND LTRIM(RTRIM(oprname)) = LTRIM(RTRIM(?))) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
+            sql = """WITH AllEfficiency AS (SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?)))) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
             cursor.execute(sql, [start_date, end_date, oprname, start_date, end_date, oprname, start_date, end_date, oprname])
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)

@@ -995,6 +995,15 @@ function AdvancedPurchaseAnalyticsSection({
         }
     }, [apaMode, rawCatalogList, storeCatalogList, apaRawCategories, apaStoreGroups]);
 
+    // Auto-switch mode if active mode has 0 parts but the other mode has parts
+    useEffect(() => {
+        if (rawCatalogList.length === 0 && storeCatalogList.length > 0 && apaMode !== "store") {
+            setApaMode("store");
+        } else if (storeCatalogList.length === 0 && rawCatalogList.length > 0 && apaMode !== "raw") {
+            setApaMode("raw");
+        }
+    }, [rawCatalogList.length, storeCatalogList.length, apaMode]);
+
     // Auto-select valid part when mode, category, or group changes
     useEffect(() => {
         if (scopedCatalog.length > 0) {
@@ -2292,6 +2301,13 @@ export default function PurchaseAnalysis() {
         setAppliedSearchQuery(searchQuery);
         setAppliedPoType(filters.poType);
         setAppliedSupplier(Array.isArray(filters.supplier) ? [...filters.supplier] : ["All Suppliers"]);
+        setFsSupplierFilter([]);
+        setFsPartFilter([]);
+        setFuturisticSupplierFilter([]);
+        setFuturisticPartFilter([]);
+        setFsPage(1);
+        setFuturisticPage(1);
+        setApvPage(1);
         setFetchTrigger(prev => prev + 1);
     }, [dateRange, searchQuery, filters.poType, filters.supplier]);
 
@@ -2797,13 +2813,41 @@ export default function PurchaseAnalysis() {
 
     // ── PO Fulfillment Schedule Data (Fetched directly from backend API) ──
 
+    // Base rows respecting top-level Report Filters (Date Range, Supplier, PO Type, Search)
+    const baseFsRows = useMemo(() => {
+        return (fulfillmentScheduleRows || []).filter(r => {
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                const s = (r.supplier || "").trim().toLowerCase();
+                const matched = appliedSupplier.some(sup => sup.trim().toLowerCase() === s);
+                if (!matched) return false;
+            }
+            if (appliedPoType && appliedPoType !== "All Types") {
+                const t = (r.po_type || r.dtype || "").toLowerCase();
+                const target = appliedPoType.toLowerCase();
+                if (t && !t.includes(target) && !target.includes(t)) return false;
+            }
+            if (appliedSearchQuery && appliedSearchQuery.trim()) {
+                const q = appliedSearchQuery.toLowerCase().trim();
+                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                    (r.supplier && r.supplier.toLowerCase().includes(q)) ||
+                    (r.part_no && r.part_no.toLowerCase().includes(q)) ||
+                    (r.rmname && r.rmname.toLowerCase().includes(q)) ||
+                    (r.description && r.description.toLowerCase().includes(q)) ||
+                    (r.schd_dt && r.schd_dt.toLowerCase().includes(q)) ||
+                    (r.status && r.status.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            return true;
+        });
+    }, [fulfillmentScheduleRows, appliedSupplier, appliedPoType, appliedSearchQuery]);
+
     const uniqueFsSuppliers = useMemo(() => {
         const set = new Set();
-        fulfillmentScheduleRows.forEach(r => {
+        baseFsRows.forEach(r => {
             if (r.supplier && r.supplier !== "–" && r.supplier !== "-") set.add(r.supplier);
         });
         return Array.from(set).sort();
-    }, [fulfillmentScheduleRows]);
+    }, [baseFsRows]);
 
     const filteredDropdownFsSuppliers = useMemo(() => {
         const q = fsSupplierSearchQuery.toLowerCase().trim();
@@ -2821,12 +2865,12 @@ export default function PurchaseAnalysis() {
 
     const uniqueFsParts = useMemo(() => {
         const set = new Set();
-        fulfillmentScheduleRows.forEach(r => {
+        baseFsRows.forEach(r => {
             if (fsSupplierFilter.length > 0 && !fsSupplierFilter.includes(r.supplier)) return;
             if (r.part_no && r.part_no !== "–" && r.part_no !== "-") set.add(r.part_no);
         });
         return Array.from(set).sort();
-    }, [fulfillmentScheduleRows, fsSupplierFilter]);
+    }, [baseFsRows, fsSupplierFilter]);
 
     const filteredDropdownFsParts = useMemo(() => {
         const q = fsPartSearchQuery.toLowerCase().trim();
@@ -2844,7 +2888,7 @@ export default function PurchaseAnalysis() {
 
     // Scoped rows based on supplier, part, and search (for status pill counts)
     const fsScopedRows = useMemo(() => {
-        return fulfillmentScheduleRows.filter(r => {
+        return baseFsRows.filter(r => {
             if (fsSupplierFilter.length > 0 && !fsSupplierFilter.includes(r.supplier)) {
                 return false;
             }
@@ -2863,7 +2907,7 @@ export default function PurchaseAnalysis() {
             }
             return true;
         });
-    }, [fulfillmentScheduleRows, fsSupplierFilter, fsPartFilter, fsSearchQuery]);
+    }, [baseFsRows, fsSupplierFilter, fsPartFilter, fsSearchQuery]);
 
     // Status pill counts based on active supplier, part, and search filters
     const fsStatusCounts = useMemo(() => {
@@ -3013,7 +3057,7 @@ export default function PurchaseAnalysis() {
         const countMap = {};
         const globalAvg = summaryData?.avg_lead_time_days ? Number(summaryData.avg_lead_time_days) : 18;
 
-        (fulfillmentScheduleRows || []).forEach(r => {
+        (baseFsRows || []).forEach(r => {
             if (!r.supplier) return;
             const sup = r.supplier.trim();
             let lead = 0;
@@ -3035,10 +3079,10 @@ export default function PurchaseAnalysis() {
             resultMap[sup] = Math.round(leadMap[sup] / (countMap[sup] || 1));
         });
         return { map: resultMap, defaultAvg: Math.round(globalAvg) };
-    }, [fulfillmentScheduleRows, summaryData]);
+    }, [baseFsRows, summaryData]);
 
     const futuristicEnhancedRows = useMemo(() => {
-        return (fulfillmentScheduleRows || []).map((r, idx) => {
+        return (baseFsRows || []).map((r, idx) => {
             const avg_lead_days = supplierLeadTimeMap.map[r.supplier] || supplierLeadTimeMap.defaultAvg || 18;
             let avg_lead_date_obj = null;
             let avg_lead_date_iso = "";
@@ -3071,7 +3115,7 @@ export default function PurchaseAnalysis() {
                 variance_days
             };
         });
-    }, [fulfillmentScheduleRows, supplierLeadTimeMap]);
+    }, [baseFsRows, supplierLeadTimeMap]);
 
     const uniqueFuturisticSuppliers = useMemo(() => {
         const set = new Set();
@@ -4076,6 +4120,9 @@ export default function PurchaseAnalysis() {
             from: toIso(appliedDateRange.from),
             to: toIso(appliedDateRange.to),
         });
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
+        }
         if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
             params.set("supplier", appliedSupplier.join(","));
         }
@@ -4097,7 +4144,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setApvLoading(false);
             });
         return () => ctrl.abort();
-    }, [appliedDateRange.from, appliedDateRange.to, appliedSupplier, appliedSearchQuery, fetchTrigger]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch Advanced Purchase Analytics (PO line items + Commer_BaseRateDet) ──
     const [apaBackendData, setApaBackendData] = useState({ po_rows: [], commercial_rates: {} });
@@ -4114,6 +4161,15 @@ export default function PurchaseAnalysis() {
             from: toIso(appliedDateRange.from),
             to: toIso(appliedDateRange.to),
         });
+        if (appliedPoType && appliedPoType !== "All Types") {
+            params.set("dtype", appliedPoType);
+        }
+        if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+            params.set("supplier", appliedSupplier.join(","));
+        }
+        if (appliedSearchQuery.trim()) {
+            params.set("search", appliedSearchQuery.trim());
+        }
         const ctrl = new AbortController();
         setApaLoading(true);
         fetch(`${API_BASE}/purchase-analysis/advanced-purchase-analytics/?${params}`, {
@@ -4132,7 +4188,7 @@ export default function PurchaseAnalysis() {
                 if (err.name !== "AbortError") setApaLoading(false);
             });
         return () => ctrl.abort();
-    }, [appliedDateRange.from, appliedDateRange.to, fetchTrigger]);
+    }, [appliedDateRange.from, appliedDateRange.to, appliedPoType, appliedSupplier, appliedSearchQuery, fetchTrigger]);
 
     // ── Fetch charts data (donuts + supplier ranking) ─────────────
     const [chartsData, setChartsData] = useState(null);
@@ -5580,9 +5636,33 @@ export default function PurchaseAnalysis() {
     //  Average Purchase Value (APV) Calculations & Aggregations
     // ═══════════════════════════════════════════════════════════════
     const apvBaseRows = useMemo(() => {
-        if (apvBackendRows && apvBackendRows.length > 0) return apvBackendRows;
-        return filteredPoRows;
-    }, [apvBackendRows, filteredPoRows]);
+        const sourceRows = (apvBackendRows && apvBackendRows.length > 0)
+            ? apvBackendRows
+            : (apvLoading ? (filteredPoRows && filteredPoRows.length > 0 ? filteredPoRows : poRows) : (apvBackendRows || []));
+        return sourceRows.filter(r => {
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                const s = (r.supplier || r.vendor_name || "").trim().toLowerCase();
+                if (!appliedSupplier.some(sup => sup.trim().toLowerCase() === s)) return false;
+            }
+            if (appliedPoType && appliedPoType !== "All Types") {
+                const t = (r.po_type || r.dtype || r.material_type || "").toLowerCase();
+                const target = appliedPoType.toLowerCase();
+                if (!t.includes(target) && !target.includes(t)) return false;
+            }
+            if (appliedSearchQuery && appliedSearchQuery.trim()) {
+                const q = appliedSearchQuery.toLowerCase().trim();
+                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                    (r.pono && r.pono.toLowerCase().includes(q)) ||
+                    (r.part_no && r.part_no.toLowerCase().includes(q)) ||
+                    (r.partno && r.partno.toLowerCase().includes(q)) ||
+                    (r.description && r.description.toLowerCase().includes(q)) ||
+                    (r.material && r.material.toLowerCase().includes(q)) ||
+                    (r.supplier && r.supplier.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            return true;
+        });
+    }, [apvBackendRows, apvLoading, filteredPoRows, poRows, appliedSupplier, appliedPoType, appliedSearchQuery]);
 
     const apvRawRows = useMemo(() => {
         return apvBaseRows.filter(r => {
@@ -6135,6 +6215,59 @@ export default function PurchaseAnalysis() {
                 return <AlertCircle size={16} style={{ color: "#2d6de8" }} />;
         }
     };
+
+    const apaRows = useMemo(() => {
+        const sourceRows = (apaBackendData?.po_rows && apaBackendData.po_rows.length > 0)
+            ? apaBackendData.po_rows
+            : (apaLoading ? (filteredPoRows && filteredPoRows.length > 0 ? filteredPoRows : poRows) : (apaBackendData?.po_rows || []));
+        return sourceRows.filter(r => {
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                const s = (r.supplier || r.vendor_name || r.cname || "").trim().toLowerCase();
+                if (!appliedSupplier.some(sup => sup.trim().toLowerCase() === s)) return false;
+            }
+            if (appliedPoType && appliedPoType !== "All Types") {
+                const t = (r.po_type || r.dtype || r.material_type || "").toLowerCase();
+                const target = appliedPoType.toLowerCase();
+                if (!t.includes(target) && !target.includes(t)) return false;
+            }
+            if (appliedSearchQuery && appliedSearchQuery.trim()) {
+                const q = appliedSearchQuery.toLowerCase().trim();
+                const match = (r.po_number && r.po_number.toLowerCase().includes(q)) ||
+                    (r.pono && r.pono.toLowerCase().includes(q)) ||
+                    (r.part_no && r.part_no.toLowerCase().includes(q)) ||
+                    (r.partno && r.partno.toLowerCase().includes(q)) ||
+                    (r.description && r.description.toLowerCase().includes(q)) ||
+                    (r.material && r.material.toLowerCase().includes(q)) ||
+                    (r.supplier && r.supplier.toLowerCase().includes(q)) ||
+                    (r.vendor_name && r.vendor_name.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            return true;
+        });
+    }, [apaBackendData?.po_rows, apaLoading, filteredPoRows, poRows, appliedSupplier, appliedPoType, appliedSearchQuery]);
+
+    const filteredPriceTrendRowsForApa = useMemo(() => {
+        return (priceTrendRows || []).filter(r => {
+            if (appliedSupplier && !appliedSupplier.includes("All Suppliers") && appliedSupplier.length > 0) {
+                const s = (r.supplierName || r.supplier || "").trim().toLowerCase();
+                if (!appliedSupplier.some(sup => sup.trim().toLowerCase() === s)) return false;
+            }
+            if (appliedPoType && appliedPoType !== "All Types") {
+                const t = (r.type || "").toLowerCase();
+                const target = appliedPoType.toLowerCase();
+                if (!t.includes(target) && !target.includes(t)) return false;
+            }
+            if (appliedSearchQuery && appliedSearchQuery.trim()) {
+                const q = appliedSearchQuery.toLowerCase().trim();
+                const match = (r.partDesc && r.partDesc.toLowerCase().includes(q)) ||
+                    (r.supplierName && r.supplierName.toLowerCase().includes(q)) ||
+                    (r.supplier && r.supplier.toLowerCase().includes(q)) ||
+                    (r.type && r.type.toLowerCase().includes(q));
+                if (!match) return false;
+            }
+            return true;
+        });
+    }, [priceTrendRows, appliedSupplier, appliedPoType, appliedSearchQuery]);
 
     return (
         <div className={`pa2-root ${animated ? "pa2-root--visible" : ""}`}>
@@ -7233,7 +7366,7 @@ export default function PurchaseAnalysis() {
                                 <col style={{ width: "45px" }} />
                                 <col style={{ width: "105px" }} />
                                 <col style={{ width: "95px" }} />
-                                <col style={{ width: "115px" }} />
+                                <col style={{ width: "220px" }} />
                                 <col style={{ width: "230px" }} />
                                 <col style={{ width: "85px" }} />
                                 <col style={{ width: "65px" }} />
@@ -7354,8 +7487,8 @@ export default function PurchaseAnalysis() {
                                                 <td className="pa2-po-td pa2-apv-col-podate" style={{ color: "#475569", fontSize: "0.72rem" }}>
                                                     {row.poDate}
                                                 </td>
-                                                <td className="pa2-po-td pa2-apv-col-partno">
-                                                    <span className="pa2-apv-code-badge">{row.partNo}</span>
+                                                <td className="pa2-po-td pa2-apv-col-partno" title={row.partNo}>
+                                                    <span className="pa2-apv-code-badge" title={row.partNo}>{row.partNo}</span>
                                                 </td>
                                                 <td className="pa2-po-td pa2-apv-col-desc pa2-po-material" title={row.description}>
                                                     {row.description}
@@ -7493,9 +7626,9 @@ export default function PurchaseAnalysis() {
 
             {/* ── Advanced Purchase Analytics (Part-wise History, Rate Progression & Buying Intelligence) ── */}
             <AdvancedPurchaseAnalyticsSection
-                poRows={apaBackendData.po_rows && apaBackendData.po_rows.length > 0 ? apaBackendData.po_rows : (filteredPoRows && filteredPoRows.length > 0 ? filteredPoRows : poRows)}
+                poRows={apaRows}
                 commercialRates={apaBackendData.commercial_rates || {}}
-                priceTrendRows={priceTrendRows}
+                priceTrendRows={filteredPriceTrendRowsForApa}
                 loading={apaLoading || poLoading}
             />
 

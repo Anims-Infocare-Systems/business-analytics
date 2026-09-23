@@ -383,13 +383,16 @@
 }
 
 .qa2-section-title {
-    font-size: 0.88rem;
+    font-family: var(--qa-font-heading);
+    font-size: 0.92rem;
     font-weight: 700;
     color: #1a2a5e;
+    letter-spacing: -0.015em;
     flex: 1;
 }
 
 .qa2-section-sub {
+    font-family: var(--qa-font-body);
     font-size: 0.68rem;
     color: #94a3b8;
     font-weight: 500;
@@ -399,11 +402,12 @@
 .qa2-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.2rem 0.55rem;
+    padding: 0.22rem 0.6rem;
     border-radius: 6px;
-    font-size: 0.65rem;
+    font-family: var(--qa-font-heading);
+    font-size: 0.68rem;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
     white-space: nowrap;
 }
 
@@ -562,11 +566,11 @@
 }
 
 .qa2-filter-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.85rem;
     padding: 0.95rem 1.25rem 1.1rem;
-    align-items: end;
+    align-items: flex-end;
 }
 
 .qa2-fg {
@@ -594,6 +598,8 @@
     font-family: inherit;
     transition: border-color 0.2s, box-shadow 0.2s;
     cursor: pointer;
+    box-sizing: border-box;
+    height: 39px;
 }
 
 .qa2-fi:focus,
@@ -608,6 +614,209 @@
     display: flex;
     gap: 0.55rem;
     flex-wrap: wrap;
+}
+
+/* ── Modern, High-End "Apply Filter" & "Reset Filters" Actions ── */
+.qa2-filter-actions-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    align-self: flex-end;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* Modern, high-end "Apply Filter" button */
+.qa2-btn-apply {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 60%, #1e40af 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    padding: 0 18px;
+    height: 39px;
+    border-radius: 9px;
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 3px 12px rgba(37, 99, 235, 0.28), 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+/* Premium shimmer light sweep effect */
+.qa2-btn-apply::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.38),
+        transparent
+    );
+    transform: skewX(-22deg);
+    pointer-events: none;
+    transition: none;
+}
+
+.qa2-btn-apply:hover:not(:disabled)::before {
+    left: 140%;
+    transition: left 0.75s ease-in-out;
+}
+
+.qa2-btn-apply:hover:not(:disabled) {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%);
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.42), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.qa2-btn-apply:active:not(:disabled) {
+    transform: scale(0.97) translateY(0);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+}
+
+.qa2-btn-apply:disabled,
+.qa2-btn-apply[disabled] {
+    cursor: not-allowed !important;
+    opacity: 0.65 !important;
+    background: #94a3b8 !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    pointer-events: none !important;
+}
+
+/* Dynamic ambient glow & pulse when filter selections are changed and ready to apply */
+.qa2-btn-apply--pending {
+    animation: qa2-apply-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    border-color: rgba(147, 197, 253, 0.85) !important;
+}
+
+@keyframes qa2-apply-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55), 0 4px 14px rgba(37, 99, 235, 0.32);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(37, 99, 235, 0), 0 6px 22px rgba(37, 99, 235, 0.55);
+    }
+}
+
+.qa2-btn-apply-icon {
+    transition: transform 0.3s ease;
+}
+
+.qa2-btn-apply:hover:not(:disabled) .qa2-btn-apply-icon {
+    transform: scale(1.12) rotate(6deg);
+}
+
+/* Emerald radar pulse dot signaling pending changes */
+.qa2-apply-pulse-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background-color: #34d399;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45), 0 0 8px #10b981;
+    animation: qa2-dot-blink 1.4s ease-in-out infinite;
+    margin-left: 2px;
+    flex-shrink: 0;
+}
+
+@keyframes qa2-dot-blink {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.35);
+        opacity: 0.75;
+    }
+}
+
+/* Changes count pill badge */
+.qa2-apply-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 99px;
+    padding: 0 5px;
+    margin-left: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.qa2-btn-apply-spin {
+    animation: qa2-apply-spin 1s linear infinite;
+}
+
+@keyframes qa2-apply-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Reset Button */
+.qa2-btn-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(220, 38, 38, 0.06);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.18);
+    border-radius: 9px;
+    padding: 0 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.02);
+    height: 39px;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.qa2-btn-reset:hover {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+    transform: translateY(-1px);
+}
+
+.qa2-btn-reset:active {
+    transform: translateY(1px);
+}
+
+.qa2-btn-reset-icon {
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qa2-btn-reset:hover .qa2-btn-reset-icon {
+    transform: rotate(-180deg);
+}
+
+.qa2-btn-reset:active .qa2-btn-reset-icon {
+    transform: rotate(-360deg) scale(0.95);
 }
 
 /* ── Buttons ──────────────────────────────────────────────── */
@@ -902,7 +1111,45 @@
     margin-bottom: 1.3rem;
 }
 
-/* .qa2-chart-card {} */
+/* ── Chart Section Modern Cards ───────────────────────────── */
+.qa2-chart-card {
+    font-family: var(--qa-font-body);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.qa2-chart-card .qa2-section-title {
+    font-family: var(--qa-font-heading);
+    font-size: 0.94rem;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: -0.015em;
+}
+
+.qa2-chart-card .qa2-badge {
+    font-family: var(--qa-font-heading);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.qa2-chart-card .qa2-toggle-btn {
+    font-family: var(--qa-font-heading);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.qa2-chart-card .qa2-trend-filter-btn {
+    font-family: var(--qa-font-heading);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.qa2-chart-card .qa2-premium-select-trigger {
+    font-family: var(--qa-font-heading);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
 
 .qa2-chart-wrap {
     position: relative;
@@ -1128,6 +1375,12 @@
     background: rgba(249, 115, 22, 0.08);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.16);
+}
+
+.qa2-total-badge-amber {
+    background: rgba(234, 88, 12, 0.08);
+    color: #ea580c;
+    border: 1px solid rgba(234, 88, 12, 0.2);
 }
 
 .qa2-action-bar {
@@ -7108,4 +7361,284 @@
     background: #ccfbf1;
     border-color: #5eead4;
     color: #115e59;
+}
+
+/* ── 3D Flip Card Container for Top Defect Causes & Defect Cause Analysis ── */
+.qa2-card-flip-wrap {
+    perspective: 1400px;
+    width: 100%;
+    margin-bottom: 1.3rem;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.qa2-card-flip-wrap:hover {
+    transform: translateY(-2px);
+}
+
+.qa2-charts-3-equal > .qa2-card-flip-wrap {
+    margin-bottom: 0;
+}
+
+.qa2-card-flip-inner {
+    display: grid;
+    grid-template-rows: 1fr;
+    grid-template-columns: 1fr;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-style: preserve-3d;
+}
+
+.qa2-card-flip-inner.qa2-is-flipped {
+    transform: rotateY(180deg);
+}
+
+.qa2-flip-face {
+    grid-area: 1 / 1 / 2 / 2;
+    width: 100%;
+    height: 100%;
+    margin-bottom: 0 !important;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform-style: preserve-3d;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(26, 84, 212, 0.09), 0 0 0 1px rgba(26, 84, 212, 0.06);
+    overflow: hidden;
+}
+
+.qa2-flip-face-front,
+.qa2-flip-face-front:hover {
+    transform: rotateY(0deg) !important;
+    z-index: 2;
+    pointer-events: auto;
+}
+
+.qa2-card-flip-inner.qa2-is-flipped .qa2-flip-face-front,
+.qa2-card-flip-inner.qa2-is-flipped .qa2-flip-face-front:hover {
+    pointer-events: none;
+    z-index: 1;
+}
+
+.qa2-flip-face-back,
+.qa2-flip-face-back:hover {
+    transform: rotateY(180deg) !important;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.qa2-card-flip-inner.qa2-is-flipped .qa2-flip-face-back,
+.qa2-card-flip-inner.qa2-is-flipped .qa2-flip-face-back:hover {
+    pointer-events: auto;
+    z-index: 3;
+}
+
+/* ── Modern Flip Action Button ────────────────────────────── */
+.qa2-btn-flip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3.5px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    user-select: none;
+    border: 1px solid transparent;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.qa2-btn-flip .qa2-btn-flip-icon {
+    transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    stroke-width: 2.2;
+}
+
+.qa2-btn-flip:hover .qa2-btn-flip-icon {
+    transform: rotate(-180deg);
+}
+
+/* Default / Rejection Mode (Prompts flipping to Rework) */
+.qa2-btn-flip.is-rejection {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.09), rgba(217, 119, 6, 0.16));
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.qa2-btn-flip.is-rejection:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.28));
+    color: #92400e;
+    border-color: rgba(217, 119, 6, 0.55);
+    box-shadow: 0 3px 12px rgba(245, 158, 11, 0.25);
+    transform: translateY(-1px);
+}
+
+.qa2-btn-flip.is-rejection:active {
+    transform: translateY(0) scale(0.97);
+}
+
+/* Rework Mode (Prompts flipping back to Rejection) */
+.qa2-btn-flip.is-rework {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.09), rgba(220, 38, 38, 0.16));
+    color: #dc2626;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.qa2-btn-flip.is-rework:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.28));
+    color: #b91c1c;
+    border-color: rgba(220, 38, 38, 0.55);
+    box-shadow: 0 3px 12px rgba(239, 68, 68, 0.25);
+    transform: translateY(-1px);
+}
+
+.qa2-btn-flip.is-rework:active {
+    transform: translateY(0) scale(0.97);
+}
+
+/* ── Detailed Vendor & Operation Rejection Table Columns ───── */
+.qa2-pq-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 109, 232, 0.28) transparent;
+}
+
+.qa2-pq-table-wrap::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+.qa2-pq-table-wrap::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.qa2-pq-table-wrap::-webkit-scrollbar-thumb {
+    background: rgba(45, 109, 232, 0.25);
+    border-radius: 99px;
+}
+
+.qa2-pq-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+.qa2-pq-table-wrap .qa2-pq-scroll-container {
+    min-width: 490px;
+}
+
+.qa2-pq-header-detailed,
+.qa2-pq-row-detailed {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.75rem;
+    min-width: 490px;
+    box-sizing: border-box;
+}
+
+.qa2-pq-header-detailed {
+    font-size: 0.59rem;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.qa2-pq-header-detailed span {
+    white-space: nowrap;
+}
+
+.qa2-pq-header-detailed .qa2-pqh-name {
+    flex: 1;
+    min-width: 80px;
+}
+
+.qa2-pq-header-detailed .qa2-col-mat {
+    color: #c2410c;
+}
+
+.qa2-pq-header-detailed .qa2-col-mac {
+    color: #b91c1c;
+}
+
+.qa2-pq-header-detailed .qa2-col-tot {
+    color: #881337;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.qa2-pq-row-detailed .qa2-pq-name {
+    flex: 1;
+    min-width: 80px;
+}
+
+.qa2-col-insp,
+.qa2-col-mat,
+.qa2-col-mac,
+.qa2-col-tot,
+.qa2-col-rate,
+.qa2-col-contrib {
+    flex-shrink: 0;
+}
+
+.qa2-col-insp {
+    min-width: 50px;
+    width: 50px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.qa2-col-mat {
+    min-width: 46px;
+    width: 46px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #ea580c;
+    font-weight: 600;
+}
+
+.qa2-col-mac {
+    min-width: 46px;
+    width: 46px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.qa2-col-tot {
+    min-width: 56px;
+    width: 56px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #991b1b;
+    font-weight: 700;
+}
+
+.qa2-col-rate {
+    min-width: 48px;
+    width: 48px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.qa2-col-contrib {
+    width: 74px;
+    min-width: 74px;
+    text-align: right;
+}
+
+.qa2-orange {
+    color: #ea580c;
+}
+
+.qa2-dark-red {
+    color: #991b1b;
 }

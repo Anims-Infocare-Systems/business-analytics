@@ -729,6 +729,7 @@ export default function ProductionAnalysis() {
   const [macAddedTrend, setMacAddedTrend] = useState({ labels: [], counts: [], machineList: [] });
   const [macEffTrend, setMacEffTrend] = useState({ labels: [], data: [] });
   const [pvChartType, setPvChartType] = useState("bar"); // "bar" | "line"
+  const [pvmhrViewMode, setPvmhrViewMode] = useState("comparison"); // "comparison" | "production_value" | "mhr_cost" | "net_margin"
   const [oeeChartType, setOeeChartType] = useState("line"); // "line" | "bar"
   const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("All");
   const [searchMacQuery, setSearchMacQuery] = useState("");
@@ -1952,103 +1953,7 @@ export default function ProductionAnalysis() {
 
 
 
-  /* ── Production Value chart ─────────────────── */
-  useEffect(() => {
-    if (!pvChartRef.current) return;
-    pvChartInst.current?.destroy();
-    const isMachine = pvMode === "machine";
-    const ctx = pvChartRef.current.getContext("2d");
-    const machineData = pvChartData.machine_data;
-    const monthData = pvChartData.month_data;
 
-    let datasets = [];
-    if (isMachine) {
-      const palette = ["rgba(37,99,235,0.75)", "rgba(249,115,22,0.75)", "rgba(16,185,129,0.75)", "rgba(139,92,246,0.75)", "rgba(6,182,212,0.75)", "rgba(236,72,153,0.75)", "rgba(245,158,11,0.75)", "rgba(99,102,241,0.75)", "rgba(239,68,68,0.75)"];
-      const borders = ["#2563eb", "#f97316", "#10b981", "#8b5cf6", "#06b6d4", "#ec4899", "#f59e0b", "#6366f1", "#ef4444"];
-
-      datasets = [{
-        label: "Achieved Value (₹)",
-        data: machineData.achieved,
-        backgroundColor: pvChartType === "line" ? "rgba(37, 99, 235, 0.15)" : machineData.labels.map((_, i) => palette[i % palette.length]),
-        borderColor: pvChartType === "line" ? "#2563eb" : machineData.labels.map((_, i) => borders[i % borders.length]),
-        borderWidth: pvChartType === "line" ? 3 : 1.5,
-        borderRadius: pvChartType === "line" ? 0 : 7,
-        fill: pvChartType === "line",
-        tension: 0.38,
-        pointBackgroundColor: "#ffffff",
-        pointBorderColor: "#2563eb",
-        pointBorderWidth: 2,
-        pointRadius: pvChartType === "line" ? 4 : 0,
-        pointHoverRadius: pvChartType === "line" ? 7 : 0,
-        pointHoverBackgroundColor: "#2563eb",
-        pointHoverBorderColor: "#ffffff",
-        pointHoverBorderWidth: 3
-      }];
-    } else {
-      datasets = monthData.datasets.map(d => {
-        const color = d.borderColor || d.backgroundColor || "#2563eb";
-        return {
-          ...d,
-          type: pvChartType,
-          borderRadius: pvChartType === "line" ? 0 : 4,
-          fill: false,
-          borderColor: color,
-          borderWidth: pvChartType === "line" ? 3 : 1.5,
-          tension: 0.38,
-          pointBackgroundColor: "#ffffff",
-          pointBorderColor: color,
-          pointBorderWidth: 2,
-          pointRadius: pvChartType === "line" ? 4 : 0,
-          pointHoverRadius: pvChartType === "line" ? 7 : 0,
-          pointHoverBackgroundColor: color,
-          pointHoverBorderColor: "#ffffff",
-          pointHoverBorderWidth: 3
-        };
-      });
-    }
-
-    pvChartInst.current = new Chart(ctx, {
-      type: pvChartType,
-      data: {
-        labels: isMachine ? machineData.labels : monthData.labels,
-        datasets: datasets
-      },
-      plugins: [ChartDataLabels],
-      options: {
-        responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
-        plugins: {
-          legend: { position: "top", labels: { font: { family: "'DM Sans','Outfit',sans-serif", size: 12, weight: "600" }, padding: 18, usePointStyle: true } },
-          tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.y.toLocaleString("en-IN")}` } },
-          datalabels: {
-            display: true,
-            anchor: pvChartType === "line" ? "end" : (isMachine ? "end" : "center"),
-            align: pvChartType === "line" ? "top" : (isMachine ? "top" : "center"),
-            offset: pvChartType === "line" ? 6 : 2,
-            backgroundColor: "rgba(255, 255, 255, 0.92)",
-            borderColor: "rgba(226, 232, 240, 0.8)",
-            borderWidth: 1,
-            borderRadius: 6,
-            padding: { top: 3, bottom: 3, left: 6, right: 6 },
-            font: { size: 9, weight: "700", family: "'Plus Jakarta Sans', sans-serif" },
-            color: "#1e293b",
-            shadowColor: "rgba(0, 0, 0, 0.04)",
-            shadowBlur: 3,
-            formatter: (v) => {
-              if (!v) return "";
-              if (v >= 100000) return `₹${(v / 100000).toFixed(2)}L`;
-              if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
-              return `₹${v}`;
-            }
-          }
-        },
-        scales: {
-          x: { stacked: !isMachine && pvChartType === "bar", ticks: { font: { size: 11 }, maxRotation: isMachine ? 35 : 0 }, grid: { display: false } },
-          y: { stacked: !isMachine && pvChartType === "bar", beginAtZero: true, grace: "10%", ticks: { callback: v => `₹${(v / 1000).toFixed(0)}K`, font: { size: 11 } }, grid: { color: "#f1f5f9" } }
-        }
-      }
-    });
-    return () => pvChartInst.current?.destroy();
-  }, [pvMode, pvChartData, pvChartType, pageLoading]);
 
   useEffect(() => {
     if (!oeeChartRef.current) return;
@@ -2305,14 +2210,29 @@ export default function ProductionAnalysis() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 24,
+            left: 8,
+            right: 8,
+            bottom: 4
+          }
+        },
         plugins: {
           legend: { display: false },
           tooltip: { callbacks: { label: ctx => ` Utilization: ${ctx.parsed.y}%` } },
           datalabels: {
             display: true,
             anchor: "end",
-            align: "top",
-            offset: 6,
+            align: ctx => {
+              const val = Number(ctx.dataset.data[ctx.dataIndex] || 0);
+              return val >= 98 ? "bottom" : "top";
+            },
+            offset: ctx => {
+              const val = Number(ctx.dataset.data[ctx.dataIndex] || 0);
+              return val >= 98 ? 8 : 6;
+            },
+            clamp: true,
             backgroundColor: "rgba(255, 255, 255, 0.92)",
             borderColor: "rgba(226, 232, 240, 0.8)",
             borderWidth: 1,
@@ -2333,7 +2253,6 @@ export default function ProductionAnalysis() {
           y: {
             beginAtZero: true,
             max: 100,
-            grace: "5%",
             ticks: { callback: v => `${v}%`, font: { family: "'Plus Jakarta Sans',sans-serif", size: 10 } },
             grid: { color: "#f1f5f9" }
           }
@@ -2465,66 +2384,188 @@ export default function ProductionAnalysis() {
     return sortedMacs.slice(0, 10).map(x => x.name);
   }, [sortedMacs]);
 
-  const mhrTrendChartData = useMemo(() => {
-    const machineNames = Object.keys(mhrMachinesInputs).filter(macName =>
-      mhrSelectedMachines.includes(macName)
+  // ── Unified Production Value Vs MHR Cost Data Calculation ──
+  const pvmhrChartData = useMemo(() => {
+    const rawMachData = pvChartData?.machine_data || { labels: [], achieved: [] };
+    const allLabels = rawMachData.labels || [];
+
+    // Filter by selected machines if filter is active
+    const activeMacs = allLabels.filter(mac =>
+      mhrSelectedMachines.length === 0 || mhrSelectedMachines.includes(mac)
     );
 
-    const palette = [
-      "rgba(37, 99, 235, 0.78)",
-      "rgba(59, 130, 246, 0.78)",
-      "rgba(96, 165, 250, 0.78)",
-      "rgba(16, 185, 129, 0.78)",
-      "rgba(52, 211, 153, 0.78)",
-      "rgba(139, 92, 246, 0.78)",
-      "rgba(167, 139, 250, 0.78)",
-      "rgba(245, 158, 11, 0.78)",
-      "rgba(251, 146, 60, 0.78)",
-      "rgba(236, 72, 153, 0.78)",
-      "rgba(239, 68, 68, 0.78)"
-    ];
-    const borders = [
-      "#2563eb", "#3b82f6", "#60a5fa", "#10b981", "#34d399", "#8b5cf6", "#a78bfa", "#f59e0b", "#fb923c", "#ec4899", "#ef4444"
-    ];
+    // Build per-machine comparative metrics
+    const items = activeMacs.map(mac => {
+      const idx = allLabels.indexOf(mac);
+      const prodVal = idx !== -1 ? (rawMachData.achieved?.[idx] || 0) : 0;
 
-    const data = machineNames.map(macName => {
-      return Math.round(calculateMachineMhr(macName));
+      // Hourly rate from dynamic calculation or backend
+      const dynamicRate = calculateMachineMhr(mac);
+      const backendRate = idx !== -1 ? (rawMachData.mhr_rate?.[idx] || 0) : 0;
+      const rate = dynamicRate > 0 ? dynamicRate : (backendRate > 0 ? backendRate : 0);
+
+      // Running and Productive hours
+      const backendRunHrs = idx !== -1 ? (rawMachData.running_hours?.[idx] || 0) : 0;
+      const backendProdHrs = idx !== -1 ? (rawMachData.prod_hours?.[idx] || 0) : 0;
+      const macFromMachines = machines.find(m => m.name === mac);
+      const runHrs = backendRunHrs > 0 ? backendRunHrs : (macFromMachines?.runningHrs || 0);
+      const prodHrs = backendProdHrs > 0 ? backendProdHrs : (macFromMachines?.prod_h || 0);
+
+      // Period MHR Cost = Operating Hours * Rate
+      const backendMhrCost = idx !== -1 ? (rawMachData.mhr_cost?.[idx] || 0) : 0;
+      const calcMhrCost = runHrs > 0 && rate > 0
+        ? Math.round(runHrs * rate)
+        : (backendMhrCost > 0 ? backendMhrCost : Math.round(prodHrs * rate));
+
+      const netMargin = prodVal - calcMhrCost;
+      const recoveryPct = calcMhrCost > 0 ? (prodVal / calcMhrCost) * 100 : (prodVal > 0 ? 100 : 0);
+
+      return {
+        name: mac,
+        prodVal: Math.round(prodVal),
+        mhrCost: Math.round(calcMhrCost),
+        rate: Number(rate.toFixed(2)),
+        runHrs: Number(runHrs.toFixed(1)),
+        prodHrs: Number(prodHrs.toFixed(1)),
+        netMargin: Math.round(netMargin),
+        recoveryPct: Number(recoveryPct.toFixed(1))
+      };
     });
 
-    return {
-      labels: machineNames,
-      datasets: [{
-        label: "Machine Hour Rate (₹/hr)",
-        data: data,
-        backgroundColor: machineNames.map((_, i) => palette[i % palette.length]),
-        borderColor: machineNames.map((_, i) => borders[i % borders.length]),
-        borderWidth: 1.5,
-        borderRadius: 6,
-        barThickness: 32
-      }]
-    };
-  }, [mhrMachinesInputs, mhrSelectedMachines, calculateMachineMhr]);
+    return items;
+  }, [pvChartData, mhrSelectedMachines, calculateMachineMhr, machines]);
 
-  // ── MHR Trend Chart.js Effect ──
+  // ── Unified Production Value Vs MHR Cost Chart.js Effect ──
   useEffect(() => {
-    if (!mhrChartRef.current) return;
-    mhrTrendChartInst.current?.destroy();
-    const ctx = mhrChartRef.current.getContext("2d");
+    if (!pvChartRef.current) return;
+    pvChartInst.current?.destroy();
+    const ctx = pvChartRef.current.getContext("2d");
 
-    mhrTrendChartInst.current = new Chart(ctx, {
-      type: "bar",
-      data: mhrTrendChartData,
+    const labels = pvmhrChartData.map(d => d.name);
+    const prodValues = pvmhrChartData.map(d => d.prodVal);
+    const mhrCosts = pvmhrChartData.map(d => d.mhrCost);
+    const netMargins = pvmhrChartData.map(d => d.netMargin);
+
+    let datasets = [];
+
+    if (pvmhrViewMode === "comparison") {
+      datasets = [
+        {
+          label: "Production Value (₹)",
+          data: prodValues,
+          backgroundColor: pvChartType === "line" ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.85)",
+          borderColor: "#2563eb",
+          borderWidth: pvChartType === "line" ? 3 : 1.5,
+          borderRadius: pvChartType === "line" ? 0 : 6,
+          fill: pvChartType === "line",
+          tension: 0.38,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#2563eb",
+          pointBorderWidth: 2,
+          pointRadius: pvChartType === "line" ? 4 : 0,
+          pointHoverRadius: pvChartType === "line" ? 7 : 0
+        },
+        {
+          label: "MHR Cost (₹)",
+          data: mhrCosts,
+          backgroundColor: pvChartType === "line" ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.85)",
+          borderColor: "#f59e0b",
+          borderWidth: pvChartType === "line" ? 3 : 1.5,
+          borderRadius: pvChartType === "line" ? 0 : 6,
+          fill: pvChartType === "line",
+          tension: 0.38,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#f59e0b",
+          pointBorderWidth: 2,
+          pointRadius: pvChartType === "line" ? 4 : 0,
+          pointHoverRadius: pvChartType === "line" ? 7 : 0
+        }
+      ];
+    } else if (pvmhrViewMode === "production_value") {
+      datasets = [
+        {
+          label: "Production Value (₹)",
+          data: prodValues,
+          backgroundColor: pvChartType === "line" ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.85)",
+          borderColor: "#2563eb",
+          borderWidth: pvChartType === "line" ? 3 : 1.5,
+          borderRadius: pvChartType === "line" ? 0 : 6,
+          fill: pvChartType === "line",
+          tension: 0.38,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#2563eb",
+          pointBorderWidth: 2,
+          pointRadius: pvChartType === "line" ? 4 : 0,
+          pointHoverRadius: pvChartType === "line" ? 7 : 0
+        }
+      ];
+    } else if (pvmhrViewMode === "mhr_cost") {
+      datasets = [
+        {
+          label: "MHR Cost (₹)",
+          data: mhrCosts,
+          backgroundColor: pvChartType === "line" ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.85)",
+          borderColor: "#f59e0b",
+          borderWidth: pvChartType === "line" ? 3 : 1.5,
+          borderRadius: pvChartType === "line" ? 0 : 6,
+          fill: pvChartType === "line",
+          tension: 0.38,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#f59e0b",
+          pointBorderWidth: 2,
+          pointRadius: pvChartType === "line" ? 4 : 0,
+          pointHoverRadius: pvChartType === "line" ? 7 : 0
+        }
+      ];
+    } else if (pvmhrViewMode === "net_margin") {
+      datasets = [
+        {
+          label: "Net Margin (₹)",
+          data: netMargins,
+          backgroundColor: netMargins.map(v => v >= 0 ? "rgba(16, 185, 129, 0.85)" : "rgba(239, 68, 68, 0.85)"),
+          borderColor: netMargins.map(v => v >= 0 ? "#10b981" : "#ef4444"),
+          borderWidth: 1.5,
+          borderRadius: 6
+        }
+      ];
+    }
+
+    pvChartInst.current = new Chart(ctx, {
+      type: pvChartType,
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
       plugins: [ChartDataLabels],
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
         plugins: {
           legend: {
-            display: false
+            display: pvmhrViewMode === "comparison",
+            position: "top",
+            labels: {
+              font: { family: PA2_FONT, size: 11, weight: "600" },
+              padding: 14,
+              usePointStyle: true
+            }
           },
           tooltip: {
             callbacks: {
-              label: ctx => ` Machine Hour Rate: ₹${ctx.parsed.y}/hr`
+              label: (ctx) => {
+                const item = pvmhrChartData[ctx.dataIndex];
+                if (!item) return ` ₹${ctx.parsed.y.toLocaleString("en-IN")}`;
+                if (ctx.dataset.label.includes("Production Value")) {
+                  return ` Production Value: ₹${item.prodVal.toLocaleString("en-IN")}`;
+                } else if (ctx.dataset.label.includes("MHR Cost")) {
+                  return ` MHR Cost: ₹${item.mhrCost.toLocaleString("en-IN")} (${item.runHrs}h @ ₹${item.rate}/h)`;
+                } else if (ctx.dataset.label.includes("Net Margin")) {
+                  const sign = item.netMargin >= 0 ? "+" : "";
+                  return ` Net Margin: ${sign}₹${item.netMargin.toLocaleString("en-IN")} (${item.recoveryPct}% recovery)`;
+                }
+                return ` ${ctx.dataset.label}: ₹${ctx.parsed.y.toLocaleString("en-IN")}`;
+              }
             }
           },
           datalabels: {
@@ -2533,24 +2574,48 @@ export default function ProductionAnalysis() {
             align: "top",
             offset: 4,
             backgroundColor: "rgba(255, 255, 255, 0.95)",
-            borderColor: "rgba(226, 232, 240, 0.8)",
+            borderColor: "rgba(226, 232, 240, 0.85)",
             borderWidth: 1,
             borderRadius: 6,
-            padding: { top: 3, bottom: 3, left: 6, right: 6 },
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
             font: { size: 9, weight: "750", family: PA2_FONT },
             color: "#1e293b",
-            formatter: (v) => v ? `₹${v}` : ""
+            formatter: (v) => {
+              if (v === 0) return "₹0";
+              const abs = Math.abs(v);
+              const sign = v < 0 ? "-" : "";
+              if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)}L`;
+              if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
+              return `${sign}₹${abs}`;
+            }
           }
         },
         scales: {
-          x: { ticks: { font: { size: 10, family: PA2_FONT, weight: "600" } }, grid: { display: false } },
-          y: { beginAtZero: true, grace: "12%", ticks: { callback: v => `₹${v}`, font: { size: 9.5, family: PA2_FONT } }, grid: { color: "#f1f5f9" } }
+          x: {
+            ticks: { font: { size: 10, family: PA2_FONT, weight: "600" }, maxRotation: 30 },
+            grid: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            grace: "12%",
+            ticks: {
+              callback: (v) => {
+                const abs = Math.abs(v);
+                const sign = v < 0 ? "-" : "";
+                if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+                if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(0)}K`;
+                return `${sign}₹${abs}`;
+              },
+              font: { size: 9.5, family: PA2_FONT }
+            },
+            grid: { color: "#f1f5f9" }
+          }
         }
       }
     });
 
-    return () => mhrTrendChartInst.current?.destroy();
-  }, [mhrTrendChartData, pageLoading]);
+    return () => pvChartInst.current?.destroy();
+  }, [pvmhrChartData, pvmhrViewMode, pvChartType, pageLoading]);
   /* ── Machine Added Trend Chart ───────────── */
   useEffect(() => {
     if (!macAddedChartRef.current) return;
@@ -3267,71 +3332,89 @@ export default function ProductionAnalysis() {
       {/* ══════════════════════════════════════════════
 §1 — PRODUCTION VALUE REPORT
 ══════════════════════════════════════════════ */}
-      {/* ── PRODUCTION VALUE REPORT ── */}
-      <div className="pa2-card pa2-anim" data-spotlight="pda-production-value" style={{ "--d": "100ms" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem" }}>
-          <SectionHeader icon={<FiDollarSign size={16} />} title="Production Value Report" sub="Machine-wise Production Value (₹)" />
+      {/* ══════════════════════════════════════════════════════════════════════════════
+          §1 — PRODUCTION VALUE REPORT VS MACHINE HOUR RATE (MHR) COST ANALYSIS (COMBINED)
+      ══════════════════════════════════════════════════════════════════════════════ */}
+      <div className="pa2-card pa2-anim pa2-pvmhr-card" data-spotlight="pda-production-value-vs-mhr" style={{ "--d": "100ms" }}>
+        {/* Header & Controls Toolbar */}
+        <div className="pa2-pvmhr-toolbar">
+          <SectionHeader
+            icon={<FiTrendingUp size={16} />}
+            title="Production Value Report Vs Machine Hour Rate (MHR) Cost Analysis"
+            sub="Machine-wise comparison of Production Output Value (₹) vs Operational MHR Cost (₹) for the selected period"
+          />
+
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {/* View Mode Segmented Controls */}
+            <div className="pa2-pvmhr-view-tabs">
+              <button
+                type="button"
+                className={`pa2-pvmhr-view-tab ${pvmhrViewMode === "comparison" ? "pa2-pvmhr-view-tab--active" : ""}`}
+                onClick={() => setPvmhrViewMode("comparison")}
+                title="Grouped view comparing Production Value vs MHR Cost"
+              >
+                <FiLayers size={12} /> Comparison
+              </button>
+              <button
+                type="button"
+                className={`pa2-pvmhr-view-tab ${pvmhrViewMode === "production_value" ? "pa2-pvmhr-view-tab--active" : ""}`}
+                onClick={() => setPvmhrViewMode("production_value")}
+                title="View Production Value alone"
+              >
+                <FiDollarSign size={12} /> Prod. Value
+              </button>
+              <button
+                type="button"
+                className={`pa2-pvmhr-view-tab ${pvmhrViewMode === "mhr_cost" ? "pa2-pvmhr-view-tab--active" : ""}`}
+                onClick={() => setPvmhrViewMode("mhr_cost")}
+                title="View Operational MHR Cost alone"
+              >
+                <FiClock size={12} /> MHR Cost
+              </button>
+              <button
+                type="button"
+                className={`pa2-pvmhr-view-tab ${pvmhrViewMode === "net_margin" ? "pa2-pvmhr-view-tab--active" : ""}`}
+                onClick={() => setPvmhrViewMode("net_margin")}
+                title="View Net Value Added / Profit Margin (Prod. Value - MHR Cost)"
+              >
+                <FiAward size={12} /> Net Margin
+              </button>
+            </div>
+
+            {/* Bar / Line Format Toggle */}
             <div className="pa2-pv-toggle" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <button className={`pa2-pv-tab ${pvChartType === "bar" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("bar")} style={{ padding: "6px 12px" }}><FiLayers size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Bar</button>
-              <button className={`pa2-pv-tab ${pvChartType === "line" ? "pa2-pv-tab--active" : ""}`} onClick={() => setPvChartType("line")} style={{ padding: "6px 12px" }}><FiActivity size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Line</button>
+              <button
+                type="button"
+                className={`pa2-pv-tab ${pvChartType === "bar" ? "pa2-pv-tab--active" : ""}`}
+                onClick={() => setPvChartType("bar")}
+                style={{ padding: "6px 12px" }}
+              >
+                <FiLayers size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Bar
+              </button>
+              <button
+                type="button"
+                className={`pa2-pv-tab ${pvChartType === "line" ? "pa2-pv-tab--active" : ""}`}
+                onClick={() => setPvChartType("line")}
+                style={{ padding: "6px 12px" }}
+              >
+                <FiActivity size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />Line
+              </button>
             </div>
-          </div>
-        </div>
-        <div className="pa2-pv-kpis">
-          {(() => {
-            const ach = pvChartData.machine_data.achieved;
-            const lbl = pvChartData.machine_data.labels;
-            const total = ach.reduce((s, v) => s + v, 0);
-            const count = lbl.length || 1;
-            const maxIdx = ach.indexOf(Math.max(...(ach.length ? ach : [0])));
-            return [{ label: "Total Achieved Value", val: `₹${total.toLocaleString("en-IN")}`, color: "#f97316" }, { label: "No. of Machines", val: lbl.length, color: "#2563eb" }, { label: "Avg per Machine", val: `₹${Math.round(total / count).toLocaleString("en-IN")}`, color: "#10b981" }, { label: "Top Machine", val: lbl[maxIdx] || "—", color: "#8b5cf6" }].map((k, i) => (
-              <div key={i} className="pa2-pv-kpi" style={{ borderColor: k.color + "33" }}><div className="pa2-pv-kpi-lbl">{k.label}</div><div className="pa2-pv-kpi-val" style={{ color: k.color }}>{k.val}</div></div>
-            ));
-          })()}
-        </div>
-        <div style={{ height: 340, marginTop: "1rem", position: "relative" }}>
-          {pageLoading ? (
-            <div className="pa2-chart-skeleton">
-              <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
-              <div className="pa2-skeleton-spinner">
-                <FiLoader className="pa2-spinner-icon" />
-                <span>Loading Production Values...</span>
-              </div>
-            </div>
-          ) : (!pvChartData || !pvChartData.machine_data || pvChartData.machine_data.labels.length === 0 || pvChartData.machine_data.achieved.every(v => v === 0)) ? (
-            <NoDataFound
-              title="No Data Found on this period"
-              sub="No machine production values recorded for this period."
-              height={340}
-              icon={FiDollarSign}
-            />
-          ) : (
-            <canvas key={pvMode + pvChartType} ref={pvChartRef} />
-          )}
-        </div>
-      </div>
 
-      {/* ── MACHINE HOUR RATE (MHR) CALCULATION ── */}
-      <div className="pa2-card pa2-anim" data-spotlight="pda-mhr" style={{ "--d": "105ms", marginTop: "18px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.2rem", paddingBottom: "12px", borderBottom: "1.5px solid #eef2ff" }}>
-          <SectionHeader icon={<FiClock size={16} />} title="Machine Hour Rate (MHR) Cost Analysis" sub="Machine-wise comparative analysis of hourly operating rates (₹/hr)" />
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             {/* Searchable Multi-Select Macno Filter */}
             <div ref={mhrFilterDropdownRef} style={{ position: "relative" }}>
               <button
                 type="button"
                 className="pa2-ps-trigger"
                 style={{
-                  minWidth: "160px",
+                  minWidth: "155px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "6px 14px",
+                  padding: "6px 12px",
                   borderRadius: "8px",
                   background: "rgba(255, 255, 255, 0.95)",
-                  border: "1.5px solid rgba(37, 99, 235, 0.15)",
+                  border: "1.5px solid rgba(37, 99, 235, 0.18)",
                   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
                   fontWeight: "750",
                   fontSize: "12px",
@@ -3342,7 +3425,7 @@ export default function ProductionAnalysis() {
               >
                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <FiCpu size={13} style={{ color: "#2563eb" }} />
-                  {mhrSelectedMachines.length === 0 ? "Select Macno" : `Machines (${mhrSelectedMachines.length})`}
+                  {mhrSelectedMachines.length === 0 ? "All Machines" : `Machines (${mhrSelectedMachines.length})`}
                 </span>
                 <svg
                   style={{
@@ -3356,6 +3439,7 @@ export default function ProductionAnalysis() {
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </button>
+
               {mhrFilterOpen && (
                 <div
                   className="pa2-ps-menu"
@@ -3394,9 +3478,9 @@ export default function ProductionAnalysis() {
                   <div className="pa2-ps-scroll-list" style={{ maxHeight: "200px", padding: "2px" }}>
                     {(() => {
                       const query = mhrSearchQuery.trim().toLowerCase();
-                      const allMacs = macOptions.length > 1
-                        ? macOptions.filter(opt => opt.value !== "").map(opt => opt.value)
-                        : Object.keys(mhrMachinesInputs);
+                      const allMacs = (pvChartData?.machine_data?.labels?.length > 0)
+                        ? pvChartData.machine_data.labels
+                        : (macOptions.length > 1 ? macOptions.filter(opt => opt.value !== "").map(opt => opt.value) : Object.keys(mhrMachinesInputs));
 
                       const displayedMacs = query
                         ? allMacs.filter(mac => mac.toLowerCase().includes(query))
@@ -3455,7 +3539,7 @@ export default function ProductionAnalysis() {
                       onClick={() => setMhrSelectedMachines([])}
                       style={{ border: "none", background: "none", color: "#64748b", fontSize: "10.5px", fontWeight: "700", cursor: "pointer", padding: 0 }}
                     >
-                      Clear All
+                      Show All
                     </button>
                     <button
                       type="button"
@@ -3469,21 +3553,24 @@ export default function ProductionAnalysis() {
               )}
             </div>
 
+            {/* MHR Rates & Inputs Configuration Modal Trigger */}
             <button
+              type="button"
               className="pa2-pv-tab pa2-pv-tab--active"
               onClick={() => setMhrModalOpen(true)}
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                background: "#2563eb",
+                background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                 color: "#ffffff",
                 padding: "6px 14px",
                 borderRadius: "8px",
                 fontSize: "12px",
                 fontWeight: "700",
                 border: "none",
-                cursor: "pointer"
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(37, 99, 235, 0.25)"
               }}
             >
               <FiSettings size={13} style={{ verticalAlign: "middle" }} /> MHR Rates & Inputs
@@ -3491,50 +3578,132 @@ export default function ProductionAnalysis() {
           </div>
         </div>
 
-        {/* Outer View: Dynamic MHR cost graph per date */}
-        <div style={{ height: 320, position: "relative" }}>
+        {/* KPI Summary Deck */}
+        <div className="pa2-pvmhr-kpis">
+          {(() => {
+            const totProd = pvmhrChartData.reduce((s, x) => s + x.prodVal, 0);
+            const totMhr = pvmhrChartData.reduce((s, x) => s + x.mhrCost, 0);
+            const netMargin = totProd - totMhr;
+            const recoveryPct = totMhr > 0 ? ((totProd / totMhr) * 100).toFixed(1) : (totProd > 0 ? "100.0" : "0.0");
+            const topMac = pvmhrChartData.length > 0
+              ? [...pvmhrChartData].sort((a, b) => b.recoveryPct - a.recoveryPct)[0]
+              : null;
+
+            return [
+              {
+                label: "Total Production Value",
+                val: `₹${totProd.toLocaleString("en-IN")}`,
+                accent: "#2563eb",
+                badge: `${pvmhrChartData.length} Machines`,
+                sub: "Achieved gross output value"
+              },
+              {
+                label: "Total Period MHR Cost",
+                val: `₹${totMhr.toLocaleString("en-IN")}`,
+                accent: "#f59e0b",
+                badge: "Operating Cost",
+                sub: "Running Hours × Hourly Rate"
+              },
+              {
+                label: "Net Value Added / Margin",
+                val: `${netMargin >= 0 ? "+" : "-"}₹${Math.abs(netMargin).toLocaleString("en-IN")}`,
+                accent: netMargin >= 0 ? "#10b981" : "#ef4444",
+                badge: `${recoveryPct}% Recovery`,
+                sub: netMargin >= 0 ? "Cost fully recovered" : "Operational cost deficit"
+              },
+              {
+                label: "Top Efficient Machine",
+                val: topMac?.name || "—",
+                accent: "#8b5cf6",
+                badge: topMac ? `${topMac.recoveryPct}% Rec.` : "—",
+                sub: topMac ? `Val: ₹${(topMac.prodVal / 1000).toFixed(0)}k | Cost: ₹${(topMac.mhrCost / 1000).toFixed(0)}k` : "No activity"
+              }
+            ].map((k, i) => (
+              <div key={i} className="pa2-pvmhr-kpi" style={{ "--kpi-accent": k.accent }}>
+                <div className="pa2-pvmhr-kpi-hdr">
+                  <span className="pa2-pvmhr-kpi-lbl">{k.label}</span>
+                  <span
+                    className="pa2-pvmhr-kpi-badge"
+                    style={{
+                      background: k.accent + "18",
+                      color: k.accent,
+                      border: `1px solid ${k.accent}33`
+                    }}
+                  >
+                    {k.badge}
+                  </span>
+                </div>
+                <div className="pa2-pvmhr-kpi-val" style={{ color: k.accent }}>
+                  {k.val}
+                </div>
+                <div className="pa2-pvmhr-kpi-sub">{k.sub}</div>
+              </div>
+            ));
+          })()}
+        </div>
+
+        {/* Interactive Chart Container */}
+        <div style={{ height: 350, marginTop: "0.5rem", position: "relative" }}>
           {pageLoading ? (
             <div className="pa2-chart-skeleton">
               <div className="pa2-skeleton" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
               <div className="pa2-skeleton-spinner">
                 <FiLoader className="pa2-spinner-icon" />
-                <span>Loading MHR cost trends...</span>
+                <span>Loading Production Values & MHR Costs...</span>
               </div>
             </div>
-          ) : (!mhrTrendChartData || !mhrTrendChartData.labels || mhrTrendChartData.labels.length === 0 || mhrTrendChartData.datasets[0].data.every(v => v === 0)) ? (
+          ) : (pvmhrChartData.length === 0 || pvmhrChartData.every(v => v.prodVal === 0 && v.mhrCost === 0)) ? (
             <NoDataFound
               title="No Data Found on this period"
-              sub="No machine hour rate records found for this period."
-              height={320}
-              icon={FiClock}
+              sub="No machine production values or MHR operating costs recorded for this period."
+              height={350}
+              icon={FiDollarSign}
             />
           ) : (
-            <canvas ref={mhrChartRef} />
+            <canvas key={pvmhrViewMode + pvChartType + mhrSelectedMachines.join(",")} ref={pvChartRef} />
           )}
         </div>
 
-        {/* Dynamic rate list tags */}
-        <div className="pa2-mhr-bottom-rates" style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "18px", paddingTop: "14px", borderTop: "1.5px solid #f1f5f9" }}>
-          {mhrSelectedMachines.map(mac => {
-            const rate = calculateMachineMhr(mac);
+        {/* Machine Cost & Value Summary Chips Strip */}
+        <div className="pa2-pvmhr-bottom-strip">
+          {pvmhrChartData.map(item => {
+            const isProfitable = item.netMargin >= 0;
             return (
               <div
-                key={mac}
-                className="pa2-mhr-bottom-rate-tag"
-                onClick={() => { setMhrSelectedMachine(mac); setMhrModalOpen(true); }}
-                style={{
-                  background: "#f8fafc",
-                  border: "1.5px solid #e2e8f0",
-                  padding: "5px 10px",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                  fontWeight: "600",
-                  color: "#334155",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease"
+                key={item.name}
+                className="pa2-pvmhr-chip"
+                onClick={() => {
+                  setMhrSelectedMachine(item.name);
+                  setMhrModalOpen(true);
                 }}
+                title={`Click to adjust MHR rates & inputs for ${item.name}`}
               >
-                <span style={{ color: "#64748b" }}>{mac}:</span> <strong style={{ color: "#1e3a8a", fontVariantNumeric: "tabular-nums" }}>₹{rate.toFixed(2)}/h</strong>
+                <div className="pa2-pvmhr-chip-title">
+                  <span className="pa2-pvmhr-chip-name">{item.name}</span>
+                  <span className="pa2-pvmhr-chip-rate">₹{item.rate}/h</span>
+                </div>
+                <div className="pa2-pvmhr-chip-metrics">
+                  <span style={{ color: "#2563eb", fontWeight: "750" }}>
+                    Val: ₹{item.prodVal >= 100000 ? `${(item.prodVal / 100000).toFixed(2)}L` : `${(item.prodVal / 1000).toFixed(1)}K`}
+                  </span>
+                  <span style={{ color: "#f59e0b", fontWeight: "750" }}>
+                    Cost: ₹{item.mhrCost >= 100000 ? `${(item.mhrCost / 100000).toFixed(2)}L` : `${(item.mhrCost / 1000).toFixed(1)}K`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px", fontSize: "10.5px" }}>
+                  <span style={{ color: "#64748b" }}>{item.runHrs}h run</span>
+                  <span
+                    style={{
+                      fontWeight: "750",
+                      color: isProfitable ? "#059669" : "#dc2626",
+                      background: isProfitable ? "#ecfdf5" : "#fef2f2",
+                      padding: "1px 5px",
+                      borderRadius: "4px"
+                    }}
+                  >
+                    {isProfitable ? "+" : ""}{item.recoveryPct}%
+                  </span>
+                </div>
               </div>
             );
           })}
@@ -4728,7 +4897,7 @@ export default function ProductionAnalysis() {
       {/* ── MACHINE TREND GRAPHS ── */}
       <div className="pa2-row-2" data-spotlight="pda-machine-added" style={{ marginBottom: "18px" }}>
         <div className="pa2-card pa2-anim" style={{ "--d": "150ms" }}>
-          <SectionHeader icon={<FiPlus size={16} />} title="Machine Added Trend" sub="Incubation / addition of new machines in production line month-wise" />
+          <SectionHeader icon={<FiPlus size={16} />} title="Machine Added Trend" sub="Incubation / addition of new machines in production line year-wise" />
           <div style={{ height: 230, marginTop: "1rem", position: "relative" }}>
             {pageLoading ? (
               <div className="pa2-chart-skeleton">

@@ -3142,8 +3142,8 @@ def purchase_analysis_fulfillment_schedule(request):
             sups = [s.strip() for s in supplier_filter.split(",") if s.strip()]
             if sups:
                 placeholders = ",".join(["?"] * len(sups))
-                supplier_where = f" AND {cm_name_sel} IN ({placeholders}) "
-                supplier_params.extend(sups)
+                supplier_where = f" AND UPPER(LTRIM(RTRIM(ISNULL({cm_name_sel}, N'')))) IN ({placeholders}) "
+                supplier_params.extend([s.upper() for s in sups])
 
         # ── Search Filter (request.GET) ────────────────────────────
         search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
@@ -3491,6 +3491,28 @@ def purchase_analysis_average_purchase_value(request):
 
     start_date, end_date = parse_date_range(request)
 
+    dtype_param = (request.GET.get("dtype") or request.GET.get("po_type") or "").strip()
+    apply_dtype = dtype_param and dtype_param.lower() != "all types"
+    dtype_filter_sql = " AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) = UPPER(?)" if apply_dtype else ""
+
+    supplier_filter = (request.GET.get("supplier") or "").strip()
+    supplier_where = ""
+    supplier_params = []
+    if supplier_filter and supplier_filter.lower() != "all suppliers":
+        sups = [s.strip() for s in supplier_filter.split(",") if s.strip()]
+        if sups:
+            placeholders = ",".join(["?"] * len(sups))
+            supplier_where = f" AND UPPER(LTRIM(RTRIM(ISNULL(CM.CName, '')))) IN ({placeholders}) "
+            supplier_params.extend([s.upper() for s in sups])
+
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+    search_where = ""
+    search_params = []
+    if search_q:
+        like_val = f"%{search_q}%"
+        search_where = " AND (P.pono LIKE ? OR P.rmname LIKE ? OR CM.CName LIKE ? OR M.WMDescription LIKE ? OR M.RMDescription LIKE ? OR M.RPMDescription LIKE ?) "
+        search_params.extend([like_val, like_val, like_val, like_val, like_val, like_val])
+
     cursor = None
     try:
         cursor = conn.cursor()
@@ -3541,7 +3563,7 @@ def purchase_analysis_average_purchase_value(request):
 
             WHERE ISNULL(PM.deleted, 0) = 0
               AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
-
+              {dtype_filter_sql}
               AND CAST(PM.podate AS DATE) >= ?
               AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
         ),
@@ -3730,13 +3752,24 @@ def purchase_analysis_average_purchase_value(request):
             ON P.pono = GB.pono
            AND LTRIM(RTRIM(P.rmname)) = GB.rmname
 
+        WHERE 1=1
+          {supplier_where}
+          {search_where}
+
         ORDER BY
             P.podate,
             P.pono,
             P.rmname;
         """
 
-        cursor.execute(query, [str(start_date), str(end_date)])
+        params = []
+        if apply_dtype:
+            params.append(dtype_param)
+        params.extend([str(start_date), str(end_date)])
+        params.extend(supplier_params)
+        params.extend(search_params)
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
 
         rows_out = []
@@ -3830,7 +3863,29 @@ def purchase_analysis_advanced_purchase_analytics(request):
         conn, tenant = get_tenant_connection(request)
         cursor = conn.cursor()
 
-        start_date, end_date = dashboard2_parse_date_range_default_month(request)
+        start_date, end_date = parse_date_range(request)
+
+        dtype_param = (request.GET.get("dtype") or request.GET.get("po_type") or "").strip()
+        apply_dtype = dtype_param and dtype_param.lower() != "all types"
+        dtype_filter_sql = " AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) = UPPER(?)" if apply_dtype else ""
+
+        supplier_filter = (request.GET.get("supplier") or "").strip()
+        supplier_where = ""
+        supplier_params = []
+        if supplier_filter and supplier_filter.lower() != "all suppliers":
+            sups = [s.strip() for s in supplier_filter.split(",") if s.strip()]
+            if sups:
+                placeholders = ",".join(["?"] * len(sups))
+                supplier_where = f" AND UPPER(LTRIM(RTRIM(ISNULL(CM.CName, '')))) IN ({placeholders}) "
+                supplier_params.extend([s.upper() for s in sups])
+
+        search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+        search_where = ""
+        search_params = []
+        if search_q:
+            like_val = f"%{search_q}%"
+            search_where = " AND (P.pono LIKE ? OR P.rmname LIKE ? OR CM.CName LIKE ? OR M.WMDescription LIKE ? OR M.RMDescription LIKE ? OR M.RPMDescription LIKE ?) "
+            search_params = [like_val, like_val, like_val, like_val, like_val, like_val]
 
         _, _, q_m = resolve_erp_table(cursor, ["POMas", "pomas", "POMAS", "PoMas"])
         _, _, q_d = resolve_erp_table(cursor, ["PODet", "podet", "PODET", "PoDet", "In_PoDet"])
@@ -3876,7 +3931,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
 
             WHERE ISNULL(PM.deleted, 0) = 0
               AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
-
+              {dtype_filter_sql}
               AND CAST(PM.podate AS DATE) >= ?
               AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
         ),
@@ -4006,13 +4061,24 @@ def purchase_analysis_advanced_purchase_analytics(request):
         LEFT JOIN ITEM_MASTER M
             ON P.rmname = M.rmname
 
+        WHERE 1=1
+          {supplier_where}
+          {search_where}
+
         ORDER BY
             P.podate,
             P.pono,
             P.rmname;
         """
 
-        cursor.execute(query_po, [str(start_date), str(end_date)])
+        params_po = []
+        if apply_dtype:
+            params_po.append(dtype_param)
+        params_po.extend([str(start_date), str(end_date)])
+        params_po.extend(supplier_params)
+        params_po.extend(search_params)
+
+        cursor.execute(query_po, params_po)
         po_rows = cursor.fetchall()
 
         # 2. Query Commer_BaseRateDet for commercial rate changes

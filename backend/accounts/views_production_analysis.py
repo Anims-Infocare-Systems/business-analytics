@@ -823,8 +823,14 @@ def production_analysis_report(request):
             SELECT 
                 macno,
                 CASE 
-                    WHEN SUM(CAST(ShiftTimeSecs AS FLOAT)) > 0 
-                    THEN (SUM(CAST(RunTimeSecs AS FLOAT)) / SUM(CAST(ShiftTimeSecs AS FLOAT))) * 100.0
+                    WHEN SUM(CAST(RunTimeSecs AS FLOAT)) > 0 
+                    THEN (
+                        CASE 
+                            WHEN SUM(CAST(RunTimeSecs AS FLOAT)) - SUM(CAST(IdleTimeSecs AS FLOAT)) > 0 
+                            THEN ((SUM(CAST(RunTimeSecs AS FLOAT)) - SUM(CAST(IdleTimeSecs AS FLOAT))) / SUM(CAST(RunTimeSecs AS FLOAT))) * 100.0
+                            ELSE 0.0 
+                        END
+                    )
                     ELSE 0.0 
                 END AS Utilization,
                 SUM(CAST(RunTimeSecs AS FLOAT)) / 3600.0 AS RunningHrs,
@@ -954,6 +960,14 @@ def production_analysis_report(request):
 
                 rej_pct = round((rej_qty / prod_qty * 100.0), 2) if prod_qty > 0 else 0.0
                 rw_pct = round((rw_qty / prod_qty * 100.0), 2) if prod_qty > 0 else 0.0
+                running_h = float(r[9] or 0.0)
+                idle_h = float(r[10] or 0.0)
+                if running_h > 0:
+                    prod_h = max(0.0, running_h - idle_h)
+                    util_val = round(min(100.0, (prod_h / running_h) * 100.0), 2)
+                else:
+                    util_val = round(float(r[5] or 0.0), 2)
+
                 machines.append({
                     "name": r[0] if r[0] is not None else "",
                     "macname": r[1] if r[1] is not None else "",
@@ -961,7 +975,7 @@ def production_analysis_report(request):
                     "color": COLORS[idx % len(COLORS)],
                     "oee": round(float(r[3] or 0.0), 2),
                     "oprEff": round(float(r[4] or 0.0), 2),
-                    "utilization": round(float(r[5] or 0.0), 2),
+                    "utilization": util_val,
                     "prodQty": prod_qty,
                     "rejQty": rej_qty,
                     "macRejQty": mac_rej,
@@ -969,8 +983,8 @@ def production_analysis_report(request):
                     "rwQty": rw_qty,
                     "rejPct": rej_pct,
                     "rwPct": rw_pct,
-                    "runningHrs": round(float(r[9] or 0.0), 1),
-                    "idleHrs": round(float(r[10] or 0.0), 1),
+                    "runningHrs": round(running_h, 1),
+                    "idleHrs": round(idle_h, 1),
                 })
         except Exception as mqe:
             logger.warning(f"Machines query error: {mqe}")
@@ -979,25 +993,32 @@ def production_analysis_report(request):
         result["machines"] = machines
 
         # ── Query 11: Machine & Operator Efficiency ───────────────────
+        # Formula logic: Production hours / Running hours * 100
         overall_util_query = """
         SELECT 
             CASE 
-                WHEN SUM(CAST(ShiftTimeSecs AS FLOAT)) > 0 
-                THEN (SUM(CAST(RunTimeSecs AS FLOAT)) / SUM(CAST(ShiftTimeSecs AS FLOAT))) * 100.0
+                WHEN SUM(CAST(RunTimeSecs AS FLOAT)) > 0 
+                THEN (
+                    CASE 
+                        WHEN SUM(CAST(RunTimeSecs AS FLOAT)) - SUM(CAST(IdleTimeSecs AS FLOAT)) > 0 
+                        THEN ((SUM(CAST(RunTimeSecs AS FLOAT)) - SUM(CAST(IdleTimeSecs AS FLOAT))) / SUM(CAST(RunTimeSecs AS FLOAT))) * 100.0
+                        ELSE 0.0 
+                    END
+                )
                 ELSE 0.0 
             END AS OverallUtilization
         FROM (
             SELECT 
                 CASE WHEN runto < runfrom THEN DATEDIFF(SECOND, runfrom, DATEADD(DAY, 1, runto)) ELSE DATEDIFF(SECOND, runfrom, runto) END AS RunTimeSecs,
-                COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs
-            FROM ProductionEntry 
+                CASE WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) END AS IdleTimeSecs
+            FROM ProductionEntry PE 
             WHERE prodid IN (SELECT prodid FROM #FilteredPE)
             
             UNION ALL
             
             SELECT 
                 runtimesecs AS RunTimeSecs,
-                COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs
+                DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntry 
             WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
             
@@ -1005,13 +1026,15 @@ def production_analysis_report(request):
             
             SELECT 
                 runtimesecs AS RunTimeSecs,
-                COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs
+                DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntryRod 
             WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
         ) A
         """
         row = run_query(overall_util_query)
-        if row and row[0] is not None:
+        if result.get("productionHours", 0) > 0:
+            result["machineUtilization"] = round(min(100.0, (result.get("totProductionHours", 0.0) / result["productionHours"]) * 100.0), 2)
+        elif row and row[0] is not None:
             result["machineUtilization"] = round(float(row[0]), 2)
         else:
             result["machineUtilization"] = 0.0
@@ -1076,7 +1099,7 @@ def production_analysis_report(request):
                 except: pass
         result["oeeTrend"] = oee_trend
 
-        # ── Query 13: Machine Added Trend (based on effdate) ─────────
+        # ── Query 13: Machine Added Trend (based on effdate, year-wise) ─
         mac_added_query = "SELECT macno, effdate FROM MacMaster WHERE deleted = 0 AND effdate IS NOT NULL " + mac_filter_sql + " ORDER BY effdate"
         mac_added_trend = {"labels": [], "counts": [], "machineList": []}
         try:
@@ -1084,16 +1107,20 @@ def production_analysis_report(request):
             cur.execute(mac_added_query, mac_filter_params)
             mac_rows = cur.fetchall()
             from collections import defaultdict
-            added_by_month = defaultdict(list)
+            added_by_year = defaultdict(list)
             for m_no, eff_date in mac_rows:
                 if eff_date:
-                    month_label = eff_date.strftime("%b %y")
-                    added_by_month[month_label].append(m_no)
+                    if hasattr(eff_date, "year"):
+                        year_label = str(eff_date.year)
+                    else:
+                        eff_str = str(eff_date).strip()
+                        year_label = eff_str[:4] if len(eff_str) >= 4 and eff_str[:4].isdigit() else eff_str
+                    added_by_year[year_label].append(str(m_no or "").strip())
             
-            # Sort the months chronologically
-            sorted_added = sorted(added_by_month.items(), key=lambda x: datetime.strptime(x[0], "%b %y"))
-            for month, macs in sorted_added:
-                mac_added_trend["labels"].append(f"{month} ({macs[0]})")
+            # Sort the years chronologically
+            sorted_added = sorted(added_by_year.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0)
+            for year, macs in sorted_added:
+                mac_added_trend["labels"].append(f"{year} ({macs[0]})")
                 mac_added_trend["counts"].append(len(macs))
                 mac_added_trend["machineList"].append(", ".join(macs))
         except Exception as mate:
@@ -1346,7 +1373,7 @@ def _get_mac_filter_sql(request, cursor, table_alias=""):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Production Value Report  (Machine-wise + Month-wise)
-# Value = qty × RatePerHr from MacMaster
+# Value = Tot Production Minutes × RatePerMinute (from MacMaster RatePerHr / 60)
 # ─────────────────────────────────────────────────────────────────────────────
 @api_view(["GET"])
 def production_value_report(request):
@@ -1391,13 +1418,70 @@ def production_value_report(request):
             finally:
                 cur.close()
 
+        company_code = tenant.get("company_code") or tenant.get("tenant_id") or "DEFAULT"
+        saved_mhr_inputs = {}
+        try:
+            from django.db import connection as cloud_connection
+            with cloud_connection.cursor() as cloud_cursor:
+                cloud_cursor.execute("""
+                    SELECT LTRIM(RTRIM(macno)), ratePerHr
+                    FROM MhrInputs
+                    WHERE company_code = %s OR company_code = %s
+                """, [company_code, "DEFAULT"])
+                for r in cloud_cursor.fetchall() or []:
+                    m_no = (r[0] or "").strip()
+                    if m_no and r[1] is not None:
+                        saved_mhr_inputs[m_no] = float(r[1])
+        except Exception as ce:
+            logger.warning(f"production_value_report MhrInputs fetch warning: {ce}")
+
         value_query = """
         SELECT A.macno AS MacName, ISNULL(M.RatePerHr, 0) AS RatePerHr, FORMAT(A.entrydate, 'MMM yy') AS MonthLabel,
-               DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth, SUM(A.qty) AS TotalQty
+               DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth,
+               SUM(CASE WHEN (A.RunTimeSecs - A.IdleTimeSecs) > 0 THEN (A.RunTimeSecs - A.IdleTimeSecs) ELSE 0 END) AS TotProdSeconds,
+               SUM(ISNULL(A.RunTimeSecs, 0)) AS TotRunSeconds
         FROM (
-            SELECT macno, proddate AS entrydate, ISNULL(okqty, 0) AS qty FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
-            UNION ALL SELECT macno, entrydate, ISNULL(qty, 0) AS qty FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
-            UNION ALL SELECT macno, entrydate, ISNULL(qty, 0) AS qty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+            SELECT 
+                PE.macno, 
+                PE.proddate AS entrydate, 
+                CASE 
+                    WHEN PE.runto >= PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, PE.runto) 
+                    ELSE DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) 
+                END AS RunTimeSecs,
+                CASE 
+                    WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) 
+                    ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) 
+                END AS IdleTimeSecs
+            FROM ProductionEntry PE 
+            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) AND PE.macno IS NOT NULL AND PE.deleted = 0
+            
+            UNION ALL 
+            
+            SELECT 
+                CPE.macno, 
+                CPE.entrydate, 
+                CASE 
+                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
+                    WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                    ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+                END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvProductionEntry CPE 
+            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) AND CPE.macno IS NOT NULL AND CPE.deleted = 0
+            
+            UNION ALL 
+            
+            SELECT 
+                CPR.macno, 
+                CPR.entrydate, 
+                CASE 
+                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
+                    WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                    ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+                END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvProductionEntryRod CPR 
+            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) AND CPR.macno IS NOT NULL AND CPR.deleted = 0
         ) A
         LEFT JOIN MacMaster M ON M.macno = A.macno AND M.deleted = 0
         GROUP BY A.macno, ISNULL(M.RatePerHr, 0), FORMAT(A.entrydate, 'MMM yy'), DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate)
@@ -1406,34 +1490,74 @@ def production_value_report(request):
         rows = run_query(value_query)
 
         machine_totals = {}
+        machine_mhr_costs = {}
+        machine_run_hours = {}
+        machine_prod_hours = {}
+        machine_rates = {}
+
         month_order   = {}
         month_machine = {}
+        month_mhr     = {}
 
-        for mac_name, rate_per_hr, month_label, year_month, total_qty in rows:
-            value = float(total_qty or 0) * float(rate_per_hr or 0)
+        for mac_name, rate_per_hr, month_label, year_month, tot_prod_seconds, tot_run_seconds in rows:
+            mhr_rate = saved_mhr_inputs.get(mac_name) or float(rate_per_hr or 0)
+            tot_prod_hours = float(tot_prod_seconds or 0) / 3600.0
+            tot_run_hours = float(tot_run_seconds or 0) / 3600.0
+
+            # Machine Production Value = Tot Production Hours * Rate Per Hour
+            value = tot_prod_hours * float(rate_per_hr or mhr_rate or 0)
+            # Machine Hour Rate (MHR) Cost for period = Tot Running Hours * MHR Rate
+            mhr_cost = tot_run_hours * mhr_rate
+
             machine_totals[mac_name] = machine_totals.get(mac_name, 0) + value
+            machine_mhr_costs[mac_name] = machine_mhr_costs.get(mac_name, 0) + mhr_cost
+            machine_run_hours[mac_name] = machine_run_hours.get(mac_name, 0) + tot_run_hours
+            machine_prod_hours[mac_name] = machine_prod_hours.get(mac_name, 0) + tot_prod_hours
+            machine_rates[mac_name] = mhr_rate
+
             month_order[year_month] = month_label
             if mac_name not in month_machine: month_machine[mac_name] = {}
             month_machine[mac_name][year_month] = month_machine[mac_name].get(year_month, 0) + value
+            if mac_name not in month_mhr: month_mhr[mac_name] = {}
+            month_mhr[mac_name][year_month] = month_mhr[mac_name].get(year_month, 0) + mhr_cost
 
         sorted_machines = sorted(machine_totals.items(), key=lambda x: x[1], reverse=True)
         machine_labels   = [m[0] for m in sorted_machines]
         machine_achieved = [round(m[1]) for m in sorted_machines]
+        machine_mhr_cost = [round(machine_mhr_costs.get(m[0], 0)) for m in sorted_machines]
+        machine_run_hrs  = [round(machine_run_hours.get(m[0], 0), 1) for m in sorted_machines]
+        machine_prod_hrs = [round(machine_prod_hours.get(m[0], 0), 1) for m in sorted_machines]
+        machine_mhr_rate = [round(machine_rates.get(m[0], 0), 2) for m in sorted_machines]
+
         sorted_months = sorted(month_order.items())
         month_labels  = [m[1] for m in sorted_months]
         month_ym_keys = [m[0] for m in sorted_months]
 
         COLORS = ["#2563eb","#f97316","#10b981","#8b5cf6","#06b6d4","#ec4899","#f59e0b","#6366f1","#ef4444","#84cc16","#14b8a6","#a855f7","#fb923c","#22d3ee","#4ade80","#f43f5e","#0ea5e9","#d946ef","#fbbf24","#34d399"]
         month_datasets = []
+        month_mhr_datasets = []
         for idx, mac in enumerate(machine_labels):
             month_data = [round(month_machine.get(mac, {}).get(ym, 0)) for ym in month_ym_keys]
             month_datasets.append({"label": mac, "data": month_data, "backgroundColor": COLORS[idx % len(COLORS)], "borderRadius": 4})
+            mhr_data = [round(month_mhr.get(mac, {}).get(ym, 0)) for ym in month_ym_keys]
+            month_mhr_datasets.append({"label": f"{mac} (Cost)", "data": mhr_data, "backgroundColor": COLORS[idx % len(COLORS)], "borderRadius": 4})
 
         return Response({
             "status": "success",
             "data": {
-                "machine_data": {"labels": machine_labels, "achieved": machine_achieved},
-                "month_data":   {"labels": month_labels, "datasets": month_datasets},
+                "machine_data": {
+                    "labels": machine_labels,
+                    "achieved": machine_achieved,
+                    "mhr_cost": machine_mhr_cost,
+                    "running_hours": machine_run_hrs,
+                    "prod_hours": machine_prod_hrs,
+                    "mhr_rate": machine_mhr_rate
+                },
+                "month_data": {
+                    "labels": month_labels,
+                    "datasets": month_datasets,
+                    "mhr_datasets": month_mhr_datasets
+                },
             },
             "dateRange": {"from": from_date, "to": to_date}
         })

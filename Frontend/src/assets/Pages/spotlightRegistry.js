@@ -1130,9 +1130,9 @@ export const SPOTLIGHT_REGISTRY = [
         categoryLabel: "Quality Cockpit",
         targetSelector: "[data-spotlight='qa-kpis']",
         fallbackSelector: ".qa2-kpi-grid",
-        description: "Executive quality deck summarizing Total Inspections, Pass Rate %, First Pass Yield (FPY), Rejection Rate %, and Quality Loss Value.",
-        tags: ["quality kpis", "inspections", "pass rate", "fpy", "first pass yield", "rejection rate", "scrap value"],
-        keyActions: ["Monitor First Pass Yield %", "Track Overall Quality Value Loss", "Inspect Pass vs Rejection Rates"],
+        description: "Executive quality deck summarizing Total Inspections, Pass Rate %, Total Inspected OK Qty, Rejection Rate %, and Quality Loss Value.",
+        tags: ["quality kpis", "inspections", "pass rate", "ok qty", "total inspected ok qty", "rejection rate", "scrap value"],
+        keyActions: ["Monitor Total Inspected OK Qty", "Track Overall Quality Value Loss", "Inspect Pass vs Rejection Rates"],
         badge: "Quality Cockpit",
         color: "#f43f5e",
         iconName: "ShieldAlert"
