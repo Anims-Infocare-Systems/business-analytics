@@ -40,7 +40,7 @@ from .views_userrights import (
 )
 from .views_sales_analysis import (
     sales_analysis_summary_strip, sales_analysis_grand_total, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
-    sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_top_products,
+    sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_customer_part_wise, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
     sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
     sales_analysis_traceability, sales_analysis_avg_rate_cards, sales_analysis_part_rate_history,
@@ -199,6 +199,7 @@ urlpatterns = [
     path('sales-analysis/revenue-charts/', sales_analysis_revenue_charts, name='sales_analysis_revenue_charts'),
     path('sales-analysis/month-summary/', sales_analysis_month_summary, name='sales_analysis_month_summary'),
     path('sales-analysis/invoice-details/', sales_analysis_invoice_details, name='sales_analysis_invoice_details'),
+    path('sales-analysis/customer-part-wise/', sales_analysis_customer_part_wise, name='sales_analysis_customer_part_wise'),
     path('sales-analysis/top-products/', sales_analysis_top_products, name='sales_analysis_top_products'),
     path('sales-analysis/monthly-sales-trend/', sales_analysis_monthly_sales_trend, name='sales_analysis_monthly_sales_trend'),
     path('sales-analysis/bill-type-revenue/', sales_analysis_bill_type_revenue, name='sales_analysis_bill_type_revenue'),

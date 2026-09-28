@@ -2556,6 +2556,10 @@
     vertical-align: middle;
 }
 
+.us-td--category {
+    white-space: nowrap;
+}
+
 .us-ds-table tr:last-child td {
     border-bottom: none;
 }
@@ -3179,33 +3183,43 @@
 }
 
 .us-ds-cat-tag {
-    font-size: 0.66rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.67rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 0.12rem 0.45rem;
-    border-radius: 5px;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    white-space: nowrap;
     width: fit-content;
+    line-height: 1;
+    border: 1px solid transparent;
     transition: all 0.2s ease;
 }
 
 .us-ds-cat-tag:hover {
-    transform: scale(1.04);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .us-ds-cat-tag--dashboard {
     background: #e0f2fe;
     color: #0369a1;
+    border-color: #bae6fd;
 }
 
 .us-ds-cat-tag--reports {
     background: #eef2ff;
     color: #4338ca;
+    border-color: #c7d2fe;
 }
 
 .us-ds-cat-tag--mis {
     background: #ffedd5;
     color: #c2410c;
+    border-color: #fed7aa;
 }
 
 .us-ds-rec-badge {

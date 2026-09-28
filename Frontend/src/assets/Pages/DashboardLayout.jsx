@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
@@ -10,9 +10,11 @@ import {
 } from "react-icons/md";
 
 /* ── Idle session constants ───────────────────────────────── */
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;  // 15 minutes total
-const IDLE_WARN_MS = 14 * 60 * 1000;  // show warning after 14 min
-const IDLE_WARN_SECS = 60;              // countdown seconds shown in modal
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;  // 15 minutes total inactivity
+const IDLE_WARN_MS = 14 * 60 * 1000;     // show warning modal at 14 min
+const IDLE_WARN_SECS = 60;               // countdown seconds shown in modal
+const ACTIVITY_THROTTLE_MS = 2000;       // throttle activity tracking writes to once per 2s
+const LAST_ACTIVITY_KEY = "ba_last_activity";
 /* ─────────────────────────────────────────────────────────── */
 
 const API = resolveApiBase();
@@ -154,6 +156,11 @@ const HEADING_MAP = {
     "Spotlight": "Spotlight",
     "Settings": "Settings",
     "Welcome": "Workspace Overview",
+    "Dashboard": "Dashboard Overview",
+    "Approvals": "Approvals Overview",
+    "Reports": "Reports Overview",
+    "MIS": "MIS Reports Overview",
+    "Utility": "Utility Overview",
 };
 
 /* ── Sub-item metadata for CategoryLanding cards ──────────── */
@@ -305,7 +312,64 @@ function renderModuleByKey(key, props) {
     );
 }
 
-function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
+const KeepAlivePane = memo(function KeepAlivePane({
+    paneKey,
+    isActive,
+    isPlant,
+    userName,
+    companyName,
+    onNavigate,
+    userRights,
+    isSuperAdmin,
+    allowedMenuItems,
+    onOpenSpotlight
+}) {
+    return (
+        <div
+            className={`dl-keepalive-pane${isActive ? " dl-keepalive-pane--active" : " dl-keepalive-pane--hidden"}${isPlant ? " dl-page-wrap--plant" : ""}`}
+            style={{
+                display: isActive ? (isPlant ? "flex" : "block") : "none"
+            }}
+        >
+            <Suspense fallback={(
+                <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: "360px",
+                    gap: "12px",
+                    color: "#2563eb",
+                    fontFamily: "inherit"
+                }}>
+                    <div style={{
+                        width: "32px",
+                        height: "32px",
+                        border: "3px solid #e2e8f0",
+                        borderTopColor: "#2563eb",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite"
+                    }} />
+                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#64748b" }}>
+                        Loading {paneKey.startsWith("category_") ? paneKey.replace("category_", "") : paneKey}…
+                    </span>
+                </div>
+            )}>
+                {renderModuleByKey(paneKey, {
+                    userName,
+                    companyName,
+                    onNavigate,
+                    userRights,
+                    isSuperAdmin,
+                    allowedMenuItems,
+                    onOpenSpotlight
+                })}
+            </Suspense>
+        </div>
+    );
+});
+
+const PageContent = memo(function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
     const currentKey = getEffectivePageKey(activeItem, activeSubItem);
     const [visitedKeys, setVisitedKeys] = useState(() => new Set([currentKey]));
 
@@ -325,53 +389,24 @@ function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyN
                 const isPlant = (key === "Plant Performance Dashboard");
 
                 return (
-                    <div
+                    <KeepAlivePane
                         key={key}
-                        className={`dl-keepalive-pane${isActive ? " dl-keepalive-pane--active" : " dl-keepalive-pane--hidden"}${isPlant ? " dl-page-wrap--plant" : ""}`}
-                        style={{
-                            display: isActive ? (isPlant ? "flex" : "block") : "none"
-                        }}
-                    >
-                        <Suspense fallback={(
-                            <div style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minHeight: "360px",
-                                gap: "12px",
-                                color: "#2563eb",
-                                fontFamily: "inherit"
-                            }}>
-                                <div style={{
-                                    width: "32px",
-                                    height: "32px",
-                                    border: "3px solid #e2e8f0",
-                                    borderTopColor: "#2563eb",
-                                    borderRadius: "50%",
-                                    animation: "spin 0.8s linear infinite"
-                                }} />
-                                <span style={{ fontSize: "13px", fontWeight: 500, color: "#64748b" }}>
-                                    Loading {key.startsWith("category_") ? key.replace("category_", "") : key}…
-                                </span>
-                            </div>
-                        )}>
-                            {renderModuleByKey(key, {
-                                userName,
-                                companyName,
-                                onNavigate,
-                                userRights,
-                                isSuperAdmin,
-                                allowedMenuItems,
-                                onOpenSpotlight
-                            })}
-                        </Suspense>
-                    </div>
+                        paneKey={key}
+                        isActive={isActive}
+                        isPlant={isPlant}
+                        userName={userName}
+                        companyName={companyName}
+                        onNavigate={onNavigate}
+                        userRights={userRights}
+                        isSuperAdmin={isSuperAdmin}
+                        allowedMenuItems={allowedMenuItems}
+                        onOpenSpotlight={onOpenSpotlight}
+                    />
                 );
             })}
         </div>
     );
-}
+});
 
 /* ── Clock (Indian Standard Time / IST) ───────────────────── */
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC + 5:30 in milliseconds
@@ -478,7 +513,7 @@ function TopbarHeading({ text }) {
 }
 
 /* ── SidebarItem ─────────────────────────────────────────── */
-function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, onSubClick, activeSubItem, index }) {
+const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, onSubClick, activeSubItem, index }) {
     const [hovered, setHovered] = useState(false);
     const [rippleKey, setRippleKey] = useState(0);
     const leaveTimer = useRef(null);
@@ -489,7 +524,7 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
     const collapsedMode = !isExpanded && !isMobile;
 
     const handleMouseEnter = () => { clearTimeout(leaveTimer.current); setHovered(true); };
-    const handleMouseLeave = () => { leaveTimer.current = setTimeout(() => setHovered(false), 180); };
+    const handleMouseLeave = () => { leaveTimer.current = setTimeout(() => setHovered(false), 90); };
     useEffect(() => () => clearTimeout(leaveTimer.current), []);
 
     const handleSubSelect = (sub) => {
@@ -581,7 +616,7 @@ function SidebarItem({ item, isActive, isOpen, isExpanded, isMobile, onToggle, o
             )}
         </div>
     );
-}
+});
 
 
 /* ══════════════════════════════════════════════════════════
@@ -647,59 +682,61 @@ export default function DashboardLayout() {
     });
 
     const tenantLicense = user.license || {};
-    const isModuleLicensed = (itemKey) => {
+    const isModuleLicensed = useCallback((itemKey) => {
         if (!itemKey) return true;
         const keyLower = itemKey.toLowerCase();
         if (tenantLicense[keyLower] !== undefined) {
             return !!tenantLicense[keyLower];
         }
         return true;
-    };
+    }, [tenantLicense]);
 
-    const allowedMenuItems = MENU_ITEMS.map(item => {
-        if (!isModuleLicensed(item.key)) {
+    const allowedMenuItems = useMemo(() => {
+        return MENU_ITEMS.map(item => {
+            if (!isModuleLicensed(item.key)) {
+                return {
+                    ...item,
+                    children: []
+                };
+            }
+            let filteredChildren = item.children.filter(sub => {
+                if (sub === "Users Setting") {
+                    return isSuperAdmin;
+                }
+                if (sub === "M-Approval") {
+                    return !!userRights["M-Approval"];
+                }
+                if (isSuperAdmin) return true;
+                return !!userRights[sub];
+            });
+            if (planId === "pro") {
+                if (item.key === "Dashboard") {
+                    filteredChildren = filteredChildren.filter(sub => sub === "Top Management Dashboard");
+                } else if (item.key === "Utility") {
+                    filteredChildren = filteredChildren.filter(sub => sub === "User Rights" || (sub === "Users Setting" && isSuperAdmin));
+                } else if (item.key !== "Approvals") {
+                    filteredChildren = [];
+                }
+            }
             return {
                 ...item,
-                children: []
+                children: filteredChildren
             };
-        }
-        let filteredChildren = item.children.filter(sub => {
-            if (sub === "Users Setting") {
-                return isSuperAdmin;
+        }).filter(item => {
+            if (!isModuleLicensed(item.key)) {
+                return false;
             }
-            if (sub === "M-Approval") {
-                return !!userRights["M-Approval"];
+            if (planId === "pro" && !["Dashboard", "Approvals", "Utility"].includes(item.key)) {
+                return false;
             }
-            if (isSuperAdmin) return true;
-            return !!userRights[sub];
+            const originalItem = MENU_ITEMS.find(m => m.key === item.key);
+            const hasOriginalChildren = originalItem && originalItem.children && originalItem.children.length > 0;
+            if (hasOriginalChildren) {
+                return item.children.length > 0;
+            }
+            return isSuperAdmin || userRights[item.key];
         });
-        if (planId === "pro") {
-            if (item.key === "Dashboard") {
-                filteredChildren = filteredChildren.filter(sub => sub === "Top Management Dashboard");
-            } else if (item.key === "Utility") {
-                filteredChildren = filteredChildren.filter(sub => sub === "User Rights" || (sub === "Users Setting" && isSuperAdmin));
-            } else if (item.key !== "Approvals") {
-                filteredChildren = [];
-            }
-        }
-        return {
-            ...item,
-            children: filteredChildren
-        };
-    }).filter(item => {
-        if (!isModuleLicensed(item.key)) {
-            return false;
-        }
-        if (planId === "pro" && !["Dashboard", "Approvals", "Utility"].includes(item.key)) {
-            return false;
-        }
-        const originalItem = MENU_ITEMS.find(m => m.key === item.key);
-        const hasOriginalChildren = originalItem && originalItem.children && originalItem.children.length > 0;
-        if (hasOriginalChildren) {
-            return item.children.length > 0;
-        }
-        return isSuperAdmin || userRights[item.key];
-    });
+    }, [userRights, isSuperAdmin, planId, isModuleLicensed]);
 
     const firstAllowed = allowedMenuItems[0];
     const defaultItem = firstAllowed ? firstAllowed.key : "Dashboard";
@@ -733,6 +770,8 @@ export default function DashboardLayout() {
     const isMobile = screenWidth < BP_MOBILE;
 
     const [expanded, setExpanded] = useState(getInitialExpanded);
+    const expandedRef = useRef(expanded);
+    expandedRef.current = expanded;
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [openMenu, setOpenMenu] = useState(initMenu);
     const [activeItem, setActiveItem] = useState(initItem);
@@ -970,9 +1009,7 @@ export default function DashboardLayout() {
     /* ── Idle / auto-logout state ────────────────────────── */
     const [idleWarning, setIdleWarning] = useState(false);  // show warning modal
     const [countdown, setCountdown] = useState(IDLE_WARN_SECS);
-    const idleTimerRef = useRef(null);
-    const warnTimerRef = useRef(null);
-    const countdownRef = useRef(null);
+    const lastActivityWriteRef = useRef(0);
     /* ─────────────────────────────────────────────────────── */
     const [erpUnavailable, setErpUnavailable] = useState(() => {
         try {
@@ -1091,9 +1128,13 @@ export default function DashboardLayout() {
         }
     }, [activeSubItem, activeItem, isAuthenticated]);
 
-    const handleLogout = useCallback(() => {
+    const handleLogout = useCallback((reason = null) => {
         try {
             sessionStorage.clear();
+            if (reason) {
+                sessionStorage.setItem("ba_logout_reason", reason);
+                try { localStorage.setItem("ba_logout_reason", reason); } catch {}
+            }
             localStorage.removeItem("user");
             localStorage.removeItem("ba_user_rights");
             localStorage.removeItem("ba_settings_profile");
@@ -1101,6 +1142,20 @@ export default function DashboardLayout() {
             localStorage.removeItem("ba_last_user_id");
             localStorage.removeItem("ba_last_username");
             localStorage.removeItem("ba_last_company_name");
+            localStorage.removeItem(LAST_ACTIVITY_KEY);
+
+            // Layer 1 & 2: Broadcast to all other tabs immediately
+            try {
+                localStorage.setItem("ba_logout_event", String(Date.now()));
+            } catch {}
+
+            try {
+                if (typeof BroadcastChannel !== "undefined") {
+                    const channel = new BroadcastChannel("ba_auth_channel");
+                    channel.postMessage({ type: "LOGOUT", reason });
+                    channel.close();
+                }
+            } catch {}
         } catch { /* ignore */ }
 
         fetch(`${API}/logout/`, {
@@ -1114,9 +1169,9 @@ export default function DashboardLayout() {
     }, []);
 
     /* ── Presence heartbeat ────────────────────────────────────────────────
-       Sends GET /heartbeat/ every 5 minutes to refresh live presence.
+       Sends GET /heartbeat/ periodically to refresh live presence.
        Debounced on tab visibility change to eliminate rapid tab-switch storms.
-       Paused when tab is hidden to save battery and network bandwidth.
+       Paused when tab is hidden or user has been inactive for >= 14 minutes.
     ─────────────────────────────────────────────────────────────────────── */
     useEffect(() => {
         let lastSent = 0;
@@ -1125,6 +1180,14 @@ export default function DashboardLayout() {
             // Don't send if tab is hidden unless forced
             if (!force && document.visibilityState === "hidden") return;
             if (!force && now - lastSent < 20000) return;
+
+            // Pause heartbeats if user has been inactive for >= 14 minutes
+            try {
+                const rawAct = localStorage.getItem(LAST_ACTIVITY_KEY);
+                if (rawAct && (now - Number(rawAct) >= IDLE_WARN_MS)) {
+                    return;
+                }
+            } catch {}
 
             lastSent = now;
             fetch(`${API}/heartbeat/`, {
@@ -1136,7 +1199,8 @@ export default function DashboardLayout() {
                         const data = await res.clone().json().catch(() => ({}));
                         const err = String(data?.error || data?.reason || "").toLowerCase();
                         if (err.includes("another device") || data?.code === "concurrent_login") {
-                            sessionStorage.setItem("ba_logout_reason", "concurrent_login");
+                            handleLogout("concurrent_login");
+                            return;
                         }
                     } catch {}
                     handleLogout();
@@ -1162,55 +1226,149 @@ export default function DashboardLayout() {
         };
     }, [handleLogout]);
 
-    /* ── Idle auto-logout — 15-minute inactivity timer ────────────────────
-       Activity events: mousemove, mousedown, keydown, scroll, touchstart
-       • At 14 min  → show warning modal with 60 s countdown
-       • At 15 min  → auto-logout
-       • "Stay Logged In" button calls resetIdleTimer() to clear everything
+    /* ── Idle auto-logout — 15-minute wall-clock inactivity engine ─────────
+       Activity events: mousemove, mousedown, keydown, scroll, touchstart, click
+       • Persists last activity timestamp to localStorage ('ba_last_activity')
+       • Synchronizes across tabs via 'storage' events
+       • Uses wall-clock Date.now() comparison (handles sleep, lock screen, background throttle)
+       • At 14 min  → show warning modal with live 60s countdown
+       • At 15 min  → auto-logout with 'idle_timeout' reason
+       • "Stay Logged In" resets activity timestamp and hides modal
     ─────────────────────────────────────────────────────────────────────── */
-    const resetIdleTimer = useCallback(() => {
-        clearTimeout(idleTimerRef.current);
-        clearTimeout(warnTimerRef.current);
-        clearInterval(countdownRef.current);
+    const recordActivity = useCallback((force = false) => {
+        const now = Date.now();
+        if (force || now - lastActivityWriteRef.current >= ACTIVITY_THROTTLE_MS) {
+            lastActivityWriteRef.current = now;
+            try {
+                localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+            } catch { /* ignore */ }
+        }
+    }, []);
 
-        // Dismiss the warning if it was showing
+    // "Stay Logged In" button handler in modal
+    const handleStayLoggedIn = useCallback(() => {
         setIdleWarning(false);
         setCountdown(IDLE_WARN_SECS);
-
-        // Warn at 14 minutes
-        warnTimerRef.current = setTimeout(() => {
-            setIdleWarning(true);
-            setCountdown(IDLE_WARN_SECS);
-            countdownRef.current = setInterval(() => {
-                setCountdown(prev => {
-                    if (prev <= 1) { clearInterval(countdownRef.current); return 0; }
-                    return prev - 1;
-                });
-            }, 1000);
-        }, IDLE_WARN_MS);
-
-        // Hard logout at 15 minutes
-        idleTimerRef.current = setTimeout(() => {
-            clearInterval(countdownRef.current);
-            handleLogout();
-        }, IDLE_TIMEOUT_MS);
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        recordActivity(true);
+    }, [recordActivity]);
 
     useEffect(() => {
+        // Record initial activity on mount if not set
+        try {
+            const rawAct = localStorage.getItem(LAST_ACTIVITY_KEY);
+            const lastAct = Number(rawAct || 0);
+            if (!lastAct) {
+                recordActivity(true);
+            } else if (Date.now() - lastAct >= IDLE_TIMEOUT_MS) {
+                // If tab was reopened after 15m of inactivity, log out immediately
+                handleLogout("idle_timeout");
+                return;
+            }
+        } catch {
+            recordActivity(true);
+        }
+
+        // 1. Throttled activity listeners
         const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
         const onActivity = () => {
-            // While warning is showing, ignore activity — user must click "Stay Logged In"
-            if (!idleWarning) resetIdleTimer();
+            // While modal is showing, ignore passive activity — user must click "Stay Logged In"
+            if (!idleWarning) {
+                recordActivity(false);
+            }
         };
         ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }));
-        resetIdleTimer(); // kick off the timer on mount
+
+        // 2. Wall-clock interval checker (runs every 1 second)
+        const checkIdleStatus = () => {
+            // Layer 3: If user was removed from localStorage by ANY tab, exit immediately!
+            if (!localStorage.getItem("user")) {
+                window.location.replace("/");
+                return;
+            }
+
+            let lastAct = 0;
+            try {
+                lastAct = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+            } catch {
+                lastAct = 0;
+            }
+            if (!lastAct) return;
+
+            const elapsed = Date.now() - lastAct;
+
+            if (elapsed >= IDLE_TIMEOUT_MS) {
+                // Hard timeout reached (15 minutes)
+                handleLogout("idle_timeout");
+                return;
+            }
+
+            if (elapsed >= IDLE_WARN_MS) {
+                // Warning window (14m to 15m)
+                const remainingSecs = Math.max(0, Math.ceil((IDLE_TIMEOUT_MS - elapsed) / 1000));
+                setIdleWarning(true);
+                setCountdown(remainingSecs);
+            } else {
+                // User is active (< 14m)
+                setIdleWarning(false);
+            }
+        };
+
+        const intervalId = setInterval(checkIdleStatus, 1000);
+
+        // 3. Immediate check on tab visibility change or window focus (handles clicking into tab / laptop lid open)
+        const onVisibilityOrFocus = () => {
+            if (!localStorage.getItem("user")) {
+                window.location.replace("/");
+                return;
+            }
+            if (document.visibilityState === "visible") {
+                checkIdleStatus();
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibilityOrFocus);
+        window.addEventListener("focus", onVisibilityOrFocus);
+
+        // 4. Cross-tab synchronization via BroadcastChannel (Layer 1 - Instant 0ms)
+        let authChannel = null;
+        try {
+            if (typeof BroadcastChannel !== "undefined") {
+                authChannel = new BroadcastChannel("ba_auth_channel");
+                authChannel.onmessage = (event) => {
+                    if (event.data?.type === "LOGOUT") {
+                        window.location.replace("/");
+                    }
+                };
+            }
+        } catch { /* ignore */ }
+
+        // 5. Cross-tab synchronization via storage event (Layer 2)
+        const onStorage = (e) => {
+            if (e.key === "ba_logout_event" || e.key === "user") {
+                if (e.key === "ba_logout_event" || !e.newValue || !localStorage.getItem("user")) {
+                    window.location.replace("/");
+                }
+            } else if (e.key === LAST_ACTIVITY_KEY && e.newValue) {
+                const newAct = Number(e.newValue);
+                const elapsed = Date.now() - newAct;
+                if (elapsed < IDLE_WARN_MS) {
+                    setIdleWarning(false);
+                    setCountdown(IDLE_WARN_SECS);
+                }
+            }
+        };
+        window.addEventListener("storage", onStorage);
+
         return () => {
             ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, onActivity));
-            clearTimeout(idleTimerRef.current);
-            clearTimeout(warnTimerRef.current);
-            clearInterval(countdownRef.current);
+            clearInterval(intervalId);
+            document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+            window.removeEventListener("focus", onVisibilityOrFocus);
+            window.removeEventListener("storage", onStorage);
+            if (authChannel) {
+                try { authChannel.close(); } catch {}
+            }
         };
-    }, [idleWarning, resetIdleTimer]);
+    }, [idleWarning, recordActivity, handleLogout]);
 
     /* responsive resize handler */
     useEffect(() => {
@@ -1284,7 +1442,7 @@ export default function DashboardLayout() {
     }, [isAuthenticated, navigate]);
 
     /* parent-level toggle */
-    const handleToggle = (key) => {
+    const handleToggle = useCallback((key) => {
         if (key === "Spotlight") {
             setSettingsInitialTab("spotlight");
             try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
@@ -1307,26 +1465,46 @@ export default function DashboardLayout() {
             writeNav({ activeItem: key, activeSubItem: null, openMenu: null });
             if (isMobile) setDrawerOpen(false);
         } else {
-            const nextMenu = openMenu === key ? null : key;
-            setOpenMenu(nextMenu);
-            setActiveItem(key);
-            writeNav({ activeItem: key, activeSubItem, openMenu: nextMenu });
+            setOpenMenu(prevMenu => {
+                const nextMenu = prevMenu === key ? null : key;
+                setActiveItem(key);
+                setActiveSubItem(prevSub => (item.children && item.children.includes(prevSub)) ? prevSub : null);
+                writeNav({
+                    activeItem: key,
+                    activeSubItem: (item.children && item.children.includes(activeSubItem)) ? activeSubItem : null,
+                    openMenu: nextMenu
+                });
+                return nextMenu;
+            });
         }
-    };
+    }, [isMobile, activeSubItem]);
 
     /* sub-item click */
-    const handleSubClick = (sub) => {
+    const handleSubClick = useCallback((sub) => {
         const parent = MENU_ITEMS.find(m => m.children?.includes(sub));
         const parentKey = parent ? parent.key : activeItem;
         if (parent) setActiveItem(parentKey);
         setActiveSubItem(sub);
-        const nextMenu = expanded ? openMenu : null;
-        if (!expanded) setOpenMenu(null);
+        const isExp = expandedRef.current;
+        setOpenMenu(prevMenu => {
+            const nextMenu = isExp ? prevMenu : null;
+            writeNav({ activeItem: parentKey, activeSubItem: sub, openMenu: nextMenu });
+            return nextMenu;
+        });
         if (isMobile) setDrawerOpen(false);
-        writeNav({ activeItem: parentKey, activeSubItem: sub, openMenu: nextMenu });
+    }, [activeItem, isMobile]);
+
+    const handleLogoClick = () => {
+        setSettingsOpen(false);
+        try { sessionStorage.setItem("ba_settings_open", "0"); } catch { }
+        setActiveItem("Welcome");
+        setActiveSubItem(null);
+        setOpenMenu(null);
+        writeNav({ activeItem: "Welcome", activeSubItem: null, openMenu: null });
+        if (isMobile) setDrawerOpen(false);
     };
 
-    const handleWelcomeNavigate = (target) => {
+    const handleWelcomeNavigate = useCallback((target) => {
         if (target === "Spotlight") {
             setSettingsInitialTab("spotlight");
             try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
@@ -1348,7 +1526,11 @@ export default function DashboardLayout() {
             return;
         }
         handleSubClick(target);
-    };
+    }, [isMobile, handleSubClick]);
+
+    const handleOpenSpotlightModal = useCallback(() => {
+        setSpotlightOpen(true);
+    }, []);
 
 
     const showExpanded = isMobile ? true : expanded;
@@ -1443,7 +1625,19 @@ export default function DashboardLayout() {
                 <div className="dl-sidebar__glow-stripe" />
 
                 {/* Logo */}
-                <div className="dl-sidebar__logo">
+                <div
+                    className="dl-sidebar__logo"
+                    onClick={handleLogoClick}
+                    title="Workspace Overview"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleLogoClick();
+                        }
+                    }}
+                >
                     <div className="dl-sidebar__logo-box">
                         <img src="/Images/logo.png" alt="Anims ERP Logo" className="dl-sidebar__logo-img" />
                     </div>
@@ -1538,7 +1732,7 @@ export default function DashboardLayout() {
                         </button>
                     )}
                     {/* ✅ Dynamic company name from localStorage */}
-                    <h1 className="dl-header__title" data-tour="workspace-header" data-spotlight="dl-global-header">{companyName}</h1>
+                    <h1 className="dl-header__title" data-tour="workspace-header" data-spotlight="dl-global-header" title={companyName}>{companyName}</h1>
                     <div className="dl-header__right">
                         <div data-tour="live-clock" data-spotlight="dl-live-clock">
                             <Clock />
@@ -1613,7 +1807,7 @@ export default function DashboardLayout() {
                         userRights={userRights}
                         isSuperAdmin={isSuperAdmin}
                         allowedMenuItems={allowedMenuItems}
-                        onOpenSpotlight={() => setSpotlightOpen(true)}
+                        onOpenSpotlight={handleOpenSpotlightModal}
                     />
                 </main>
             </div>
@@ -1699,7 +1893,7 @@ export default function DashboardLayout() {
                         <div className="dl-idle-actions">
                             <button
                                 className="dl-idle-btn dl-idle-btn--stay"
-                                onClick={resetIdleTimer}
+                                onClick={handleStayLoggedIn}
                                 autoFocus
                             >
                                 <MdCheckCircleOutline size={18} />
@@ -1707,7 +1901,7 @@ export default function DashboardLayout() {
                             </button>
                             <button
                                 className="dl-idle-btn dl-idle-btn--logout"
-                                onClick={handleLogout}
+                                onClick={() => handleLogout("idle_timeout")}
                             >
                                 <MdLogout size={18} />
                                 Logout Now

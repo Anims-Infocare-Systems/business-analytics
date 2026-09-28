@@ -1481,6 +1481,182 @@ def sales_analysis_invoice_details(request):
 
 
 @api_view(["GET"])
+def sales_analysis_customer_part_wise(request):
+    """
+    Dedicated Customer & Part-Wise Sales Analysis aggregation.
+    Aggregates Bill_Mas + Bill_Det grouped by (Customer, Part Number) directly in SQL Server.
+
+    Query Parameters:
+      - from: YYYY-MM-DD
+      - to: YYYY-MM-DD
+      - btype: comma-separated invoice types (e.g. Sales, Labour, Export)
+      - customer: customer name string (optional)
+      - search: keyword to search across customer, part_no, or description
+    """
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    btype_filter = (request.GET.get("btype") or "").strip()
+    customer_filter = (request.GET.get("customer") or "").strip()
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+    try:
+        cursor = conn.cursor()
+
+        # 1. Customer Alias resolution (CustAliasMast vs CustMast)
+        use_alias = table_exists(cursor, "CustAliasMast")
+        cust_expr = _invoice_cust_name_expr(use_alias)
+        cust_join = _invoice_cust_join_sql(use_alias, bm_alias="BM")
+
+        # 2. Dynamic Qty resolution (units vs weight in kg)
+        qty_kgs_col_bd = find_column_ci(cursor, "dbo", "Bill_Det", ["QtyKgs", "qtykgs"])
+        if qty_kgs_col_bd:
+            qty_col_expr = f"""CASE
+                    WHEN ISNULL(CAST(BD.qty AS FLOAT), 0) <> 0 THEN CAST(BD.qty AS FLOAT)
+                    ELSE ISNULL(CAST(BD.[{qty_kgs_col_bd}] AS FLOAT), 0)
+                END"""
+        else:
+            qty_col_expr = "ISNULL(CAST(BD.qty AS FLOAT), 0)"
+
+        # 3. Base Conditions
+        where_clauses = [
+            "ISNULL(BM.deleted, 0) = 0",
+            "ISNULL(BD.deleted, 0) = 0",
+            "CAST(BM.invdt AS DATE) BETWEEN ? AND ?",
+            "NULLIF(LTRIM(RTRIM(ISNULL(BD.itcode, N''))), N'') IS NOT NULL"
+        ]
+        params: list = [start_date, end_date]
+
+        # 4. Invoice Type Filter (Sales / Labour / Export)
+        btype_items = _parse_btype_list(btype_filter)
+        if len(btype_items) == 1:
+            where_clauses.append("LTRIM(RTRIM(ISNULL(BM.btype, N''))) = ?")
+            params.append(btype_items[0])
+        elif len(btype_items) > 1:
+            placeholders = ", ".join(["?"] * len(btype_items))
+            where_clauses.append(f"LTRIM(RTRIM(ISNULL(BM.btype, N''))) IN ({placeholders})")
+            params.extend(btype_items)
+
+        # 5. Customer Specific Filter (supports single or comma-separated multiple customers)
+        if customer_filter and customer_filter.lower() != "all":
+            cust_items = [c.strip() for c in customer_filter.split(",") if c.strip() and c.strip().lower() != "all"]
+            if len(cust_items) == 1:
+                where_clauses.append(f"{cust_expr} = ?")
+                params.append(cust_items[0])
+            elif len(cust_items) > 1:
+                placeholders = ", ".join(["?"] * len(cust_items))
+                where_clauses.append(f"{cust_expr} IN ({placeholders})")
+                params.extend(cust_items)
+
+        # 6. Search across Customer, Part No, and Description
+        if search_q:
+            where_clauses.append(
+                f"({cust_expr} LIKE ? OR LTRIM(RTRIM(ISNULL(BD.itcode, N''))) LIKE ? OR LTRIM(RTRIM(ISNULL(BD.itdesc, N''))) LIKE ?)"
+            )
+            like_term = f"%{search_q}%"
+            params.extend([like_term, like_term, like_term])
+
+        where_sql = " AND ".join(where_clauses)
+
+        # 7. Execute Aggregated Query
+        query = f"""
+            SELECT
+                {cust_expr} AS customer,
+                LTRIM(RTRIM(ISNULL(BD.itcode, N''))) AS part_no,
+                MAX(LTRIM(RTRIM(ISNULL(BD.itdesc, N'')))) AS description,
+                MAX(LTRIM(RTRIM(ISNULL(BD.uom, N'')))) AS uom,
+                ROUND(SUM({qty_col_expr}), 2) AS total_qty,
+                ROUND(SUM(ISNULL(CAST(BD.amt AS FLOAT), 0)), 2) AS total_value,
+                COUNT(DISTINCT BM.invno) AS invoice_count
+            FROM Bill_Mas BM
+            INNER JOIN Bill_Det BD ON BM.invno = BD.invno
+            {cust_join}
+            WHERE {where_sql}
+            GROUP BY
+                {cust_expr},
+                LTRIM(RTRIM(ISNULL(BD.itcode, N'')))
+            ORDER BY total_value DESC
+        """
+
+        cursor.execute(query, params)
+        rows = []
+        total_qty = 0.0
+        total_value = 0.0
+        distinct_parts = set()
+        distinct_customers = set()
+
+        for r in cursor.fetchall():
+            cust_name = (r[0] or "").strip() or "—"
+            part_no = (r[1] or "").strip()
+            desc = (r[2] or "").strip()
+            uom = (r[3] or "").strip()
+            qty = float(r[4] or 0)
+            val = float(r[5] or 0)
+            inv_count = int(r[6] or 0)
+
+            total_qty += qty
+            total_value += val
+            if part_no:
+                distinct_parts.add(part_no)
+            if cust_name and cust_name != "—":
+                distinct_customers.add(cust_name)
+
+            rows.append({
+                "customer": cust_name,
+                "part_no": part_no,
+                "description": desc,
+                "uom": uom,
+                "qty": qty,
+                "value": val,
+                "avg_rate": round(val / qty, 2) if qty > 0 else 0.0,
+                "invoice_count": inv_count,
+            })
+
+        # 8. Available Customer List for the Filter Dropdown
+        cursor.execute(
+            f"""
+            SELECT DISTINCT {cust_expr} AS customer
+            FROM Bill_Mas BM
+            {cust_join}
+            WHERE ISNULL(BM.deleted, 0) = 0
+              AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+              AND NULLIF({cust_expr}, N'') IS NOT NULL
+            ORDER BY customer
+            """,
+            (start_date, end_date),
+        )
+        customer_options = [(cr[0] or "").strip() for cr in cursor.fetchall() if (cr[0] or "").strip()]
+
+        cursor.close()
+        conn.close()
+
+    except Exception as e:
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    avg_realization = round(total_value / total_qty, 2) if total_qty > 0 else 0.0
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "from": str(start_date),
+        "to": str(end_date),
+        "period": format_period_label(start_date, end_date),
+        "kpis": {
+            "total_value": round(total_value, 2),
+            "total_quantity": round(total_qty, 2),
+            "distinct_parts": len(distinct_parts),
+            "distinct_customers": len(distinct_customers),
+            "total_records": len(rows),
+            "avg_realization": avg_realization,
+        },
+        "customer_options": customer_options,
+        "rows": rows,
+    })
+
+
+@api_view(["GET"])
 def sales_analysis_top_products(request):
     """Top 5 products by SUM(Bill_Det.amt) in the selected date range (lakhs)."""
     try:

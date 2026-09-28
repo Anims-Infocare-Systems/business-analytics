@@ -26,7 +26,10 @@ import {
     ArrowRight,
     ChevronRight,
     ChevronLeft,
-    RotateCcw
+    RotateCcw,
+    FileText,
+    Calendar,
+    BarChart2
 } from "lucide-react";
 
 const ICON_MAP = {
@@ -47,7 +50,10 @@ const ICON_MAP = {
     LayoutDashboard,
     Factory,
     Clock,
-    Compass
+    Compass,
+    FileText,
+    Calendar,
+    BarChart2
 };
 
 function getDarkerColor(hex) {

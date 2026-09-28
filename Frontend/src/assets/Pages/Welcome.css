@@ -72,6 +72,19 @@
   margin-bottom: 10px;
 }
 
+.wh-hero__eyebrow-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 50%;
+  padding: 1.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 .wh-hero__title {
   margin: 0 0 8px;
   font-size: clamp(1.5rem, 2.8vw, 2rem);

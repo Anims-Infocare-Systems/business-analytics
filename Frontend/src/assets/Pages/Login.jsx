@@ -227,6 +227,27 @@ export default function LoginPage() {
             if (rawUser) {
                 const user = JSON.parse(rawUser);
                 if (user && user.username) {
+                    const rawAct = localStorage.getItem("ba_last_activity");
+                    const lastAct = Number(rawAct || 0);
+                    const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+                    if (lastAct > 0 && Date.now() - lastAct >= IDLE_TIMEOUT_MS) {
+                        // User closed tab previously and returned after > 15 minutes of inactivity!
+                        try {
+                            localStorage.removeItem("user");
+                            localStorage.removeItem("ba_user_rights");
+                            localStorage.removeItem("ba_settings_profile");
+                            localStorage.removeItem("ba_nav");
+                            localStorage.removeItem("ba_last_activity");
+                            sessionStorage.setItem("ba_logout_reason", "idle_timeout");
+                        } catch { /* ignore */ }
+                        fetch(`${API}/logout/`, {
+                            method: "POST",
+                            credentials: "include",
+                            keepalive: true,
+                        }).catch(() => { });
+                        setLoginError("Session Expired: You were automatically logged out due to 15 minutes of inactivity. Please log in again.");
+                        return;
+                    }
                     navigate("/AnimsBusinessAnalytics", { replace: true });
                 }
             }
@@ -244,13 +265,18 @@ export default function LoginPage() {
             localStorage.removeItem("ba_last_company_name");
         } catch { /* ignore */ }
         const timer = setTimeout(() => {
-            import("./DashboardLayout").catch(() => {});
+            import("./DashboardLayout").catch(() => { });
         }, 1200);
         try {
-            const reason = sessionStorage.getItem("ba_logout_reason");
+            const reason = sessionStorage.getItem("ba_logout_reason") || localStorage.getItem("ba_logout_reason");
             if (reason === "concurrent_login") {
                 sessionStorage.removeItem("ba_logout_reason");
+                try { localStorage.removeItem("ba_logout_reason"); } catch { }
                 setLoginError("You have been logged out because this account was logged in from another device or browser.");
+            } else if (reason === "idle_timeout") {
+                sessionStorage.removeItem("ba_logout_reason");
+                try { localStorage.removeItem("ba_logout_reason"); } catch { }
+                setLoginError("Session Expired: You were automatically logged out due to 15 minutes of inactivity. Please log in again.");
             }
         } catch { /* ignore */ }
         return () => clearTimeout(timer);
@@ -258,8 +284,8 @@ export default function LoginPage() {
 
     const prewarmBackend = () => {
         try {
-            fetch(`${API}/prewarm/`, { credentials: "include" }).catch(() => {});
-            import("./DashboardLayout").catch(() => {});
+            fetch(`${API}/prewarm/`, { credentials: "include" }).catch(() => { });
+            import("./DashboardLayout").catch(() => { });
         } catch {
             /* ignore */
         }
@@ -293,7 +319,7 @@ export default function LoginPage() {
             localCompanyMap[trimmed.toUpperCase()] = data.company_name;
             try {
                 localStorage.setItem(COMPANY_MAP_KEY, JSON.stringify(localCompanyMap));
-            } catch {}
+            } catch { }
             prewarmBackend();
             return;
         }
@@ -493,6 +519,7 @@ export default function LoginPage() {
                 try {
                     sessionStorage.removeItem("ba_nav");
                     localStorage.removeItem("ba_nav");
+                    localStorage.setItem("ba_last_activity", String(Date.now()));
                 } catch { /* ignore */ }
 
                 writeRightsCache(
@@ -738,16 +765,18 @@ export default function LoginPage() {
                             {/* ✅ Login error message — replaces alert() */}
                             {loginError && (
                                 <div style={{
-                                    background: "#fef2f2",
-                                    border: "1px solid #fecaca",
+                                    background: loginError.includes("inactivity") ? "#fffbeb" : "#fef2f2",
+                                    border: `1px solid ${loginError.includes("inactivity") ? "#fde68a" : "#fecaca"}`,
                                     borderRadius: 8,
                                     padding: "10px 14px",
                                     fontSize: 13,
-                                    color: "#dc2626",
+                                    color: loginError.includes("inactivity") ? "#b45309" : "#dc2626",
                                     fontWeight: 500,
                                     marginBottom: 4,
+                                    lineHeight: 1.45,
                                 }}>
-                                    ⚠ {loginError}
+                                    {loginError.includes("inactivity") ? "⏱ " : "⚠ "}
+                                    {loginError}
                                 </div>
                             )}
 

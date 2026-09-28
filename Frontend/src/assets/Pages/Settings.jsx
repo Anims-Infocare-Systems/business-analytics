@@ -649,12 +649,12 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 {/* ── Glass Info Tiles ── */}
                                 <div className="st-acct-tiles" data-spotlight="set-company-card">
                                     {[
-                                        { label: "Company", value: userCompany, d: "M3 21h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11" },
+                                        { label: "Company", value: userCompany, isCompany: true, d: "M3 21h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11" },
                                         { label: "Company Code", value: companyCode, mono: true, d: "M6 3h12l4 6-10 13L2 9z" },
                                         { label: "System Role", value: userRole, d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
                                         { label: "Onboarded", value: formatDateDMY(profile?.profile?.signupDate || ""), d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" },
                                     ].map((f, i) => (
-                                        <div key={i} className="st-acct-tile" style={{ "--td": `${i * 90}ms` }}>
+                                        <div key={i} className={`st-acct-tile${f.isCompany ? " st-acct-tile--company" : ""}`} style={{ "--td": `${i * 90}ms` }} title={f.value}>
                                             <div className="st-acct-tile__glow" />
                                             <div className="st-acct-tile__icon">
                                                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -663,7 +663,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                             </div>
                                             <div className="st-acct-tile__body">
                                                 <span className="st-acct-tile__label">{f.label}</span>
-                                                <span className={`st-acct-tile__val${f.mono ? " st-acct-tile__val--mono" : ""}`}>{f.value || "—"}</span>
+                                                <span className={`st-acct-tile__val${f.mono ? " st-acct-tile__val--mono" : ""}${f.isCompany ? " st-acct-tile__val--company" : ""}`}>{f.value || "—"}</span>
                                             </div>
                                         </div>
                                     ))}

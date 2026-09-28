@@ -355,7 +355,15 @@ window.fetch = async (...args) => {
         localStorage.removeItem("ba_user_rights");
         localStorage.removeItem("ba_settings_profile");
         localStorage.removeItem("ba_nav");
+
+        const rawAct = localStorage.getItem("ba_last_activity");
+        const lastAct = Number(rawAct || 0);
+        localStorage.removeItem("ba_last_activity");
+
         sessionStorage.clear();
+        if (lastAct > 0 && Date.now() - lastAct >= 15 * 60 * 1000) {
+          sessionStorage.setItem("ba_logout_reason", "idle_timeout");
+        }
 
         // Only set concurrent_login banner if server specifically reported concurrent login / superseded session
         try {
@@ -367,6 +375,15 @@ window.fetch = async (...args) => {
         } catch {
           /* ignore json clone error */
         }
+
+        try {
+          localStorage.setItem("ba_logout_event", String(Date.now()));
+          if (typeof BroadcastChannel !== "undefined") {
+            const ch = new BroadcastChannel("ba_auth_channel");
+            ch.postMessage({ type: "LOGOUT", reason: "session_expired" });
+            ch.close();
+          }
+        } catch {}
       } catch (e) {
         console.error("Storage clear failed:", e);
       }
@@ -375,6 +392,34 @@ window.fetch = async (...args) => {
   }
   return res;
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Cross-Tab Instant Logout Synchronization (BroadcastChannel + Storage)
+// ══════════════════════════════════════════════════════════════════════════════
+if (typeof window !== "undefined") {
+  const syncLogoutAcrossTabs = () => {
+    if (!isAuthPage()) {
+      window.location.replace("/");
+    }
+  };
+
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const authChannel = new BroadcastChannel("ba_auth_channel");
+      authChannel.onmessage = (event) => {
+        if (event.data?.type === "LOGOUT") {
+          syncLogoutAcrossTabs();
+        }
+      };
+    }
+  } catch {}
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === "ba_logout_event" || (e.key === "user" && !e.newValue)) {
+      syncLogoutAcrossTabs();
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  React root

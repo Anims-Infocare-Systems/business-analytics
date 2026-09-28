@@ -1524,6 +1524,42 @@
     text-align: right;
 }
 
+/* ── Top 10 Material & Machine Rejection Grid Alignment ──────── */
+.qa2-top-rej-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 70px 140px !important;
+    gap: 0.75rem !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+}
+
+.qa2-top-rej-header {
+    padding-right: calc(1.25rem + 5px) !important;
+}
+
+.qa2-top-rej-col-name {
+    min-width: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+}
+
+.qa2-top-rej-col-qty {
+    min-width: 0 !important;
+    text-align: right !important;
+    font-variant-numeric: tabular-nums !important;
+    white-space: nowrap !important;
+}
+
+.qa2-top-rej-col-op {
+    min-width: 0 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
 /* ── Defect Cause Rows ────────────────────────────────────── */
 .qa2-defect-list {
     padding: 0.5rem 1.25rem 0.6rem;

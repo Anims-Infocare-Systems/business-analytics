@@ -84,7 +84,7 @@ def get_invoice_list(conn, limit: int = 50) -> List[Dict[str, Any]]:
         WHERE BD.invno = B.invno AND ISNULL(BD.deleted, 0) = 0
     ) D
     WHERE ISNULL(B.deleted, 0) = 0
-    ORDER BY B.invdt DESC, B.invno DESC
+    ORDER BY B.invdt DESC
     """
     cursor = conn.cursor()
     cursor.execute(query, (limit,))
@@ -176,7 +176,7 @@ def search_invoices(conn, search_q: str, limit: int = 50) -> List[Dict[str, Any]
         FROM Bill_Det BD
         WHERE BD.invno = B.invno AND ISNULL(BD.deleted, 0) = 0
     ) D
-    ORDER BY B.invdt DESC, B.invno DESC
+    ORDER BY B.invdt DESC
     """
     cursor = conn.cursor()
     cursor.execute(query, (limit, term, term, limit, term, term, limit, term, limit, term, limit, term, term, limit))
@@ -272,6 +272,7 @@ def get_invoice_details(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
 
     records = []
     tot_billed_qty = 0.0
+    tot_det_amount = 0.0
     first_part = ""
     first_desc = ""
     first_uom = "Nos"
@@ -294,6 +295,7 @@ def get_invoice_details(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
             first_rate = u_rate
 
         tot_billed_qty += b_qty
+        tot_det_amount += amt
         records.append({
             "part_no": p_no,
             "description": desc,
@@ -304,6 +306,61 @@ def get_invoice_details(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
             "process_code": p_code,
             "process_name": p_name,
         })
+
+    # Taxable Subtotal: from Bill_Det.amt field (fallback to Bill_Mas.tamt if 0)
+    taxable_subtotal = tot_det_amount if tot_det_amount > 0 else _safe_float(h_row[4])
+
+    # GST: from Bill_Tax matched by invno
+    # Query: SELECT invno, nos, ttype, tp, txamt, deleted, txonamt FROM Bill_Tax
+    tax_query = """
+    SELECT
+        ISNULL(txamt, 0) AS txamt,
+        ISNULL(tp, 0) AS tp,
+        ISNULL(txonamt, 0) AS txonamt
+    FROM Bill_Tax
+    WHERE invno = ? AND ISNULL(deleted, 0) = 0
+    ORDER BY nos ASC
+    """
+    cursor.execute(tax_query, (invoice_no,))
+    tax_rows = cursor.fetchall()
+
+    gst_amount = 0.0
+    if tax_rows:
+        for tr in tax_rows:
+            r_txamt = _safe_float(tr[0])
+            r_tp = _safe_float(tr[1])
+            r_txonamt = _safe_float(tr[2])
+
+            if r_txamt > 0:
+                gst_amount += r_txamt
+            elif r_tp > 0:
+                # tp is tax percentage: multiply base by (tp / 100.0)
+                base = r_txonamt if r_txonamt > 0 else taxable_subtotal
+                gst_amount += base * (r_tp / 100.0)
+
+    # Fallback for GST if Bill_Tax had no rows or produced 0
+    if gst_amount <= 0:
+        det_tax_query = """
+        SELECT ISNULL(SUM(ISNULL(txamt, 0) + ISNULL(stxamt, 0)), 0)
+        FROM Bill_Det
+        WHERE invno = ? AND ISNULL(deleted, 0) = 0
+        """
+        cursor.execute(det_tax_query, (invoice_no,))
+        det_tax_row = cursor.fetchone()
+        if det_tax_row and _safe_float(det_tax_row[0]) > 0:
+            gst_amount = _safe_float(det_tax_row[0])
+        elif _safe_float(h_row[5]) > 0:
+            gst_amount = _safe_float(h_row[5])
+        elif _safe_float(h_row[6]) > taxable_subtotal:
+            gst_amount = _safe_float(h_row[6]) - taxable_subtotal
+
+    taxable_subtotal = round(taxable_subtotal, 2)
+    gst_amount = round(gst_amount, 2)
+
+    # Total Net Payable: Taxable Subtotal + GST
+    total_net_payable = round(taxable_subtotal + gst_amount, 2)
+    if total_net_payable <= 0 and _safe_float(h_row[6]) > 0:
+        total_net_payable = _safe_float(h_row[6])
 
     irn_qr = _safe_str(h_row[10]) or _safe_str(h_row[11]) or None
 
@@ -316,9 +373,10 @@ def get_invoice_details(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
         "billed_qty": tot_billed_qty,
         "uom": first_uom,
         "unit_rate": first_rate,
-        "amount": _safe_float(h_row[4]),
-        "gst": _safe_float(h_row[5]),
-        "total_net_payable": _safe_float(h_row[6]),
+        "amount": taxable_subtotal,
+        "taxable_subtotal": taxable_subtotal,
+        "gst": gst_amount,
+        "total_net_payable": total_net_payable,
         "customer_po_ref": customer_po_ref,
         "po_order_date": po_order_date,
         "irn_qr_code": irn_qr,
@@ -335,31 +393,33 @@ def get_invoice_details(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
 def get_dc_details(conn, invoice_no: str) -> Dict[str, Any]:
     """
     Stage 2: Delivery Challan (DC) Details
-    Links: Bill_DcOrdDet.invno -> Bill_DcOrdDet.dcno -> DC_Det, DC_Mas, Dc_RouCardDet
+    Links: Bill_DcOrdDet.invno -> Bill_DcOrdDet.dcno -> DC_Det, DC_Mas, Dc_RouCardDet, DcInSubDet, DcInSubDetAssm
     """
     cursor = conn.cursor()
 
     query_dc = """
-    SELECT DISTINCT
+    SELECT
         BDO.dcno,
         COALESCE(DM.dcdate, BDO.dcdt) AS dcdate,
-        DD.partno,
-        DD.description,
-        ISNULL(DD.okqty, 0) AS qty,
-        DD.uom,
-        DD.process AS process_code,
+        COALESCE(DD.partno, N'') AS partno,
+        COALESCE(DD.description, N'') AS description,
+        ISNULL(DD.okqty, 0) + ISNULL(DD.uncompqty, 0) AS dispatched_qty,
+        COALESCE(DD.uom, N'Nos') AS uom,
+        COALESCE(DD.process, N'') AS process_code,
         PD.process AS process_name,
-        DM.transport,
+        COALESCE(DM.transport, BM.Transport, N'') AS transport,
         COALESCE(BM.VehicleNo, N'') AS vehicle_no,
-        DM.eWayPdfDowLoadPath,
-        BDO.ordno
+        COALESCE(DM.electrefno, DM.eWayPdfDowLoadPath, BM.eWayPdfDowLoadPath, N'') AS electrefno,
+        BDO.ordno,
+        ISNULL(DD.okqty, 0) AS okqty,
+        ISNULL(DD.uncompqty, 0) AS uncompqty
     FROM Bill_DcOrdDet BDO
-    INNER JOIN DC_Det DD ON BDO.dcno = DD.dcno AND ISNULL(DD.deleted, 0) = 0
-    LEFT JOIN DC_Mas DM ON DD.dcno = DM.dcno AND ISNULL(DM.deleted, 0) = 0
+    LEFT JOIN DC_Det DD ON BDO.dcno = DD.dcno AND ISNULL(DD.deleted, 0) = 0
+    LEFT JOIN DC_Mas DM ON BDO.dcno = DM.dcno AND ISNULL(DM.deleted, 0) = 0
     LEFT JOIN Bill_Mas BM ON BDO.invno = BM.invno AND ISNULL(BM.deleted, 0) = 0
     LEFT JOIN ProcessDet PD ON DD.process = PD.pcode AND ISNULL(PD.deleted, 0) = 0
     WHERE BDO.invno = ? AND ISNULL(BDO.deleted, 0) = 0
-    ORDER BY BDO.dcno ASC, DD.partno ASC
+    ORDER BY BDO.dcno ASC, DD.RowNo ASC, DD.partno ASC
     """
     cursor.execute(query_dc, (invoice_no,))
     dc_rows = cursor.fetchall()
@@ -413,45 +473,113 @@ def get_dc_details(conn, invoice_no: str) -> Dict[str, Any]:
 
     all_route_cards = list(dict.fromkeys(rc for rc in all_route_cards if rc))
 
+    # GRN / PO Reference:
+    # "refer dcno against and bring if it is Dcinsubdet bring Apono and if dcno in DcInSubDetAssm grnno"
+    po_or_grn_ref = None
+    if all_dc_nos:
+        apono_list = []
+        grn_list = []
+
+        # 1. DcInSubDet: bring Apono
+        sub_sql, sub_params = _format_in_clause(
+            cursor,
+            """
+            SELECT DISTINCT Apono
+            FROM DcInSubDet
+            WHERE dcno IN (%IN%) AND ISNULL(deleted, 0) = 0
+            """,
+            all_dc_nos
+        )
+        if sub_sql:
+            cursor.execute(sub_sql, sub_params)
+            for sr in cursor.fetchall():
+                ap = _safe_str(sr[0])
+                if ap and ap != "0":
+                    apono_list.append(ap)
+
+        # 2. DcInSubDetAssm: bring grnno
+        assm_sql, assm_params = _format_in_clause(
+            cursor,
+            """
+            SELECT DISTINCT grnno
+            FROM DcInSubDetAssm
+            WHERE dcno IN (%IN%) AND ISNULL(deleted, 0) = 0
+            """,
+            all_dc_nos
+        )
+        if assm_sql:
+            cursor.execute(assm_sql, assm_params)
+            for ar in cursor.fetchall():
+                gr = _safe_str(ar[0])
+                if gr and gr != "0":
+                    grn_list.append(gr)
+
+        # If it is DcInSubDet bring Apono; if in DcInSubDetAssm bring grnno
+        if apono_list:
+            po_or_grn_ref = ", ".join(dict.fromkeys(apono_list))
+        elif grn_list:
+            po_or_grn_ref = ", ".join(dict.fromkeys(grn_list))
+
+    # Fallback to BDO.ordno or Bill_Mas.prnpono if neither had references
+    if not po_or_grn_ref:
+        valid_ordnos = [
+            _safe_str(r[11]) for r in dc_rows
+            if _safe_str(r[11]) and _safe_str(r[11]) != "0"
+        ]
+        if valid_ordnos:
+            po_or_grn_ref = ", ".join(dict.fromkeys(valid_ordnos))
+
     records = []
     tot_dispatched_qty = 0.0
-    first_dc_no = _safe_str(dc_rows[0][0])
+    first_dc_no = ", ".join(all_dc_nos) if all_dc_nos else None
     first_dc_date = _format_date(dc_rows[0][1])
     first_uom = _safe_str(dc_rows[0][5]) or "Nos"
-    first_transport = _safe_str(dc_rows[0][8]) or None
-    first_vehicle = _safe_str(dc_rows[0][9]) or None
-    first_eway = _safe_str(dc_rows[0][10]) or None
-    first_po_ref = _safe_str(dc_rows[0][11]) or None
+
+    # Transporter Name: from DC_Mas.transport (or Bill_Mas.Transport)
+    all_transporters = [_safe_str(r[8]) for r in dc_rows if _safe_str(r[8])]
+    first_transport = ", ".join(dict.fromkeys(all_transporters)) if all_transporters else None
+
+    # Vehicle Number: from Bill_Mas.VehicleNo
+    all_vehicles = [_safe_str(r[9]) for r in dc_rows if _safe_str(r[9])]
+    first_vehicle = ", ".join(dict.fromkeys(all_vehicles)) if all_vehicles else None
+
+    # E-Way Bill Number: from DC_Mas.electrefno (or eWayPdfDowLoadPath)
+    all_eways = [_safe_str(r[10]) for r in dc_rows if _safe_str(r[10])]
+    first_eway = ", ".join(dict.fromkeys(all_eways)) if all_eways else None
 
     for r in dc_rows:
         dc_n = _safe_str(r[0])
-        p_no = _safe_str(r[1])
-        desc = _safe_str(r[2])
-        qty = _safe_float(r[3])
-        uom_s = _safe_str(r[4]) or "Nos"
-        proc_code = _safe_str(r[5])
-        proc_name = _safe_str(r[6])
+        p_no = _safe_str(r[2])
+        desc = _safe_str(r[3])
+        disp_qty = _safe_float(r[4])
+        uom_s = _safe_str(r[5]) or "Nos"
+        proc_code = _safe_str(r[6])
+        proc_name = _safe_str(r[7])
+        ok_qty = _safe_float(r[12])
+        uncomp_qty = _safe_float(r[13])
 
-        tot_dispatched_qty += qty
-        matched_rcs = rc_by_dc_part.get((dc_n, p_no), [])
-        if not matched_rcs:
-            # Fallback matching by DC alone if part format differs slightly
-            matched_rcs = [
-                {"route_card_no": item["route_card_no"], "qty": item["qty"]}
-                for (d, p), items in rc_by_dc_part.items() if d == dc_n
-                for item in items
-            ]
+        if p_no or desc or disp_qty > 0:
+            tot_dispatched_qty += disp_qty
+            matched_rcs = rc_by_dc_part.get((dc_n, p_no), [])
+            if not matched_rcs:
+                matched_rcs = [
+                    {"route_card_no": item["route_card_no"], "qty": item["qty"]}
+                    for (d, p), items in rc_by_dc_part.items() if d == dc_n
+                    for item in items
+                ]
 
-        records.append({
-            "dc_no": dc_n,
-            "part_no": p_no,
-            "description": desc,
-            "process_code": proc_code,
-            "process_name": proc_name,
-            "qty": qty,
-            "uom": uom_s,
-            "route_cards": matched_rcs,
-        })
+            records.append({
+                "dc_no": dc_n,
+                "part_no": p_no,
+                "description": desc,
+                "process_code": proc_code,
+                "process_name": proc_name,
+                "qty": disp_qty,
+                "okqty": ok_qty,
+                "uncompqty": uncomp_qty,
+                "uom": uom_s,
+                "route_cards": matched_rcs,
+            })
 
     return {
         "dc_no": first_dc_no,
@@ -461,7 +589,7 @@ def get_dc_details(conn, invoice_no: str) -> Dict[str, Any]:
         "vehicle_no": first_vehicle,
         "transporter_name": first_transport,
         "eway_bill_no": first_eway,
-        "grn_po_reference": first_po_ref,
+        "grn_po_reference": po_or_grn_ref,
         "records": records,
         "all_dc_numbers": all_dc_nos,
         "all_route_cards": all_route_cards,
@@ -495,7 +623,7 @@ def get_inspection_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
 
     cursor = conn.cursor()
 
-    # 1. Final Inspection
+    # 1. Final Inspection (last process from final isnpqty)
     final_sql, final_params = _format_in_clause(
         cursor,
         """
@@ -508,11 +636,14 @@ def get_inspection_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
             PD.process AS process_name,
             ISNULL(F.qty, 0) AS qty,
             ISNULL(F.rwqty, 0) AS rwqty,
-            ISNULL(F.rejqty, 0) AS rejqty
+            ISNULL(F.rejqty, 0) AS rejqty,
+            FE.finspdate,
+            COALESCE(NULLIF(LTRIM(RTRIM(FE.inspby)), N''), N'QA Inspection Team') AS inspby
         FROM FinalInspRouteCard F
+        LEFT JOIN FinalInspectionEntry FE ON F.FinspNo = FE.finspno AND ISNULL(FE.deleted, 0) = 0
         LEFT JOIN ProcessDet PD ON F.process = PD.pcode AND ISNULL(PD.deleted, 0) = 0
         WHERE F.RouCardNo IN (%IN%) AND ISNULL(F.deleted, 0) = 0
-        ORDER BY F.FinspNo DESC
+        ORDER BY F.FinspNo DESC, F.RouCardNo ASC
         """,
         route_card_numbers
     )
@@ -521,57 +652,19 @@ def get_inspection_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
         cursor.execute(final_sql, final_params)
         final_rows = cursor.fetchall()
 
-    # 2. Intermediate Inspection
-    inter_sql, inter_params = _format_in_clause(
-        cursor,
-        """
-        SELECT
-            I.inter_inspno,
-            I.prodid,
-            I.partno,
-            I.process AS process_code,
-            PD.process AS process_name,
-            I.RouCardNo,
-            ISNULL(I.okqty, 0) AS okqty
-        FROM InterInspEntryRouteCard I
-        LEFT JOIN ProcessDet PD ON I.process = PD.pcode AND ISNULL(PD.deleted, 0) = 0
-        WHERE I.RouCardNo IN (%IN%) AND ISNULL(I.deleted, 0) = 0
-        ORDER BY I.inter_inspno ASC
-        """,
-        route_card_numbers
-    )
-    inter_rows = []
-    if inter_sql:
-        cursor.execute(inter_sql, inter_params)
-        inter_rows = cursor.fetchall()
-
     # Aggregate summaries
     tot_qty = sum(_safe_float(r[6]) for r in final_rows)
     tot_rw = sum(_safe_float(r[7]) for r in final_rows)
     tot_rej = sum(_safe_float(r[8]) for r in final_rows)
 
-    first_finsp = _safe_str(final_rows[0][0]) if final_rows else None
-    first_rc = route_card_numbers[0] if route_card_numbers else None
+    all_finsp = list(dict.fromkeys(_safe_str(r[0]) for r in final_rows if _safe_str(r[0])))
+    all_rc = list(dict.fromkeys(_safe_str(r[1]) for r in final_rows if _safe_str(r[1])))
+    first_date = _format_date(final_rows[0][9]) if final_rows and final_rows[0][9] else None
+    first_inspby = _safe_str(final_rows[0][10]) if final_rows else "QA Inspection Team"
 
-    # Operations breakdown
+    # Operations breakdown: ONLY final inspection operations for the last process
     operations = []
     op_num = 1
-    # Add intermediate inspection operations
-    for ir in inter_rows:
-        operations.append({
-            "routecard_no": _safe_str(ir[5]),
-            "operation_no": op_num,
-            "inspection_no": _safe_str(ir[0]),
-            "process_code": _safe_str(ir[3]),
-            "process_name": _safe_str(ir[4]) or "Intermediate Inspection",
-            "machine": _safe_str(ir[1]),
-            "shift": "Standard",
-            "total_qty": _safe_float(ir[6]),
-            "type": "Intermediate"
-        })
-        op_num += 1
-
-    # Add final inspection operations
     for fr in final_rows:
         operations.append({
             "routecard_no": _safe_str(fr[1]),
@@ -582,8 +675,12 @@ def get_inspection_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
             "machine": "QA Lab / Test Bench",
             "shift": "General",
             "total_qty": _safe_float(fr[6]),
+            "inspected_qty": _safe_float(fr[6]) + _safe_float(fr[8]),
+            "ok_qty": _safe_float(fr[6]),
             "rej_qty": _safe_float(fr[8]),
             "rw_qty": _safe_float(fr[7]),
+            "inspection_date": _format_date(fr[9]),
+            "inspected_by": _safe_str(fr[10]) or "QA Inspection Team",
             "type": "Final"
         })
         op_num += 1
@@ -595,23 +692,25 @@ def get_inspection_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
             "part_no": _safe_str(r[2]),
             "description": _safe_str(r[3]),
             "process_code": _safe_str(r[4]),
-            "process_name": _safe_str(r[5]),
+            "process_name": _safe_str(r[5]) or "Final Inspection",
             "qty": _safe_float(r[6]),
             "rw_qty": _safe_float(r[7]),
             "rej_qty": _safe_float(r[8]),
+            "inspection_date": _format_date(r[9]),
+            "inspected_by": _safe_str(r[10]) or "QA Inspection Team",
         }
         for r in final_rows
     ]
 
     return {
-        "final_insp_no": first_finsp,
-        "inspection_date": None,
+        "final_insp_no": ", ".join(all_finsp) if all_finsp else None,
+        "inspection_date": first_date,
         "total_qty": tot_qty,
         "inspected_qty": tot_qty + tot_rej,
         "rej_qty": tot_rej,
         "rw_qty": tot_rw,
-        "routecard_no": first_rc,
-        "insp_by": "QA Inspection Team",
+        "routecard_no": ", ".join(all_rc) if all_rc else (route_card_numbers[0] if route_card_numbers else None),
+        "insp_by": first_inspby,
         "operations": operations,
         "records": records,
     }

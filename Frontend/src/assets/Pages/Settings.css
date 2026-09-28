@@ -266,7 +266,11 @@
 .st-acct-plan-renew { font-size: 11px; color: rgba(255,255,255,0.7); margin: 0; }
 
 /* Tiles */
-.st-acct-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.st-acct-tiles {
+    display: grid;
+    grid-template-columns: minmax(300px, 2.2fr) minmax(115px, 1fr) minmax(115px, 1fr) minmax(115px, 1fr);
+    gap: 12px;
+}
 .st-acct-tile {
     position: relative;
     background: var(--st-surface);
@@ -279,6 +283,16 @@
     animation: st-tile-in 0.45s var(--st-easing) var(--td, 0ms) both;
     transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s var(--st-easing);
     box-shadow: var(--st-shadow-sm); cursor: default;
+}
+.st-acct-tile--company {
+    min-width: 0;
+}
+.st-acct-tile--company .st-acct-tile__val {
+    white-space: normal !important;
+    word-break: break-word;
+    line-height: 1.35;
+    font-size: 13.5px;
+    text-overflow: clip;
 }
 .st-acct-tile:hover {
     border-color: var(--st-border-hover);

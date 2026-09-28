@@ -20,3 +20,35 @@ html, body {
 button, input, textarea, select {
   font-family: inherit;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Modern UI Scrollbar System
+   Thin, rounded, translucent, with smooth hover transitions
+   ════════════════════════════════════════════════════════════════ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

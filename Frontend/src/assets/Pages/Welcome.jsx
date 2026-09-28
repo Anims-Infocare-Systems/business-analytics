@@ -197,7 +197,11 @@ export default function Welcome({
                 <div className="wh-hero__inner">
                     <div className="wh-hero__left">
                         <span className="wh-hero__eyebrow">
-                            <Sparkles size={14} />
+                            <img
+                                src="/pwa-192.png"
+                                alt="Anims Logo"
+                                className="wh-hero__eyebrow-logo"
+                            />
                             Anims Business Analytics
                         </span>
                         <h1 className="wh-hero__title">

@@ -81,12 +81,15 @@
             scrollbar-width: thin;
             scrollbar-color: rgba(147, 151, 179, 0.3) transparent;
         }
+
         .lp__right::-webkit-scrollbar {
             width: 4px;
         }
+
         .lp__right::-webkit-scrollbar-track {
             background: transparent;
         }
+
         .lp__right::-webkit-scrollbar-thumb {
             background: rgba(147, 151, 179, 0.35);
             border-radius: 4px;
@@ -873,34 +876,44 @@
             padding-top: 4.5vh;
             padding-bottom: 2.5vh;
         }
+
         .lp__card {
             transform: translateY(1.5vh);
         }
+
         .lp__card-head {
             margin-bottom: clamp(10px, 1.4vh, 16px);
         }
+
         .lp__logo {
             margin-bottom: 16px;
         }
+
         .lp__logo-img {
             width: clamp(60px, 6.5vw, 80px);
         }
+
         .lp__form {
             gap: clamp(10px, 1.2vh, 14px);
         }
+
         .lp__footer {
             margin-top: clamp(10px, 1.5vh, 18px);
             padding-top: clamp(10px, 1.2vh, 16px);
         }
+
         .lp__inp {
             height: 38px;
         }
+
         .lp__wrap {
             height: 38px;
         }
+
         .lp__btn {
             height: 38px;
         }
+
         .lp__signup-prompt {
             margin-top: 10px;
         }
@@ -912,53 +925,68 @@
             padding-top: 3vh;
             padding-bottom: 2vh;
         }
+
         .lp__card {
             transform: translateY(0);
         }
+
         .lp__card-head {
             margin-bottom: clamp(8px, 1.1vh, 13px);
         }
+
         .lp__logo {
             margin-bottom: 12px;
         }
+
         .lp__logo-img {
             width: clamp(52px, 5.5vw, 70px);
         }
+
         .lp__title {
             font-size: clamp(18px, 1.7vw, 24px);
         }
+
         .lp__subtitle {
             font-size: clamp(11px, 0.8vw, 13px);
         }
+
         .lp__label {
             font-size: 13px;
         }
+
         .lp__form {
             gap: clamp(8px, 1vh, 12px);
         }
+
         .lp__inp {
             height: 36px;
             font-size: 12.5px;
         }
+
         .lp__wrap {
             height: 36px;
         }
+
         .lp__btn {
             height: 36px;
             font-size: 13px;
         }
+
         .lp__footer {
             margin-top: clamp(8px, 1.2vh, 14px);
             padding-top: clamp(8px, 1vh, 12px);
         }
+
         .lp__copy {
             font-size: 10.5px;
             margin-bottom: 4px;
         }
+
         .lp__signup-prompt {
             margin-top: 8px;
             font-size: 12.5px;
         }
+
         .lp__forgot-row {
             margin-top: 3px;
         }
@@ -969,48 +997,63 @@
         .lp__right {
             padding-top: 2vh;
         }
+
         .lp__logo {
             margin-bottom: 8px;
         }
+
         .lp__logo-img {
             width: 50px;
         }
+
         .lp__title {
             font-size: 17px;
         }
+
         .lp__subtitle {
             font-size: 11px;
         }
+
         .lp__label {
             font-size: 12px;
         }
+
         .lp__form {
             gap: 7px;
         }
+
         .lp__inp {
             height: 34px;
             font-size: 12px;
         }
+
         .lp__wrap {
             height: 34px;
         }
+
         .lp__btn {
             height: 34px;
             margin-top: 2px;
         }
+
         .lp__card-head {
             margin-bottom: 8px;
         }
+
         .lp__footer {
             margin-top: 8px;
             padding-top: 8px;
         }
+
         .lp__copy {
             font-size: 10px;
         }
-        .lp__link, .lp__dot {
+
+        .lp__link,
+        .lp__dot {
             font-size: 9px;
         }
+
         .lp__signup-prompt {
             margin-top: 6px;
             font-size: 12px;

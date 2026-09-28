@@ -662,6 +662,22 @@ export const SPOTLIGHT_REGISTRY = [
     //  3. REPORTS & ANALYTICS — SALES ANALYSIS
     // ═════════════════════════════════════════════════════════════════
     {
+        id: "reports-sales-analysis",
+        title: "Reports — Sales Analysis (Executive Revenue Analytics)",
+        module: "Sales Analysis",
+        parentMenu: "Reports",
+        categoryType: "reports",
+        categoryLabel: "Core Reports",
+        targetSelector: "[data-spotlight='reports-sales-analysis'], [data-spotlight='sa-root'], .sa-root",
+        fallbackSelector: ".sa-root, .sa-kpi-grid",
+        description: "Primary enterprise sales performance module featuring executive revenue KPIs, customer & part-wise delivery schedules, pending PO status, dispatch tracking, and invoice ledgers.",
+        tags: ["reports — sales analysis", "reports sales analysis", "sales analysis", "sales report", "sales overview", "revenue report", "turnover", "invoices", "sales", "reports", "executive sales", "sales dashboard"],
+        keyActions: ["Inspect Revenue Performance", "Analyze Customer & Part-Wise Schedules", "Review Sales Ledgers", "Filter by Date Range"],
+        badge: "Core Report",
+        color: "#2563eb",
+        iconName: "TrendingUp"
+    },
+    {
         id: "sa-kpis",
         title: "Sales Analysis — Executive KPI Deck",
         module: "Sales Analysis",
@@ -693,20 +709,36 @@ export const SPOTLIGHT_REGISTRY = [
         iconName: "BarChart2"
     },
     {
-        id: "sa-revenue-split",
-        title: "Sales Analysis — Revenue by Customer & Product",
+        id: "sa-pending-po-summary",
+        title: "Sales Analysis — Customer & Part-Wise Pending PO Summary",
         module: "Sales Analysis",
         parentMenu: "Reports",
         categoryType: "reports",
-        categoryLabel: "Contribution Matrix",
-        targetSelector: "[data-spotlight='sa-revenue-split']",
-        fallbackSelector: ".sa-donuts-row",
-        description: "Dual donut visualizer showing revenue contribution share across top customer accounts and highest-selling manufactured products.",
-        tags: ["revenue by customer", "revenue by product", "donuts", "revenue split", "customer share", "product share"],
-        keyActions: ["Hover Donut Segments for Amounts", "Inspect Top 5 Customer Share", "Evaluate Top Product Lines"],
-        badge: "Contribution Matrix",
-        color: "#10b981",
-        iconName: "Package"
+        categoryLabel: "Order Backlog",
+        targetSelector: "[data-spotlight='sa-pending-po-summary']",
+        fallbackSelector: ".sa-card--pending-po, [data-spotlight='sa-revenue-split']",
+        description: "Customer and part-wise pending purchase order summary with PO Date Wise and PO Schedule Wise toggle views, ordered quantities, invoiced sales, and pending backlogs.",
+        tags: ["customer & part-wise pending po summary", "pending po summary", "pending po", "po summary", "customer pending po", "part-wise pending po", "po date wise", "po sch wise", "po qty", "sal qty", "po pend qty"],
+        keyActions: ["Toggle PO Date Wise vs PO Sch Wise", "Search Customer or Part", "Inspect Pending Balance Qty", "Maximize Table View"],
+        badge: "Pending PO Summary",
+        color: "#2563eb",
+        iconName: "FileText"
+    },
+    {
+        id: "sa-schedule-analysis",
+        title: "Sales Analysis — Customer & Part-Wise Schedule Analysis",
+        module: "Sales Analysis",
+        parentMenu: "Reports",
+        categoryType: "reports",
+        categoryLabel: "Delivery Schedule",
+        targetSelector: "[data-spotlight='sa-schedule-analysis']",
+        fallbackSelector: ".sa-card--sched-analysis, [data-spotlight='sa-revenue-split']",
+        description: "Multi-month dispatch schedule analysis comparing scheduled quantity vs sales quantity and scheduled value vs sales value across August-26 and September-26.",
+        tags: ["customer & part-wise schedule analysis", "schedule analysis", "august-26", "september-26", "delivery schedule", "schd qty", "schd val", "sal qty", "sal val", "customer schedule", "part-wise schedule"],
+        keyActions: ["Compare Scheduled vs Actual Sales", "Review August & September Commitments", "Search Customer / Part", "Maximize Table View"],
+        badge: "Schedule Analysis",
+        color: "#7c3aed",
+        iconName: "Calendar"
     },
     {
         id: "sa-despatch-plan",
@@ -770,6 +802,22 @@ export const SPOTLIGHT_REGISTRY = [
         badge: "Historical Sales Ledger",
         color: "#10b981",
         iconName: "Calendar"
+    },
+    {
+        id: "sa-customer-part-wise",
+        title: "Sales Analysis — Customer & Part-Wise Sales Analysis",
+        module: "Sales Analysis",
+        parentMenu: "Reports",
+        categoryType: "reports",
+        categoryLabel: "Sales Performance",
+        targetSelector: "[data-spotlight='sa-customer-part-wise']",
+        fallbackSelector: ".sa-card--cust-part",
+        description: "Comprehensive customer and part-level sales performance analysis with type filtering, customer selection, part search, pagination, and detailed revenue trends.",
+        tags: ["customer & part-wise sales analysis", "customer part-wise sales", "customer sales analysis", "part-wise sales", "customer sales ledger", "sales table", "all types", "part sales performance"],
+        keyActions: ["Filter by Part / Assembly Type", "Search Specific Part or Customer", "Review Part Sales Performance", "Analyze Customer Revenue Share"],
+        badge: "Customer & Part Analysis",
+        color: "#0284c7",
+        iconName: "Package"
     },
     {
         id: "sa-invoice-details",

@@ -108,7 +108,7 @@ const EMPTY_KPI_CARDS = [
     { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: "0", sub: "Processing defects", trend: "All clear", cls: "qa2-t-up" },
     { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "0", sub: "Log complaints", trend: "0 complaints", cls: "qa2-t-up" },
     { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: "0 PPM", sub: "Defect PPM level", trend: "Within control", cls: "qa2-t-up" },
-    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
+    { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting Qty", value: "0", sub: "Live snapshot", trend: "All caught up", cls: "qa2-t-up" },
     { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: "0", sub: "Gauges & Instruments", trend: "All calibrated", cls: "qa2-t-up" },
 ];
 
@@ -623,7 +623,7 @@ export const transformBackendTimeline = (backendData) => {
                 { label: "Invoice Date", value: s1.invoice_date || inv.invoice_date || "-" },
                 { label: "Billed Quantity", value: `${s1.billed_qty ?? totBilledQty} ${s1.uom || 'Nos'}`, highlight: true },
                 { label: "Unit Rate", value: formatTimelineCurrency(s1.unit_rate) },
-                { label: "Taxable Subtotal", value: formatTimelineCurrency(s1.amount) },
+                { label: "Taxable Subtotal", value: formatTimelineCurrency(s1.taxable_subtotal ?? s1.amount) },
                 { label: "GST", value: formatTimelineCurrency(s1.gst) },
                 { label: "Total Net Payable", value: formatTimelineCurrency(s1.total_net_payable || inv.invoice_value), highlight: true },
                 { label: "Customer PO Ref", value: s1.customer_po_ref || "-" },
@@ -903,7 +903,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                     setIsRouteCardProd(Number(data.is_route_card_prod ?? data.IsRouteCardProd));
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
         return () => { isMounted = false; };
     }, [propIsRouteCardProd]);
 
@@ -947,7 +947,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                         });
                     }
                 })
-                .catch(() => {});
+                .catch(() => { });
         }, 300);
         return () => clearTimeout(timer);
     }, [searchQuery]);
@@ -1779,7 +1779,6 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                         <td className="text-slate-400 font-mono text-xs">{rIdx + 1}</td>
                                                         <td className="font-mono text-xs font-bold text-blue-600">{rec.routeCard}</td>
                                                         <td className="font-medium text-slate-800" style={{ fontFamily: "var(--qa-font-body)" }}>
-                                                            <span className="qa2-timeline-op-badge" style={{ marginRight: 6, fontSize: "0.68rem", padding: "1px 6px" }}>{rec.op}</span>
                                                             {rec.process}
                                                         </td>
                                                         <td className="text-slate-600 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.machine}</td>
@@ -1991,37 +1990,37 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                             <tbody>
                                                 {modalStageData.grnRecords && modalStageData.grnRecords.length > 0 ? (
                                                     modalStageData.grnRecords.map((rec, gIdx) => (
-                                                    <tr key={gIdx}>
-                                                        <td className="text-slate-400 font-mono text-xs">{gIdx + 1}</td>
-                                                        <td className="font-mono text-xs font-bold text-cyan-700">
-                                                            {rec.grnNo}
-                                                        </td>
-                                                        <td className="font-mono text-xs font-semibold text-slate-700">
-                                                            {rec.grnDate}
-                                                        </td>
-                                                        <td className="font-mono text-right text-slate-900 font-bold text-xs">
-                                                            {rec.materialQty}
-                                                        </td>
-                                                        <td className="font-mono text-center text-slate-700 font-semibold text-xs">
-                                                            <span className="qa2-grn-uom-badge">{rec.uom}</span>
-                                                        </td>
-                                                        <td className="font-mono text-right text-emerald-600 font-bold text-xs">
-                                                            {rec.okQty}
-                                                        </td>
-                                                        <td className="font-mono text-right text-slate-400 font-medium text-xs">
-                                                            {rec.rejQty}
-                                                        </td>
-                                                        <td className="text-slate-800 text-xs font-semibold" style={{ fontFamily: "var(--qa-font-body)" }}>
-                                                            {rec.inspBy}
-                                                        </td>
-                                                        <td style={{ textAlign: "center" }}>
-                                                            <span className="qa2-timeline-pass-tag">
-                                                                <Check size={11} strokeWidth={3} />
-                                                                {rec.verdict || "PASS"}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))
+                                                        <tr key={gIdx}>
+                                                            <td className="text-slate-400 font-mono text-xs">{gIdx + 1}</td>
+                                                            <td className="font-mono text-xs font-bold text-cyan-700">
+                                                                {rec.grnNo}
+                                                            </td>
+                                                            <td className="font-mono text-xs font-semibold text-slate-700">
+                                                                {rec.grnDate}
+                                                            </td>
+                                                            <td className="font-mono text-right text-slate-900 font-bold text-xs">
+                                                                {rec.materialQty}
+                                                            </td>
+                                                            <td className="font-mono text-center text-slate-700 font-semibold text-xs">
+                                                                <span className="qa2-grn-uom-badge">{rec.uom}</span>
+                                                            </td>
+                                                            <td className="font-mono text-right text-emerald-600 font-bold text-xs">
+                                                                {rec.okQty}
+                                                            </td>
+                                                            <td className="font-mono text-right text-slate-400 font-medium text-xs">
+                                                                {rec.rejQty}
+                                                            </td>
+                                                            <td className="text-slate-800 text-xs font-semibold" style={{ fontFamily: "var(--qa-font-body)" }}>
+                                                                {rec.inspBy}
+                                                            </td>
+                                                            <td style={{ textAlign: "center" }}>
+                                                                <span className="qa2-timeline-pass-tag">
+                                                                    <Check size={11} strokeWidth={3} />
+                                                                    {rec.verdict || "PASS"}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))
                                                 ) : (
                                                     <tr>
                                                         <td colSpan={9} style={{ textAlign: "center", padding: "20px 16px", color: "#64748b" }}>
@@ -2064,31 +2063,31 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                 <tbody>
                                                     {modalStageData.supplierRecords && modalStageData.supplierRecords.length > 0 ? (
                                                         modalStageData.supplierRecords.map((rec, sIdx) => (
-                                                        <tr key={sIdx}>
-                                                            <td className="text-slate-400 font-mono text-xs">{sIdx + 1}</td>
-                                                            <td className="font-semibold text-slate-900" style={{ fontFamily: "var(--qa-font-heading)" }}>
-                                                                {rec.supplierName}
-                                                            </td>
-                                                            <td className="font-mono text-xs font-bold text-pink-700">
-                                                                {rec.poRef}
-                                                            </td>
-                                                            <td className="font-mono text-xs font-semibold text-slate-700">
-                                                                {rec.poDate}
-                                                            </td>
-                                                            <td className="font-mono text-right text-slate-900 font-bold text-xs">
-                                                                {rec.qty}
-                                                            </td>
-                                                            <td className="font-mono text-center text-slate-700 font-semibold text-xs">
-                                                                <span className="qa2-grn-uom-badge">{rec.uom}</span>
-                                                            </td>
-                                                            <td style={{ textAlign: "center" }}>
-                                                                <span className="qa2-timeline-pass-tag">
-                                                                    <Check size={11} strokeWidth={3} />
-                                                                    {rec.status || "APPROVED"}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))
+                                                            <tr key={sIdx}>
+                                                                <td className="text-slate-400 font-mono text-xs">{sIdx + 1}</td>
+                                                                <td className="font-semibold text-slate-900" style={{ fontFamily: "var(--qa-font-heading)" }}>
+                                                                    {rec.supplierName}
+                                                                </td>
+                                                                <td className="font-mono text-xs font-bold text-pink-700">
+                                                                    {rec.poRef}
+                                                                </td>
+                                                                <td className="font-mono text-xs font-semibold text-slate-700">
+                                                                    {rec.poDate}
+                                                                </td>
+                                                                <td className="font-mono text-right text-slate-900 font-bold text-xs">
+                                                                    {rec.qty}
+                                                                </td>
+                                                                <td className="font-mono text-center text-slate-700 font-semibold text-xs">
+                                                                    <span className="qa2-grn-uom-badge">{rec.uom}</span>
+                                                                </td>
+                                                                <td style={{ textAlign: "center" }}>
+                                                                    <span className="qa2-timeline-pass-tag">
+                                                                        <Check size={11} strokeWidth={3} />
+                                                                        {rec.status || "APPROVED"}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))
                                                     ) : (
                                                         <tr>
                                                             <td colSpan={7} style={{ textAlign: "center", padding: "20px 16px", color: "#64748b" }}>
@@ -2577,17 +2576,105 @@ export default function QualityAnalysis() {
         );
     };
 
+    const getCleanPartNo = useCallback((p) => {
+        if (!p) return "";
+        const str = String(p).trim();
+        const idx = str.indexOf(" (");
+        if (idx !== -1 && str.endsWith(")")) {
+            return str.slice(0, idx).trim();
+        }
+        return str;
+    }, []);
+
+    const fastParseNum = useCallback((val) => {
+        if (typeof val === 'number') return isNaN(val) ? 0 : val;
+        if (!val) return 0;
+        const s = String(val);
+        if (s.indexOf(',') !== -1) {
+            return parseFloat(s.replace(/,/g, '')) || 0;
+        }
+        return parseFloat(s) || 0;
+    }, []);
+
     const uniquePartOptions = useMemo(() => {
-        const set = new Set();
-        (recordsData?.inspection_records || []).forEach(r => {
-            const part = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
-            if (part && part !== "—" && part !== "-") set.add(part);
-        });
+        const partMap = new Map();
+
+        const addPart = (rawPart, rawDesc) => {
+            if (!rawPart) return;
+            let part = String(rawPart).trim();
+            if (!part || part === "—" || part === "-") return;
+
+            let desc = rawDesc ? String(rawDesc).trim() : "";
+            if (desc === "—" || desc === "-" || desc.toLowerCase() === part.toLowerCase()) {
+                desc = "";
+            }
+
+            const parenIdx = part.indexOf(" (");
+            if (parenIdx !== -1 && part.endsWith(")")) {
+                const extractedDesc = part.slice(parenIdx + 2, part.length - 1).trim();
+                part = part.slice(0, parenIdx).trim();
+                if (!desc && extractedDesc) {
+                    desc = extractedDesc;
+                }
+            }
+
+            const key = part.toUpperCase();
+            const existing = partMap.get(key);
+            if (!existing) {
+                partMap.set(key, { partNo: part, desc });
+            } else if (desc) {
+                if (!existing.desc || existing.desc.endsWith("...") || existing.desc.endsWith("…") ||
+                    (desc.length > existing.desc.length && !desc.endsWith("...") && !desc.endsWith("…"))) {
+                    existing.desc = desc;
+                }
+            }
+        };
+
         (prodPerfData?.products || []).forEach(p => {
-            const part = (p.code || p.name || "").trim();
-            if (part && part !== "—" && part !== "-") set.add(part);
+            const pName = p.name || p.code || "";
+            const pDesc = p.description || p.desc || "";
+            addPart(pName, pDesc);
         });
-        return Array.from(set).sort();
+
+        (recordsData?.inspection_records || []).forEach(r => {
+            let part = (r.partNo || "").trim();
+            let desc = (r.description || r.product || "").trim();
+            if (part && !desc && r.partNoDesc) {
+                const pUpper = part.toUpperCase();
+                const dUpper = r.partNoDesc.toUpperCase();
+                if (dUpper.startsWith(pUpper)) {
+                    let rem = r.partNoDesc.slice(part.length).trim();
+                    if (rem.startsWith("-") || rem.startsWith("—")) {
+                        rem = rem.slice(1).trim();
+                    }
+                    if (rem) desc = rem;
+                }
+            } else if (!part && r.partNoDesc) {
+                const dashIdx = r.partNoDesc.indexOf(" - ");
+                if (dashIdx !== -1) {
+                    part = r.partNoDesc.slice(0, dashIdx).trim();
+                    if (!desc) desc = r.partNoDesc.slice(dashIdx + 3).trim();
+                } else {
+                    part = r.partNoDesc.trim();
+                }
+            }
+            addPart(part, desc);
+        });
+
+        (recordsData?.rejection_rows || []).forEach(r => {
+            addPart(r.partNo, r.description || r.product);
+        });
+
+        const result = [];
+        for (const item of partMap.values()) {
+            if (item.desc) {
+                result.push(`${item.partNo} (${item.desc})`);
+            } else {
+                result.push(item.partNo);
+            }
+        }
+
+        return result.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     }, [recordsData, prodPerfData]);
 
     const getWeekSlotKey = useCallback((dStr) => {
@@ -2614,10 +2701,26 @@ export default function QualityAnalysis() {
     }, [uniqueCustomerNames, trendRejCustSearch, selectedCustomers]);
 
     const filteredRejDropdownParts = useMemo(() => {
-        if (!trendRejPartSearch.trim()) return uniquePartOptions;
-        const q = trendRejPartSearch.toLowerCase().trim();
-        return uniquePartOptions.filter(p => p.toLowerCase().includes(q));
-    }, [uniquePartOptions, trendRejPartSearch]);
+        let list = uniquePartOptions;
+        if (trendRejPartSearch.trim()) {
+            const q = trendRejPartSearch.toLowerCase().trim();
+            list = uniquePartOptions.filter(p => p.toLowerCase().includes(q));
+        }
+        if (trendRejPartFilter.length > 0) {
+            const checkedSet = new Set(trendRejPartFilter);
+            const checked = [];
+            const unchecked = [];
+            for (let i = 0; i < list.length; i++) {
+                if (checkedSet.has(list[i])) {
+                    checked.push(list[i]);
+                } else {
+                    unchecked.push(list[i]);
+                }
+            }
+            return [...checked, ...unchecked.slice(0, 100)];
+        }
+        return list.slice(0, 100);
+    }, [uniquePartOptions, trendRejPartSearch, trendRejPartFilter]);
 
     const handleTrendRejCustToggle = (cust) => {
         setTrendRejCustFilter(prev => prev.includes(cust) ? prev.filter(c => c !== cust) : [...prev, cust]);
@@ -2636,10 +2739,26 @@ export default function QualityAnalysis() {
     }, [uniqueCustomerNames, trendRwkCustSearch, selectedCustomers]);
 
     const filteredRwkDropdownParts = useMemo(() => {
-        if (!trendRwkPartSearch.trim()) return uniquePartOptions;
-        const q = trendRwkPartSearch.toLowerCase().trim();
-        return uniquePartOptions.filter(p => p.toLowerCase().includes(q));
-    }, [uniquePartOptions, trendRwkPartSearch]);
+        let list = uniquePartOptions;
+        if (trendRwkPartSearch.trim()) {
+            const q = trendRwkPartSearch.toLowerCase().trim();
+            list = uniquePartOptions.filter(p => p.toLowerCase().includes(q));
+        }
+        if (trendRwkPartFilter.length > 0) {
+            const checkedSet = new Set(trendRwkPartFilter);
+            const checked = [];
+            const unchecked = [];
+            for (let i = 0; i < list.length; i++) {
+                if (checkedSet.has(list[i])) {
+                    checked.push(list[i]);
+                } else {
+                    unchecked.push(list[i]);
+                }
+            }
+            return [...checked, ...unchecked.slice(0, 100)];
+        }
+        return list.slice(0, 100);
+    }, [uniquePartOptions, trendRwkPartSearch, trendRwkPartFilter]);
 
     const handleTrendRwkCustToggle = (cust) => {
         setTrendRwkCustFilter(prev => prev.includes(cust) ? prev.filter(c => c !== cust) : [...prev, cust]);
@@ -3049,8 +3168,34 @@ export default function QualityAnalysis() {
         return parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0;
     }, []);
 
+    const getWeekDayRange = useCallback((label, idx, weekDays = []) => {
+        if (weekDays && weekDays[idx]) return weekDays[idx];
+        if (!label) return "";
+        if (Array.isArray(label)) return label[1] || "";
+        const match = String(label).match(/W([1-5])/i);
+        if (!match) return "";
+        const w = parseInt(match[1], 10);
+        if (w === 1) return "1-7";
+        if (w === 2) return "8-14";
+        if (w === 3) return "15-21";
+        if (w === 4) return "22-28";
+        if (w === 5) {
+            const mMatch = String(label).match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i);
+            if (mMatch) {
+                const m = mMatch[1].toLowerCase();
+                const days30 = ["apr", "jun", "sep", "nov"];
+                if (days30.includes(m)) return "29-30";
+                if (m === "feb") return "29-28";
+                return "29-31";
+            }
+            return "29-30";
+        }
+        return "";
+    }, []);
+
     const activeRejectionTrendData = useMemo(() => {
         const trendLabels = chartsData?.trend?.labels || [];
+        const weekDays = chartsData?.trend?.week_days || [];
         const defaultRejDataset = chartsData?.trend?.datasets?.find(d =>
             d.label?.toLowerCase().includes("reject") || d.label?.toLowerCase().includes("rej") || d.label?.toLowerCase().includes("fail")
         );
@@ -3065,7 +3210,8 @@ export default function QualityAnalysis() {
             let points = defaultPoints;
             if ((hasActiveFilter || hasActiveReasonFilter) && trendLabels.length > 0) {
                 const calcReject = new Array(trendLabels.length).fill(0);
-                sourceRows.forEach(r => {
+                for (let i = 0; i < sourceRows.length; i++) {
+                    const r = sourceRows[i];
                     const rawDate = r.date || r.inspDate || "";
                     let slotIdx = -1;
                     if (rawDate) {
@@ -3076,139 +3222,213 @@ export default function QualityAnalysis() {
                         }
                     }
                     if (slotIdx === -1) slotIdx = 0;
-                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
-                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : fastParseNum(r.matRejQty);
+                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : fastParseNum(r.macRejQty);
                     calcReject[slotIdx] += (mat + mac);
-                });
+                }
                 points = calcReject;
             }
             let rateVal = summaryData?.kpis?.rejection_rate_card?.value || "7.5% Rate";
             if (hasActiveFilter || hasActiveReasonFilter) {
-                const totalInsp = sourceRows.reduce((sum, r) => sum + (parseFloat(String(r.qty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
-                const totalRej = sourceRows.reduce((sum, r) => {
-                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
-                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
-                    return sum + mat + mac;
-                }, 0);
+                let totalInsp = 0;
+                let totalRej = 0;
+                for (let i = 0; i < sourceRows.length; i++) {
+                    const r = sourceRows[i];
+                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : fastParseNum(r.matRejQty);
+                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : fastParseNum(r.macRejQty);
+                    const rej = mat + mac;
+                    const insp = fastParseNum(r.qty) || rej;
+                    totalInsp += insp;
+                    totalRej += rej;
+                }
                 const rRateRaw = totalInsp > 0 ? (totalRej / totalInsp) * 100 : 0;
                 rateVal = rRateRaw > 0 && rRateRaw < 0.1 ? `${rRateRaw.toFixed(2)}% Rate` : `${rRateRaw.toFixed(1)}% Rate`;
             }
+
+            const formattedLabels = trendLabels.map((lbl, idx) => {
+                if (Array.isArray(lbl)) return lbl;
+                const days = getWeekDayRange(lbl, idx, weekDays);
+                return days ? [lbl, days] : lbl;
+            });
+
             return {
                 axisType: "week",
-                labels: trendLabels,
+                labels: formattedLabels,
                 points: points,
                 rate: rateVal
             };
         }
 
-        // 2. Customer Wise Axis
+        // 2. Customer Wise Axis (Fast Single-Pass)
         if (hasCustFilter && !hasPartFilter) {
+            const custCount = trendRejCustFilter.length;
+            const custInspArr = new Float64Array(custCount);
+            const custRejArr = new Float64Array(custCount);
             let totalInsp = 0;
             let totalRej = 0;
 
-            const points = trendRejCustFilter.map(cust => {
-                let custInsp = 0;
-                let custRej = 0;
-                sourceRows.forEach(r => {
-                    const cName = (r.partyName || r.cname || "").trim();
-                    if (cName.toLowerCase() === cust.toLowerCase()) {
-                        const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0);
-                        const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || (mat + mac);
-                        custInsp += insp;
-                        custRej += (mat + mac);
-                    }
-                });
-                totalInsp += custInsp;
-                totalRej += custRej;
-                return custRej;
-            });
+            const custMap = new Map();
+            trendRejCustFilter.forEach((c, idx) => custMap.set(c.trim().toUpperCase(), idx));
+
+            for (let i = 0; i < sourceRows.length; i++) {
+                const r = sourceRows[i];
+                const cName = (r.partyName || r.cname || "").trim().toUpperCase();
+                const idx = custMap.get(cName);
+                if (idx !== undefined) {
+                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : fastParseNum(r.matRejQty);
+                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : fastParseNum(r.macRejQty);
+                    const rej = mat + mac;
+                    const insp = fastParseNum(r.qty) || rej;
+                    custInspArr[idx] += insp;
+                    custRejArr[idx] += rej;
+                    totalInsp += insp;
+                    totalRej += rej;
+                }
+            }
 
             const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
             return {
                 axisType: "customer",
                 labels: trendRejCustFilter,
-                points: points,
+                points: Array.from(custRejArr),
                 rate: rateVal
             };
         }
 
-        // 3. PartNo Wise Axis
+        // 3. PartNo Wise Axis (Fast Single-Pass & Accurate Matching)
         if (hasPartFilter && !hasCustFilter) {
+            const partCount = trendRejPartFilter.length;
+            const partInspArr = new Float64Array(partCount);
+            const partRejArr = new Float64Array(partCount);
             let totalInsp = 0;
             let totalRej = 0;
 
-            const points = trendRejPartFilter.map(part => {
-                let partInsp = 0;
-                let partRej = 0;
-                sourceRows.forEach(r => {
-                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
-                    if (pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()))) {
-                        const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0);
-                        const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || (mat + mac);
-                        partInsp += insp;
-                        partRej += (mat + mac);
-                    }
-                });
-                totalInsp += partInsp;
-                totalRej += partRej;
-                return partRej;
+            const partMap = new Map();
+            trendRejPartFilter.forEach((p, idx) => {
+                const bare = getCleanPartNo(p).toUpperCase();
+                partMap.set(bare, idx);
             });
+
+            for (let i = 0; i < sourceRows.length; i++) {
+                const r = sourceRows[i];
+                let idx = -1;
+                if (r.partNo && r.partNo !== "—" && r.partNo !== "-") {
+                    let pUpper = r.partNo.trim().toUpperCase();
+                    idx = partMap.get(pUpper);
+                    if (idx === undefined) {
+                        const parenIdx = pUpper.indexOf(" (");
+                        if (parenIdx !== -1) {
+                            idx = partMap.get(pUpper.slice(0, parenIdx).trim());
+                        }
+                    }
+                }
+                if (idx === undefined || idx === -1) {
+                    if (r.partNoDesc && r.partNoDesc !== "—") {
+                        const dUpper = r.partNoDesc.toUpperCase();
+                        for (const [barePart, pIdx] of partMap.entries()) {
+                            if (dUpper.startsWith(barePart)) {
+                                idx = pIdx;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (idx !== undefined && idx >= 0) {
+                    const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : fastParseNum(r.matRejQty);
+                    const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : fastParseNum(r.macRejQty);
+                    const rej = mat + mac;
+                    const insp = fastParseNum(r.qty) || rej;
+                    partInspArr[idx] += insp;
+                    partRejArr[idx] += rej;
+                    totalInsp += insp;
+                    totalRej += rej;
+                }
+            }
 
             const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
             return {
                 axisType: "part",
-                labels: trendRejPartFilter,
-                points: points,
+                labels: trendRejPartFilter.map(getCleanPartNo),
+                points: Array.from(partRejArr),
                 rate: rateVal
             };
         }
 
-        // 4. Both Customer & PartNo Selected
-        let totalInsp = 0;
-        let totalRej = 0;
-        const labels = [];
-        const points = [];
-
+        // 4. Both Customer & PartNo Selected (Fast Single-Pass)
+        const combos = [];
+        const comboMap = new Map();
         trendRejCustFilter.forEach(cust => {
+            const custUpper = cust.trim().toUpperCase();
+            const shortCust = cust.length > 8 ? cust.substring(0, 8) + "…" : cust;
             trendRejPartFilter.forEach(part => {
-                let comboInsp = 0;
-                let comboRej = 0;
-                sourceRows.forEach(r => {
-                    const cName = (r.partyName || r.cname || "").trim();
-                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
-                    const matchC = cName.toLowerCase() === cust.toLowerCase();
-                    const matchP = pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()));
-                    if (matchC && matchP) {
-                        const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/,/g, "")) || 0);
-                        const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || (mat + mac);
-                        comboInsp += insp;
-                        comboRej += (mat + mac);
-                    }
+                const barePart = getCleanPartNo(part);
+                const bareUpper = barePart.toUpperCase();
+                const key = `${custUpper}:::${bareUpper}`;
+                comboMap.set(key, combos.length);
+                combos.push({
+                    custUpper,
+                    bareUpper,
+                    label: `${barePart} (${shortCust})`
                 });
-                totalInsp += comboInsp;
-                totalRej += comboRej;
-                labels.push(`${part} (${cust.length > 8 ? cust.substring(0, 8) + "…" : cust})`);
-                points.push(comboRej);
             });
         });
+
+        const comboCount = combos.length;
+        const comboInspArr = new Float64Array(comboCount);
+        const comboRejArr = new Float64Array(comboCount);
+        let totalInsp = 0;
+        let totalRej = 0;
+
+        for (let i = 0; i < sourceRows.length; i++) {
+            const r = sourceRows[i];
+            const cUpper = (r.partyName || r.cname || "").trim().toUpperCase();
+            if (!cUpper) continue;
+
+            let rowBare = "";
+            if (r.partNo && r.partNo !== "—" && r.partNo !== "-") {
+                let pUpper = r.partNo.trim().toUpperCase();
+                const pIdx = pUpper.indexOf(" (");
+                rowBare = pIdx !== -1 ? pUpper.slice(0, pIdx).trim() : pUpper;
+            } else if (r.partNoDesc && r.partNoDesc !== "—") {
+                const dUpper = r.partNoDesc.toUpperCase();
+                for (const item of combos) {
+                    if (dUpper.startsWith(item.bareUpper)) {
+                        rowBare = item.bareUpper;
+                        break;
+                    }
+                }
+            }
+            if (!rowBare) continue;
+
+            const key = `${cUpper}:::${rowBare}`;
+            const idx = comboMap.get(key);
+            if (idx !== undefined) {
+                const mat = hasActiveReasonFilter ? getRejRowMatRej(r) : fastParseNum(r.matRejQty);
+                const mac = hasActiveReasonFilter ? getRejRowMacRej(r) : fastParseNum(r.macRejQty);
+                const rej = mat + mac;
+                const insp = fastParseNum(r.qty) || rej;
+                comboInspArr[idx] += insp;
+                comboRejArr[idx] += rej;
+                totalInsp += insp;
+                totalRej += rej;
+            }
+        }
 
         const rateVal = totalInsp > 0 ? `${((totalRej / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
         return {
             axisType: "combo",
-            labels: labels,
-            points: points,
+            labels: combos.map(c => c.label),
+            points: Array.from(comboRejArr),
             rate: rateVal
         };
-    }, [chartsData, summaryData, trendRejCustFilter, trendRejPartFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveFilter, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej]);
+    }, [chartsData, summaryData, trendRejCustFilter, trendRejPartFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveFilter, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getCleanPartNo, fastParseNum]);
 
     const activeReworkTrendData = useMemo(() => {
         const trendLabels = chartsData?.trend?.labels || [];
+        const weekDays = chartsData?.trend?.week_days || [];
         const defaultRwkDataset = chartsData?.trend?.datasets?.find(d =>
             d.label?.toLowerCase().includes("rework") || d.label?.toLowerCase().includes("rw")
         );
@@ -3223,7 +3443,8 @@ export default function QualityAnalysis() {
             let points = defaultPoints;
             if ((hasActiveFilter || hasActiveReasonFilter) && trendLabels.length > 0) {
                 const calcRework = new Array(trendLabels.length).fill(0);
-                sourceRows.forEach(r => {
+                for (let i = 0; i < sourceRows.length; i++) {
+                    const r = sourceRows[i];
                     const rawDate = r.date || r.inspDate || "";
                     let slotIdx = -1;
                     if (rawDate) {
@@ -3234,131 +3455,200 @@ export default function QualityAnalysis() {
                         }
                     }
                     if (slotIdx === -1) slotIdx = 0;
-                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : (parseFloat(String(r.reworkQty || 0).replace(/[^0-9.]/g, "")) || 0);
+                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : fastParseNum(r.reworkQty);
                     calcRework[slotIdx] += rwk;
-                });
+                }
                 points = calcRework;
             }
             let rateVal = summaryData?.kpis?.rework_rate_card?.value || "4.9% Rate";
             if (hasActiveFilter || hasActiveReasonFilter) {
-                const totalInsp = sourceRows.reduce((sum, r) => sum + (parseFloat(String(r.qty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
-                const totalRwk = sourceRows.reduce((sum, r) => {
-                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : (parseFloat(String(r.reworkQty || 0).replace(/[^0-9.]/g, "")) || 0);
-                    return sum + rwk;
-                }, 0);
+                let totalInsp = 0;
+                let totalRwk = 0;
+                for (let i = 0; i < sourceRows.length; i++) {
+                    const r = sourceRows[i];
+                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : fastParseNum(r.reworkQty);
+                    const insp = fastParseNum(r.qty) || rwk;
+                    totalInsp += insp;
+                    totalRwk += rwk;
+                }
                 const rwRateRaw = totalInsp > 0 ? (totalRwk / totalInsp) * 100 : 0;
                 rateVal = `${rwRateRaw.toFixed(1)}% Rate`;
             }
+
+            const formattedLabels = trendLabels.map((lbl, idx) => {
+                if (Array.isArray(lbl)) return lbl;
+                const days = getWeekDayRange(lbl, idx, weekDays);
+                return days ? [lbl, days] : lbl;
+            });
+
             return {
                 axisType: "week",
-                labels: trendLabels,
+                labels: formattedLabels,
                 points: points,
                 rate: rateVal
             };
         }
 
-        // 2. Customer Wise Axis
+        // 2. Customer Wise Axis (Fast Single-Pass)
         if (hasCustFilter && !hasPartFilter) {
+            const custCount = trendRwkCustFilter.length;
+            const custInspArr = new Float64Array(custCount);
+            const custRwkArr = new Float64Array(custCount);
             let totalInsp = 0;
             let totalRwk = 0;
 
-            const points = trendRwkCustFilter.map(cust => {
-                let custInsp = 0;
-                let custRwk = 0;
-                sourceRows.forEach(r => {
-                    const cName = (r.partyName || r.cname || "").trim();
-                    if (cName.toLowerCase() === cust.toLowerCase()) {
-                        const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : (parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || rwk;
-                        custInsp += insp;
-                        custRwk += rwk;
-                    }
-                });
-                totalInsp += custInsp;
-                totalRwk += custRwk;
-                return custRwk;
-            });
+            const custMap = new Map();
+            trendRwkCustFilter.forEach((c, idx) => custMap.set(c.trim().toUpperCase(), idx));
+
+            for (let i = 0; i < sourceRows.length; i++) {
+                const r = sourceRows[i];
+                const cName = (r.partyName || r.cname || "").trim().toUpperCase();
+                const idx = custMap.get(cName);
+                if (idx !== undefined) {
+                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : fastParseNum(r.reworkQty);
+                    const insp = fastParseNum(r.qty) || rwk;
+                    custInspArr[idx] += insp;
+                    custRwkArr[idx] += rwk;
+                    totalInsp += insp;
+                    totalRwk += rwk;
+                }
+            }
 
             const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
             return {
                 axisType: "customer",
                 labels: trendRwkCustFilter,
-                points: points,
+                points: Array.from(custRwkArr),
                 rate: rateVal
             };
         }
 
-        // 3. PartNo Wise Axis
+        // 3. PartNo Wise Axis (Fast Single-Pass & Accurate Matching)
         if (hasPartFilter && !hasCustFilter) {
+            const partCount = trendRwkPartFilter.length;
+            const partInspArr = new Float64Array(partCount);
+            const partRwkArr = new Float64Array(partCount);
             let totalInsp = 0;
             let totalRwk = 0;
 
-            const points = trendRwkPartFilter.map(part => {
-                let partInsp = 0;
-                let partRwk = 0;
-                sourceRows.forEach(r => {
-                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
-                    if (pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()))) {
-                        const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : (parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || rwk;
-                        partInsp += insp;
-                        partRwk += rwk;
-                    }
-                });
-                totalInsp += partInsp;
-                totalRwk += partRwk;
-                return partRwk;
+            const partMap = new Map();
+            trendRwkPartFilter.forEach((p, idx) => {
+                const bare = getCleanPartNo(p).toUpperCase();
+                partMap.set(bare, idx);
             });
+
+            for (let i = 0; i < sourceRows.length; i++) {
+                const r = sourceRows[i];
+                let idx = -1;
+                if (r.partNo && r.partNo !== "—" && r.partNo !== "-") {
+                    let pUpper = r.partNo.trim().toUpperCase();
+                    idx = partMap.get(pUpper);
+                    if (idx === undefined) {
+                        const parenIdx = pUpper.indexOf(" (");
+                        if (parenIdx !== -1) {
+                            idx = partMap.get(pUpper.slice(0, parenIdx).trim());
+                        }
+                    }
+                }
+                if (idx === undefined || idx === -1) {
+                    if (r.partNoDesc && r.partNoDesc !== "—") {
+                        const dUpper = r.partNoDesc.toUpperCase();
+                        for (const [barePart, pIdx] of partMap.entries()) {
+                            if (dUpper.startsWith(barePart)) {
+                                idx = pIdx;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (idx !== undefined && idx >= 0) {
+                    const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : fastParseNum(r.reworkQty);
+                    const insp = fastParseNum(r.qty) || rwk;
+                    partInspArr[idx] += insp;
+                    partRwkArr[idx] += rwk;
+                    totalInsp += insp;
+                    totalRwk += rwk;
+                }
+            }
 
             const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
             return {
                 axisType: "part",
-                labels: trendRwkPartFilter,
-                points: points,
+                labels: trendRwkPartFilter.map(getCleanPartNo),
+                points: Array.from(partRwkArr),
                 rate: rateVal
             };
         }
 
-        // 4. Both Customer & PartNo Selected
-        let totalInsp = 0;
-        let totalRwk = 0;
-        const labels = [];
-        const points = [];
-
+        // 4. Both Customer & PartNo Selected (Fast Single-Pass)
+        const combos = [];
+        const comboMap = new Map();
         trendRwkCustFilter.forEach(cust => {
+            const custUpper = cust.trim().toUpperCase();
+            const shortCust = cust.length > 8 ? cust.substring(0, 8) + "…" : cust;
             trendRwkPartFilter.forEach(part => {
-                let comboInsp = 0;
-                let comboRwk = 0;
-                sourceRows.forEach(r => {
-                    const cName = (r.partyName || r.cname || "").trim();
-                    const pName = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
-                    const matchC = cName.toLowerCase() === cust.toLowerCase();
-                    const matchP = pName.toLowerCase() === part.toLowerCase() || (r.partNoDesc && r.partNoDesc.toLowerCase().includes(part.toLowerCase()));
-                    if (matchC && matchP) {
-                        const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : (parseFloat(String(r.reworkQty || 0).replace(/,/g, "")) || 0);
-                        const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || rwk;
-                        comboInsp += insp;
-                        comboRwk += rwk;
-                    }
+                const barePart = getCleanPartNo(part);
+                const bareUpper = barePart.toUpperCase();
+                const key = `${custUpper}:::${bareUpper}`;
+                comboMap.set(key, combos.length);
+                combos.push({
+                    custUpper,
+                    bareUpper,
+                    label: `${barePart} (${shortCust})`
                 });
-                totalInsp += comboInsp;
-                totalRwk += comboRwk;
-                labels.push(`${part} (${cust.length > 8 ? cust.substring(0, 8) + "…" : cust})`);
-                points.push(comboRwk);
             });
         });
+
+        const comboCount = combos.length;
+        const comboInspArr = new Float64Array(comboCount);
+        const comboRwkArr = new Float64Array(comboCount);
+        let totalInsp = 0;
+        let totalRwk = 0;
+
+        for (let i = 0; i < sourceRows.length; i++) {
+            const r = sourceRows[i];
+            const cUpper = (r.partyName || r.cname || "").trim().toUpperCase();
+            if (!cUpper) continue;
+
+            let rowBare = "";
+            if (r.partNo && r.partNo !== "—" && r.partNo !== "-") {
+                let pUpper = r.partNo.trim().toUpperCase();
+                const pIdx = pUpper.indexOf(" (");
+                rowBare = pIdx !== -1 ? pUpper.slice(0, pIdx).trim() : pUpper;
+            } else if (r.partNoDesc && r.partNoDesc !== "—") {
+                const dUpper = r.partNoDesc.toUpperCase();
+                for (const item of combos) {
+                    if (dUpper.startsWith(item.bareUpper)) {
+                        rowBare = item.bareUpper;
+                        break;
+                    }
+                }
+            }
+            if (!rowBare) continue;
+
+            const key = `${cUpper}:::${rowBare}`;
+            const idx = comboMap.get(key);
+            if (idx !== undefined) {
+                const rwk = hasActiveReasonFilter ? getRejRowReworkQty(r) : fastParseNum(r.reworkQty);
+                const insp = fastParseNum(r.qty) || rwk;
+                comboInspArr[idx] += insp;
+                comboRwkArr[idx] += rwk;
+                totalInsp += insp;
+                totalRwk += rwk;
+            }
+        }
 
         const rateVal = totalInsp > 0 ? `${((totalRwk / totalInsp) * 100).toFixed(1)}% Rate` : "0.0% Rate";
 
         return {
             axisType: "combo",
-            labels: labels,
-            points: points,
+            labels: combos.map(c => c.label),
+            points: Array.from(comboRwkArr),
             rate: rateVal
         };
-    }, [chartsData, summaryData, trendRwkCustFilter, trendRwkPartFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveFilter, hasActiveReasonFilter, getRejRowReworkQty]);
+    }, [chartsData, summaryData, trendRwkCustFilter, trendRwkPartFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveFilter, hasActiveReasonFilter, getRejRowReworkQty, getCleanPartNo, fastParseNum]);
 
     const activeCustomerComplaints = useMemo(() => {
         let list = rawCustomerComplaints;
@@ -3527,6 +3817,20 @@ export default function QualityAnalysis() {
         }
     }, [fetchQualityData, appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers]);
 
+    // Auto-apply debounced search for Search Records input so partno searches update cards smoothly
+    useEffect(() => {
+        if (!initialMountRef.current) return;
+        const trimmed = searchQuery.trim();
+        if (trimmed === appliedSearchQuery.trim()) return;
+
+        const timer = setTimeout(() => {
+            setAppliedSearchQuery(trimmed);
+            fetchQualityData(appliedDateRange.from, appliedDateRange.to, trimmed, appliedCustomers);
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [searchQuery, appliedSearchQuery, appliedDateRange.from, appliedDateRange.to, appliedCustomers, fetchQualityData]);
+
     const QA_CHART_FONT = "'Outfit', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
     const QA_NUM_FONT = "'Plus Jakarta Sans', 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
     const fontBase = useMemo(() => ({ family: QA_CHART_FONT }), []);
@@ -3537,7 +3841,14 @@ export default function QualityAnalysis() {
         trendChart.current?.destroy();
 
         const trendData = chartsData?.trend || { labels: [], datasets: [] };
-        const labels = trendData.labels || [];
+        const rawLabels = trendData.labels || [];
+        const weekDays = trendData.week_days || [];
+
+        const labels = rawLabels.map((lbl, idx) => {
+            if (Array.isArray(lbl)) return lbl;
+            const days = getWeekDayRange(lbl, idx, weekDays);
+            return days ? [lbl, days] : lbl;
+        });
         const datasets = [];
 
         let passData = trendData.datasets?.[0]?.data || [];
@@ -3752,7 +4063,7 @@ export default function QualityAnalysis() {
                 maintainAspectRatio: false,
                 animation: { duration: 800, easing: "easeOutQuart" },
                 interaction: { mode: "index", intersect: false },
-                layout: { padding: { left: 15, right: 15, top: 12 } },
+                layout: { padding: { left: 15, right: 15, top: 12, bottom: 6 } },
                 plugins: {
                     legend: {
                         position: "top",
@@ -3767,6 +4078,12 @@ export default function QualityAnalysis() {
                         borderColor: "rgba(255, 255, 255, 0.1)",
                         borderWidth: 1,
                         callbacks: {
+                            title: (items) => {
+                                if (!items || !items.length) return "";
+                                const raw = items[0].label;
+                                if (Array.isArray(raw)) return `${raw[0]} (${raw[1]})`;
+                                return raw;
+                            },
                             label: (ctx) => `  ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} units`,
                         }
                     },
@@ -3802,7 +4119,7 @@ export default function QualityAnalysis() {
                     x: {
                         stacked: weeklyChartType === "stack",
                         grid: { display: false },
-                        ticks: { font: { family: QA_CHART_FONT, size: 10, weight: "600" }, color: "#5a6a9a", padding: 6 }
+                        ticks: { font: { family: QA_CHART_FONT, size: 10, weight: "600" }, color: "#5a6a9a", padding: 6, autoSkip: false }
                     },
                     y: {
                         stacked: weeklyChartType === "stack",
@@ -3822,59 +4139,61 @@ export default function QualityAnalysis() {
         if (!resultRef.current) return;
         resultChart.current?.destroy();
 
-        const rawResultDonut = chartsData?.result_donut || { labels: [], datasets: [] };
-        let resultDonut = rawResultDonut;
+        // ── Calculate Inspection Results Split directly from KPI card metrics ──
+        let okTotal = 0;
+        let rwkTotal = 0;
+        let rejTotal = 0;
 
         if (hasActiveReasonFilter) {
-            let okTotal = 0;
-            let rwkTotal = 0;
-            let rejTotal = 0;
             reasonFilteredRejectionRows.forEach(r => {
                 rwkTotal += getRejRowReworkQty(r);
                 rejTotal += (getRejRowMatRej(r) + getRejRowMacRej(r));
             });
-            const total = okTotal + rwkTotal + rejTotal;
-            const okPct = total > 0 ? ((okTotal / total) * 100).toFixed(1) : "0.0";
-            const rwkPct = total > 0 ? ((rwkTotal / total) * 100).toFixed(1) : "0.0";
-            const rejPct = total > 0 ? ((rejTotal / total) * 100).toFixed(1) : "0.0";
-            resultDonut = {
-                labels: [`OK (${okPct}%)`, `Rework (${rwkPct}%)`, `Reject (${rejPct}%)`],
-                datasets: [{
-                    backgroundColor: ["#10b981", "#f5a623", "#ef4444"],
-                    hoverBackgroundColor: ["#059669", "#d97706", "#dc2626"],
-                    borderColor: ["#ffffff", "#ffffff", "#ffffff"],
-                    borderWidth: 2,
-                    data: [okTotal, rwkTotal, rejTotal]
-                }]
-            };
-        } else if (hasActiveFilter) {
-            let okTotal = 0;
-            let rwkTotal = 0;
-            let rejTotal = 0;
-            searchFilteredInspectionRows.forEach(r => {
-                const ok = parseFloat(String(r.okQty ?? r.ok_qty ?? (r.result === "PASS" ? r.qty : 0)).replace(/[^0-9.]/g, "")) || 0;
-                const rew = parseFloat(String(r.reworkQty ?? r.rwkQty ?? (r.result === "REWORK" ? r.qty : 0)).replace(/[^0-9.]/g, "")) || 0;
-                const mat = parseFloat(String(r.matRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0;
-                const mac = parseFloat(String(r.macRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0;
-                okTotal += ok;
-                rwkTotal += rew;
-                rejTotal += (mat + mac);
-            });
-            const total = okTotal + rwkTotal + rejTotal;
-            const okPct = total > 0 ? ((okTotal / total) * 100).toFixed(1) : "0.0";
-            const rwkPct = total > 0 ? ((rwkTotal / total) * 100).toFixed(1) : "0.0";
-            const rejPct = total > 0 ? ((rejTotal / total) * 100).toFixed(1) : "0.0";
-            resultDonut = {
-                labels: [`OK (${okPct}%)`, `Rework (${rwkPct}%)`, `Reject (${rejPct}%)`],
-                datasets: [{
-                    backgroundColor: ["#10b981", "#f5a623", "#ef4444"],
-                    hoverBackgroundColor: ["#059669", "#d97706", "#dc2626"],
-                    borderColor: ["#ffffff", "#ffffff", "#ffffff"],
-                    borderWidth: 2,
-                    data: [okTotal, rwkTotal, rejTotal]
-                }]
-            };
+        } else if (hasActiveFilter && searchFilteredInspectionRows.length > 0) {
+            const rowsMat = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
+            const rowsMac = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
+            const rowsRwk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0), 0);
+            const rowsInsp = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
+            const rowsOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
+
+            rejTotal = rowsMat + rowsMac;
+            rwkTotal = rowsRwk;
+            const compOk = Math.max(0, rowsInsp - (rejTotal + rwkTotal));
+            okTotal = rowsOk > 0 ? Math.min(compOk, rowsOk) : compOk;
+        } else {
+            // As per KPI card of Total Inspected Ok Qty, rework, and rejection
+            const sMat = summaryData?.total_mat_rej !== undefined
+                ? parseFloat(summaryData.total_mat_rej)
+                : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+            const sMac = summaryData?.total_mac_rej !== undefined
+                ? parseFloat(summaryData.total_mac_rej)
+                : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+            rejTotal = sMat + sMac;
+            rwkTotal = parseFloat(String(summaryData?.rework || 0).replace(/[^0-9.]/g, "")) || 0;
+            const sInsp = parseFloat(String(summaryData?.total_inspected || 0).replace(/[^0-9.]/g, "")) || 0;
+            const sCompOk = Math.max(0, sInsp - (rejTotal + rwkTotal));
+            okTotal = summaryData?.total_ok_raw !== undefined
+                ? parseFloat(summaryData.total_ok_raw)
+                : (summaryData?.total_ok_qty
+                    ? (parseFloat(String(summaryData.total_ok_qty).replace(/[^0-9.]/g, "")) || sCompOk)
+                    : sCompOk);
         }
+
+        const total = okTotal + rwkTotal + rejTotal;
+        const okPct = total > 0 ? ((okTotal / total) * 100).toFixed(1) : "0.0";
+        const rwkPct = total > 0 ? ((rwkTotal / total) * 100).toFixed(1) : "0.0";
+        const rejPct = total > 0 ? ((rejTotal / total) * 100).toFixed(1) : "0.0";
+
+        const resultDonut = {
+            labels: [`Pass (${okPct}%)`, `Rework (${rwkPct}%)`, `Reject (${rejPct}%)`],
+            datasets: [{
+                backgroundColor: ["#10b981", "#f5a623", "#ef4444"],
+                hoverBackgroundColor: ["#059669", "#d97706", "#dc2626"],
+                borderColor: ["#ffffff", "#ffffff", "#ffffff"],
+                borderWidth: 2,
+                data: [okTotal, rwkTotal, rejTotal]
+            }]
+        };
 
         resultChart.current = new Chart(resultRef.current, {
             type: "doughnut",
@@ -3899,7 +4218,7 @@ export default function QualityAnalysis() {
                                 const val = Number(ctx.parsed) || 0;
                                 const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
                                 const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                                return ` ${cleanLabel}: ${pct}%`;
+                                return ` ${cleanLabel}: ${val.toLocaleString()} units (${pct}%)`;
                             }
                         }
                     },
@@ -3907,10 +4226,16 @@ export default function QualityAnalysis() {
                         display: true,
                         color: "#fff",
                         font: { size: 11, weight: "700", family: QA_NUM_FONT },
+                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
+                        textStrokeWidth: 1.5,
                         formatter: (value, context) => {
+                            const val = Number(value) || 0;
+                            if (val <= 0) return "";
                             const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
-                            return Number(pct) >= 1 ? `${pct}%` : "";
+                            if (sum <= 0) return "";
+                            const rawPct = (val / sum) * 100;
+                            if (rawPct <= 0) return "";
+                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
                         }
                     }
                 },
@@ -3919,42 +4244,41 @@ export default function QualityAnalysis() {
         });
 
         return () => resultChart.current?.destroy();
-    }, [chartsData?.result_donut, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowReworkQty, getRejRowMatRej, getRejRowMacRej]);
+    }, [chartsData?.result_donut, summaryData, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowReworkQty, getRejRowMatRej, getRejRowMacRej]);
 
     // ── 3. Defect Category Breakdown Donut Chart ──
     useEffect(() => {
         if (!defectRef.current) return;
         defectChart.current?.destroy();
 
-        const rawDefectDonut = chartsData?.defect_donut || { labels: [], datasets: [] };
-        let defectData = rawDefectDonut.datasets?.[0]?.data || [];
+        // ── Calculate Defect Category Breakdown directly from KPI card metrics ──
+        let matTotal = 0;
+        let macTotal = 0;
+        let rwkTotal = 0;
 
         if (hasActiveReasonFilter) {
-            let matTotal = 0;
-            let macTotal = 0;
-            let rwkTotal = 0;
             reasonFilteredRejectionRows.forEach(r => {
                 matTotal += getRejRowMatRej(r);
                 macTotal += getRejRowMacRej(r);
                 rwkTotal += getRejRowReworkQty(r);
             });
-            defectData = [matTotal, macTotal, rwkTotal];
-        } else if (hasActiveFilter) {
-            let matTotal = 0;
-            let macTotal = 0;
-            let rwkTotal = 0;
-            searchFilteredInspectionRows.forEach(r => {
-                const mat = parseFloat(String(r.matRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0;
-                const mac = parseFloat(String(r.macRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0;
-                const rew = parseFloat(String(r.reworkQty ?? r.rwkQty ?? (r.result === "REWORK" ? r.qty : 0)).replace(/[^0-9.]/g, "")) || 0;
-                matTotal += mat;
-                macTotal += mac;
-                rwkTotal += rew;
-            });
-            defectData = [matTotal, macTotal, rwkTotal];
+        } else if (hasActiveFilter && searchFilteredInspectionRows.length > 0) {
+            matTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0), 0);
+            macTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0), 0);
+            rwkTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty ?? r.rwkQty ?? (r.result === "REWORK" ? r.qty : 0)).replace(/[^0-9.]/g, "")) || 0), 0);
+        } else {
+            // As per KPI card of Material Rejection Qty, Machine Rejection Qty & Rework
+            matTotal = summaryData?.total_mat_rej !== undefined
+                ? parseFloat(summaryData.total_mat_rej)
+                : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+            macTotal = summaryData?.total_mac_rej !== undefined
+                ? parseFloat(summaryData.total_mac_rej)
+                : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
+            rwkTotal = parseFloat(String(summaryData?.rework || 0).replace(/[^0-9.]/g, "")) || 0;
         }
 
-        const defectTotal = defectData.reduce((a, b) => Number(a) + Number(b), 0);
+        const defectData = [matTotal, macTotal, rwkTotal];
+        const defectTotal = matTotal + macTotal + rwkTotal;
         const defectBaseNames = ["Material Rejection", "Machine Rejection", "Rework"];
         const defectLabels = defectBaseNames.map((name, idx) => {
             const rawVal = Number(defectData[idx]) || 0;
@@ -3962,7 +4286,6 @@ export default function QualityAnalysis() {
             return `${name} (${pct}%)`;
         });
         const defectDonut = {
-            ...rawDefectDonut,
             labels: defectLabels,
             datasets: [{
                 backgroundColor: ["#f43f5e", "#0f766e", "#f59e0b"],
@@ -3996,7 +4319,7 @@ export default function QualityAnalysis() {
                                 const val = Number(ctx.parsed) || 0;
                                 const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
                                 const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                                return ` ${cleanLabel}: ${pct}%`;
+                                return ` ${cleanLabel}: ${val.toLocaleString()} units (${pct}%)`;
                             }
                         }
                     },
@@ -4004,10 +4327,16 @@ export default function QualityAnalysis() {
                         display: true,
                         color: "#fff",
                         font: { size: 11, weight: "700", family: QA_NUM_FONT },
+                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
+                        textStrokeWidth: 1.5,
                         formatter: (value, context) => {
+                            const val = Number(value) || 0;
+                            if (val <= 0) return "";
                             const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            const pct = sum > 0 ? ((Number(value) / sum) * 100).toFixed(1) : 0;
-                            return Number(pct) >= 1 ? `${pct}%` : "";
+                            if (sum <= 0) return "";
+                            const rawPct = (val / sum) * 100;
+                            if (rawPct <= 0) return "";
+                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
                         }
                     }
                 },
@@ -4016,7 +4345,7 @@ export default function QualityAnalysis() {
         });
 
         return () => defectChart.current?.destroy();
-    }, [chartsData?.defect_donut, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
+    }, [chartsData?.defect_donut, summaryData, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
 
     // ── 4. Internal Mac Rejection PPM Chart ──
     useEffect(() => {
@@ -4189,12 +4518,19 @@ export default function QualityAnalysis() {
                 });
             });
 
-            const sorted = Object.entries(reworkMap).sort((a, b) => b[1] - a[1]).slice(0, 7);
-            const totalDisplayed = sorted.reduce((sum, [, q]) => sum + q, 0);
-            const maxQty = sorted.length > 0 ? sorted[0][1] : 1;
-            const colors = ["#f59e0b", "#f97316", "#ea580c", "#d97706", "#b45309", "#ca8a04", "#eab308"];
+            const sorted = Object.entries(reworkMap).sort((a, b) => b[1] - a[1]);
+            const topReasons = sorted.slice(0, 7);
+            if (sorted.length > 7) {
+                const othersQty = sorted.slice(7).reduce((sum, [, q]) => sum + q, 0);
+                if (othersQty > 0) {
+                    topReasons.push(["Others", othersQty]);
+                }
+            }
+            const totalDisplayed = topReasons.reduce((sum, [, q]) => sum + q, 0);
+            const maxQty = topReasons.length > 0 ? topReasons[0][1] : 1;
+            const colors = ["#f59e0b", "#f97316", "#ea580c", "#d97706", "#b45309", "#ca8a04", "#eab308", "#94a3b8"];
 
-            raw = sorted.map(([name, qty], idx) => {
+            raw = topReasons.map(([name, qty], idx) => {
                 const pct = totalDisplayed > 0 ? ((qty / totalDisplayed) * 100).toFixed(1) : "0.0";
                 const barW = Math.round((qty / maxQty) * 100);
                 return {
@@ -4444,11 +4780,17 @@ export default function QualityAnalysis() {
                     datalabels: {
                         display: true,
                         color: "#fff",
-                        font: { size: 10, weight: "700", family: QA_NUM_FONT },
+                        font: { size: 9.5, weight: "700", family: QA_NUM_FONT },
+                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
+                        textStrokeWidth: 1.5,
                         formatter: (value, context) => {
+                            const val = Number(value) || 0;
+                            if (val <= 0) return "";
                             const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
-                            return pct > 3 ? `${pct}%` : "";
+                            if (sum <= 0) return "";
+                            const rawPct = (val / sum) * 100;
+                            if (rawPct <= 0) return "";
+                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
                         }
                     }
                 }
@@ -4643,11 +4985,17 @@ export default function QualityAnalysis() {
                     datalabels: {
                         display: true,
                         color: "#fff",
-                        font: { size: 10, weight: "700", family: QA_NUM_FONT },
+                        font: { size: 9.5, weight: "700", family: QA_NUM_FONT },
+                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
+                        textStrokeWidth: 1.5,
                         formatter: (value, context) => {
+                            const val = Number(value) || 0;
+                            if (val <= 0) return "";
                             const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            const pct = sum > 0 ? ((value / sum) * 100).toFixed(1) : 0;
-                            return pct > 3 ? `${pct}%` : "";
+                            if (sum <= 0) return "";
+                            const rawPct = (val / sum) * 100;
+                            if (rawPct <= 0) return "";
+                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
                         }
                     }
                 }
@@ -4669,7 +5017,17 @@ export default function QualityAnalysis() {
         rejectionChart.current?.destroy();
 
         const trendLabels = chartsData?.trend?.labels || [];
+        const weekDays = chartsData?.trend?.week_days || [];
         const rejectDataPoints = activeRejectionTrendData.points || [];
+
+        const rawLabels = activeRejectionTrendData.labels || trendLabels;
+        const chartLabels = (activeRejectionTrendData.axisType === "week" || (!activeRejectionTrendData.axisType && trendRejCustFilter.length === 0 && trendRejPartFilter.length === 0))
+            ? rawLabels.map((lbl, idx) => {
+                if (Array.isArray(lbl)) return lbl;
+                const days = getWeekDayRange(lbl, idx, weekDays);
+                return days ? [lbl, days] : lbl;
+            })
+            : rawLabels;
 
         const rejectionCanvas = rejectionRef.current;
         let rejectionGradient = "rgba(239, 68, 68, 0.1)";
@@ -4686,7 +5044,7 @@ export default function QualityAnalysis() {
         rejectionChart.current = new Chart(rejectionRef.current, {
             type: "line",
             data: {
-                labels: activeRejectionTrendData.labels || trendLabels,
+                labels: chartLabels,
                 datasets: [{
                     label: "Rejection Qty",
                     data: rejectDataPoints,
@@ -4703,9 +5061,19 @@ export default function QualityAnalysis() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { left: 15, right: 15, top: 16 } },
+                layout: { padding: { left: 15, right: 15, top: 16, bottom: 6 } },
                 plugins: {
                     legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => {
+                                if (!items || !items.length) return "";
+                                const raw = items[0].label;
+                                if (Array.isArray(raw)) return `${raw[0]} (${raw[1]})`;
+                                return raw;
+                            }
+                        }
+                    },
                     datalabels: {
                         display: true,
                         anchor: "end",
@@ -4727,6 +5095,7 @@ export default function QualityAnalysis() {
                         ticks: {
                             font: { family: QA_CHART_FONT, size: 9.5, weight: "600" },
                             color: "#5a6a9a",
+                            padding: 6,
                             autoSkip: false,
                             maxRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 25 : 0,
                             minRotation: (activeRejectionTrendData.axisType && activeRejectionTrendData.axisType !== "week") ? 15 : 0
@@ -4744,7 +5113,7 @@ export default function QualityAnalysis() {
         });
 
         return () => rejectionChart.current?.destroy();
-    }, [activeRejectionTrendData, chartsData?.trend?.labels, fontBase]);
+    }, [activeRejectionTrendData, chartsData?.trend?.labels, chartsData?.trend?.week_days, fontBase]);
 
     // ── 7. Rework Analytics Trend Chart ──
     useEffect(() => {
@@ -4752,7 +5121,17 @@ export default function QualityAnalysis() {
         reworkChart.current?.destroy();
 
         const trendLabels = chartsData?.trend?.labels || [];
+        const weekDays = chartsData?.trend?.week_days || [];
         const reworkDataPoints = activeReworkTrendData.points || [];
+
+        const rawLabels = activeReworkTrendData.labels || trendLabels;
+        const chartLabels = (activeReworkTrendData.axisType === "week" || (!activeReworkTrendData.axisType && trendRwkCustFilter.length === 0 && trendRwkPartFilter.length === 0))
+            ? rawLabels.map((lbl, idx) => {
+                if (Array.isArray(lbl)) return lbl;
+                const days = getWeekDayRange(lbl, idx, weekDays);
+                return days ? [lbl, days] : lbl;
+            })
+            : rawLabels;
 
         const reworkCanvas = reworkRef.current;
         let reworkGradient = "rgba(245, 166, 35, 0.1)";
@@ -4769,7 +5148,7 @@ export default function QualityAnalysis() {
         reworkChart.current = new Chart(reworkRef.current, {
             type: "line",
             data: {
-                labels: activeReworkTrendData.labels || trendLabels,
+                labels: chartLabels,
                 datasets: [{
                     label: "Rework Qty",
                     data: reworkDataPoints,
@@ -4786,9 +5165,19 @@ export default function QualityAnalysis() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { left: 15, right: 15, top: 16 } },
+                layout: { padding: { left: 15, right: 15, top: 16, bottom: 6 } },
                 plugins: {
                     legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => {
+                                if (!items || !items.length) return "";
+                                const raw = items[0].label;
+                                if (Array.isArray(raw)) return `${raw[0]} (${raw[1]})`;
+                                return raw;
+                            }
+                        }
+                    },
                     datalabels: {
                         display: true,
                         anchor: "end",
@@ -4810,6 +5199,7 @@ export default function QualityAnalysis() {
                         ticks: {
                             font: { family: QA_CHART_FONT, size: 9.5, weight: "600" },
                             color: "#5a6a9a",
+                            padding: 6,
                             autoSkip: false,
                             maxRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 25 : 0,
                             minRotation: (activeReworkTrendData.axisType && activeReworkTrendData.axisType !== "week") ? 15 : 0
@@ -4827,7 +5217,7 @@ export default function QualityAnalysis() {
         });
 
         return () => reworkChart.current?.destroy();
-    }, [activeReworkTrendData, chartsData?.trend?.labels, fontBase]);
+    }, [activeReworkTrendData, chartsData?.trend?.labels, chartsData?.trend?.week_days, fontBase]);
 
     // ── 8. Supplier Rejections Chart ──
     useEffect(() => {
@@ -4917,7 +5307,7 @@ export default function QualityAnalysis() {
     const { hasUnappliedChanges, pendingChangesCount } = useMemo(() => {
         let count = 0;
         const dateChanged = formatYmd(dateRange?.from) !== formatYmd(appliedDateRange?.from) ||
-                            formatYmd(dateRange?.to) !== formatYmd(appliedDateRange?.to);
+            formatYmd(dateRange?.to) !== formatYmd(appliedDateRange?.to);
         if (dateChanged) count++;
 
         const searchChanged = searchQuery.trim() !== appliedSearchQuery.trim();
@@ -5712,7 +6102,7 @@ export default function QualityAnalysis() {
                 passRate: "0.0%",
                 totalRejected: totalRej.toLocaleString("en-IN"),
                 rework: totalRwk.toLocaleString("en-IN"),
-                pending: "0",
+                pending: summaryData?.kpis?.pending_insp_card?.value || summaryData?.pending_inspection || "0",
             };
         }
 
@@ -5731,17 +6121,30 @@ export default function QualityAnalysis() {
                 passRate: totalInsp > 0 ? `${((totalOk / totalInsp) * 100).toFixed(1)}%` : "0.0%",
                 totalRejected: totalRej.toLocaleString("en-IN"),
                 rework: totalRwk.toLocaleString("en-IN"),
-                pending: pendingCount.toString(),
+                pending: summaryData?.kpis?.pending_insp_card?.value || summaryData?.pending_inspection || (pendingCount ? pendingCount.toString() : "0"),
             };
         }
 
+        const totalInspFormatted = searchFilteredInspectionRows.length > 0
+            ? totalInsp.toLocaleString("en-IN")
+            : (summaryData?.total_inspected ?? totalInsp.toLocaleString("en-IN"));
+        const passRateFormatted = totalInsp > 0
+            ? `${((totalOk / totalInsp) * 100).toFixed(1)}%`
+            : (summaryData?.pass_rate ?? "0.0%");
+        const totalRejFormatted = searchFilteredInspectionRows.length > 0
+            ? totalRej.toLocaleString("en-IN")
+            : (summaryData?.total_rejected ?? totalRej.toLocaleString("en-IN"));
+        const reworkFormatted = searchFilteredInspectionRows.length > 0
+            ? totalRwk.toLocaleString("en-IN")
+            : (summaryData?.rework ?? totalRwk.toLocaleString("en-IN"));
+
         return {
             period: summaryData?.period ?? "Jul 2026",
-            totalInspected: summaryData?.total_inspected ?? totalInsp.toLocaleString("en-IN"),
-            passRate: summaryData?.pass_rate ?? (totalInsp > 0 ? `${((totalOk / totalInsp) * 100).toFixed(1)}%` : "0.0%"),
-            totalRejected: summaryData?.total_rejected ?? totalRej.toLocaleString("en-IN"),
-            rework: summaryData?.rework ?? totalRwk.toLocaleString("en-IN"),
-            pending: summaryData?.pending_inspection ?? pendingCount.toString(),
+            totalInspected: totalInspFormatted,
+            passRate: passRateFormatted,
+            totalRejected: totalRejFormatted,
+            rework: reworkFormatted,
+            pending: summaryData?.kpis?.pending_insp_card?.value || summaryData?.pending_inspection || (pendingCount ? pendingCount.toString() : "0"),
         };
     }, [hasActiveFilter, hasActiveReasonFilter, appliedSearchQuery, summaryData, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
 
@@ -5779,7 +6182,7 @@ export default function QualityAnalysis() {
                 { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: totalMacRej.toLocaleString("en-IN"), sub: "Processing defects", trend: totalMacRej > 0 ? "Under watch" : "All clear", cls: totalMacRej > 0 ? "qa2-t-down" : "qa2-t-up" },
                 { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: "0", sub: "Log complaints", trend: "0 complaints", cls: "qa2-t-up" },
                 { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: ppm.toLocaleString("en-IN") + " PPM", sub: "Defect PPM level", trend: totalRej > 0 ? "Action needed" : "0 PPM", cls: totalRej === 0 ? "qa2-t-up" : "qa2-t-down" },
-                { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: "0", sub: "Waiting queue", trend: "0 waiting", cls: "qa2-t-neutral" },
+                { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting Qty", value: summaryData?.kpis?.pending_insp_card?.value || summaryData?.pending_inspection || "0", sub: "Waiting queue", trend: "0 waiting", cls: "qa2-t-neutral" },
                 { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: calibrationAlertCount.toString(), sub: "Gauges & Instruments", trend: calibrationAlertCount > 0 ? `${calibrationAlertCount} alerts pending` : "All calibrated", cls: calibrationAlertCount > 0 ? "qa2-t-down" : "qa2-t-up" }
             ];
         }
@@ -5817,37 +6220,32 @@ export default function QualityAnalysis() {
                 : computedOk);
 
         const totalOk = searchFilteredInspectionRows.length > 0
-            ? (rowsOk > 0 ? rowsOk : computedOk)
+            ? (rowsOk > 0 ? Math.min(computedOk, rowsOk) : computedOk)
             : (summaryOk || computedOk);
 
         const pendingCount = searchFilteredInspectionRows.filter(r => r.result === "PENDING" || (r.id || "").toLowerCase().includes("pending")).length;
         const complaintsCount = activeCustomerComplaints.length;
         const ppm = totalInspected > 0 ? Math.round(((totalMaterialRej + totalMachineRej) / totalInspected) * 1000000) : 0;
 
-        const insQty = hasActiveFilter
+        const insQty = searchFilteredInspectionRows.length > 0
             ? totalInspected.toLocaleString("en-IN")
             : (summaryData?.kpis?.total_inspected_card?.value || totalInspected.toLocaleString("en-IN"));
-        const okQtyDisplay = hasActiveFilter
+        const okQtyDisplay = searchFilteredInspectionRows.length > 0
             ? totalOk.toLocaleString("en-IN")
             : (summaryData?.kpis?.total_ok_card?.value || summaryData?.total_ok_qty || totalOk.toLocaleString("en-IN"));
-        const passRate = hasActiveFilter
-            ? (totalInspected > 0 ? `${((totalOk / totalInspected) * 100).toFixed(1)}%` : "0.0%")
-            : (summaryData?.kpis?.pass_rate_card?.value || (totalInspected > 0 ? `${((totalOk / totalInspected) * 100).toFixed(1)}%` : "0.0%"));
+        const passRate = totalInspected > 0
+            ? `${((totalOk / totalInspected) * 100).toFixed(1)}%`
+            : (summaryData?.kpis?.pass_rate_card?.value || "0.0%");
         const totalRejCount = totalMaterialRej + totalMachineRej;
         const rejRateRaw = totalInspected > 0 ? ((totalRejCount / totalInspected) * 100) : 0;
         const rejRateCalculated = rejRateRaw > 0 && rejRateRaw < 0.1
             ? `${rejRateRaw.toFixed(2)}%`
             : `${rejRateRaw.toFixed(1)}%`;
-        let rejRate = summaryData?.kpis?.rejection_rate_card?.value;
-        if (!rejRate || (totalRejCount > 0 && (rejRate === "0.0%" || rejRate === "0%")) || hasActiveFilter) {
-            rejRate = rejRateCalculated;
-        }
-        const reworkRate = hasActiveFilter
-            ? (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%")
-            : (summaryData?.kpis?.rework_rate_card?.value || (totalInspected > 0 ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%` : "0.0%"));
-        const pendingInsp = hasActiveFilter
-            ? pendingCount.toString()
-            : (summaryData?.kpis?.pending_insp_card?.value || "0");
+        let rejRate = rejRateCalculated;
+        const reworkRate = totalInspected > 0
+            ? `${((totalReworkQty / totalInspected) * 100).toFixed(1)}%`
+            : (summaryData?.kpis?.rework_rate_card?.value || "0.0%");
+        const pendingInsp = (summaryData?.kpis?.pending_insp_card?.value || summaryData?.pending_inspection || pendingCount.toString());
         const qualityVal = summaryData?.kpis?.quality_value_card?.value || "₹0";
 
         return [
@@ -5862,7 +6260,7 @@ export default function QualityAnalysis() {
             { icon: Activity, iconColor: "#0f766e", label: "Machine Rejection Qty", value: totalMachineRej.toLocaleString("en-IN"), sub: "Processing defects", trend: totalMachineRej > 0 ? "Under watch" : "All clear", cls: totalMachineRej > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: AlertCircle, iconColor: "#dc2626", label: "Customer Complaint Count", value: complaintsCount.toString(), sub: "Log complaints", trend: complaintsCount > 0 ? `${complaintsCount} open issues` : "0 complaints", cls: complaintsCount > 0 ? "qa2-t-down" : "qa2-t-up" },
             { icon: BarChart2, iconColor: "#6366f1", label: "Over All PPM", value: ppm.toLocaleString("en-IN") + " PPM", sub: "Defect PPM level", trend: "Target < 10,000", cls: ppm < 10000 ? "qa2-t-up" : "qa2-t-down" },
-            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" },
+            { icon: Hourglass, iconColor: "#f59e0b", label: "Final Insp. Waiting Qty", value: pendingInsp, sub: "Waiting queue", trend: "Action needed", cls: "qa2-t-down" },
             { icon: SlidersHorizontal, iconColor: "#f59e0b", label: "Calibration Due", value: calibrationAlertCount.toString(), sub: "Gauges & Instruments", trend: calibrationAlertCount > 0 ? `${calibrationAlertCount} alerts pending` : "All calibrated", cls: calibrationAlertCount > 0 ? "qa2-t-down" : "qa2-t-up" }
         ];
     }, [summaryData, hasNoData, hasActiveFilter, hasActiveReasonFilter, appliedSearchQuery, searchFilteredInspectionRows, reasonFilteredRejectionRows, activeCustomerComplaints, calibrationAlertCount, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
@@ -6527,7 +6925,12 @@ export default function QualityAnalysis() {
                                 <button
                                     type="button"
                                     disabled={isGlobalLoading}
-                                    onClick={() => !isGlobalLoading && setSearchQuery("")}
+                                    onClick={() => {
+                                        if (isGlobalLoading) return;
+                                        setSearchQuery("");
+                                        setAppliedSearchQuery("");
+                                        fetchQualityData(appliedDateRange.from, appliedDateRange.to, "", appliedCustomers);
+                                    }}
                                     style={{
                                         position: 'absolute',
                                         right: '0.8rem',
@@ -6544,6 +6947,7 @@ export default function QualityAnalysis() {
                                         width: '18px',
                                         height: '18px'
                                     }}
+                                    title="Clear search"
                                 >
                                     <X size={14} />
                                 </button>
@@ -6616,7 +7020,7 @@ export default function QualityAnalysis() {
                         { lbl: "Pass Rate", val: activeSummaryStrip.passRate, cls: "qa2-green" },
                         { lbl: "Total Rejected", val: activeSummaryStrip.totalRejected, cls: "qa2-red" },
                         { lbl: "Rework", val: activeSummaryStrip.rework, cls: "qa2-orange" },
-                        { lbl: "Final Insp. Pending", val: activeSummaryStrip.pending, cls: "qa2-yellow" },
+                        { lbl: "Final Insp. Waiting Qty", val: activeSummaryStrip.pending, cls: "qa2-yellow" },
                     ].map((s, i) => (
                         <div className="qa2-strip-item" key={i}>
                             <div className="qa2-strip-lbl">{s.lbl}</div>
@@ -6954,7 +7358,7 @@ export default function QualityAnalysis() {
                                             {trendRejPartFilter.length === 0
                                                 ? "Part: All"
                                                 : trendRejPartFilter.length === 1
-                                                    ? trendRejPartFilter[0]
+                                                    ? getCleanPartNo(trendRejPartFilter[0])
                                                     : `${trendRejPartFilter.length} Parts`}
                                         </span>
                                         {trendRejPartFilter.length > 0 && (
@@ -7130,7 +7534,7 @@ export default function QualityAnalysis() {
                                             {trendRwkPartFilter.length === 0
                                                 ? "Part: All"
                                                 : trendRwkPartFilter.length === 1
-                                                    ? trendRwkPartFilter[0]
+                                                    ? getCleanPartNo(trendRwkPartFilter[0])
                                                     : `${trendRwkPartFilter.length} Parts`}
                                         </span>
                                         {trendRwkPartFilter.length > 0 && (
@@ -7634,18 +8038,18 @@ export default function QualityAnalysis() {
                 <div className="qa2-card qa2-card-premium" data-spotlight="qa-top-material-rejection">
                     <SectionHead icon={Package} iconColor="#f43f5e" title="Top 10 Material Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity material failures</span>} />
-                    <div className="qa2-pq-header">
-                        <span className="qa2-pqh-name">Material / Product</span>
-                        <span className="qa2-pqh-num" style={{ minWidth: '70px', textAlign: 'right' }}>Rej Qty</span>
-                        <span className="qa2-pqh-num" style={{ minWidth: '90px', textAlign: 'right' }}>Operation</span>
+                    <div className="qa2-pq-header qa2-top-rej-grid qa2-top-rej-header">
+                        <span className="qa2-pqh-name qa2-top-rej-col-name">Material / Product</span>
+                        <span className="qa2-pqh-num qa2-top-rej-col-qty">Rej Qty</span>
+                        <span className="qa2-pqh-num qa2-top-rej-col-op">Operation</span>
                     </div>
                     <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
                         {topMaterialRejections.length > 0 ? (
                             topMaterialRejections.map((m, i) => (
-                                <div className="qa2-pq-row" key={i}>
-                                    <div className="qa2-pq-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
-                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '70px', textAlign: 'right', fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
-                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '90px', textAlign: 'right' }}>{m.process}</div>
+                                <div className="qa2-pq-row qa2-top-rej-grid" key={i}>
+                                    <div className="qa2-pq-name qa2-top-rej-col-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
+                                    <div className="qa2-pq-num qa2-red qa2-top-rej-col-qty" style={{ fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-muted qa2-top-rej-col-op" title={m.process}>{m.process}</div>
                                 </div>
                             ))
                         ) : (
@@ -7658,18 +8062,18 @@ export default function QualityAnalysis() {
                 <div className="qa2-card qa2-card-premium" data-spotlight="qa-top-machine-rejection">
                     <SectionHead icon={Activity} iconColor="#0f766e" title="Top 10 Machine Rejection"
                         extra={<span className="qa2-section-sub">Highest quantity processing failures</span>} />
-                    <div className="qa2-pq-header">
-                        <span className="qa2-pqh-name">Product / Part</span>
-                        <span className="qa2-pqh-num" style={{ minWidth: '70px', textAlign: 'right' }}>Rej Qty</span>
-                        <span className="qa2-pqh-num" style={{ minWidth: '90px', textAlign: 'right' }}>Operation</span>
+                    <div className="qa2-pq-header qa2-top-rej-grid qa2-top-rej-header">
+                        <span className="qa2-pqh-name qa2-top-rej-col-name">Product / Part</span>
+                        <span className="qa2-pqh-num qa2-top-rej-col-qty">Rej Qty</span>
+                        <span className="qa2-pqh-num qa2-top-rej-col-op">Operation</span>
                     </div>
                     <div className="qa2-pq-scroll-container" style={{ maxHeight: '270px', overflowY: 'auto' }}>
                         {topMachineRejections.length > 0 ? (
                             topMachineRejections.map((m, i) => (
-                                <div className="qa2-pq-row" key={i}>
-                                    <div className="qa2-pq-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
-                                    <div className="qa2-pq-num qa2-red" style={{ minWidth: '70px', textAlign: 'right', fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
-                                    <div className="qa2-pq-num qa2-muted" style={{ minWidth: '90px', textAlign: 'right' }}>{m.process}</div>
+                                <div className="qa2-pq-row qa2-top-rej-grid" key={i}>
+                                    <div className="qa2-pq-name qa2-top-rej-col-name" title={m.name} style={{ fontWeight: 600 }}>{m.name}</div>
+                                    <div className="qa2-pq-num qa2-red qa2-top-rej-col-qty" style={{ fontWeight: 600 }}>{m.qty.toLocaleString()}</div>
+                                    <div className="qa2-pq-num qa2-muted qa2-top-rej-col-op" title={m.process}>{m.process}</div>
                                 </div>
                             ))
                         ) : (

@@ -29,7 +29,6 @@ import {
     TrendingUp,
     ShieldAlert,
     FileCheck2,
-    Wrench,
     Mail,
     SlidersVertical,
     UserCheck,
@@ -113,7 +112,6 @@ const HIDE_UNDER_1000_KEY = "eapproval_filter_hide_under_1000";
 const TABS = [
     { id: "eapproval", label: "E-Approval PO Limits", icon: FileCheck2 },
     { id: "datesetting", label: "Date Setting Option", icon: MdDateRange, badge: "" },
-    { id: "technical", label: "T & M Approvals", icon: Wrench, disabled: true },
 ];
 
 // Quick amount presets (in INR)
@@ -903,12 +901,6 @@ export default function UsersSetting() {
                             {/* <span className="us-quick-launch-pill__badge"></span> */}
                             <span className="us-quick-launch-pill__arrow">→</span>
                         </button>
-
-                        <div className="us-quick-launch-pill us-quick-launch-pill--inactive" title="Coming soon in future release">
-                            <Wrench size={16} />
-                            <span>T & M Approvals</span>
-                            <span className="us-quick-launch-pill__tag">Inactive</span>
-                        </div>
                     </div>
 
                     <div className="us-empty-state__future-hint">
@@ -1350,9 +1342,8 @@ export default function UsersSetting() {
                                 <thead>
                                     <tr>
                                         <th style={{ minWidth: "260px" }}>Module & Workspace</th>
-                                        <th style={{ width: "160px" }}>Category</th>
+                                        <th style={{ minWidth: "180px", width: "180px" }}>Category</th>
                                         <th style={{ minWidth: "275px" }}>Default Date Preset</th>
-                                        <th style={{ minWidth: "250px" }}>Active Live Period</th>
                                         <th style={{ width: "200px" }}>Quick Switch</th>
                                         <th style={{ width: "120px", textAlign: "center" }}>Scope</th>
                                     </tr>
@@ -1360,14 +1351,13 @@ export default function UsersSetting() {
                                 <tbody>
                                     {filteredModuleTargets.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} style={{ textAlign: "center", padding: "3.5rem 1rem", color: "#94a3b8" }}>
+                                            <td colSpan={5} style={{ textAlign: "center", padding: "3.5rem 1rem", color: "#94a3b8" }}>
                                                 No modules matched "{dateSearchQuery}"
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredModuleTargets.map((m, idx) => {
                                             const currentPresetId = dateSettings[m.key] || m.defaultPreset || "last_3_months";
-                                            const computedRange = computeDateRangeFromPreset(currentPresetId);
                                             const IconComponent = MODULE_ICONS[m.iconName] || MdDateRange;
                                             const isRecommended = currentPresetId === "last_3_months";
 
@@ -1386,11 +1376,6 @@ export default function UsersSetting() {
                                                             <div className="us-user-info">
                                                                 <div className="us-ds-mod-title-row">
                                                                     <span className="us-user-name">{m.name}</span>
-                                                                    {isRecommended && (
-                                                                        <span className="us-ds-rec-pill" title="Default recommended setting">
-                                                                            ⭐ Default
-                                                                        </span>
-                                                                    )}
                                                                 </div>
                                                                 <span className="us-user-role">{m.description}</span>
                                                             </div>
@@ -1398,7 +1383,7 @@ export default function UsersSetting() {
                                                     </td>
 
                                                     {/* Category */}
-                                                    <td className="us-td">
+                                                    <td className="us-td us-td--category">
                                                         <span className={`us-ds-cat-tag us-ds-cat-tag--${m.category.toLowerCase()}`}>
                                                             {m.categoryLabel}
                                                         </span>
@@ -1412,16 +1397,6 @@ export default function UsersSetting() {
                                                                 onChange={newPreset => handleModulePresetChange(m.key, newPreset)}
                                                                 moduleKey={m.key}
                                                             />
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Calculated Dynamic Period */}
-                                                    <td className="us-td">
-                                                        <div className="us-ds-live-pill" title="Dynamic date range loaded automatically upon opening this module">
-                                                            <HiCalendarDays size={14} className="us-ds-live-pill__icon" />
-                                                            <span className="us-ds-live-pill__text">
-                                                                {formatDateDisplay(computedRange.from)} – {formatDateDisplay(computedRange.to)}
-                                                            </span>
                                                         </div>
                                                     </td>
 
@@ -1574,46 +1549,6 @@ export default function UsersSetting() {
                 </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════ */}
-            {/* TAB 2: T & M APPROVALS (TECHNICAL / MAINTENANCE)           */}
-            {/* ══════════════════════════════════════════════════════════ */}
-            {activeTab === "technical" && (
-                <div className="us-panel">
-                    <div className="us-panel-card">
-                        <h3 className="us-panel-card__title">
-                            <Wrench size={20} style={{ color: "#6366f1" }} />
-                            Technical & Material Approval Limits
-                        </h3>
-                        <p className="us-panel-card__desc">
-                            Configure authorization thresholds for T-Approval (Technical POs) and M-Approval (Maintenance & Capital Expenses).
-                        </p>
-
-                        <div className="us-settings-list">
-                            <div className="us-setting-row">
-                                <div className="us-setting-info">
-                                    <h4>T-Approval Technical Threshold</h4>
-                                    <p>Require Chief Engineer sign-off when technical scope modifications exceed this value</p>
-                                </div>
-                                <div className="us-input-group">
-                                    <span className="us-currency-symbol">₹</span>
-                                    <input type="number" className="us-amount-input" defaultValue={50000} />
-                                </div>
-                            </div>
-
-                            <div className="us-setting-row">
-                                <div className="us-setting-info">
-                                    <h4>M-Approval Emergency Maintenance Cap</h4>
-                                    <p>Maximum direct approval limit without Plant Head escalation</p>
-                                </div>
-                                <div className="us-input-group">
-                                    <span className="us-currency-symbol">₹</span>
-                                    <input type="number" className="us-amount-input" defaultValue={25000} />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ── Modern Bulk Limit Setting Modal (Portalled to body to prevent clipping) ── */}
             {bulkModalOpen && createPortal(
